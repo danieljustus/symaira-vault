@@ -80,7 +80,7 @@ pub(super) fn validated_totp(
 fn number(value: &str, field: &str) -> Result<i64, String> {
     value.parse::<i64>().map_err(|error| {
         let reason = if matches!(error.kind(), std::num::IntErrorKind::PosOverflow | std::num::IntErrorKind::NegOverflow) { "value out of range" } else { "invalid syntax" };
-        format!("invalid TOTP {field} {value:?} in otpauth URI: strconv.Atoi: parsing {value:?}: {reason}")
+        { let quoted = symvault_core::go_quote(value); format!("invalid TOTP {field} {quoted} in otpauth URI: strconv.Atoi: parsing {quoted}: {reason}") }
     })
 }
 fn valid_escapes(value: &str) -> bool {

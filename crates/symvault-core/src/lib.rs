@@ -7,6 +7,7 @@ use symaira_core_version::new as new_version;
 pub mod config;
 pub mod config_overrides;
 pub mod error;
+mod go_unicode_print_15;
 pub mod go_yaml;
 pub mod keychain_status;
 pub mod password;
@@ -35,6 +36,59 @@ pub fn go_to_lower(value: &str) -> String {
         .chars()
         .map(|ch| ch.to_lowercase().next().unwrap_or(ch))
         .collect()
+}
+
+/// Go `unicode.IsPrint` (Unicode 15.0.0 table generated from Go by
+/// `scripts/rust-port/cmd/secure_input_unicode`).
+#[must_use]
+pub fn go_is_print(character: char) -> bool {
+    let code = u32::from(character);
+    go_unicode_print_15::PRINT_RANGES
+        .binary_search_by(|(first, last)| {
+            if code < *first {
+                std::cmp::Ordering::Greater
+            } else if code > *last {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
+}
+
+/// Go `strconv.Quote` (and `%q` on a string) for valid UTF-8. Rust's `{:?}`
+/// differs for control characters (`\u{1}` vs `\x01`, `\0` vs `\x00`) and
+/// for non-printable runes.
+#[must_use]
+pub fn go_quote(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\u{7}' => quoted.push_str("\\a"),
+            '\u{8}' => quoted.push_str("\\b"),
+            '\u{c}' => quoted.push_str("\\f"),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            '\u{b}' => quoted.push_str("\\v"),
+            character if go_is_print(character) => quoted.push(character),
+            character => {
+                let code = u32::from(character);
+                if code < 0x80 {
+                    quoted.push_str(&format!("\\x{code:02x}"));
+                } else if code <= 0xffff {
+                    quoted.push_str(&format!("\\u{code:04x}"));
+                } else {
+                    quoted.push_str(&format!("\\U{code:08x}"));
+                }
+            }
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 /// Public binary and protocol tool name.

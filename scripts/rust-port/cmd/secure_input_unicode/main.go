@@ -16,7 +16,7 @@ func main() {
 	write := flag.Bool("write", false, "write Go Unicode IsPrint ranges for Rust")
 	flag.Parse()
 	data := generate()
-	const path = "crates/symvault-platform/src/go_unicode_print_15.rs"
+	const path = "crates/symvault-core/src/go_unicode_print_15.rs"
 	if *write {
 		if err := os.WriteFile(path, data, 0o600); err != nil {
 			fatal(err)

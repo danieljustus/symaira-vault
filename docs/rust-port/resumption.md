@@ -1,5 +1,18 @@
 # Rust migration handover — 2026-09-09
 
+## IO-001 CXF on gojson, 2026-10-30
+
+`cxfgen` now records Go's complete `err.Error()` and a mutation sweep over the reference
+payload (every path null / wrong scalar / array / object, upper-cased keys): 496 cases
+(oracle `58d978bb` unchanged). Before, 147 differed (13 accepted where Go rejects, 12
+entry/warning differences, 122 error texts). `importer/cxf.rs` decodes through `gojson`
+(new: `json.Unmarshal` path, `RawMessage`, `EditableValue`, `map[string]any`); Go-verbatim
+errors use `ImportError::Decode`, so the CLI keeps Go's `parse import source: <err>`.
+`go_is_print`/`go_quote` (Go `strconv.Quote`) moved to `symvault-core` (table generator
+path updated) and replace `{:?}` in the CXF warning and TOTP errors; CXF type matching uses
+`go_to_lower` (`CXF-021`). Negative controls: array-for-struct, `to_lowercase`, `{:?}`.
+Local gate only (local-first mode).
+
 ## IO-002 numeric tar header fields, 2026-10-30
 
 Rust checked only the mode field; Go's `readHeader` rejects any malformed size, uid,

@@ -426,6 +426,49 @@ pub(super) fn parse_document(bytes: &[u8]) -> Result<Reader<'_>, String> {
     })
 }
 
+/// Validates `bytes` like `json.Unmarshal` (`checkValid`): the whole input is
+/// scanned, only whitespace may follow the value, and an incomplete value is
+/// `unexpected end of JSON input`. This differs from [`parse_document`], which
+/// mirrors `Decoder.Decode` (first value only, `EOF` errors).
+pub(super) fn parse_unmarshal(bytes: &[u8]) -> Result<Reader<'_>, String> {
+    let mut scanner = Scanner::new();
+    let mut end = None;
+    for (index, &c) in bytes.iter().enumerate() {
+        match scanner.feed(c) {
+            Fed::Continue => {}
+            Fed::DoneInclusive => {
+                end = Some(index + 1);
+                break;
+            }
+            Fed::DoneExclusive => {
+                end = Some(index);
+                break;
+            }
+            Fed::Error(message) => return Err(message),
+        }
+    }
+    let end = match end {
+        Some(end) => {
+            if let Some(&c) = bytes[end..].iter().find(|&&c| !is_space(c)) {
+                return Err(match Scanner::error(c, "after top-level value") {
+                    Fed::Error(message) => message,
+                    _ => unreachable!("Scanner::error always yields Fed::Error"),
+                });
+            }
+            end
+        }
+        None => match scanner.feed(b' ') {
+            Fed::DoneExclusive => bytes.len(),
+            _ => return Err("unexpected end of JSON input".into()),
+        },
+    };
+    Ok(Reader {
+        bytes: &bytes[..end],
+        index: 0,
+        key: String::new(),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Reader over a value the scanner already validated
 // ---------------------------------------------------------------------------
@@ -648,6 +691,8 @@ pub(super) struct Context {
     struct_name: &'static str,
     path: Vec<&'static str>,
     error: Option<String>,
+    /// Set once a custom `UnmarshalJSON` failed: that error aborts the decode.
+    fatal: bool,
 }
 
 impl Context {
@@ -659,6 +704,32 @@ impl Context {
     /// skip building their text).
     fn failed(&self) -> bool {
         self.error.is_some()
+    }
+
+    /// An error returned by a custom `UnmarshalJSON`. Unlike a saved type
+    /// error it aborts the decode and replaces any error saved earlier; the
+    /// enclosing struct/field context is added on the way out
+    /// (`addErrorContext`), with `inner_field` as the error's own field.
+    fn unmarshaler_error(&mut self, value: &str, inner_field: Option<&str>, target: &str) {
+        if self.fatal {
+            return;
+        }
+        self.fatal = true;
+        let mut field = self.path.join(".");
+        if let Some(inner) = inner_field {
+            if !field.is_empty() {
+                field.push('.');
+            }
+            field.push_str(inner);
+        }
+        self.error = Some(if self.struct_name.is_empty() && field.is_empty() {
+            format!("json: cannot unmarshal {value} into Go value of type {target}")
+        } else {
+            format!(
+                "json: cannot unmarshal {value} into Go struct field {}.{field} of type {target}",
+                self.struct_name
+            )
+        });
     }
 
     fn type_error(&mut self, value: &str, target: impl FnOnce() -> String) {
@@ -890,4 +961,223 @@ pub(super) fn decode_document<S: GoStruct>(bytes: &[u8], target: &mut S) -> Resu
     let mut context = Context::default();
     target.decode(&mut reader, &mut context);
     context.into_error().map_or(Ok(()), Err)
+}
+
+/// `json.Unmarshal(bytes, target)`: [`parse_unmarshal`], then the typed
+/// decode, returning the first error with Go's wording.
+pub(super) fn unmarshal_document<S: GoStruct>(bytes: &[u8], target: &mut S) -> Result<(), String> {
+    let mut reader = parse_unmarshal(bytes)?;
+    let mut context = Context::default();
+    target.decode(&mut reader, &mut context);
+    context.into_error().map_or(Ok(()), Err)
+}
+
+/// Go's `json.RawMessage`: the exact bytes of the next value, whatever its
+/// kind (a JSON `null` is kept as the four bytes `null`).
+#[derive(Default)]
+pub(super) struct RawMessage(pub(super) Vec<u8>);
+
+impl GoDecode for RawMessage {
+    fn go_type(&self) -> String {
+        "json.RawMessage".into()
+    }
+
+    fn decode(&mut self, reader: &mut Reader<'_>, _context: &mut Context) {
+        reader.skip_space();
+        let start = reader.index;
+        reader.skip_value();
+        self.0.clear();
+        self.0.extend_from_slice(&reader.bytes[start..reader.index]);
+    }
+}
+
+/// The CXF `cxfFieldValue`: a custom `UnmarshalJSON` that takes either a bare
+/// string or an EditableField object (`{"value": "..."}`).
+///
+/// It first tries a string (JSON `null` also succeeds and resets the value),
+/// then an anonymous `struct { Value string }`. Its failures are errors
+/// returned by `UnmarshalJSON`, not saved type errors, so they abort the
+/// enclosing decode (see [`Context::unmarshaler_error`]).
+#[derive(Default)]
+pub(super) struct EditableValue(pub(super) String);
+
+const EDITABLE_VALUE_TYPE: &str = r#"struct { Value string "json:\"value\"" }"#;
+
+impl GoDecode for EditableValue {
+    fn go_type(&self) -> String {
+        "importer.cxfFieldValue".into()
+    }
+
+    fn decode(&mut self, reader: &mut Reader<'_>, context: &mut Context) {
+        match reader.kind() {
+            Kind::Null => {
+                reader.skip_value();
+                self.0.clear();
+            }
+            Kind::String => self.0 = reader.string(),
+            Kind::Object => {
+                reader.index += 1;
+                let mut value = String::new();
+                let mut bad = None;
+                loop {
+                    reader.skip_space();
+                    match reader.bytes[reader.index] {
+                        b'}' => {
+                            reader.index += 1;
+                            break;
+                        }
+                        b',' => reader.index += 1,
+                        _ => {
+                            let selected = reader.key_index(&["value"]);
+                            reader.skip_space();
+                            reader.index += 1; // ':'
+                            if selected.is_none() {
+                                reader.skip_value();
+                                continue;
+                            }
+                            match reader.kind() {
+                                Kind::String => value = reader.string(),
+                                Kind::Null => reader.skip_value(),
+                                other => {
+                                    bad.get_or_insert(other);
+                                    reader.skip_value();
+                                }
+                            }
+                        }
+                    }
+                }
+                match bad {
+                    Some(kind) => context.unmarshaler_error(kind.name(), Some("value"), "string"),
+                    None => self.0 = value,
+                }
+            }
+            other => {
+                reader.skip_value();
+                context.unmarshaler_error(other.name(), None, EDITABLE_VALUE_TYPE);
+            }
+        }
+    }
+}
+
+/// `json.Unmarshal(bytes, &map[string]any)`. `None` when Go would return an
+/// error (a non-object value, a number outside float64) or leave the map nil
+/// (JSON `null`). Duplicate keys keep the last value; numbers become float64
+/// and are re-encoded as `encoding/json` would print them.
+pub(super) fn unmarshal_object(bytes: &[u8]) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let mut reader = parse_unmarshal(bytes).ok()?;
+    match reader.kind() {
+        Kind::Object => match reader.any()? {
+            serde_json::Value::Object(map) => Some(map),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+enum Frame {
+    Array(Vec<serde_json::Value>),
+    Object(serde_json::Map<String, serde_json::Value>, String),
+}
+
+impl Frame {
+    fn into_value(self) -> serde_json::Value {
+        match self {
+            Frame::Array(items) => serde_json::Value::Array(items),
+            Frame::Object(map, _) => serde_json::Value::Object(map),
+        }
+    }
+}
+
+impl Reader<'_> {
+    /// Go's `valueInterface`: the next value as a generic JSON value, built
+    /// without recursion so nesting up to Go's depth limit cannot overflow
+    /// the stack. `None` for a number float64 cannot hold.
+    fn any(&mut self) -> Option<serde_json::Value> {
+        use serde_json::{Map, Value};
+        let mut stack: Vec<Frame> = Vec::new();
+        let mut done: Option<Value> = None;
+        loop {
+            if done.is_none() {
+                match self.kind() {
+                    Kind::Object => {
+                        self.index += 1;
+                        stack.push(Frame::Object(Map::new(), String::new()));
+                    }
+                    Kind::Array => {
+                        self.index += 1;
+                        stack.push(Frame::Array(Vec::new()));
+                    }
+                    Kind::String => done = Some(Value::String(self.string())),
+                    Kind::Bool => {
+                        let value = self.bytes[self.index] == b't';
+                        self.skip_value();
+                        done = Some(Value::Bool(value));
+                    }
+                    Kind::Null => {
+                        self.skip_value();
+                        done = Some(Value::Null);
+                    }
+                    Kind::Number => done = Some(Value::Number(go_number(self.number())?)),
+                }
+                if done.is_none() {
+                    // A container was just opened: it may be empty.
+                    self.skip_space();
+                    let closer = match stack.last() {
+                        Some(Frame::Object(..)) => b'}',
+                        _ => b']',
+                    };
+                    if self.bytes[self.index] == closer {
+                        self.index += 1;
+                        done = stack.pop().map(Frame::into_value);
+                    } else {
+                        self.open_key(&mut stack);
+                        continue;
+                    }
+                }
+            }
+            let Some(frame) = stack.last_mut() else {
+                return done;
+            };
+            let value = done.take()?;
+            match frame {
+                Frame::Array(items) => items.push(value),
+                Frame::Object(map, key) => {
+                    map.insert(std::mem::take(key), value);
+                }
+            }
+            self.skip_space();
+            if self.bytes[self.index] == b',' {
+                self.index += 1;
+                self.open_key(&mut stack);
+            } else {
+                self.index += 1; // closing bracket
+                done = stack.pop().map(Frame::into_value);
+            }
+        }
+    }
+
+    /// Reads the next object key (and its colon) into the innermost frame
+    /// when that frame is an object.
+    fn open_key(&mut self, stack: &mut [Frame]) {
+        if let Some(Frame::Object(_, key)) = stack.last_mut() {
+            self.skip_space();
+            *key = self.string();
+            self.skip_space();
+            self.index += 1; // ':'
+        }
+    }
+}
+
+/// A JSON number decoded to float64 and printed the way `encoding/json`
+/// prints it (integral values below 2^64 stay integers). `None` when the
+/// literal overflows float64.
+fn go_number(literal: &str) -> Option<serde_json::Number> {
+    let value = literal
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite())?;
+    // Rust's shortest round-trip `Display` matches Go's `'f'` formatting;
+    // parsing that text picks the same integer/float representation a
+    // reader of Go's output would see.
+    serde_json::from_str(&format!("{value}")).ok()
 }

@@ -25,8 +25,6 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::time::{Duration, Instant};
-#[path = "go_unicode_print_15.rs"]
-mod go_unicode_print_15;
 
 /// Default approval timeout, mirroring Go's `defaultTimeout`.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -807,21 +805,8 @@ fn parse_secure_input(response: &str) -> Result<String, SecureInputError> {
     Ok(value.trim().to_owned())
 }
 
-/// Go `unicode.IsPrint`, using the same immutable table as secure rune input.
-pub fn go_is_print(character: char) -> bool {
-    let code = u32::from(character);
-    go_unicode_print_15::PRINT_RANGES
-        .binary_search_by(|(first, last)| {
-            if code < *first {
-                std::cmp::Ordering::Greater
-            } else if code > *last {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        })
-        .is_ok()
-}
+/// Go `unicode.IsPrint` (shared table in `symvault-core`).
+pub use symvault_core::go_is_print;
 
 fn build_secure_input_prompt(req: &SecureInputRequest) -> String {
     build_secure_input_prompt_with_mode(req, screen_reader_mode())

@@ -49,6 +49,8 @@ type fixtureCase struct {
 type expected struct {
 	Entries       []entry `json:"entries,omitempty"`
 	ErrorContains string  `json:"error_contains,omitempty"`
+	// Error is Go's complete error text; ErrorContains its stage marker.
+	Error string `json:"error,omitempty"`
 }
 
 type entry struct {
@@ -71,7 +73,7 @@ func main() {
 		if checkErr := checkFixture(root, *output, meta); checkErr != nil {
 			fail(checkErr)
 		}
-		fmt.Println("PASS Go CXF oracle fixture (20 synthetic cases)")
+		fmt.Println("PASS Go CXF oracle fixture (21 synthetic cases plus the payload mutation sweep)")
 		return
 	}
 	cases, err := runOracle(root)
@@ -274,12 +276,12 @@ import (
 )
 
 type Case struct { ID string ` + "`json:\"id\"`" + `; InputB64 string ` + "`json:\"input_b64\"`" + `; Expected Expected ` + "`json:\"expected\"`" + ` }
-type Expected struct { Entries []Entry ` + "`json:\"entries,omitempty\"`" + `; ErrorContains string ` + "`json:\"error_contains,omitempty\"`" + ` }
+type Expected struct { Entries []Entry ` + "`json:\"entries,omitempty\"`" + `; ErrorContains string ` + "`json:\"error_contains,omitempty\"`" + `; Error string ` + "`json:\"error,omitempty\"`" + ` }
 type Entry struct { Path string ` + "`json:\"path\"`" + `; Data map[string]any ` + "`json:\"data\"`" + `; Warnings []string ` + "`json:\"warnings\"`" + `; SecretType string ` + "`json:\"secret_type,omitempty\"`" + ` }
 func fail(e error) { if e != nil { panic(e) } }
 func b64(v []byte) string { return base64.StdEncoding.EncodeToString(v) }
 func zipData(files map[string][]byte) []byte { var b bytes.Buffer; z:=zip.NewWriter(&b); names:=make([]string,0,len(files)); for name:=range files { names=append(names,name) }; sort.Strings(names); for _,name:=range names { data:=files[name]; h:=&zip.FileHeader{Name:name,Method:zip.Deflate}; h.SetModTime(time.Unix(0,0)); w,e:=z.CreateHeader(h);fail(e);_,e=w.Write(data);fail(e) }; fail(z.Close()); return b.Bytes() }
-func run(id string, archive []byte) Case { imp,e:=importer.New(importer.FormatCXF);fail(e); got,err:=imp.Parse(bytes.NewReader(archive)); c:=Case{ID:id,InputB64:b64(archive)}; if err!=nil { text:=err.Error(); marker:=text; for _,candidate:=range []string{"open cxf zip","no CXF JSON document","parse CXF JSON document"} { if strings.Contains(text,candidate) { marker=candidate; break } }; c.Expected.ErrorContains=marker; return c }; c.Expected.Entries=make([]Entry,0,len(got)); for _,entry:=range got { st:="";if entry.SecretMetadata!=nil {st=string(entry.SecretMetadata.Type)};c.Expected.Entries=append(c.Expected.Entries,Entry{entry.Path,entry.Data,entry.Warnings,st}) }; return c }
+func run(id string, archive []byte) Case { imp,e:=importer.New(importer.FormatCXF);fail(e); got,err:=imp.Parse(bytes.NewReader(archive)); c:=Case{ID:id,InputB64:b64(archive)}; if err!=nil { text:=err.Error(); marker:=text; for _,candidate:=range []string{"open cxf zip","no CXF JSON document","parse CXF JSON document"} { if strings.Contains(text,candidate) { marker=candidate; break } }; c.Expected.ErrorContains=marker; c.Expected.Error=text; return c }; c.Expected.Entries=make([]Entry,0,len(got)); for _,entry:=range got { st:="";if entry.SecretMetadata!=nil {st=string(entry.SecretMetadata.Type)};c.Expected.Entries=append(c.Expected.Entries,Entry{entry.Path,entry.Data,entry.Warnings,st}) }; return c }
 func payload() []byte {
   field := func(value string) map[string]any { return map[string]any{"value": value} }
   login := map[string]any{
@@ -445,7 +447,62 @@ func caseInsensitiveTagsPayload() []byte {
   }
   b, e := json.Marshal(x); fail(e); return b
 }
-func main() { p:=payload(); n:=nullPayload(); cases:=[]Case{run("CXF-020-case-insensitive-tags",zipData(map[string][]byte{"nested/payload.json":caseInsensitiveTagsPayload()})),run("CXF-019-totp-structured",zipData(map[string][]byte{"payload.json":totpEdgesPayload()})),run("CXF-001-features",zipData(map[string][]byte{"manifest.json":[]byte("{\"version\":1}"),"nested/payload.json":p})),run("CXF-002-preferred-payload",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"nested/payload.json":p,"export.json":[]byte("{\"accounts\":[]}")})),run("CXF-003-largest-json",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"export.json":p})),run("CXF-004-invalid-zip",[]byte("not a zip archive")),run("CXF-005-no-json",zipData(map[string][]byte{"readme.txt":[]byte("fixture")})),run("CXF-006-invalid-json",zipData(map[string][]byte{"manifest.json":[]byte("{not-json")})),run("CXF-007-null-fields",zipData(map[string][]byte{"nested/payload.json":n})),run("CXF-008-trailing-json",zipData(map[string][]byte{"nested/payload.json":append(n, []byte(" trailing")...)})),run("CXF-009-invalid-version-type",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("version")})),run("CXF-010-invalid-account-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-id")})),run("CXF-011-invalid-collection-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("collection-id")})),run("CXF-012-invalid-linked-account",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("linked-account")})),run("CXF-013-null-top-level",zipData(map[string][]byte{"nested/payload.json":[]byte("null")})),run("CXF-014-malformed-credential-values",zipData(map[string][]byte{"nested/payload.json":malformedCredentialPayload()})),run("CXF-015-malformed-credentials-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("credentials")})),run("CXF-016-malformed-tags-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("tags")})),run("CXF-017-invalid-account-username",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-username")})),run("CXF-018-invalid-account-email",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-email")}))}; enc:=json.NewEncoder(os.Stdout);enc.SetEscapeHTML(false);fail(enc.Encode(cases)) }
+// Mutation sweep over payload(): every JSON path gets null, a wrong scalar,
+// a wrong array and a wrong object (skipping its own type), and every object
+// key an upper-cased spelling. Paths and keys are visited in sorted order.
+type step struct { key string; index int }
+func pathID(path []step) string { var b strings.Builder; for _, s := range path { if s.key != "" { b.WriteString("." + s.key) } else { fmt.Fprintf(&b, "[%d]", s.index) } }; return b.String() }
+func walk(v any, path []step, visit func([]step, any)) {
+  visit(path, v)
+  switch t := v.(type) {
+  case map[string]any:
+    keys := make([]string, 0, len(t)); for k := range t { keys = append(keys, k) }; sort.Strings(keys)
+    for _, k := range keys { walk(t[k], append(append([]step{}, path...), step{key: k}), visit) }
+  case []any:
+    for i, e := range t { walk(e, append(append([]step{}, path...), step{index: i}), visit) }
+  }
+}
+func edit(root any, path []step, f func(parent any, last step)) any {
+  var copyOf func(any) any
+  copyOf = func(v any) any { switch t := v.(type) { case map[string]any: m := map[string]any{}; for k, e := range t { m[k] = copyOf(e) }; return m; case []any: a := make([]any, len(t)); for i, e := range t { a[i] = copyOf(e) }; return a }; return v }
+  out := copyOf(root); cur := out
+  for _, s := range path[:len(path)-1] { if s.key != "" { cur = cur.(map[string]any)[s.key] } else { cur = cur.([]any)[s.index] } }
+  f(cur, path[len(path)-1]); return out
+}
+func kind(v any) string { switch v.(type) { case nil: return "null"; case bool: return "bool"; case float64: return "number"; case string: return "string"; case []any: return "array" }; return "object" }
+func mutations(p []byte) []Case {
+  var doc any; fail(json.Unmarshal(p, &doc))
+  variants := []struct{ name string; value any }{{"null", nil}, {"number", 7}, {"string", "x"}, {"array", []any{}}, {"object", map[string]any{}}}
+  var cases []Case
+  walk(doc, nil, func(path []step, v any) {
+    if len(path) == 0 { return }
+    id := pathID(path)
+    for _, variant := range variants {
+      if variant.name == kind(v) || (variant.name == "string" && kind(v) != "number") || (variant.name == "number" && kind(v) == "number") { continue }
+      value := variant.value
+      mutated := edit(doc, path, func(parent any, last step) { if last.key != "" { parent.(map[string]any)[last.key] = value } else { parent.([]any)[last.index] = value } })
+      b, e := json.Marshal(mutated); fail(e)
+      cases = append(cases, run("CXF-M"+id+"="+variant.name, zipData(map[string][]byte{"payload.json": b})))
+    }
+    if last := path[len(path)-1]; last.key != "" && strings.ToUpper(last.key) != last.key {
+      mutated := edit(doc, path, func(parent any, last step) { m := parent.(map[string]any); m[strings.ToUpper(last.key)] = m[last.key]; delete(m, last.key) })
+      b, e := json.Marshal(mutated); fail(e)
+      cases = append(cases, run("CXF-M"+id+"=upper-key", zipData(map[string][]byte{"payload.json": b})))
+    }
+  })
+  return cases
+}
+// Go strings.ToLower maps U+0130 to a bare "i" and %q escapes control
+// characters as \\xNN; Rust's to_lowercase/{:?} differ on both.
+func typeQuotingPayload() []byte {
+  item := map[string]any{"id": "quoting", "title": "Quoting", "credentials": []any{
+    map[string]any{"type": "BAS\u0130C-AUTH", "username": map[string]any{"value": "dotted-i"}, "password": map[string]any{"value": "p"}},
+    map[string]any{"type": "\x01mystery\t\u200b"},
+    map[string]any{"type": "totp", "secret": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP&digits=%01"},
+  }}
+  b, e := json.Marshal(map[string]any{"accounts": []any{map[string]any{"id": "account", "items": []any{item}}}}); fail(e); return b
+}
+func main() { p:=payload(); n:=nullPayload(); cases:=[]Case{run("CXF-020-case-insensitive-tags",zipData(map[string][]byte{"nested/payload.json":caseInsensitiveTagsPayload()})),run("CXF-019-totp-structured",zipData(map[string][]byte{"payload.json":totpEdgesPayload()})),run("CXF-001-features",zipData(map[string][]byte{"manifest.json":[]byte("{\"version\":1}"),"nested/payload.json":p})),run("CXF-002-preferred-payload",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"nested/payload.json":p,"export.json":[]byte("{\"accounts\":[]}")})),run("CXF-003-largest-json",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"export.json":p})),run("CXF-004-invalid-zip",[]byte("not a zip archive")),run("CXF-005-no-json",zipData(map[string][]byte{"readme.txt":[]byte("fixture")})),run("CXF-006-invalid-json",zipData(map[string][]byte{"manifest.json":[]byte("{not-json")})),run("CXF-007-null-fields",zipData(map[string][]byte{"nested/payload.json":n})),run("CXF-008-trailing-json",zipData(map[string][]byte{"nested/payload.json":append(n, []byte(" trailing")...)})),run("CXF-009-invalid-version-type",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("version")})),run("CXF-010-invalid-account-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-id")})),run("CXF-011-invalid-collection-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("collection-id")})),run("CXF-012-invalid-linked-account",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("linked-account")})),run("CXF-013-null-top-level",zipData(map[string][]byte{"nested/payload.json":[]byte("null")})),run("CXF-014-malformed-credential-values",zipData(map[string][]byte{"nested/payload.json":malformedCredentialPayload()})),run("CXF-015-malformed-credentials-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("credentials")})),run("CXF-016-malformed-tags-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("tags")})),run("CXF-017-invalid-account-username",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-username")})),run("CXF-018-invalid-account-email",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-email")}))}; enc:=json.NewEncoder(os.Stdout);enc.SetEscapeHTML(false);cases=append(cases,run("CXF-021-type-quoting",zipData(map[string][]byte{"payload.json":typeQuotingPayload()})));cases=append(cases,mutations(p)...);fail(enc.Encode(cases)) }
 `
 
 func runOracle(root string) ([]fixtureCase, error) {

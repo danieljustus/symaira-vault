@@ -1,232 +1,191 @@
 use base64::{Engine as _, engine::general_purpose};
-use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     io::{Cursor, Read},
 };
-use zip::ZipArchive;
+use zip::{ZipArchive, result::ZipError};
 
+use super::gojson::{
+    self, Context, EditableValue, GoDecode, GoStruct, RawMessage, Reader, decode_struct, go_struct,
+};
 use super::{ImportError, ImportedEntry, apply_prefix, normalize_path, parse_totp};
 
 const MAX_IMPORT_BYTES: usize = 100 * 1024 * 1024;
 const MAX_ZIP_ENTRY: u64 = 100 * 1024 * 1024;
 
+// The CXF document is decoded like Go's `json.Unmarshal` into the same typed
+// structs as `internal/importer/cxf.go`: `null` is a no-op, keys match
+// case-insensitively (exact match first), a value of the wrong JSON kind is a
+// Go `UnmarshalTypeError` with Go's struct/field context, and credentials stay
+// raw (`json.RawMessage`) until their `type` selects the struct to decode.
+
 #[allow(dead_code)]
-#[derive(Debug, Deserialize, Default)]
+#[derive(Default)]
 struct CxfExport {
-    #[serde(default, deserialize_with = "super::null_default")]
     version: CxfVersion,
-    #[serde(default, deserialize_with = "super::null_default_vec")]
     accounts: Vec<CxfAccount>,
 }
+go_struct!(CxfExport, "cxfExport", { "version" => version, "accounts" => accounts });
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize, Default)]
+#[derive(Default)]
 struct CxfVersion {
-    #[serde(default, deserialize_with = "super::null_default")]
     major: i64,
-    #[serde(default, deserialize_with = "super::null_default")]
     minor: i64,
 }
+go_struct!(CxfVersion, "cxfVersion", { "major" => major, "minor" => minor });
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize, Default)]
+#[derive(Default)]
 struct CxfAccount {
-    #[serde(default, deserialize_with = "super::null_default")]
     id: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     username: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     email: String,
-    #[serde(default, deserialize_with = "super::null_default_vec")]
     collections: Vec<CxfCollection>,
-    #[serde(default, deserialize_with = "super::null_default_vec")]
     items: Vec<CxfItem>,
 }
+go_struct!(CxfAccount, "cxfAccount", {
+    "id" => id, "username" => username, "email" => email,
+    "collections" => collections, "items" => items,
+});
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize, Default)]
+#[derive(Default)]
 struct CxfCollection {
-    #[serde(default, deserialize_with = "super::null_default")]
     id: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     title: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     name: String,
-    #[serde(default, deserialize_with = "super::null_default_vec")]
     items: Vec<CxfLinkedItem>,
-    #[serde(
-        rename = "subCollections",
-        default,
-        deserialize_with = "super::null_default_vec"
-    )]
     sub_collections: Vec<CxfCollection>,
 }
+go_struct!(CxfCollection, "cxfCollection", {
+    "id" => id, "title" => title, "name" => name,
+    "items" => items, "subCollections" => sub_collections,
+});
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize, Default)]
+#[derive(Default)]
 struct CxfLinkedItem {
-    #[serde(default, deserialize_with = "super::null_default")]
     item: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     account: String,
 }
+go_struct!(CxfLinkedItem, "cxfLinkedItem", { "item" => item, "account" => account });
 
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Default)]
 struct CxfItem {
-    #[serde(default, deserialize_with = "super::null_default")]
     id: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     title: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     name: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     scope: CxfScope,
-    #[serde(default, deserialize_with = "super::null_default_vec")]
-    credentials: Vec<Value>,
-    #[serde(default, deserialize_with = "super::null_default_vec")]
+    credentials: Vec<RawMessage>,
     tags: Vec<String>,
 }
+go_struct!(CxfItem, "cxfItem", {
+    "id" => id, "title" => title, "name" => name, "scope" => scope,
+    "credentials" => credentials, "tags" => tags,
+});
 
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Default)]
 struct CxfScope {
-    #[serde(default, deserialize_with = "super::null_default_vec")]
     urls: Vec<String>,
 }
+go_struct!(CxfScope, "cxfScope", { "urls" => urls });
 
-// Parse a FIDO Credential Exchange Format archive using the same bounded
+#[derive(Default)]
+struct CxfBasicAuth {
+    username: EditableValue,
+    password: EditableValue,
+    urls: Vec<String>,
+}
+go_struct!(CxfBasicAuth, "cxfBasicAuth", {
+    "username" => username, "password" => password, "urls" => urls,
+});
+
+#[allow(dead_code)]
+#[derive(Default)]
+struct CxfTotp {
+    secret: String,
+    period: i64,
+    digits: i64,
+    algorithm: String,
+    issuer: String,
+    username: String,
+}
+go_struct!(CxfTotp, "cxfTOTP", {
+    "secret" => secret, "period" => period, "digits" => digits,
+    "algorithm" => algorithm, "issuer" => issuer, "username" => username,
+});
+
+#[derive(Default)]
+struct CxfNote {
+    content: EditableValue,
+}
+go_struct!(CxfNote, "cxfNote", { "content" => content });
+
+#[allow(dead_code)]
+#[derive(Default)]
+struct CxfSshKey {
+    key_type: String,
+    private_key: String,
+    private_key_pem: String,
+    key_comment: String,
+}
+go_struct!(CxfSshKey, "cxfSSHKey", {
+    "keyType" => key_type, "privateKey" => private_key,
+    "privateKeyPem" => private_key_pem, "keyComment" => key_comment,
+});
+
+#[allow(dead_code)]
+#[derive(Default)]
+struct CxfCreditCard {
+    number: EditableValue,
+    full_name: EditableValue,
+    card_type: EditableValue,
+    verification_number: EditableValue,
+    expiry_date: EditableValue,
+}
+go_struct!(CxfCreditCard, "cxfCreditCard", {
+    "number" => number, "fullName" => full_name, "cardType" => card_type,
+    "verificationNumber" => verification_number, "expiryDate" => expiry_date,
+});
+
+/// Go's text for a failure of `zip.NewReader`.
+fn zip_open_error(error: &ZipError) -> String {
+    match error {
+        ZipError::InvalidArchive(_) | ZipError::UnsupportedArchive(_) => {
+            "zip: not a valid zip file".into()
+        }
+        other => other.to_string(),
+    }
+}
+
+/// A diagnostic reproduced verbatim from Go's `Parse`, like the Bitwarden
+/// importer's: the CLI prints `parse import source: <text>` on both sides.
+fn go_error(text: impl Into<String>) -> ImportError {
+    ImportError::Decode(text.into())
+}
+
+/// Parse a FIDO Credential Exchange Format archive using the same bounded
 /// selection and item mapping rules as the Go importer.
 pub fn parse(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
     if bytes.len() >= MAX_IMPORT_BYTES {
-        return Err(ImportError::Limit(MAX_IMPORT_BYTES));
+        return Err(go_error(format!(
+            "import source exceeds maximum size of {MAX_IMPORT_BYTES} bytes"
+        )));
     }
     let mut archive = ZipArchive::new(Cursor::new(bytes))
-        .map_err(|error| ImportError::Parse(format!("open cxf zip: {error}")))?;
+        .map_err(|error| go_error(format!("open cxf zip: {}", zip_open_error(&error))))?;
     let payload = read_payload(&mut archive)?;
-    let mut document: Value = serde_json::from_slice(&payload)
-        .map_err(|error| ImportError::Parse(format!("parse CXF JSON document: {error}")))?;
-    normalize_export_fields(&mut document);
-    let export: Option<CxfExport> = serde_json::from_value(document)
-        .map_err(|error| ImportError::Parse(format!("parse CXF JSON document: {error}")))?;
+    let mut export = CxfExport::default();
+    gojson::unmarshal_document(&payload, &mut export)
+        .map_err(|error| go_error(format!("parse CXF JSON document: {error}")))?;
 
     let mut entries = Vec::new();
-    for account in export.unwrap_or_default().accounts {
+    for account in &export.accounts {
         entries.extend(account_entries(account));
     }
     Ok(entries)
-}
-
-// Go's encoding/json matches tagged struct fields without regard to ASCII
-// case. Normalize only fields belonging to known CXF structs; passkey data
-// remains opaque, and credential `type` retains its exact map-key lookup.
-fn normalize_export_fields(value: &mut Value) {
-    let Some(export) = value.as_object_mut() else {
-        return;
-    };
-    normalize_keys(export, &["version", "accounts"]);
-    if let Some(version) = export.get_mut("version").and_then(Value::as_object_mut) {
-        normalize_keys(version, &["major", "minor"]);
-    }
-    if let Some(accounts) = export.get_mut("accounts").and_then(Value::as_array_mut) {
-        for account in accounts.iter_mut().filter_map(Value::as_object_mut) {
-            normalize_keys(
-                account,
-                &["id", "username", "email", "collections", "items"],
-            );
-            if let Some(collections) = account.get_mut("collections").and_then(Value::as_array_mut)
-            {
-                normalize_collections(collections);
-            }
-            if let Some(items) = account.get_mut("items").and_then(Value::as_array_mut) {
-                for item in items.iter_mut().filter_map(Value::as_object_mut) {
-                    normalize_item(item);
-                }
-            }
-        }
-    }
-}
-
-fn normalize_collections(collections: &mut [Value]) {
-    for collection in collections.iter_mut().filter_map(Value::as_object_mut) {
-        normalize_keys(
-            collection,
-            &["id", "title", "name", "items", "subCollections"],
-        );
-        if let Some(items) = collection.get_mut("items").and_then(Value::as_array_mut) {
-            for linked in items.iter_mut().filter_map(Value::as_object_mut) {
-                normalize_keys(linked, &["item", "account"]);
-            }
-        }
-        if let Some(children) = collection
-            .get_mut("subCollections")
-            .and_then(Value::as_array_mut)
-        {
-            normalize_collections(children);
-        }
-    }
-}
-
-fn normalize_item(item: &mut Map<String, Value>) {
-    normalize_keys(
-        item,
-        &["id", "title", "name", "scope", "credentials", "tags"],
-    );
-    if let Some(scope) = item.get_mut("scope").and_then(Value::as_object_mut) {
-        normalize_keys(scope, &["urls"]);
-    }
-    if let Some(credentials) = item.get_mut("credentials").and_then(Value::as_array_mut) {
-        for credential in credentials.iter_mut().filter_map(Value::as_object_mut) {
-            let Some(credential_type) = credential.get("type").and_then(Value::as_str) else {
-                continue;
-            };
-            let fields: &[&str] = match normalize_type(credential_type).as_str() {
-                "basicauth" => &["username", "password", "urls"],
-                "totp" => &[
-                    "secret",
-                    "period",
-                    "digits",
-                    "algorithm",
-                    "issuer",
-                    "username",
-                ],
-                "note" => &["content"],
-                "sshkey" | "cryptographickey" => {
-                    &["keyType", "privateKey", "privateKeyPem", "keyComment"]
-                }
-                "creditcard" => &[
-                    "number",
-                    "fullName",
-                    "cardType",
-                    "verificationNumber",
-                    "expiryDate",
-                ],
-                _ => continue,
-            };
-            normalize_keys(credential, fields);
-            for field in fields {
-                if let Some(wrapper) = credential.get_mut(*field).and_then(Value::as_object_mut) {
-                    normalize_keys(wrapper, &["value"]);
-                }
-            }
-        }
-    }
-}
-
-fn normalize_keys(object: &mut Map<String, Value>, fields: &[&str]) {
-    for field in fields {
-        if object.contains_key(*field) {
-            continue;
-        }
-        if let Some(key) = object
-            .keys()
-            .find(|key| key.eq_ignore_ascii_case(field))
-            .cloned()
-            && let Some(value) = object.remove(&key)
-        {
-            object.insert((*field).to_owned(), value);
-        }
-    }
 }
 
 struct JsonCandidate {
@@ -242,10 +201,10 @@ fn read_payload<R: Read + std::io::Seek>(
     for index in 0..archive.len() {
         let file = archive
             .by_index(index)
-            .map_err(|error| ImportError::Parse(format!("inspect cxf zip: {error}")))?;
+            .map_err(|error| go_error(format!("inspect cxf zip: {error}")))?;
         let name = file
             .name()
-            .map_err(|error| ImportError::Parse(format!("inspect cxf zip: {error}")))?;
+            .map_err(|error| go_error(format!("inspect cxf zip: {error}")))?;
         if file.is_dir() || !name.to_ascii_lowercase().ends_with(".json") {
             continue;
         }
@@ -256,9 +215,7 @@ fn read_payload<R: Read + std::io::Seek>(
         });
     }
     if candidates.is_empty() {
-        return Err(ImportError::Parse(
-            "no CXF JSON document found in cxf zip".into(),
-        ));
+        return Err(go_error("no CXF JSON document found in cxf zip"));
     }
 
     let mut selected = &candidates[0];
@@ -281,66 +238,65 @@ fn read_payload<R: Read + std::io::Seek>(
         }
     }
     if selected.size >= MAX_ZIP_ENTRY {
-        return Err(ImportError::Parse(format!(
+        return Err(go_error(format!(
             "zip entry exceeds maximum size of {MAX_ZIP_ENTRY} bytes"
         )));
     }
 
     let mut file = archive
         .by_index(selected.index)
-        .map_err(|error| ImportError::Parse(format!("open {}: {error}", selected.name)))?;
+        .map_err(|error| go_error(format!("open {}: {error}", selected.name)))?;
     let mut payload = Vec::new();
     file.by_ref()
         .take(MAX_ZIP_ENTRY)
         .read_to_end(&mut payload)
-        .map_err(|error| ImportError::Parse(format!("read {}: {error}", selected.name)))?;
+        .map_err(|error| go_error(format!("read {}: {error}", selected.name)))?;
     if payload.len() as u64 >= MAX_ZIP_ENTRY {
-        return Err(ImportError::Parse(format!(
+        return Err(go_error(format!(
             "zip entry exceeds maximum size of {MAX_ZIP_ENTRY} bytes"
         )));
     }
     Ok(payload)
 }
 
-fn account_entries(account: CxfAccount) -> Vec<ImportedEntry> {
-    let items_by_id: HashMap<String, CxfItem> = account
+fn account_entries(account: &CxfAccount) -> Vec<ImportedEntry> {
+    let items_by_id: HashMap<&str, &CxfItem> = account
         .items
         .iter()
         .filter(|item| !item.id.is_empty())
-        .cloned()
-        .map(|item| (item.id.clone(), item))
+        .map(|item| (item.id.as_str(), item))
         .collect();
     let mut placed = HashSet::new();
     let mut entries = Vec::new();
 
-    fn add(
-        item: &CxfItem,
+    fn add<'a>(
+        item: &'a CxfItem,
         collection_path: &str,
-        placed: &mut HashSet<String>,
+        placed: &mut HashSet<&'a str>,
         entries: &mut Vec<ImportedEntry>,
     ) {
-        if collection_path.is_empty() && !item.id.is_empty() && placed.contains(&item.id) {
+        if collection_path.is_empty() && !item.id.is_empty() && placed.contains(item.id.as_str()) {
             return;
         }
         if let Some(entry) = item_entry(item, collection_path) {
             if !collection_path.is_empty() && !item.id.is_empty() {
-                placed.insert(item.id.clone());
+                placed.insert(item.id.as_str());
             }
             entries.push(entry);
         }
     }
 
-    fn walk(
+    fn walk<'a>(
         collections: &[CxfCollection],
         parent_path: &str,
-        items_by_id: &HashMap<String, CxfItem>,
-        placed: &mut HashSet<String>,
+        items_by_id: &HashMap<&str, &'a CxfItem>,
+        placed: &mut HashSet<&'a str>,
         entries: &mut Vec<ImportedEntry>,
     ) {
         for collection in collections {
             let collection_path = apply_prefix(parent_path, collection_title(collection));
             for linked in &collection.items {
-                if let Some(item) = items_by_id.get(&linked.item) {
+                if let Some(item) = items_by_id.get(linked.item.as_str()) {
                     add(item, &collection_path, placed, entries);
                 }
             }
@@ -367,6 +323,18 @@ fn account_entries(account: CxfAccount) -> Vec<ImportedEntry> {
     entries
 }
 
+/// Go's `cxfParseCredential`: the credential as a generic map plus its
+/// exact-key `type` string. `None` when Go would skip the credential (not an
+/// object, `null`, or no non-empty string `type`).
+fn parse_credential(raw: &[u8]) -> Option<(Map<String, Value>, String)> {
+    let credential = gojson::unmarshal_object(raw)?;
+    let credential_type = match credential.get("type") {
+        Some(Value::String(value)) if !value.is_empty() => value.clone(),
+        _ => return None,
+    };
+    Some((credential, credential_type))
+}
+
 fn item_entry(item: &CxfItem, collection_path: &str) -> Option<ImportedEntry> {
     let mut data = BTreeMap::new();
     let mut warnings = Vec::new();
@@ -374,30 +342,24 @@ fn item_entry(item: &CxfItem, collection_path: &str) -> Option<ImportedEntry> {
     let mut has_basic_auth = false;
     let mut secret_type = None;
 
-    for credential in &item.credentials {
-        let Some(object) = credential.as_object() else {
+    for raw in &item.credentials {
+        let raw = raw.0.as_slice();
+        let Some((credential, credential_type)) = parse_credential(raw) else {
             continue;
         };
-        let Some(credential_type) = object.get("type").and_then(Value::as_str) else {
-            continue;
-        };
-        if credential_type.is_empty() {
-            continue;
-        }
-        match normalize_type(credential_type).as_str() {
+        match normalize_type(&credential_type).as_str() {
             "basicauth" => {
                 has_basic_auth = true;
-                apply_basic_auth(object, &mut data, &mut urls, &mut warnings);
+                apply_basic_auth(raw, &mut data, &mut urls, &mut warnings);
             }
-            "totp" => apply_totp(object, &mut data, &mut warnings),
-            "note" => apply_note(object, &mut data, &mut warnings),
-            "passkey" => apply_passkey(credential, &mut data),
+            "totp" => apply_totp(raw, &mut data, &mut warnings),
+            "note" => apply_note(raw, &mut data, &mut warnings),
+            "passkey" => apply_passkey(Value::Object(credential), &mut data),
             "sshkey" | "cryptographickey" => {
-                apply_ssh_key(object, &mut data, &mut secret_type, &mut warnings)
+                apply_ssh_key(raw, &mut data, &mut secret_type, &mut warnings)
             }
-            "creditcard" => apply_credit_card(object, &mut data, &mut secret_type, &mut warnings),
-            "file" | "address" => skip_credential(credential_type, &mut warnings),
-            _ => skip_credential(credential_type, &mut warnings),
+            "creditcard" => apply_credit_card(raw, &mut data, &mut secret_type, &mut warnings),
+            _ => skip_credential(&credential_type, &mut warnings),
         }
     }
 
@@ -437,89 +399,42 @@ fn item_entry(item: &CxfItem, collection_path: &str) -> Option<ImportedEntry> {
     })
 }
 
+/// Decodes a credential's raw JSON into its typed struct. A failure becomes
+/// the `cxf: <label>: <Go error>` warning and the credential is dropped.
+fn decode_credential<S: GoStruct + Default>(
+    raw: &[u8],
+    label: &str,
+    warnings: &mut Vec<String>,
+) -> Option<S> {
+    let mut credential = S::default();
+    match gojson::unmarshal_document(raw, &mut credential) {
+        Ok(()) => Some(credential),
+        Err(error) => {
+            warnings.push(format!("cxf: {label}: {error}"));
+            None
+        }
+    }
+}
+
 fn apply_basic_auth(
-    object: &Map<String, Value>,
+    raw: &[u8],
     data: &mut BTreeMap<String, Value>,
     urls: &mut Vec<String>,
     warnings: &mut Vec<String>,
 ) {
-    let username = match field_value_named(object.get("username"), "cxfBasicAuth", "username") {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: basic-auth: {error}"));
-            return;
-        }
+    let Some(credential) = decode_credential::<CxfBasicAuth>(raw, "basic-auth", warnings) else {
+        return;
     };
-    let password = match field_value_named(object.get("password"), "cxfBasicAuth", "password") {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: basic-auth: {error}"));
-            return;
-        }
-    };
-    let credential_urls = match string_vec_named(object.get("urls"), "cxfBasicAuth", "urls") {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: basic-auth: {error}"));
-            return;
-        }
-    };
-    data.insert("username".into(), Value::String(username));
-    data.insert("password".into(), Value::String(password));
-    *urls = credential_urls;
+    data.insert("username".into(), Value::String(credential.username.0));
+    data.insert("password".into(), Value::String(credential.password.0));
+    *urls = credential.urls;
 }
 
-fn apply_totp(
-    object: &Map<String, Value>,
-    data: &mut BTreeMap<String, Value>,
-    warnings: &mut Vec<String>,
-) {
-    let secret = match string_field_named(object.get("secret"), "cxfTOTP", "secret", "string") {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: totp: {error}"));
-            return;
-        }
+fn apply_totp(raw: &[u8], data: &mut BTreeMap<String, Value>, warnings: &mut Vec<String>) {
+    let Some(credential) = decode_credential::<CxfTotp>(raw, "totp", warnings) else {
+        return;
     };
-    let algorithm =
-        match string_field_named(object.get("algorithm"), "cxfTOTP", "algorithm", "string") {
-            Ok(value) => value,
-            Err(error) => {
-                warnings.push(format!("cxf: totp: {error}"));
-                return;
-            }
-        };
-    let issuer = match string_field_named(object.get("issuer"), "cxfTOTP", "issuer", "string") {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: totp: {error}"));
-            return;
-        }
-    };
-    let username = match string_field_named(object.get("username"), "cxfTOTP", "username", "string")
-    {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: totp: {error}"));
-            return;
-        }
-    };
-    let _ = (issuer, username);
-    let digits = match integer_field_named(object.get("digits"), "cxfTOTP", "digits", "int") {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: totp: {error}"));
-            return;
-        }
-    };
-    let period = match integer_field_named(object.get("period"), "cxfTOTP", "period", "int") {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: totp: {error}"));
-            return;
-        }
-    };
-    let secret = secret.trim();
+    let secret = credential.secret.trim();
     if secret.is_empty() {
         warnings.push("totp: empty TOTP secret".into());
         return;
@@ -527,12 +442,14 @@ fn apply_totp(
     let result = if secret.to_ascii_lowercase().starts_with("otpauth://") {
         parse_totp(secret)
     } else {
-        let algorithm = algorithm.trim().to_uppercase();
+        let algorithm = credential.algorithm.trim().to_uppercase();
         let algorithm = if algorithm.is_empty() {
             "SHA1"
         } else {
             &algorithm
         };
+        let digits = credential.digits;
+        let period = credential.period;
         super::totp::validated_totp(
             secret,
             algorithm,
@@ -548,18 +465,11 @@ fn apply_totp(
     }
 }
 
-fn apply_note(
-    object: &Map<String, Value>,
-    data: &mut BTreeMap<String, Value>,
-    warnings: &mut Vec<String>,
-) {
-    let content = match field_value_named(object.get("content"), "cxfNote", "content") {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: note: {error}"));
-            return;
-        }
+fn apply_note(raw: &[u8], data: &mut BTreeMap<String, Value>, warnings: &mut Vec<String>) {
+    let Some(credential) = decode_credential::<CxfNote>(raw, "note", warnings) else {
+        return;
     };
+    let content = credential.content.0;
     if content.is_empty() {
         return;
     }
@@ -574,64 +484,33 @@ fn apply_note(
     }
 }
 
-fn apply_passkey(credential: &Value, data: &mut BTreeMap<String, Value>) {
+fn apply_passkey(credential: Value, data: &mut BTreeMap<String, Value>) {
     if !data.contains_key("passkey") {
-        data.insert("passkey".into(), credential.clone());
+        data.insert("passkey".into(), credential);
         return;
     }
-    let first = data.remove("passkey").expect("passkey exists");
     match data.get_mut("passkeys") {
-        Some(Value::Array(values)) => values.push(credential.clone()),
+        Some(Value::Array(values)) => values.push(credential),
         _ => {
-            data.insert(
-                "passkeys".into(),
-                Value::Array(vec![first.clone(), credential.clone()]),
-            );
+            let first = data.get("passkey").cloned().expect("passkey exists");
+            data.insert("passkeys".into(), Value::Array(vec![first, credential]));
         }
     }
-    data.insert("passkey".into(), first);
 }
 
 fn apply_ssh_key(
-    object: &Map<String, Value>,
+    raw: &[u8],
     data: &mut BTreeMap<String, Value>,
     secret_type: &mut Option<String>,
     warnings: &mut Vec<String>,
 ) {
-    for field in ["keyType", "keyComment"] {
-        if let Err(error) = string_field_named(object.get(field), "cxfSSHKey", field, "string") {
-            warnings.push(format!("cxf: ssh-key: {error}"));
-            return;
-        }
-    }
-    let private_key = match string_field_named(
-        object.get("privateKey"),
-        "cxfSSHKey",
-        "privateKey",
-        "string",
-    ) {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: ssh-key: {error}"));
-            return;
-        }
+    let Some(credential) = decode_credential::<CxfSshKey>(raw, "ssh-key", warnings) else {
+        return;
     };
-    let private_key_pem = match string_field_named(
-        object.get("privateKeyPem"),
-        "cxfSSHKey",
-        "privateKeyPem",
-        "string",
-    ) {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: ssh-key: {error}"));
-            return;
-        }
-    };
-    let key = if private_key.is_empty() {
-        private_key_pem
+    let key = if credential.private_key.is_empty() {
+        credential.private_key_pem
     } else {
-        private_key
+        credential.private_key
     };
     if key.is_empty() {
         return;
@@ -641,45 +520,22 @@ fn apply_ssh_key(
 }
 
 fn apply_credit_card(
-    object: &Map<String, Value>,
+    raw: &[u8],
     data: &mut BTreeMap<String, Value>,
     secret_type: &mut Option<String>,
     warnings: &mut Vec<String>,
 ) {
-    let fields = [
-        "number",
-        "fullName",
-        "cardType",
-        "verificationNumber",
-        "expiryDate",
-    ];
-    let mut values = BTreeMap::new();
-    for field in fields {
-        match field_value_named(object.get(field), "cxfCreditCard", field) {
-            Ok(value) => {
-                values.insert(field, value);
-            }
-            Err(error) => {
-                warnings.push(format!("cxf: credit-card: {error}"));
-                return;
-            }
-        }
-    }
-    let (month, year) =
-        split_year_month(values.get("expiryDate").map(String::as_str).unwrap_or(""));
-    data.insert(
-        "card_number".into(),
-        Value::String(values.remove("number").unwrap_or_default()),
-    );
-    data.insert(
-        "cardholder".into(),
-        Value::String(values.remove("fullName").unwrap_or_default()),
-    );
+    let Some(credential) = decode_credential::<CxfCreditCard>(raw, "credit-card", warnings) else {
+        return;
+    };
+    let (month, year) = split_year_month(&credential.expiry_date.0);
+    data.insert("card_number".into(), Value::String(credential.number.0));
+    data.insert("cardholder".into(), Value::String(credential.full_name.0));
     data.insert("expiry_month".into(), Value::String(month));
     data.insert("expiry_year".into(), Value::String(year));
     data.insert(
         "cvc".into(),
-        Value::String(values.remove("verificationNumber").unwrap_or_default()),
+        Value::String(credential.verification_number.0),
     );
     data.insert("subtype".into(), Value::String("card".into()));
     *secret_type = Some("payment".into());
@@ -687,126 +543,13 @@ fn apply_credit_card(
 
 fn skip_credential(credential_type: &str, warnings: &mut Vec<String>) {
     warnings.push(format!(
-        "cxf: skipped credential type {credential_type:?}: not supported by Symaira Vault"
+        "cxf: skipped credential type {}: not supported by Symaira Vault",
+        symvault_core::go_quote(credential_type)
     ));
 }
 
-fn field_value_named(
-    value: Option<&Value>,
-    struct_name: &str,
-    field_name: &str,
-) -> Result<String, String> {
-    match value {
-        None | Some(Value::Null) => Ok(String::new()),
-        Some(Value::String(value)) => Ok(value.clone()),
-        Some(Value::Object(object)) => string_field_named(
-            object.get("value"),
-            struct_name,
-            field_name,
-            r#"struct { Value string "json:\"value\"" }"#,
-        ),
-        Some(other) => Err(go_unmarshal_field_error(
-            other,
-            struct_name,
-            field_name,
-            r#"struct { Value string "json:\"value\"" }"#,
-        )),
-    }
-}
-
-fn string_field_named(
-    value: Option<&Value>,
-    struct_name: &str,
-    field_name: &str,
-    target_type: &str,
-) -> Result<String, String> {
-    match value {
-        None | Some(Value::Null) => Ok(String::new()),
-        Some(Value::String(value)) => Ok(value.clone()),
-        Some(other) => Err(go_unmarshal_field_error(
-            other,
-            struct_name,
-            field_name,
-            target_type,
-        )),
-    }
-}
-
-fn integer_field_named(
-    value: Option<&Value>,
-    struct_name: &str,
-    field_name: &str,
-    target_type: &str,
-) -> Result<i64, String> {
-    match value {
-        None | Some(Value::Null) => Ok(0),
-        Some(Value::Number(number)) => number.as_i64().ok_or_else(|| {
-            go_unmarshal_field_error(value.unwrap(), struct_name, field_name, target_type)
-        }),
-        Some(other) => Err(go_unmarshal_field_error(
-            other,
-            struct_name,
-            field_name,
-            target_type,
-        )),
-    }
-}
-
-fn string_vec_named(
-    value: Option<&Value>,
-    struct_name: &str,
-    field_name: &str,
-) -> Result<Vec<String>, String> {
-    match value {
-        None | Some(Value::Null) => Ok(Vec::new()),
-        Some(Value::Array(values)) => values
-            .iter()
-            .enumerate()
-            .map(|(index, value)| match value {
-                Value::String(value) => Ok(value.clone()),
-                Value::Null => Ok(String::new()),
-                other => Err(go_unmarshal_field_error(
-                    other,
-                    struct_name,
-                    &format!("{field_name}[{index}]"),
-                    "string",
-                )),
-            })
-            .collect(),
-        Some(other) => Err(go_unmarshal_field_error(
-            other,
-            struct_name,
-            field_name,
-            "[]string",
-        )),
-    }
-}
-
-fn go_unmarshal_field_error(
-    value: &Value,
-    struct_name: &str,
-    field_name: &str,
-    target_type: &str,
-) -> String {
-    format!(
-        "json: cannot unmarshal {} into Go struct field {struct_name}.{field_name} of type {target_type}",
-        json_type(value)
-    )
-}
-
-fn json_type(value: &Value) -> &'static str {
-    match value {
-        Value::Null => "null",
-        Value::Bool(_) => "bool",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-        Value::Array(_) => "array",
-        Value::Object(_) => "object",
-    }
-}
-
 fn normalize_type(value: &str) -> String {
-    value.trim().to_ascii_lowercase().replace(['-', '_'], "")
+    symvault_core::go_to_lower(value.trim()).replace(['-', '_'], "")
 }
 
 fn ssh_key_material(value: &str) -> String {
