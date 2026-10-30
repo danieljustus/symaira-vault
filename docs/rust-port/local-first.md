@@ -37,9 +37,9 @@ requests and per-slice hosted CI runs are suspended for the port.
 
 ## Known limits of the local gate
 
-- Linux runs on arm64 Debian bookworm, CI on x86_64 Ubuntu 24.04. Defects that
-  depend on the CPU architecture, glibc version or Ubuntu packaging surface only
-  in the closing CI run.
+- Linux runs on Ubuntu 24.04 arm64 (git from the git-core PPA, because this
+  repository's worktrees need git >= 2.48), CI on Ubuntu 24.04 x86_64. Defects
+  that depend on the CPU architecture surface only in the closing CI run.
 - Hosted macOS keychain tests (`keychain-native`) and the Go matrix jobs
   (`test`, `build`, `integration-test`, `smoke-test`) are not part of the local
   gate. Go is the frozen oracle; it is tested only when a slice edits Go
