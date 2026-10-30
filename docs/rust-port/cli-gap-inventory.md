@@ -113,7 +113,7 @@ bool shorthand like pflag (previously it read `=` as an unknown shorthand: `sync
 the `=` as unknown.
 
 Evidence: 20 Go-recorded `bool_flag_local_*` usage cases in
-`testdata/port/cli/error-taxonomy.json` (now 95 usage cases; `errtaxgen`
+`testdata/port/cli/error-taxonomy.json` (95 usage cases at that point; `errtaxgen`
 regenerated at the unchanged oracle `0cc78062`, only `generator_digest` and the
 appended cases differ) cover `verify --rebuild=false|true|F|t|maybe|`, repeated
 forms, `--rebuild-only=false`, `get -p -p=false`, `sync -f=false|maybe|`,
@@ -127,11 +127,20 @@ of the tree: `go_bool_flags_accept_an_explicit_value` (structural: the clap arg
 is the `--flag[=bool]` spelling, long and short) and
 `clap_parses_explicit_values_of_every_go_bool_flag` (behavioral: `--f=false`,
 `--f --f=false`, `--f=false --f`, `--f=F --f=1`, `-x=false` parse). Not
-covered: the nine bool flags of the hand-parsed commands `update
-apply|check|info` (7) and `setup` (2, not probed: interactive wizard); they are
-not clap `SetTrue` and their parsers reject the `=value` form (measured: `update
-check --force=false` exits 1 with `unknown command "--force=false"` where Go
-exits 0). Also uncovered: the `delete` prompt-before-vault-check gap (`delete -y=false x` prompts), and
+covered: the two bool flags of `setup` (`--keep-on-error`, `--no-resume`),
+because the native CLI has no `setup` command yet (`unrecognized subcommand`;
+only its help text is ported).
+
+The seven bool flags of the hand-parsed `update apply|check|info` follow pflag
+since #1558: `update_commands` assigns `--flag[=<ParseBool form>]` with the last
+occurrence winning, and the cobra emulation (`HAND_PARSED_BOOLS`, checked
+against `command-tree.json`) rejects an invalid value before argument
+validation and lets the local `update info --json` shadow the persistent flag.
+Go prints these errors once (`SilenceErrors`). Evidence: 10 Go-recorded
+`bool_flag_update_*` cases (105 usage cases, oracle `0cc78062` unchanged).
+Before the fix the native CLI rejected `update check --force=false` with
+`unknown command "--force=false"`, printed `update info --json=` doubled and
+reported `update check extra --force=maybe` as an unknown command. Also uncovered: the `delete` prompt-before-vault-check gap (`delete -y=false x` prompts), and
 clap still rejecting `--flag false`-style extra positionals that cobra's
 `legacyArgs` accepts (listed above).
 

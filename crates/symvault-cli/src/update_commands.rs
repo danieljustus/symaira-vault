@@ -71,28 +71,41 @@ pub(crate) fn run(
         Some(word) => {
             let word = word.to_string_lossy();
             if word == "info" {
-                let mut info_json = json_flag || output_format == "json";
+                let mut local_json = false;
+                let mut output_json = output_format == "json";
+                let mut extra_word = None;
                 let mut index = 1;
                 while let Some(arg) = rest.get(index) {
-                    match arg.to_string_lossy().as_ref() {
-                        "--json" => info_json = true,
+                    let arg = arg.to_string_lossy();
+                    if let Some(value) = bool_flag(&arg, "json") {
+                        match value {
+                            Ok(value) => local_json = value,
+                            Err(code) => return code,
+                        }
+                        index += 1;
+                        continue;
+                    }
+                    match arg.as_ref() {
                         "--output" => {
                             let Some(format) = rest.get(index + 1) else {
                                 return unknown_command("symvault update info", "--output", false);
                             };
-                            info_json = format == "json";
+                            output_json = format == "json";
                             index += 1;
                         }
                         value if value.starts_with("--output=") => {
-                            info_json = value.trim_start_matches("--output=") == "json";
+                            output_json = value.trim_start_matches("--output=") == "json";
                         }
                         extra => {
-                            return unknown_command("symvault update info", extra, false);
+                            extra_word.get_or_insert_with(|| extra.to_owned());
                         }
                     }
                     index += 1;
                 }
-                return info(info_json);
+                if let Some(extra) = extra_word {
+                    return unknown_command("symvault update info", &extra, false);
+                }
+                return info(json_flag || local_json || output_json);
             }
             if word == "check" {
                 return check(rest, output_format, json_flag, quiet);
@@ -118,16 +131,30 @@ struct ApplyDryRunJson<'a> {
 /// use the existing hardened checker/cache path; non-release builds return
 /// before any network or cache access. No artifact is downloaded or installed.
 fn apply_dry_run(rest: &[OsString], output_format: &str, json_flag: bool) -> ExitCode {
-    let mut want_json = json_flag;
+    let mut local_json = false;
     let mut output_json = output_format == "json";
     let mut dry_run = false;
     let mut force = false;
+    let mut extra_word = None;
     let mut index = 1;
     while let Some(arg) = rest.get(index) {
-        match arg.to_string_lossy().as_ref() {
-            "--json" => want_json = true,
-            "--dry-run" => dry_run = true,
-            "--force" => force = true,
+        let arg = arg.to_string_lossy();
+        let local = [
+            ("json", &mut local_json),
+            ("dry-run", &mut dry_run),
+            ("force", &mut force),
+        ]
+        .into_iter()
+        .find_map(|(name, slot)| bool_flag(&arg, name).map(|value| (value, slot)));
+        if let Some((value, slot)) = local {
+            match value {
+                Ok(value) => *slot = value,
+                Err(code) => return code,
+            }
+            index += 1;
+            continue;
+        }
+        match arg.as_ref() {
             "--output" => {
                 let Some(format) = rest.get(index + 1) else {
                     return unknown_command("symvault update apply", "--output", false);
@@ -138,13 +165,16 @@ fn apply_dry_run(rest: &[OsString], output_format: &str, json_flag: bool) -> Exi
             value if value.starts_with("--output=") => {
                 output_json = value.trim_start_matches("--output=") == "json";
             }
-            flag if flag.starts_with('-') => {
-                return unknown_command("symvault update apply", flag, false);
+            extra => {
+                extra_word.get_or_insert_with(|| extra.to_owned());
             }
-            extra => return unknown_command("symvault update apply", extra, false),
         }
         index += 1;
     }
+    if let Some(extra) = extra_word {
+        return unknown_command("symvault update apply", &extra, false);
+    }
+    let want_json = json_flag || local_json;
 
     if !dry_run {
         let info = match install_info() {
@@ -268,20 +298,32 @@ const MAX_RELEASE_RESPONSE_BYTES: u64 = 1 << 20;
 /// not a stable semver. This is the complete local/dev-build path and cannot
 /// consult the network or write the release cache.
 fn check(rest: &[OsString], output_format: &str, json_flag: bool, root_quiet: bool) -> ExitCode {
-    let mut want_json = json_flag || output_format == "json";
-    let mut quiet = root_quiet;
+    let mut local_json = false;
+    let mut local_quiet = false;
     let mut force = false;
+    let mut extra_word = None;
     for arg in rest.iter().skip(1) {
-        match arg.to_string_lossy().as_ref() {
-            "--json" => want_json = true,
-            "--quiet" => quiet = true,
-            "--force" => force = true,
-            flag if flag.starts_with('-') => {
-                return unknown_command("symvault update check", flag, false);
+        let arg = arg.to_string_lossy();
+        let local = [
+            ("json", &mut local_json),
+            ("quiet", &mut local_quiet),
+            ("force", &mut force),
+        ]
+        .into_iter()
+        .find_map(|(name, slot)| bool_flag(&arg, name).map(|value| (value, slot)));
+        match local {
+            Some((Ok(value), slot)) => *slot = value,
+            Some((Err(code), _)) => return code,
+            None => {
+                extra_word.get_or_insert_with(|| arg.into_owned());
             }
-            extra => return unknown_command("symvault update check", extra, false),
         }
     }
+    if let Some(extra) = extra_word {
+        return unknown_command("symvault update check", &extra, false);
+    }
+    let want_json = json_flag || output_format == "json" || local_json;
+    let quiet = root_quiet || local_quiet;
 
     let version = crate::VERSION.trim();
     let result = if let Some(current) = parse_stable_version(version) {
@@ -1467,6 +1509,27 @@ fn output_gate(output_format: &str, json_flag: bool) -> Option<ExitCode> {
 /// `unknown command %q for %q`. Parent commands carry no `SilenceErrors`, so
 /// cobra and `ExecuteRoot` both print; the info command silences cobra and
 /// the error appears exactly once.
+/// pflag's view of a local bool flag `name`: `--name` sets it, `--name=<v>`
+/// assigns Go's `strconv.ParseBool(v)` (the last occurrence wins), and an
+/// unparsable value is cobra's `invalid argument` error, exit 1. The `update`
+/// commands print it once (`error-taxonomy.json`, `bool_flag_update_*`), unlike
+/// the doubled line of other commands. `None` when `arg` is not this flag.
+fn bool_flag(arg: &str, name: &str) -> Option<Result<bool, ExitCode>> {
+    let rest = arg.strip_prefix("--")?.strip_prefix(name)?;
+    if rest.is_empty() {
+        return Some(Ok(true));
+    }
+    let value = rest.strip_prefix('=')?;
+    Some(crate::intake_commands::parse_bool(value).map_err(|reason| {
+        let message = format!(
+            "Error: invalid argument {} for \"--{name}\" flag: {reason}\n",
+            crate::cli_artifacts::quote_go_string(value)
+        );
+        let _ = std::io::stderr().lock().write_all(message.as_bytes());
+        ExitCode::from(1)
+    }))
+}
+
 fn unknown_command(path: &str, word: &str, doubled: bool) -> ExitCode {
     let message = format!("Error: unknown command {word:?} for {path:?}\n");
     let mut stderr = std::io::stderr().lock();

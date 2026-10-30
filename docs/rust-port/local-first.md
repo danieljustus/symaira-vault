@@ -35,6 +35,15 @@ requests and per-slice hosted CI runs are suspended for the port.
    `local/rust-port`, rerun the gate, open one pull request, fix what hosted CI
    finds, merge. Release, cutover and Go removal (RUST-013 to RUST-015) stay
    separate authorizations.
+6. **Oracle pins survive the squash.** `main` allows only squash or rebase
+   merges with linear history, so every local SHA changes on merge. Oracle
+   pins resolve their revision with `git rev-parse <sha>^{commit}` and
+   `git show <sha>:<path>` (`scripts/rust-port/internal/provenance`), which
+   need the object, not ancestry. Pins may therefore name `local/rust-port`
+   commits. Before merging the closing PR, push the permanent tag
+   `rust-port/local-history` at the branch tip; CI checks out with
+   `fetch-depth: 0`, which fetches tags, so every pinned commit stays
+   resolvable. Never delete that tag.
 
 ## Known limits of the local gate
 

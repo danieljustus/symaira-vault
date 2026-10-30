@@ -98,7 +98,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "5b6791c5dfc05523818917cb0dc912925466350078611c371f964e74978d6f2b"
+    "generator_digest": "024f023f44ee2167a8af0a4c768df67ecbf33ac60d6d69606721ba9153d6e567"
   },
   "usage": [
     {
@@ -1386,6 +1386,150 @@
         "exit_code": 0,
         "stdout": "Unified install command that detects an AI agent, creates a security\nprofile in config.yaml, generates a scoped access token, injects the\nMCP server configuration into the agent's config file, and installs the\nembedded skill package — all in one step.\n\nThis replaces the older mcp install, mcp-config, and agent setup commands.\n\nThe default security tier is \"safe\" (read-only capabilities). For \"standard\"\nor \"admin\" tiers, an interactive terminal is required to confirm the\nsecurity implications.\n\nSupported agents: openclaw, claude-code, hermes, codex, opencode\n\nUsage:\n  symvault agent install [name] [flags]\n\nExamples:\n  # Install and configure Claude Code (auto-detect)\n  symvault agent install claude-code\n\n  # Detect all installed agents and configure each\n  symvault agent install --auto-detect\n\n  # HTTP transport with auto-generated bearer token\n  symvault agent install hermes --http\n\n  # Standard tier with explicit confirmation\n  symvault agent install codex --tier standard\n\n  # Preview what would happen without writing anything\n  symvault agent install openclaw --dry-run\n\n  # Only install the skill package, skip MCP config\n  symvault agent install opencode --skill-only\n\n  # Only inject MCP config, skip the skill\n  symvault agent install claude-code --config-only\n\n  # Force overwrite existing profile and MCP config entries\n  symvault agent install hermes --force\n\n  # Structured JSON output for scripting\n  symvault agent install opencode --output json\n\nFlags:\n      --auto-detect   Detect all installed agents and configure each\n      --config-only   Only inject MCP config, skip the skill\n      --dry-run       Preview changes without applying them\n      --force         Overwrite existing agent profile and MCP config entries\n  -h, --help          help for install\n      --http          Use HTTP transport with auto-generated bearer token\n      --skill-only    Only install the skill package, skip MCP config\n      --tier string   Security tier: safe (default), standard, or admin (default \"safe\")\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n",
         "stderr": ""
+      }
+    },
+    {
+      "name": "bool_flag_update_check_force_false",
+      "description": "the hand-parsed update check accepts --force=false (non-release build: no network)",
+      "observation": {
+        "args": [
+          "update",
+          "check",
+          "--force=false"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "Update checks are only available for stable release builds. Current version: dev\n"
+      }
+    },
+    {
+      "name": "bool_flag_update_check_force_reset",
+      "description": "update check --force --force=false is last-value-wins",
+      "observation": {
+        "args": [
+          "update",
+          "check",
+          "--force",
+          "--force=false"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "Update checks are only available for stable release builds. Current version: dev\n"
+      }
+    },
+    {
+      "name": "bool_flag_update_check_json_true",
+      "description": "update check --json=true prints JSON",
+      "observation": {
+        "args": [
+          "update",
+          "check",
+          "--json=true"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"current_version\": \"dev\",\n  \"checkable\": false,\n  \"update_available\": false\n}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "bool_flag_update_check_json_reset",
+      "description": "update check --json --json=false prints text",
+      "observation": {
+        "args": [
+          "update",
+          "check",
+          "--json",
+          "--json=false"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "Update checks are only available for stable release builds. Current version: dev\n"
+      }
+    },
+    {
+      "name": "bool_flag_update_check_quiet_false",
+      "description": "update check --quiet=F keeps the normal output",
+      "observation": {
+        "args": [
+          "update",
+          "check",
+          "--quiet=F"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "Update checks are only available for stable release builds. Current version: dev\n"
+      }
+    },
+    {
+      "name": "bool_flag_update_check_invalid_value",
+      "description": "an invalid value on a hand-parsed update flag",
+      "observation": {
+        "args": [
+          "update",
+          "check",
+          "--force=maybe"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"maybe\" for \"--force\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "bool_flag_update_check_invalid_after_word",
+      "description": "pflag rejects the flag value before cobra sees the extra positional",
+      "observation": {
+        "args": [
+          "update",
+          "check",
+          "extra",
+          "--force=maybe"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"maybe\" for \"--force\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "bool_flag_update_apply_dry_run_true",
+      "description": "update apply --dry-run=true --force=false previews",
+      "observation": {
+        "args": [
+          "update",
+          "apply",
+          "--dry-run=true",
+          "--force=false"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "Update checks are only available for stable release builds. Current version: dev\n"
+      }
+    },
+    {
+      "name": "bool_flag_update_apply_dry_run_invalid",
+      "description": "an invalid value on update apply --dry-run",
+      "observation": {
+        "args": [
+          "update",
+          "apply",
+          "--dry-run=maybe"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"maybe\" for \"--dry-run\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "bool_flag_update_info_json_empty",
+      "description": "an empty value on update info --json",
+      "observation": {
+        "args": [
+          "update",
+          "info",
+          "--json="
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\" for \"--json\" flag: strconv.ParseBool: parsing \"\": invalid syntax\n"
       }
     }
   ],

@@ -1,5 +1,16 @@
 # Rust migration handover — 2026-09-09
 
+## CLI-005/006 hand-parsed `update` bool flags, 2026-10-30 (#1558)
+
+`update apply|check|info` accept `--flag[=<ParseBool form>]`, last value wins, for
+`--json`, `--quiet`, `--force` and `--dry-run`. The cobra emulation now types these
+hand-parsed flags (`HAND_PARSED_BOOLS`, guarded against `command-tree.json`), so an
+invalid value is reported before an extra positional and `update info --json=`
+no longer hits the persistent `--json`. Go prints the `update` errors once.
+`errtaxgen` gained 10 `bool_flag_update_*` cases (105 usage cases; oracle
+`0cc78062` unchanged). Open: `setup` is not ported, so its two bool flags are not
+either. Local gate only (local-first mode).
+
 ## CLI-005/006 local bool flags `--flag[=bool]`, 2026-10-30 (#1529)
 
 All 69 command-local clap `SetTrue` bool flags that are pflag `BoolVar`s in Go (plus `audit -j` and

@@ -63,6 +63,27 @@ const JOIN_PAIRING_FILE_MESSAGE: &str =
 /// Integer-valued flags, by command path and long name.
 const INT_FLAGS: &[(&str, &str)] = &[("generate", "length")];
 
+/// Local bool flags of commands the native CLI parses by hand (no clap
+/// definition, so the tree cannot type them). pflag parses them before cobra
+/// validates arguments, and a local flag shadows a persistent one of the same
+/// name (`update info --json`). Checked against `command-tree.json` by
+/// `hand_parsed_bool_flags_match_the_command_tree`.
+const HAND_PARSED_BOOLS: &[(&str, &[&str])] = &[
+    ("update apply", &["dry-run", "force", "json"]),
+    ("update check", &["force", "json", "quiet"]),
+    ("update info", &["json"]),
+];
+
+/// Go commands with `SilenceErrors`: cobra omits its copy, but the root
+/// executor still prints the returned error once.
+const SILENCED: &[&str] = &["update apply", "update check", "update info"];
+
+fn hand_parsed_bool(path: &str, name: &str) -> bool {
+    HAND_PARSED_BOOLS
+        .iter()
+        .any(|(command, flags)| *command == path && flags.contains(&name))
+}
+
 const SUGGESTION_ORDER: &[&str] = &[
     "audit",
     "auth",
@@ -559,6 +580,17 @@ fn fail(message: &str, code: u8) -> Verdict {
     }
 }
 
+/// [`fail`], but printed once for a [`SILENCED`] command.
+fn fail_at(path: &str, message: &str, code: u8) -> Verdict {
+    if SILENCED.contains(&path) {
+        return Verdict::Fail {
+            stderr: format!("Error: {message}\n"),
+            code,
+        };
+    }
+    fail(message, code)
+}
+
 const SUPPORTED_COMMANDS: &str = "admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate";
 
 /// The gate message for `path` ("symvault <path>").
@@ -931,6 +963,16 @@ fn parse_flags(
                 Some((name, value)) => (name, Some(value)),
                 None => (rest, None),
             };
+            if lenient && hand_parsed_bool(path, name) {
+                if let Some(value) = inline
+                    && !go_parse_bool(value)
+                {
+                    return Err(format!(
+                        "invalid argument {value:?} for \"--{name}\" flag: strconv.ParseBool: parsing {value:?}: invalid syntax"
+                    ));
+                }
+                continue;
+            }
             let Some(arg) = flags.long(name) else {
                 if lenient {
                     continue;
@@ -1127,7 +1169,7 @@ pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
     let lenient = current.command.is_none() && !current.path.is_empty();
     let parsed = match parse_flags(&tokens, flags, &path_text, lenient) {
         Ok(parsed) => parsed,
-        Err(message) => return fail(&message, 1),
+        Err(message) => return fail_at(&path_text, &message, 1),
     };
     if current.path.is_empty() {
         return Verdict::Proceed;
@@ -1143,18 +1185,7 @@ pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
             crate::cli_artifacts::quote_go_string(first),
             crate::cli_artifacts::quote_go_string(&format!("symvault {path_text}"))
         );
-        // These Go commands set SilenceErrors: cobra omits its copy, but the
-        // root executor still prints the returned argument-validation error.
-        if matches!(
-            path_text.as_str(),
-            "update apply" | "update check" | "update info"
-        ) {
-            return Verdict::Fail {
-                stderr: format!("Error: {message}\n"),
-                code: 1,
-            };
-        }
-        return fail(&message, 1);
+        return fail_at(&path_text, &message, 1);
     }
     if let Some(message) = arity_message(&path_text, parsed.positionals.len(), parsed.validator) {
         return fail(&message, 1);
@@ -1633,6 +1664,32 @@ mod tests {
             verdict(&["--quiet=maybe", "version"]),
             Verdict::Fail { code: 1, .. }
         ));
+    }
+
+    #[test]
+    fn hand_parsed_bool_flags_match_the_command_tree() {
+        let tree = tree();
+        for (path, names) in HAND_PARSED_BOOLS {
+            let entry = tree["commands"]
+                .as_array()
+                .expect("commands")
+                .iter()
+                .find(|entry| go_path(entry) == *path)
+                .unwrap_or_else(|| panic!("{path} is not in command-tree.json"));
+            let mut go_bools: Vec<&str> = entry["local_flags"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|flag| flag["type"] == "bool" && flag["name"] != "help")
+                .map(|flag| flag["name"].as_str().expect("flag name"))
+                .collect();
+            go_bools.sort_unstable();
+            assert_eq!(go_bools, *names, "{path}");
+            assert!(
+                clap_command(&root(), path).is_none(),
+                "{path} now has a clap definition"
+            );
+        }
     }
 
     #[test]

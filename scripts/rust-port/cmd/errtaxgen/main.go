@@ -244,6 +244,16 @@ func usageInputs() []usageInput {
 		{"bool_flag_local_recipients_remove_false", "recipients remove --yes=false --no-reencrypt=false reaches the vault check", []string{"recipients", "remove", "--yes=false", "--no-reencrypt=false", "x"}},
 		{"bool_flag_local_doctor_fix_false_help", "doctor --fix=false: the report of the command itself depends on the host, so the case ends at --help (decided before clap parses the value; the structural guard and the parse test cover doctor)", []string{"doctor", "--fix=false", "--help"}},
 		{"bool_flag_local_agent_install_global_quiet", "agent install has no local --quiet: --quiet=false is the persistent flag and is accepted", []string{"agent", "install", "--quiet=false", "--help"}},
+		{"bool_flag_update_check_force_false", "the hand-parsed update check accepts --force=false (non-release build: no network)", []string{"update", "check", "--force=false"}},
+		{"bool_flag_update_check_force_reset", "update check --force --force=false is last-value-wins", []string{"update", "check", "--force", "--force=false"}},
+		{"bool_flag_update_check_json_true", "update check --json=true prints JSON", []string{"update", "check", "--json=true"}},
+		{"bool_flag_update_check_json_reset", "update check --json --json=false prints text", []string{"update", "check", "--json", "--json=false"}},
+		{"bool_flag_update_check_quiet_false", "update check --quiet=F keeps the normal output", []string{"update", "check", "--quiet=F"}},
+		{"bool_flag_update_check_invalid_value", "an invalid value on a hand-parsed update flag", []string{"update", "check", "--force=maybe"}},
+		{"bool_flag_update_check_invalid_after_word", "pflag rejects the flag value before cobra sees the extra positional", []string{"update", "check", "extra", "--force=maybe"}},
+		{"bool_flag_update_apply_dry_run_true", "update apply --dry-run=true --force=false previews", []string{"update", "apply", "--dry-run=true", "--force=false"}},
+		{"bool_flag_update_apply_dry_run_invalid", "an invalid value on update apply --dry-run", []string{"update", "apply", "--dry-run=maybe"}},
+		{"bool_flag_update_info_json_empty", "an empty value on update info --json", []string{"update", "info", "--json="}},
 	}
 }
 
