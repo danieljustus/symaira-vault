@@ -38,6 +38,7 @@ ARCHIVED_INPUTS = {
     'scripts/rust-port/cmd/mcpcallgen/main_test.go',
     'scripts/rust-port/cmd/http001initgen/main_test.go',
     'scripts/rust-port/cmd/execute_secret_provenance/main.go',
+    'scripts/rust-port/cmd/secure_input_unicode/main.go',
     'testdata/port/mcp/copy-clipboard.json',
     'testdata/port/mcp/execute-with-secret.json',
     'testdata/port/mcp/secure-input.json',
