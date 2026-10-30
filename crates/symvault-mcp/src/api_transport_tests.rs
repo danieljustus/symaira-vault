@@ -470,7 +470,9 @@ fn actual_dns_https_verifies_chain_hostname_and_redacts_positive_control() {
             &BTreeMap::new(),
             b"",
             Some("public-TLS-canary"),
-            &RequestContext::default().with_timeout(Duration::from_secs(2)),
+            // Certificate rejections must surface as "failed", not "timed out";
+            // 2 s let the deadline win the race on a loaded host (#1566).
+            &RequestContext::default().with_timeout(Duration::from_secs(15)),
             &options,
         );
         assert_eq!(server.join().unwrap(), expected_request);
