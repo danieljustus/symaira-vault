@@ -25,12 +25,12 @@ qrcode = { version = "=0.14.1", default-features = false }
 rcgen = "=0.14.10"
 tar = "=0.4.46"
 tempfile = "=3.27.0"
-zip = { version = "=9.0.5", default-features = false, features = ["deflate"] }
+zip = { version = "=9.1.0", default-features = false, features = ["deflate"] }
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
-sha2 = "=0.11.0"
+sha2 = "=0.11.1"
 serde_yaml_ng = "=0.10.0"
 yaml-edit = { version = "=0.3.3", default-features = false }
 rpassword = "=7.5.4"
@@ -51,6 +51,6 @@ x509-parser = "=0.18.1"
 ctrlc = { version = "=3.5.2", features = ["termination"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "=0.2.189"
+libc = "=0.2.191"
 signal-hook = "=0.4.5"
 rustix = { version = "=1.1.5", features = ["event", "fs", "process", "termios"] }
