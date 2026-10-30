@@ -5,6 +5,10 @@
 > Historical Windows receipts and source paths below are retained as evidence,
 > not as a current native acceptance or release requirement. Source removal is a follow-up.
 
+> **Working mode since 2026-10-30:** local-first on `local/rust-port`, gated by
+> `scripts/rust-port/local-gate.sh`, one closing pull request. See
+> [local-first.md](local-first.md).
+
 > **Status:** accepted for staged implementation
 > **Go oracle:** commit `caadd5e`, release `v0.22.1`
 > **Scope:** the Go backend and mobile bridge; Swift clients and editor plugins stay in their current languages
