@@ -55,6 +55,13 @@ requests and per-slice hosted CI runs are suspended for the port.
   gate. Go is the frozen oracle; it is tested only when a slice edits Go
   code (see rule 3).
 - Findings accumulate until the closing PR instead of surfacing per slice.
+- The local gate mirrors `ci.yml` only. The 25 area workflows
+  (`rust-http-*`, `rust-mcp-*`, `rust-pairing`, `rust-tui`, `rust-intake-cli`,
+  `vault-read-resource-policy`, `kdf-resource-policy`, ...) also run Python
+  process contracts with receipts; their cargo tests are mostly inside
+  nextest, their process contracts are not. A slice that touches one of those
+  areas runs that workflow's contract steps by hand and names them in its
+  evidence; everything else is first exercised by the closing CI run.
 
 ## Pull requests folded in at the start
 

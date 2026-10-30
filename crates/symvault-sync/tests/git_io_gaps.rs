@@ -169,7 +169,7 @@ fn go_git_io_fixture_is_source_bound() {
     assert_eq!(fixture.schema_version, 1);
     assert_eq!(
         fixture.oracle.commit,
-        "28fd35315cf4989821a96bb08279c999c693e8d9"
+        "971714a473bb9a5594ecb9ca39ed2e8e278d2ce0"
     );
     assert_eq!(fixture.oracle.release, "unreleased");
     assert!(!fixture.oracle.source_files.is_empty());

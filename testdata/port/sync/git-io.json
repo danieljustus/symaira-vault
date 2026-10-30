@@ -1,11 +1,12 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "28fd35315cf4989821a96bb08279c999c693e8d9",
+    "commit": "971714a473bb9a5594ecb9ca39ed2e8e278d2ce0",
     "release": "unreleased",
     "source_files": [
       "internal/git/device_id.go",
       "internal/git/git.go",
+      "internal/git/git_env.go",
       "internal/git/git_offline.go",
       "internal/git/git_pull.go",
       "internal/git/git_push.go",
@@ -17,9 +18,9 @@
       "internal/git/separate_gitdir.go",
       "internal/git/syncer.go"
     ],
-    "source_digest": "42e21b213538c1b3765506ffdd5427dfc490036cfe23da66738749b33ed2318d",
+    "source_digest": "3a024f05eacbe31dabffeb1792c9053415643446b91defd3ef58db4cfb449a6e",
     "generator": "scripts/rust-port/cmd/gitio/main.go",
-    "generator_digest": "bd370a48fb6b4415b1a41b65e02af255c04e192c2695991c337357711463ee58"
+    "generator_digest": "cd9534b5eed74f96cd23d087dc4b196e53016c813e2b51fb9a427e220ea88558"
   },
   "cases": [
     {

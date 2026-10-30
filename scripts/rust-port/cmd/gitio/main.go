@@ -28,7 +28,7 @@ import (
 // oracleCommit is the immutable Go production revision whose internal/git
 // blobs are used to generate this fixture. The fixture is regenerated only
 // after deliberately advancing this pin when the production source changes.
-const oracleCommit = "28fd35315cf4989821a96bb08279c999c693e8d9"
+const oracleCommit = "971714a473bb9a5594ecb9ca39ed2e8e278d2ce0"
 const oracleRelease = "unreleased"
 
 type Oracle struct {
