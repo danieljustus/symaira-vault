@@ -1,5 +1,18 @@
 # Rust migration handover — 2026-09-09
 
+## CLI-005/006 local bool flags `--flag[=bool]`, 2026-10-30 (#1529)
+
+All 69 command-local clap `SetTrue` bool flags that are pflag `BoolVar`s in Go (plus `audit -j` and
+the Rust-only local `agent install --quiet`) now use the `--flag[=bool]` + `overrides_with` spelling,
+so `doctor --fix=false`, `verify --rebuild=false`, `-y=false` and repeats (last value wins) behave
+like Go; pre-existing `--flag[=bool]` locals gained the missing `overrides_with`, and
+`auth rotate-passphrase --reencrypt` takes ParseBool forms. The cobra emulation accepts `-y=value`
+for bool shorthands. `errtaxgen` records 20 more `bool_flag_local_*` usage cases (95 total; oracle
+`0cc78062` unchanged, only `generator_digest` and the appended cases differ; 15 failed on the
+pre-change binary). `doctor --fix=false` is guarded by in-crate tests over the whole command tree,
+not by a byte replay (host-dependent report). Open: hand-parsed `update apply|check|info` and
+`setup` bool flags still reject `--flag=false`; details in `cli-gap-inventory.md`.
+
 ## IO-003 intake watch mtime zone, 2026-10-25 (#1510)
 
 Go formats `fi.ModTime()` in `time.Local`, so `intake <file> --json` provenance `mtime` carries the host offset (`2023-11-14T23:13:20+01:00` under `TZ=Europe/Berlin`); Rust printed `Z`. The contract was previously only exercised in UTC. Red: `TZ=Europe/Berlin intake_watch_contract.py` failed on `file-env` against the pinned Go oracle. Fix: `intake_commands.rs` converts the mtime with a `localtime_r` offset (the `time` crate's `local_offset_at` refuses in the CLI's worker thread). The contract gains a `file-env-local-zone` case (`TZ=Europe/Berlin`, non-Windows; asserts `+01:00`). No Go source or fixture changed, so no pin advance was needed.
