@@ -1,5 +1,31 @@
 # Rust migration handover — 2026-09-09
 
+## IO-001 complete import CLI, 2026-10-31
+
+`importcligen` (new, oracle `bf7f687b`, source files `cmd/admin/import.go` + `internal/importer` +
+`internal/cli`, generator digest over `cases.go`, `main.go` and `check_import_cli.sh`) freezes 293
+`symvault import <source>` cases: stdout, stderr, exit status and, through `list --json` and
+`export --format json --yes` replays, the resulting vault (paths, field values, secret type and usage
+hint). `import_command_contract.rs` replays them with an exact case count and collects all
+differences; `make import-cli-differential` re-verifies the corpus against a rebuilt oracle first
+(`make import-cli-regenerate` rewrites it deliberately). Normalization is two narrow rules, documented
+in the generator and the test: sandbox paths become `@WORK`/`@ROOT`, and `import-YYYYMMDD-<8 hex>`
+quarantine IDs become `import-<DATE>-<RAND>`. Red before: 273 of 293 differed (heuristic classes, a
+case can be in several): per-entry progress lines missing 150, `list --json` of an empty vault 137,
+error printed once instead of twice 105, dry-run report missing 36, vault state 30, exit code 25,
+`usage_hint` of imported secret metadata 18, `Detected ... CSV export` line 17, repeated string flags
+rejected 4, plus single cases for `.json`/`.yaml` dispatch, `filepath.Ext` dotfiles, `1pux` alias,
+check order (vault before source, quarantine ID after parse), CSV parse error positions, mapping and
+open/read diagnostics, pass through the command, vault path diagnostics, backslash auto-commit.
+`import_commands.rs` now follows `cmd/admin/import.go` step for step (`prepare` before the vault,
+`apply` inside it). Also fixed at the root: Go CSV scanner port (`GoCsvScanner`) for exact `parse error
+on line N, column M` text, `path.Join` cleaning, Go `%q` in mapping errors, `UsageHintForType` in
+`symvault-store`, DEL/C1 characters accepted in entry paths (Go rejects only runes below 0x20),
+`list --json` `null` for an empty vault, auto-commit paths keep Unix backslashes. Negative control:
+reverting the `path.Join` cleaning fails 6 prefix cases. Residual: an environment-dependent case
+(case-insensitive file system, wall-clock git warning) is deliberately not in the corpus. Local gate
+only (local-first mode).
+
 ## IO-001 1PUX on gojson, 2026-10-30
 
 `import1passgen` adds the same mutation sweep as `cxfgen` (197 `onepux_mut*` cases, complete

@@ -252,7 +252,14 @@ pub fn write_list<W: Write>(
             writeln!(output, "{}", entry.path).map_err(|error| error.to_string())
         }),
         "json" => {
-            serde_json::to_writer(&mut *output, entries).map_err(|error| error.to_string())?;
+            // Go marshals the nil slice of an empty listing as `null`.
+            if entries.is_empty() {
+                output
+                    .write_all(b"null")
+                    .map_err(|error| error.to_string())?;
+            } else {
+                serde_json::to_writer(&mut *output, entries).map_err(|error| error.to_string())?;
+            }
             writeln!(output).map_err(|error| error.to_string())
         }
         other => Err(format!(

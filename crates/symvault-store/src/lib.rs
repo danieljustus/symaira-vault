@@ -1410,7 +1410,8 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
 fn validate_entry_path(path: &str) -> Result<(), StoreError> {
     if path.trim().is_empty()
         || path.contains('\0')
-        || path.chars().any(char::is_control)
+        // Go rejects only runes below 0x20; DEL and C1 controls are accepted.
+        || path.chars().any(|character| u32::from(character) < 0x20)
         || Path::new(path).is_absolute()
     {
         return Err(StoreError::InvalidEntryPath(path.to_owned()));
@@ -1986,6 +1987,53 @@ impl SecretType {
             Self::TotpSeed => "totp_seed",
             Self::Payment => "payment",
             Self::Custom => "custom",
+        }
+    }
+
+    /// Parses a stored type name (the inverse of [`SecretType::as_str`]).
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "api_key" => Self::ApiKey,
+            "bearer_token" => Self::BearerToken,
+            "basic_auth" => Self::BasicAuth,
+            "ssh_key" => Self::SshKey,
+            "password" => Self::Password,
+            "certificate" => Self::Certificate,
+            "database_url" => Self::DatabaseUrl,
+            "totp_seed" => Self::TotpSeed,
+            "payment" => Self::Payment,
+            "custom" => Self::Custom,
+            _ => return None,
+        })
+    }
+
+    /// Go's `UsageHintForType`: the agent-facing hint stored with the type.
+    #[must_use]
+    pub const fn usage_hint(self) -> &'static str {
+        match self {
+            Self::ApiKey => {
+                "Set as header or query parameter depending on API documentation. Common: X-API-Key: *** or ?api_key=<key>"
+            }
+            Self::BearerToken => "Set Header Authorization: Bearer ***",
+            Self::BasicAuth => {
+                "Encode as base64(user:pass) and set Header Authorization: Basic ***"
+            }
+            Self::SshKey => {
+                "Write to temporary file with chmod 600 before use. Use with ssh -i <keyfile>"
+            }
+            Self::Password => {
+                "Use for authentication. Consider using a password manager or secret injection."
+            }
+            Self::Certificate => "Use with TLS/SSL configuration. May require private key pairing.",
+            Self::DatabaseUrl => "Use as connection string. Ensure credentials are not logged.",
+            Self::TotpSeed => {
+                "Use with TOTP generator. Never share the seed - only share generated codes."
+            }
+            Self::Payment => {
+                "Payment card or bank account details. Sensitive fields (card_number, cvc, iban) are redacted by default."
+            }
+            Self::Custom => "Follow the specific integration instructions for this secret.",
         }
     }
 }

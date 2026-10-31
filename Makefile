@@ -600,6 +600,19 @@ yaml-syntax-cli-differential:
 error-taxonomy-cli-differential:
 	./scripts/rust-port/check_error_taxonomy_cli.sh
 
+# IO-001: the complete `symvault import <source>` command (every flag, every
+# format, existing-entry collisions, error paths and the resulting vault state)
+# against the pinned Go binary (oracle bf7f687b). Re-verifies the frozen corpus
+# against a rebuilt oracle, then replays it against the Rust CLI.
+.PHONY: import-cli-differential
+import-cli-differential:
+	./scripts/rust-port/check_import_cli.sh
+
+# Deliberate regeneration of the import-command fixture from the pinned oracle.
+.PHONY: import-cli-regenerate
+import-cli-regenerate:
+	SYMVAULT_IMPORT_CLI_REGENERATE=1 ./scripts/rust-port/check_import_cli.sh
+
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
@@ -701,7 +714,7 @@ port-contract: cfg-overrides-fixtures-check mcp-oauth-contract store004-isolatio
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9 --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:

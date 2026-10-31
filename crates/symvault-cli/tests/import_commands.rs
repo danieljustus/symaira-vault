@@ -213,7 +213,11 @@ fn failed_overwrite_keeps_the_existing_entry() {
         |_, _, _, _| panic!("metadata must not run after replacement failure"),
     )
     .expect_err("replacement failure must be returned");
-    assert!(error.contains("cannot overwrite entry existing"));
+    // Go's wording carries the cause but not the path.
+    assert_eq!(
+        error,
+        "cannot overwrite entry: injected replacement failure"
+    );
     let entry = Store::open(&root, &identity)
         .unwrap()
         .get("existing", &identity)

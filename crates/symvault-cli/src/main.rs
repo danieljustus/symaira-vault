@@ -524,17 +524,18 @@ enum Command {
         /// first non-flag word may name the `review` group (Find semantics).
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<OsString>,
-        #[arg(long)]
+        // cobra string flags keep the last value of a repeated flag.
+        #[arg(long, overrides_with = "format")]
         format: Option<String>,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
-        #[arg(long, default_value = "")]
+        #[arg(long, default_value = "", overrides_with = "prefix")]
         prefix: String,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "skip_existing")]
         skip_existing: bool,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "overwrite")]
         overwrite: bool,
-        #[arg(long, default_value = "")]
+        #[arg(long, default_value = "", overrides_with = "mapping")]
         mapping: String,
         #[arg(
             long,
@@ -4886,60 +4887,57 @@ fn run_import(
     quarantine: bool,
     quiet: bool,
 ) -> ExitCode {
-    // Go resolves the format and flag conflicts before opening the vault.
-    if let Err(error) = import_commands::resolve_format(format, source) {
-        return finish_vault_result(Err(error));
-    }
-    if skip_existing && overwrite {
-        return finish_vault_result(Err(
-            "--skip-existing and --overwrite cannot be used together".into(),
-        ));
-    }
-    if quarantine && !prefix.is_empty() {
-        return finish_vault_result(Err(
-            "--quarantine and --prefix cannot be used together".into()
-        ));
-    }
+    let mut stdout = io::stdout();
+    let mut reporter = import_commands::Reporter::new(&mut stdout, quiet);
     let result = (|| {
+        // Go resolves the format, prints its reports, checks the flag
+        // conflicts and parses the source before it opens the vault, so a bad
+        // source never reaches the passphrase or the "not initialized" check.
+        let options = import_commands::ImportOptions {
+            source: source.to_owned(),
+            format: format.map(str::to_owned),
+            dry_run,
+            prefix: prefix.to_owned(),
+            skip_existing,
+            overwrite,
+            mapping: mapping.to_owned(),
+            quarantine_id: if quarantine {
+                Some(import_commands::generate_import_id()?)
+            } else {
+                None
+            },
+        };
+        let prepared = import_commands::prepare(&options, &mut reporter)?;
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
-        let quarantine_id = if quarantine {
-            Some(import_commands::generate_import_id()?)
-        } else {
-            None
-        };
-        if !quiet && let Some(import_id) = quarantine_id.as_deref() {
-            println!("Quarantine import ID: {import_id}");
-        }
-        let result = import_commands::run_import(
+        let result = import_commands::apply(
             &vault,
             &identity,
-            &import_commands::ImportOptions {
-                source: source.to_owned(),
-                format: format.map(str::to_owned),
-                dry_run,
-                prefix: prefix.to_owned(),
-                skip_existing,
-                overwrite,
-                mapping: mapping.to_owned(),
-                quarantine_id,
-            },
+            prepared,
+            &options,
+            &mut reporter,
             write_commands::import_fields,
             write_commands::replace_fields,
             |root, identity, path, secret_type| {
                 write_commands::set_secret_type(root, identity, path, secret_type)
             },
         )?;
-        if !quiet {
-            println!(
-                "Import summary: {} imported, {} skipped",
-                result.imported, result.skipped
-            );
-        }
+        reporter.line(&format!(
+            "Import summary: {} imported, {} skipped",
+            result.imported, result.skipped
+        ));
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        // Cobra and the root executor each print a failure of this command.
+        Err(error) if !is_not_initialized(&error) => {
+            print_error_like_go(&error);
+            ExitCode::from(1)
+        }
+        Err(error) => finish_vault_result(Err(error)),
+    }
 }
 
 fn confirm_export() -> Result<bool, String> {

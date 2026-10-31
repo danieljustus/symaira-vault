@@ -47,8 +47,13 @@ pub fn import_pass(dir: &Path) -> Result<Vec<ImportedEntry>, ImportError> {
 /// their process adapter. It still goes through the same argument and
 /// environment filtering as the production entry point.
 pub fn import_pass_with_gpg(dir: &Path, gpg: &Path) -> Result<Vec<ImportedEntry>, ImportError> {
-    let metadata = fs::metadata(dir)
-        .map_err(|error| ImportError::Parse(format!("open pass store: {error}")))?;
+    let metadata = fs::metadata(dir).map_err(|error| {
+        ImportError::Parse(format!(
+            "open pass store: stat {}: {}",
+            dir.display(),
+            super::go_io_reason(&error)
+        ))
+    })?;
     if !metadata.is_dir() {
         return Err(ImportError::Parse(format!(
             "pass store is not a directory: {}",
@@ -103,7 +108,18 @@ fn decrypt_pass_file(gpg: &Path, path: &Path) -> Result<String, ImportError> {
     command.arg(path);
     prepare_gpg_command(&mut command);
     let output = command.output().map_err(|error| {
-        ImportError::Parse(format!("decrypt pass entry {}: {error}", path.display()))
+        // Go's os/exec reports a bare program name that is not on PATH with
+        // its own text; any other spawn failure carries the OS reason.
+        let reason =
+            if error.kind() == std::io::ErrorKind::NotFound && gpg.components().count() == 1 {
+                format!(
+                    "exec: {:?}: executable file not found in $PATH",
+                    gpg.display().to_string()
+                )
+            } else {
+                super::go_io_reason(&error)
+            };
+        ImportError::Parse(format!("decrypt pass entry {}: {reason}", path.display()))
     })?;
     if !output.status.success() {
         let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();

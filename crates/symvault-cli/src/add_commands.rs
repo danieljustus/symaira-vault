@@ -238,30 +238,5 @@ fn primary_field(secret_type: SecretType) -> String {
 }
 
 fn usage_hint(secret_type: SecretType) -> &'static str {
-    match secret_type {
-        SecretType::ApiKey => {
-            "Set as header or query parameter depending on API documentation. Common: X-API-Key: <key> or ?api_key=<key>"
-        }
-        SecretType::BearerToken => "Set Header Authorization: Bearer <token>",
-        SecretType::BasicAuth => {
-            "Encode as base64(user:pass) and set Header Authorization: Basic <encoded>"
-        }
-        SecretType::SshKey => {
-            "Write to temporary file with chmod 600 before use. Use with ssh -i <keyfile>"
-        }
-        SecretType::Password => {
-            "Use for authentication. Consider using a password manager or secret injection."
-        }
-        SecretType::Certificate => {
-            "Use with TLS/SSL configuration. May require private key pairing."
-        }
-        SecretType::DatabaseUrl => "Use as connection string. Ensure credentials are not logged.",
-        SecretType::TotpSeed => {
-            "Use with TOTP generator. Never share the seed - only share generated codes."
-        }
-        SecretType::Payment => {
-            "Payment card or bank account details. Sensitive fields (card_number, cvc, iban) are redacted by default."
-        }
-        SecretType::Custom => "Follow the specific integration instructions for this secret.",
-    }
+    secret_type.usage_hint()
 }

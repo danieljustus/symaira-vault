@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::{collections::BTreeMap, path::Path};
 use symvault_core::{password, totp};
 use symvault_crypto::Identity;
-use symvault_store::{Entry, Store, StoreError, WriteRecord};
+use symvault_store::{Entry, SecretMetadata, SecretType, Store, StoreError, WriteRecord};
 use symvault_sync::GoTime;
 
 pub fn sensitive_field(field: &str) -> bool {
@@ -121,7 +121,15 @@ pub fn set_secret_type(
     let mut entry = store
         .get(path, identity)
         .map_err(|error| format!("cannot read entry {path}: {error}"))?;
-    entry.secret_metadata.secret_type = secret_type.to_owned();
+    // Go's SetSecretMetadata replaces the whole metadata with the importer's
+    // type and the type's usage hint.
+    entry.secret_metadata = SecretMetadata {
+        secret_type: secret_type.to_owned(),
+        usage_hint: SecretType::from_name(secret_type)
+            .map_or("", SecretType::usage_hint)
+            .to_owned(),
+        ..SecretMetadata::default()
+    };
     store
         .write_entry_with_recipients_at(
             path,

@@ -97,11 +97,14 @@ pub fn parse_mapping(value: &str) -> Result<BTreeMap<String, String>, String> {
         }
         let (field, column) = pair
             .split_once('=')
-            .ok_or_else(|| format!("invalid mapping pair: {pair:?}"))?;
+            .ok_or_else(|| format!("invalid mapping pair: {}", symvault_core::go_quote(pair)))?;
         let field = field.trim();
         let column = column.trim();
         if field.is_empty() || column.is_empty() {
-            return Err(format!("empty field or column in mapping: {pair:?}"));
+            return Err(format!(
+                "empty field or column in mapping: {}",
+                symvault_core::go_quote(pair)
+            ));
         }
         mapping.insert(field.to_owned(), column.to_owned());
     }
