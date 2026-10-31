@@ -158,8 +158,13 @@ func newSandbox() (*sandbox, error) {
 			return nil, err
 		}
 	}
+	systemBin, err := systemToolsWithoutGPG(root)
+	if err != nil {
+		_ = os.RemoveAll(root)
+		return nil, err
+	}
 	box.env = []string{
-		"PATH=" + filepath.Join(box.work, "bin") + ":/usr/bin:/bin",
+		"PATH=" + filepath.Join(box.work, "bin") + ":" + systemBin,
 		"HOME=" + box.home,
 		"USERPROFILE=" + box.home,
 		"XDG_CONFIG_HOME=" + filepath.Join(root, "xdg-config"),
@@ -537,4 +542,34 @@ func marshalJSON(value any) ([]byte, error) {
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "FAIL "+format+"\n", args...)
 	exit(1)
+}
+
+// systemToolsWithoutGPG mirrors /usr/bin and /bin (in PATH order, first name
+// wins) into root/sysbin as symlinks, leaving out every gpg* executable. The
+// corpus was captured on a host without a system gpg; Linux hosts ship one, so
+// a plain /usr/bin:/bin PATH would make "no gpg on PATH" host-dependent. Cases
+// that need gpg stage their own shim in work/bin, which precedes this dir.
+func systemToolsWithoutGPG(root string) (string, error) {
+	dir := filepath.Join(root, "sysbin")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	seen := map[string]bool{}
+	for _, source := range []string{"/usr/bin", "/bin"} {
+		entries, err := os.ReadDir(source)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if seen[name] || strings.HasPrefix(name, "gpg") {
+				continue
+			}
+			seen[name] = true
+			if err := os.Symlink(filepath.Join(source, name), filepath.Join(dir, name)); err != nil {
+				return "", err
+			}
+		}
+	}
+	return dir, nil
 }

@@ -37,7 +37,7 @@
       "scripts/rust-port/cmd/importcligen/cases.go",
       "scripts/rust-port/cmd/importcligen/main.go"
     ],
-    "generator_digest": "cf538f27db457ef83c145274a66c6ea5260c5760de2681f7c59acbeb18351dba"
+    "generator_digest": "b420e56faf76249cef68360d136a2b1915d75e0a229645a913475c584dce4072"
   },
   "notes": [
     "Every case ran the pinned Go oracle in its own disposable HOME/XDG/vault sandbox with the source files in the working directory.",

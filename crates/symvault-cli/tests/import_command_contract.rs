@@ -196,7 +196,11 @@ impl Sandbox {
         let path = {
             #[cfg(unix)]
             {
-                format!("{}:/usr/bin:/bin", work_bin.display())
+                format!(
+                    "{}:{}",
+                    work_bin.display(),
+                    system_tools_without_gpg(&self.root).display()
+                )
             }
             #[cfg(not(unix))]
             {
@@ -490,4 +494,34 @@ fn fixture_provenance_matches_checkout() {
         "generator changed since fixture capture — re-freeze the fixture \
          (make import-cli-regenerate)"
     );
+}
+
+/// `/usr/bin` and `/bin` (PATH order, first name wins) mirrored as symlinks
+/// into `root/sysbin` without any `gpg*` executable, exactly like the
+/// generator's `systemToolsWithoutGPG`. The corpus was captured on a host
+/// without a system gpg; Linux hosts ship one, so a plain `/usr/bin:/bin` PATH
+/// would make the "no gpg on PATH" case host-dependent. Cases that need gpg
+/// stage their own shim in the sandbox's `bin`, which precedes this directory.
+#[cfg(unix)]
+fn system_tools_without_gpg(root: &Path) -> PathBuf {
+    let dir = root.join("sysbin");
+    if dir.is_dir() {
+        return dir;
+    }
+    std::fs::create_dir_all(&dir).expect("system tools directory");
+    let mut seen = std::collections::BTreeSet::new();
+    for source in ["/usr/bin", "/bin"] {
+        let Ok(entries) = std::fs::read_dir(source) else {
+            continue;
+        };
+        for entry in entries {
+            let name = entry.expect("system tool entry").file_name();
+            if name.to_string_lossy().starts_with("gpg") || !seen.insert(name.clone()) {
+                continue;
+            }
+            std::os::unix::fs::symlink(Path::new(source).join(&name), dir.join(&name))
+                .expect("link system tool");
+        }
+    }
+    dir
 }
