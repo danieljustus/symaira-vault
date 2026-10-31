@@ -17,6 +17,13 @@ migration warning not silenced by `--quiet`; `agent install --json`; intake JSON
 errors; config `git:` writes `commit_template` first; device errors are doubled; yaml renderer shared via
 `symvault-gojson::yaml`.
 
+Verified (HEAD at commit time): `outputmodegen --check` PASS against the rebuilt-pin oracle; replay 379 cases
+(>= 3 per path, all 47 paths) green; negative control (one byte of `version.text` changed) fails both `--check`
+and the replay; red-before: 125 of 379 cases fail against the base `fbc2a4b1` binary. `error_taxonomy` and
+`cli_device_approval` expectations moved with the fixes (`delete x`, `device approval-revoke` now Go-exact);
+`empty_flow_mapping_root` became a regular `config-yaml-syntax.json` case (94 cases, 32 open divergences, 441 comparisons;
+fixture regenerated provenance-neutral: source digest unchanged, only that case added).
+
 Declared open: update apply/check/info beyond the dev-build branch, `intake watch` beyond `--once`, live
 `approval`/`device approval-pair|accept|join`/`remote init` flows, `--color`/`--theme`; `doctor` is pinned with
 `--no-network`; Touch ID availability is normalised (rule 7: Go's LAContext probe says true here, the Rust JXA
