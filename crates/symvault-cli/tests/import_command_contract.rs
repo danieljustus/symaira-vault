@@ -212,6 +212,8 @@ impl Sandbox {
             .args(self.expand(args))
             .current_dir(&self.work)
             .env_clear()
+            // Keep cargo-llvm-cov's absolute profile path (see the export contract).
+            .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
             .env("PATH", path)
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)

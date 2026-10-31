@@ -415,6 +415,10 @@ mod replay {
                 .current_dir(self.root.join("work"))
                 .env_clear()
                 .envs(self.environment(case))
+                // cargo-llvm-cov points instrumented binaries at an absolute
+                // profile path; without it they drop `default_*.profraw` into
+                // the compared working tree.
+                .envs(std::env::var_os("LLVM_PROFILE_FILE").map(|path| ("LLVM_PROFILE_FILE", path)))
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .stdin(if step.stdin.is_some() {
