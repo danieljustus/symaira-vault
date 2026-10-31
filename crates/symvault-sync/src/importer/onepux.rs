@@ -193,6 +193,7 @@ fn parse_1pux_with_limits(
                     data,
                     warnings,
                     secret_type: None,
+                    ..ImportedEntry::default()
                 });
             }
         }

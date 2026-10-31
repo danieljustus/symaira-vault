@@ -17,14 +17,30 @@
 //     "@WORK" and "@ROOT" in every captured stream, and the token "@WORK" in
 //     an argv/seed element is replaced by the working directory. This keeps
 //     absolute-path error text comparable without dropping it.
+//
 //  2. Quarantine import IDs. `--quarantine` mints `import-YYYYMMDD-<8 hex>`
 //     from the wall clock and a random source. Exactly that shape (a valid
 //     calendar date and 8 lowercase hex digits) is rewritten to
 //     "import-<DATE>-<RAND>" in stdout, stderr and post stdout. Nothing else
 //     is rewritten and an ID of any other shape stays visible as a diff.
 //
+//  3. Temporary entry files. A failed write names `<entry>.age.tmp-<digits>`
+//     with a random decimal suffix; exactly `.age.tmp-` followed by digits
+//     becomes ".age.tmp-<N>" in stdout and stderr.
+//
 // Streams are compared as raw bytes; post commands compare stdout and exit
 // status only, because `export` stderr carries a wall-clock log line.
+//
+// Go strings carry raw bytes, so the importer echoes an entry path with
+// invalid UTF-8 unchanged (dry-run lines, errors). A stream that is not valid
+// UTF-8 is stored twice: `stdout`/`stderr` hold the text with one U+FFFD per
+// invalid byte (readable, never compared) and `stdout_b64`/`stderr_b64` hold
+// the exact bytes (authoritative whenever present).
+//
+// Platform gating. A case marked "darwin" depends on the host file system:
+// macOS (APFS) refuses to create a file whose name is not valid UTF-8
+// (EILSEQ), while Linux creates it. Such a case is observed on darwin only;
+// on any other host `--check` keeps the recorded case and does not run it.
 package main
 
 import (
@@ -44,6 +60,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
 )
@@ -113,7 +130,11 @@ type caseResult struct {
 	Exit     int        `json:"exit"`
 	Stdout   string     `json:"stdout"`
 	Stderr   string     `json:"stderr"`
-	Post     []step     `json:"post,omitempty"`
+	// StdoutB64/StderrB64 carry the exact bytes of a stream that is not valid
+	// UTF-8; Stdout/Stderr then hold the readable replacement text.
+	StdoutB64 string `json:"stdout_b64,omitempty"`
+	StderrB64 string `json:"stderr_b64,omitempty"`
+	Post      []step `json:"post,omitempty"`
 }
 
 type fixture struct {
@@ -248,6 +269,46 @@ var wallClockLine = regexp.MustCompile(`[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9
 
 var quarantineID = regexp.MustCompile(`import-([0-9]{8})-[0-9a-f]{8}`)
 
+// tempEntrySuffix is the random decimal suffix of a failed write's temporary
+// file (normalization rule 3).
+var tempEntrySuffix = regexp.MustCompile(`\.age\.tmp-[0-9]+`)
+
+// displayText is the readable form of a stream that may not be valid UTF-8:
+// one U+FFFD per invalid byte, exactly what encoding/json would emit.
+func displayText(raw string) string {
+	var out strings.Builder
+	for i := 0; i < len(raw); {
+		r, width := utf8.DecodeRuneInString(raw[i:])
+		if r == utf8.RuneError && width == 1 {
+			out.WriteRune(utf8.RuneError)
+		} else {
+			out.WriteString(raw[i : i+width])
+		}
+		i += width
+	}
+	return out.String()
+}
+
+// streamFields returns the readable text and, only when the stream is not
+// valid UTF-8, the base64 of its exact bytes.
+func streamFields(raw string) (text, b64 string) {
+	if utf8.ValidString(raw) {
+		return raw, ""
+	}
+	return displayText(raw), base64.StdEncoding.EncodeToString([]byte(raw))
+}
+
+// runsOnThisHost reports whether a case of the given platform can be observed
+// here. "darwin" cases depend on macOS refusing non-UTF-8 file names.
+func runsOnThisHost(platform string) bool {
+	switch platform {
+	case "darwin":
+		return runtime.GOOS == "darwin"
+	default:
+		return true
+	}
+}
+
 // normalize applies both documented rules to a captured stream.
 func (s *sandbox) normalize(text string) string {
 	for _, pair := range []struct{ dir, marker string }{{s.work, workMarker}, {s.root, rootMarker}} {
@@ -259,6 +320,7 @@ func (s *sandbox) normalize(text string) string {
 			text = strings.ReplaceAll(text, dir, pair.marker)
 		}
 	}
+	text = tempEntrySuffix.ReplaceAllString(text, ".age.tmp-<N>")
 	return quarantineID.ReplaceAllStringFunc(text, func(id string) string {
 		match := quarantineID.FindStringSubmatch(id)
 		if _, err := time.Parse("20060102", match[1]); err != nil {
@@ -300,9 +362,6 @@ func (s *sandbox) run(goBinary string, args []string) (observed, error) {
 		raw  []byte
 		dest *string
 	}{{stdout.Bytes(), &out.stdout}, {stderr.Bytes(), &out.stderr}} {
-		if strings.ToValidUTF8(string(text.raw), "\x00?") != string(text.raw) {
-			return out, fmt.Errorf("oracle output of %v is not valid UTF-8", args)
-		}
 		*text.dest = s.normalize(string(text.raw))
 	}
 	return out, nil
@@ -362,9 +421,10 @@ func runCase(goBinary string, in caseInput) (caseResult, error) {
 	}
 	result := caseResult{
 		ID: in.id, Desc: in.desc, Platform: platform, Files: in.files,
-		Seed: in.seed, Argv: in.argv,
-		Exit: main.exit, Stdout: main.stdout, Stderr: main.stderr,
+		Seed: in.seed, Argv: in.argv, Exit: main.exit,
 	}
+	result.Stdout, result.StdoutB64 = streamFields(main.stdout)
+	result.Stderr, result.StderrB64 = streamFields(main.stderr)
 	if result.Seed == nil {
 		result.Seed = [][]string{}
 	}
@@ -374,6 +434,11 @@ func runCase(goBinary string, in caseInput) (caseResult, error) {
 			got, err := box.run(goBinary, post)
 			if err != nil {
 				return caseResult{}, fmt.Errorf("case %s post %v: %w", in.id, post, err)
+			}
+			if !utf8.ValidString(got.stdout) {
+				// Post steps carry no byte field: vault reads emit JSON/CSV
+				// text, so invalid UTF-8 here would be an unrecorded change.
+				return caseResult{}, fmt.Errorf("case %s post %v: stdout is not valid UTF-8", in.id, post)
 			}
 			result.Post = append(result.Post, step{Argv: post, Exit: got.exit, Stdout: got.stdout})
 		}
@@ -439,6 +504,10 @@ func main() {
 		fatal("hash generator: %v", err)
 	}
 	inputs := allCases()
+	recordedCases, err := loadRecordedCases(root, *output)
+	if err != nil {
+		fatal("read recorded fixture: %v", err)
+	}
 	seen := map[string]bool{}
 	var results []caseResult
 	for _, in := range inputs {
@@ -446,6 +515,14 @@ func main() {
 			fatal("duplicate case id %s", in.id)
 		}
 		seen[in.id] = true
+		if !runsOnThisHost(in.platform) {
+			recorded, ok := recordedCases[in.id]
+			if !*check || !ok {
+				fatal("case %s needs a %s host to be observed; regenerate there", in.id, in.platform)
+			}
+			results = append(results, recorded)
+			continue
+		}
 		got, err := runCase(*goBinary, in)
 		if err != nil {
 			fatal("%v", err)
@@ -464,7 +541,9 @@ func main() {
 			"seed commands build the starting vault; post commands pin the resulting entries (list --json: paths, secret type, usage hint; export: every field value).",
 			"Post commands compare stdout and exit only: export stderr carries a wall-clock log line.",
 			"The 'SYMVAULT_PASSPHRASE is active' stderr line is part of the oracle bytes on purpose.",
-			"Normalization (documented in cmd/importcligen/main.go): sandbox paths become @WORK/@ROOT; quarantine IDs import-YYYYMMDD-<8 hex> become import-<DATE>-<RAND>.",
+			"Normalization (documented in cmd/importcligen/main.go): sandbox paths become @WORK/@ROOT; quarantine IDs import-YYYYMMDD-<8 hex> become import-<DATE>-<RAND>; the random suffix of a failed write's temporary file (.age.tmp-<digits>) becomes .age.tmp-<N>.",
+			"A stream that is not valid UTF-8 (Go echoes entry paths as raw bytes) is stored as stdout_b64/stderr_b64; the text field then holds one U+FFFD per invalid byte and is not compared.",
+			"Cases marked platform darwin depend on macOS refusing non-UTF-8 file names (EILSEQ); other hosts keep the recorded case and do not run it. Linux accepts such names (see docs/adr/0030).",
 		},
 		Cases: results,
 	})
@@ -491,6 +570,28 @@ func main() {
 		fatal("write fixture: %v", err)
 	}
 	fmt.Printf("WROTE %s (%s)\n", *output, summary)
+}
+
+// loadRecordedCases returns the cases of the committed fixture by ID, so a host
+// that cannot observe a platform-gated case keeps its recorded observation. A
+// missing fixture (first generation) yields no cases.
+func loadRecordedCases(root, output string) (map[string]caseResult, error) {
+	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(output))) // #nosec G304 -- repository fixture path
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]caseResult{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var existing fixture
+	if err := json.Unmarshal(raw, &existing); err != nil {
+		return nil, err
+	}
+	byID := make(map[string]caseResult, len(existing.Cases))
+	for _, recorded := range existing.Cases {
+		byID[recorded.ID] = recorded
+	}
+	return byID, nil
 }
 
 func validateGoBinary(path string) error {

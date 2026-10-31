@@ -37,14 +37,16 @@
       "scripts/rust-port/cmd/importcligen/cases.go",
       "scripts/rust-port/cmd/importcligen/main.go"
     ],
-    "generator_digest": "b420e56faf76249cef68360d136a2b1915d75e0a229645a913475c584dce4072"
+    "generator_digest": "8c4514f80d1d92513f54d17ebc73776f37f1f231ab432f0eb699563aaf8ef1ae"
   },
   "notes": [
     "Every case ran the pinned Go oracle in its own disposable HOME/XDG/vault sandbox with the source files in the working directory.",
     "seed commands build the starting vault; post commands pin the resulting entries (list --json: paths, secret type, usage hint; export: every field value).",
     "Post commands compare stdout and exit only: export stderr carries a wall-clock log line.",
     "The 'SYMVAULT_PASSPHRASE is active' stderr line is part of the oracle bytes on purpose.",
-    "Normalization (documented in cmd/importcligen/main.go): sandbox paths become @WORK/@ROOT; quarantine IDs import-YYYYMMDD-<8 hex> become import-<DATE>-<RAND>."
+    "Normalization (documented in cmd/importcligen/main.go): sandbox paths become @WORK/@ROOT; quarantine IDs import-YYYYMMDD-<8 hex> become import-<DATE>-<RAND>; the random suffix of a failed write's temporary file (.age.tmp-<digits>) becomes .age.tmp-<N>.",
+    "A stream that is not valid UTF-8 (Go echoes entry paths as raw bytes) is stored as stdout_b64/stderr_b64; the text field then holds one U+FFFD per invalid byte and is not compared.",
+    "Cases marked platform darwin depend on macOS refusing non-UTF-8 file names (EILSEQ); other hosts keep the recorded case and do not run it. Linux accepts such names (see docs/adr/0030)."
   ],
   "cases": [
     {
@@ -12890,6 +12892,2352 @@
       "exit": 1,
       "stdout": "",
       "stderr": "Error: import source exceeds maximum size of 104857600 bytes\nError: import source exceeds maximum size of 104857600 bytes\n"
+    },
+    {
+      "id": "invalid-bytes-dry-run-lone-bytes",
+      "desc": "two titles that differ only in their invalid byte stay two distinct raw paths",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/yxwdy1vbmUK/ixwdy10d28K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: �\nWould import: �\nImport summary: 2 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IP8KV291bGQgaW1wb3J0OiD+CkltcG9ydCBzdW1tYXJ5OiAyIGltcG9ydGVkLCAwIHNraXBwZWQK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-classes",
+      "desc": "truncated 2/3/4-byte sequences, overlong, surrogate, out-of-range, 5-byte, lone C1 and a valid NEL (trimmed) in titles",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKYcMscDEKYeKCLHAyCmHwnyxwMwphwK8scDQKYe2ggCxwNQph9JCAgCxwNgph+IiAgIAscDcKYYUscDgKYcKFLHA5CmNhZsOpLHAxMAo="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: a�\nWould import: a��\nWould import: a��\nWould import: a��\nWould import: a���\nWould import: a����\nWould import: a�����\nWould import: a�\nWould import: a\nWould import: café\nImport summary: 10 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IGHDCldvdWxkIGltcG9ydDogYeKCCldvdWxkIGltcG9ydDogYfCfCldvdWxkIGltcG9ydDogYcCvCldvdWxkIGltcG9ydDogYe2ggApXb3VsZCBpbXBvcnQ6IGH0kICACldvdWxkIGltcG9ydDogYfiIgICACldvdWxkIGltcG9ydDogYYUKV291bGQgaW1wb3J0OiBhCldvdWxkIGltcG9ydDogY2Fmw6kKSW1wb3J0IHN1bW1hcnk6IDEwIGltcG9ydGVkLCAwIHNraXBwZWQK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-duplicate",
+      "desc": "the generic CSV importer keeps two rows with the same invalid path",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/yxwMQr/LHAyCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: �\nWould import: �\nImport summary: 2 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IP8KV291bGQgaW1wb3J0OiD/CkltcG9ydCBzdW1tYXJ5OiAyIGltcG9ydGVkLCAwIHNraXBwZWQK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-nested",
+      "desc": "invalid bytes inside a nested path",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKYS//L2IscDEKYf4vYv0scDIK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: a/�/b\nWould import: a�/b�\nImport summary: 2 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IGEv/y9iCldvdWxkIGltcG9ydDogYf4vYv0KSW1wb3J0IHN1bW1hcnk6IDIgaW1wb3J0ZWQsIDAgc2tpcHBlZAo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-prefix",
+      "desc": "--prefix joins the raw path with path.Join",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/yxwdy1vbmUK/ixwdy10d28K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--prefix",
+        "a/b",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: a/b/�\nWould import: a/b/�\nImport summary: 2 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IGEvYi//CldvdWxkIGltcG9ydDogYS9iL/4KSW1wb3J0IHN1bW1hcnk6IDIgaW1wb3J0ZWQsIDAgc2tpcHBlZAo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-prefix-clean",
+      "desc": "path.Join cleans repeated and dot segments around an invalid path; spaces become dashes and edge slashes go",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKIi//LyIscDEKeC8v/yxwMgp4Ly4v/yxwMwog/yAgLHA0Cv8gYSxwNQr/LWEscDYK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--prefix",
+        "p",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: p/�\nWould import: p/x/�\nWould import: p/x/�\nWould import: p/�\nWould import: p/�-a\nWould import: p/�-a\nImport summary: 6 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IHAv/wpXb3VsZCBpbXBvcnQ6IHAveC//CldvdWxkIGltcG9ydDogcC94L/8KV291bGQgaW1wb3J0OiBwL/8KV291bGQgaW1wb3J0OiBwL/8tYQpXb3VsZCBpbXBvcnQ6IHAv/y1hCkltcG9ydCBzdW1tYXJ5OiA2IGltcG9ydGVkLCAwIHNraXBwZWQK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-clean-without-prefix",
+      "desc": "without a prefix a clean path prints raw and a rejected one fails the existence check",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKIi//LyIscDEKeC8v/yxwMgo="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 1,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: �\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot check entry: cannot read entry x//�: entry path \"x//\\xff\": invalid path: path contains empty segment (double slash): entry path \"x//\\xff\": invalid path: path contains empty segment (double slash)\nError: cannot check entry: cannot read entry x//�: entry path \"x//\\xff\": invalid path: path contains empty segment (double slash): entry path \"x//\\xff\": invalid path: path contains empty segment (double slash)\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IP8K",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IGNoZWNrIGVudHJ5OiBjYW5ub3QgcmVhZCBlbnRyeSB4Ly//OiBlbnRyeSBwYXRoICJ4Ly9ceGZmIjogaW52YWxpZCBwYXRoOiBwYXRoIGNvbnRhaW5zIGVtcHR5IHNlZ21lbnQgKGRvdWJsZSBzbGFzaCk6IGVudHJ5IHBhdGggIngvL1x4ZmYiOiBpbnZhbGlkIHBhdGg6IHBhdGggY29udGFpbnMgZW1wdHkgc2VnbWVudCAoZG91YmxlIHNsYXNoKQpFcnJvcjogY2Fubm90IGNoZWNrIGVudHJ5OiBjYW5ub3QgcmVhZCBlbnRyeSB4Ly//OiBlbnRyeSBwYXRoICJ4Ly9ceGZmIjogaW52YWxpZCBwYXRoOiBwYXRoIGNvbnRhaW5zIGVtcHR5IHNlZ21lbnQgKGRvdWJsZSBzbGFzaCk6IGVudHJ5IHBhdGggIngvL1x4ZmYiOiBpbnZhbGlkIHBhdGg6IHBhdGggY29udGFpbnMgZW1wdHkgc2VnbWVudCAoZG91YmxlIHNsYXNoKQo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-quarantine",
+      "desc": "--quarantine joins the raw path under the quarantine ID",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/yxwdy1vbmUK/ixwdy10d28K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--quarantine",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nQuarantine import ID: import-<DATE>-<RAND>\nWould import: quarantine/import-<DATE>-<RAND>/�\nWould import: quarantine/import-<DATE>-<RAND>/�\nImport summary: 2 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpRdWFyYW50aW5lIGltcG9ydCBJRDogaW1wb3J0LTxEQVRFPi08UkFORD4KV291bGQgaW1wb3J0OiBxdWFyYW50aW5lL2ltcG9ydC08REFURT4tPFJBTkQ+L/8KV291bGQgaW1wb3J0OiBxdWFyYW50aW5lL2ltcG9ydC08REFURT4tPFJBTkQ+L/4KSW1wb3J0IHN1bW1hcnk6IDIgaW1wb3J0ZWQsIDAgc2tpcHBlZAo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-skip-existing",
+      "desc": "--skip-existing reports no existing entry for a raw path",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/yxwdy1vbmUK/ixwdy10d28K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--skip-existing",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: �\nWould import: �\nImport summary: 2 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IP8KV291bGQgaW1wb3J0OiD+CkltcG9ydCBzdW1tYXJ5OiAyIGltcG9ydGVkLCAwIHNraXBwZWQK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-control-char",
+      "desc": "a control character after an invalid byte is rejected with the raw path and a quoted copy",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKImH/AWIiLHAxCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 1,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot check entry: cannot read entry a�\u0001b: entry path \"a\\xff\\x01b\": invalid path: path contains control character 0x01: entry path \"a\\xff\\x01b\": invalid path: path contains control character 0x01\nError: cannot check entry: cannot read entry a�\u0001b: entry path \"a\\xff\\x01b\": invalid path: path contains control character 0x01: entry path \"a\\xff\\x01b\": invalid path: path contains control character 0x01\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IGNoZWNrIGVudHJ5OiBjYW5ub3QgcmVhZCBlbnRyeSBh/wFiOiBlbnRyeSBwYXRoICJhXHhmZlx4MDFiIjogaW52YWxpZCBwYXRoOiBwYXRoIGNvbnRhaW5zIGNvbnRyb2wgY2hhcmFjdGVyIDB4MDE6IGVudHJ5IHBhdGggImFceGZmXHgwMWIiOiBpbnZhbGlkIHBhdGg6IHBhdGggY29udGFpbnMgY29udHJvbCBjaGFyYWN0ZXIgMHgwMQpFcnJvcjogY2Fubm90IGNoZWNrIGVudHJ5OiBjYW5ub3QgcmVhZCBlbnRyeSBh/wFiOiBlbnRyeSBwYXRoICJhXHhmZlx4MDFiIjogaW52YWxpZCBwYXRoOiBwYXRoIGNvbnRhaW5zIGNvbnRyb2wgY2hhcmFjdGVyIDB4MDE6IGVudHJ5IHBhdGggImFceGZmXHgwMWIiOiBpbnZhbGlkIHBhdGg6IHBhdGggY29udGFpbnMgY29udHJvbCBjaGFyYWN0ZXIgMHgwMQo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-control-char-prefix",
+      "desc": "the same rejection under a prefix",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKImH/AWIiLHAxCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--prefix",
+        "p",
+        "--dry-run"
+      ],
+      "exit": 1,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot check entry: cannot read entry p/a�\u0001b: entry path \"p/a\\xff\\x01b\": invalid path: path contains control character 0x01: entry path \"p/a\\xff\\x01b\": invalid path: path contains control character 0x01\nError: cannot check entry: cannot read entry p/a�\u0001b: entry path \"p/a\\xff\\x01b\": invalid path: path contains control character 0x01: entry path \"p/a\\xff\\x01b\": invalid path: path contains control character 0x01\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IGNoZWNrIGVudHJ5OiBjYW5ub3QgcmVhZCBlbnRyeSBwL2H/AWI6IGVudHJ5IHBhdGggInAvYVx4ZmZceDAxYiI6IGludmFsaWQgcGF0aDogcGF0aCBjb250YWlucyBjb250cm9sIGNoYXJhY3RlciAweDAxOiBlbnRyeSBwYXRoICJwL2FceGZmXHgwMWIiOiBpbnZhbGlkIHBhdGg6IHBhdGggY29udGFpbnMgY29udHJvbCBjaGFyYWN0ZXIgMHgwMQpFcnJvcjogY2Fubm90IGNoZWNrIGVudHJ5OiBjYW5ub3QgcmVhZCBlbnRyeSBwL2H/AWI6IGVudHJ5IHBhdGggInAvYVx4ZmZceDAxYiI6IGludmFsaWQgcGF0aDogcGF0aCBjb250YWlucyBjb250cm9sIGNoYXJhY3RlciAweDAxOiBlbnRyeSBwYXRoICJwL2FceGZmXHgwMWIiOiBpbnZhbGlkIHBhdGg6IHBhdGggY29udGFpbnMgY29udHJvbCBjaGFyYWN0ZXIgMHgwMQo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-del",
+      "desc": "DEL after an invalid byte is accepted",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKIv9/eCIscDEK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: �x\nImport summary: 1 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IP9/eApJbXBvcnQgc3VtbWFyeTogMSBpbXBvcnRlZCwgMCBza2lwcGVkCg==",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-tab",
+      "desc": "a tab after an invalid byte is a control character",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKImL/CXoiLHAxCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 1,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot check entry: cannot read entry b�\tz: entry path \"b\\xff\\tz\": invalid path: path contains control character 0x09: entry path \"b\\xff\\tz\": invalid path: path contains control character 0x09\nError: cannot check entry: cannot read entry b�\tz: entry path \"b\\xff\\tz\": invalid path: path contains control character 0x09: entry path \"b\\xff\\tz\": invalid path: path contains control character 0x09\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IGNoZWNrIGVudHJ5OiBjYW5ub3QgcmVhZCBlbnRyeSBi/wl6OiBlbnRyeSBwYXRoICJiXHhmZlx0eiI6IGludmFsaWQgcGF0aDogcGF0aCBjb250YWlucyBjb250cm9sIGNoYXJhY3RlciAweDA5OiBlbnRyeSBwYXRoICJiXHhmZlx0eiI6IGludmFsaWQgcGF0aDogcGF0aCBjb250YWlucyBjb250cm9sIGNoYXJhY3RlciAweDA5CkVycm9yOiBjYW5ub3QgY2hlY2sgZW50cnk6IGNhbm5vdCByZWFkIGVudHJ5IGL/CXo6IGVudHJ5IHBhdGggImJceGZmXHR6IjogaW52YWxpZCBwYXRoOiBwYXRoIGNvbnRhaW5zIGNvbnRyb2wgY2hhcmFjdGVyIDB4MDk6IGVudHJ5IHBhdGggImJceGZmXHR6IjogaW52YWxpZCBwYXRoOiBwYXRoIGNvbnRhaW5zIGNvbnRyb2wgY2hhcmFjdGVyIDB4MDkK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-dotdot",
+      "desc": "a '..' next to an invalid byte becomes a dash before the path check",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/y4u/ixwMQouLv8scDIK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: �-�\nWould import: -�\nImport summary: 2 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IP8t/gpXb3VsZCBpbXBvcnQ6IC3/CkltcG9ydCBzdW1tYXJ5OiAyIGltcG9ydGVkLCAwIHNraXBwZWQK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-windows-chars",
+      "desc": "characters invalid on Windows are removed around an invalid byte",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKYTr/KmI/LHAxCjz+Pnz9XHgscDIK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: a�b\nWould import: ��x\nImport summary: 2 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "SW1wb3J0IGZvcm1hdDogY3N2CkNTViBtYXBwaW5nOiBub3Rlcz1ub3Rlcywgb3RwPW90cCwgcGFzc3dvcmQ9cGFzc3dvcmQsIHRpdGxlPXRpdGxlLCB1cmw9dXJsLCB1c2VybmFtZT11c2VybmFtZQpXb3VsZCBpbXBvcnQ6IGH/YgpXb3VsZCBpbXBvcnQ6IP79eApJbXBvcnQgc3VtbWFyeTogMiBpbXBvcnRlZCwgMCBza2lwcGVkCg==",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-chrome-dedupe",
+      "desc": "Chrome names that differ only in an invalid byte are distinct; a duplicate gets -2 on the raw bytes, including a literal -2",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "bmFtZSx1cmwsdXNlcm5hbWUscGFzc3dvcmQsbm90ZQr/LGh0dHBzOi8vYS5leGFtcGxlLHUscCwK/yxodHRwczovL2IuZXhhbXBsZSx1LHAsCv4saHR0cHM6Ly9jLmV4YW1wbGUsdSxwLAr/LTIsaHR0cHM6Ly9kLmV4YW1wbGUsdSxwLAr/LTIsaHR0cHM6Ly9lLmV4YW1wbGUsdSxwLAo="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Detected Chrome / Chromium CSV export from header row\nImport format: chrome\nCSV mapping: notes=note, password=password, title=name, url=url, username=username\nWould import: �\nWould import: �-2\nWould import: �\nWould import: �-2-2\nWould import: �-2-3\nImport summary: 5 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "RGV0ZWN0ZWQgQ2hyb21lIC8gQ2hyb21pdW0gQ1NWIGV4cG9ydCBmcm9tIGhlYWRlciByb3cKSW1wb3J0IGZvcm1hdDogY2hyb21lCkNTViBtYXBwaW5nOiBub3Rlcz1ub3RlLCBwYXNzd29yZD1wYXNzd29yZCwgdGl0bGU9bmFtZSwgdXJsPXVybCwgdXNlcm5hbWU9dXNlcm5hbWUKV291bGQgaW1wb3J0OiD/CldvdWxkIGltcG9ydDog/y0yCldvdWxkIGltcG9ydDog/gpXb3VsZCBpbXBvcnQ6IP8tMi0yCldvdWxkIGltcG9ydDog/y0yLTMKSW1wb3J0IHN1bW1hcnk6IDUgaW1wb3J0ZWQsIDAgc2tpcHBlZAo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-chrome-url-host",
+      "desc": "a nameless Chrome row falls back to the URL host: an invalid byte becomes U+FFFD there and the paths then collide as text",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "bmFtZSx1cmwsdXNlcm5hbWUscGFzc3dvcmQsbm90ZQosaHR0cHM6Ly9h/y5leGFtcGxlL3gsdSxwLAosaHR0cHM6Ly9h/i5leGFtcGxlL3gsdSxwLAo="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Detected Chrome / Chromium CSV export from header row\nImport format: chrome\nCSV mapping: notes=note, password=password, title=name, url=url, username=username\nWould import: a�.example\nWould import: a�.example-2\nImport summary: 2 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-firefox-host",
+      "desc": "Firefox hosts with invalid bytes de-duplicate as text",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dXJsLHVzZXJuYW1lLHBhc3N3b3JkLGh0dHBSZWFsbSxmb3JtQWN0aW9uT3JpZ2luLGd1aWQsdGltZUNyZWF0ZWQsdGltZUxhc3RVc2VkLHRpbWVQYXNzd29yZENoYW5nZWQKaHR0cHM6Ly//LmV4YW1wbGUvbG9naW4sdSxwLCwse2d9LDEsMiwzCmh0dHBzOi8v/i5leGFtcGxlL2xvZ2luLHUscCwsLHtnfSwxLDIsMwpodHRwczovL/8uZXhhbXBsZS9sb2dpbix1LHAsLCx7Z30sMSwyLDMK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Detected Firefox CSV export from header row\nImport format: firefox\nCSV mapping: password=password, url=url, username=username\nWould import: �.example\nWould import: �.example-2\nWould import: �.example-3\nImport summary: 3 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-apple-dedupe",
+      "desc": "Apple titles with invalid bytes de-duplicate on the raw bytes",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "VGl0bGUsVVJMLFVzZXJuYW1lLFBhc3N3b3JkLE5vdGVzLE9UUEF1dGgK/ywsdSxwLCwK/iwsdSxwLCwK/ywsdSxwLCwK/y0yLCx1LHAsLAo="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Detected Apple Passwords (iCloud Keychain) CSV export from header row\nImport format: apple\nCSV mapping: notes=Notes, otp=OTPAuth, password=Password, title=Title, url=URL, username=Username\nWould import: �\nWould import: �\nWould import: �-2\nWould import: �-2-2\nImport summary: 4 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "RGV0ZWN0ZWQgQXBwbGUgUGFzc3dvcmRzIChpQ2xvdWQgS2V5Y2hhaW4pIENTViBleHBvcnQgZnJvbSBoZWFkZXIgcm93CkltcG9ydCBmb3JtYXQ6IGFwcGxlCkNTViBtYXBwaW5nOiBub3Rlcz1Ob3Rlcywgb3RwPU9UUEF1dGgsIHBhc3N3b3JkPVBhc3N3b3JkLCB0aXRsZT1UaXRsZSwgdXJsPVVSTCwgdXNlcm5hbWU9VXNlcm5hbWUKV291bGQgaW1wb3J0OiD/CldvdWxkIGltcG9ydDog/gpXb3VsZCBpbXBvcnQ6IP8tMgpXb3VsZCBpbXBvcnQ6IP8tMi0yCkltcG9ydCBzdW1tYXJ5OiA0IGltcG9ydGVkLCAwIHNraXBwZWQK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-dry-run-normalized-collision",
+      "desc": "raw paths that normalize to one path (space becomes a dash) get a suffix",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "bmFtZSx1cmwsdXNlcm5hbWUscGFzc3dvcmQsbm90ZQr/IGEsaHR0cHM6Ly9hLmV4YW1wbGUsdSxwLAr/LWEsaHR0cHM6Ly9iLmV4YW1wbGUsdSxwLAr/ICBhLGh0dHBzOi8vYy5leGFtcGxlLHUscCwK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Detected Chrome / Chromium CSV export from header row\nImport format: chrome\nCSV mapping: notes=note, password=password, title=name, url=url, username=username\nWould import: �-a\nWould import: �-a-2\nWould import: �--a\nImport summary: 3 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "stdout_b64": "RGV0ZWN0ZWQgQ2hyb21lIC8gQ2hyb21pdW0gQ1NWIGV4cG9ydCBmcm9tIGhlYWRlciByb3cKSW1wb3J0IGZvcm1hdDogY2hyb21lCkNTViBtYXBwaW5nOiBub3Rlcz1ub3RlLCBwYXNzd29yZD1wYXNzd29yZCwgdGl0bGU9bmFtZSwgdXJsPXVybCwgdXNlcm5hbWU9dXNlcm5hbWUKV291bGQgaW1wb3J0OiD/LWEKV291bGQgaW1wb3J0OiD/LWEtMgpXb3VsZCBpbXBvcnQ6IP8tLWEKSW1wb3J0IHN1bW1hcnk6IDMgaW1wb3J0ZWQsIDAgc2tpcHBlZAo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-values-persisted",
+      "desc": "invalid bytes in every value class are stored as one U+FFFD per byte, and a literal U+FFFD is kept",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUsdXNlcm5hbWUscGFzc3dvcmQsbm90ZXMsdXJsCm9rLHX/MSxwd/7DqcMsbu2ggMCvwoUsaHR0cDovL2H/LmV4YW1wbGUKb2syLO+/vSz0kICALOKC4oIsCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 0,
+      "stdout": "Imported: ok\nImported: ok2\nImport summary: 2 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "[{\"path\":\"ok\",\"has_value\":true,\"field_count\":4},{\"path\":\"ok2\",\"has_value\":true,\"field_count\":4}]\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "[\n  {\n    \"data\": {\n      \"notes\": \"n�����\",\n      \"password\": \"pw�é�\",\n      \"url\": \"http://a�.example\",\n      \"username\": \"u�1\"\n    },\n    \"path\": \"ok\"\n  },\n  {\n    \"data\": {\n      \"notes\": \"����\",\n      \"password\": \"����\",\n      \"url\": \"\",\n      \"username\": \"�\"\n    },\n    \"path\": \"ok2\"\n  }\n]\nExported 2 entries\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-values-chrome",
+      "desc": "Chrome values with invalid bytes under a valid name",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "bmFtZSx1cmwsdXNlcm5hbWUscGFzc3dvcmQsbm90ZQpzaXRlLGh0dHBzOi8veC5leGFtcGxlL/8sdXP+LHB3/Sxub/wK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 0,
+      "stdout": "Detected Chrome / Chromium CSV export from header row\nImported: site\nImport summary: 1 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "[{\"path\":\"site\",\"has_value\":true,\"field_count\":4}]\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "[\n  {\n    \"data\": {\n      \"notes\": \"no�\",\n      \"password\": \"pw�\",\n      \"url\": \"https://x.example/�\",\n      \"username\": \"us�\"\n    },\n    \"path\": \"site\"\n  }\n]\nExported 1 entries\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-values-overwrite-merge",
+      "desc": "invalid-byte values merge into an existing entry like any other value",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUsdXNlcm5hbWUscGFzc3dvcmQKb2ss/25ldyxwd/4K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ],
+        [
+          "set",
+          "ok.password",
+          "--value",
+          "Old-Password-1234"
+        ],
+        [
+          "set",
+          "ok.username",
+          "--value",
+          "old-user"
+        ],
+        [
+          "set",
+          "ok.extra",
+          "--value",
+          "old-extra-field"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 0,
+      "stdout": "Imported: ok\nImport summary: 1 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "[{\"path\":\"ok\",\"has_value\":true,\"field_count\":3}]\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "[\n  {\n    \"data\": {\n      \"extra\": \"old-extra-field\",\n      \"password\": \"pw�\",\n      \"username\": \"�new\"\n    },\n    \"path\": \"ok\"\n  }\n]\nExported 1 entries\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-header-alias-mapping",
+      "desc": "a header with an invalid byte is reachable through its lower-cased alias, where each invalid byte is U+FFFD",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGn/dGxlLHBhc3N3b3JkCm9rLHAxCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--mapping",
+        "title=ti�tle,password=password"
+      ],
+      "exit": 0,
+      "stdout": "Imported: ok\nImport summary: 1 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "[{\"path\":\"ok\",\"has_value\":true,\"field_count\":1}]\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "[\n  {\n    \"data\": {\n      \"password\": \"p1\"\n    },\n    \"path\": \"ok\"\n  }\n]\nExported 1 entries\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-header-raw-exact-mapping",
+      "desc": "the mapping cannot name the raw header (U+FFFD is not the invalid byte), so the title column is unmapped",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGn/dGxlLHBhc3N3b3JkCm9rLHAxCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 0,
+      "stdout": "Skipped entry with empty path\nImport summary: 0 imported, 1 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-limit-exact",
+      "desc": "4096 invalid bytes are within the limit and stored as 4096 U+FFFD",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQsbm90ZXMKb2sscDEs/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////wo="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 0,
+      "stdout": "Imported: ok\nImport summary: 1 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "[{\"path\":\"ok\",\"has_value\":true,\"field_count\":2}]\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "[\n  {\n    \"data\": {\n      \"notes\": \"����������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������\",\n      \"password\": \"p1\"\n    },\n    \"path\": \"ok\"\n  }\n]\nExported 1 entries\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-limit-over",
+      "desc": "4097 invalid bytes exceed the limit",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQsbm90ZXMKb2sscDEs//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////8K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: field \"notes\" exceeds maximum length of 4096 characters\nError: cannot write entry: field \"notes\" exceeds maximum length of 4096 characters\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-limit-truncated-sequences",
+      "desc": "2048 truncated 3-byte sequences are 4096 raw bytes: within the limit",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQsbm90ZXMKb2sscDEs4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiggo="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 0,
+      "stdout": "Imported: ok\nImport summary: 1 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "[{\"path\":\"ok\",\"has_value\":true,\"field_count\":2}]\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "[\n  {\n    \"data\": {\n      \"notes\": \"����������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������������\",\n      \"password\": \"p1\"\n    },\n    \"path\": \"ok\"\n  }\n]\nExported 1 entries\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-limit-truncated-over",
+      "desc": "2049 truncated 3-byte sequences are 4098 raw bytes: over the limit",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQsbm90ZXMKb2sscDEs4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKC4oLiguKCCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: field \"notes\" exceeds maximum length of 4096 characters\nError: cannot write entry: field \"notes\" exceeds maximum length of 4096 characters\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-limit-mixed-valid",
+      "desc": "valid two-byte characters count their UTF-8 bytes next to invalid ones: 2047*2+2 = 4096",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQsbm90ZXMKb2sscDEsw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6n//go="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 0,
+      "stdout": "Imported: ok\nImport summary: 1 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "[{\"path\":\"ok\",\"has_value\":true,\"field_count\":2}]\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "[\n  {\n    \"data\": {\n      \"notes\": \"ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé��\",\n      \"password\": \"p1\"\n    },\n    \"path\": \"ok\"\n  }\n]\nExported 1 entries\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-limit-mixed-over",
+      "desc": "one byte more",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQsbm90ZXMKb2sscDEsw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6n//v0K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: field \"notes\" exceeds maximum length of 4096 characters\nError: cannot write entry: field \"notes\" exceeds maximum length of 4096 characters\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-limit-password-over",
+      "desc": "the limit applies to the password field too",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKb2ss/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v4K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: field \"password\" exceeds maximum length of 4096 characters\nError: cannot write entry: field \"password\" exceeds maximum length of 4096 characters\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-limit-dry-run",
+      "desc": "--dry-run never checks field lengths",
+      "platform": "any",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQsbm90ZXMKb2sscDEs//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////8K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--dry-run"
+      ],
+      "exit": 0,
+      "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\nWould import: ok\nImport summary: 1 imported, 0 skipped\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-lone-byte",
+      "desc": "creating the entry file for a lone invalid byte fails",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/yxwdy1vbmUK/ixwdy10d28K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IP86IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkg/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-after-valid",
+      "desc": "entries before the failing one are stored; the import stops at the failure",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKb2sxLHAxCv8scDIKb2syLHAzCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "Imported: ok1\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IP86IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkg/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "[{\"path\":\"ok1\",\"has_value\":true,\"field_count\":1}]\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "[\n  {\n    \"data\": {\n      \"password\": \"p1\"\n    },\n    \"path\": \"ok1\"\n  }\n]\nExported 1 entries\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-parent-segment",
+      "desc": "an invalid byte in the first directory fails the mkdir",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKYf8vYixwMQo="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry a�/b: mkdir @ROOT/home/vault/entries/a�: illegal byte sequence: mkdir @ROOT/home/vault/entries/a�: illegal byte sequence\nError: cannot write entry: cannot create entry a�/b: mkdir @ROOT/home/vault/entries/a�: illegal byte sequence: mkdir @ROOT/home/vault/entries/a�: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IGH/L2I6IG1rZGlyIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy9h/zogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBta2RpciBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMvYf86IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZQpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IGH/L2I6IG1rZGlyIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy9h/zogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBta2RpciBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMvYf86IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZQo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-middle-segment",
+      "desc": "an invalid byte in a middle directory fails the mkdir of that directory",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKYS9i/y9jLHAxCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry a/b�/c: mkdir @ROOT/home/vault/entries/a/b�: illegal byte sequence: mkdir @ROOT/home/vault/entries/a/b�: illegal byte sequence\nError: cannot write entry: cannot create entry a/b�/c: mkdir @ROOT/home/vault/entries/a/b�: illegal byte sequence: mkdir @ROOT/home/vault/entries/a/b�: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IGEvYv8vYzogbWtkaXIgQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL2EvYv86IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogbWtkaXIgQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL2EvYv86IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZQpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IGEvYv8vYzogbWtkaXIgQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL2EvYv86IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogbWtkaXIgQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL2EvYv86IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZQo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-file-segment",
+      "desc": "an invalid byte only in the file name fails the temporary file",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKYS9iL2P/LHAxCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry a/b/c�: open @ROOT/home/vault/entries/a/b/c�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/a/b/c�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry a/b/c�: open @ROOT/home/vault/entries/a/b/c�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/a/b/c�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IGEvYi9j/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMvYS9iL2P/LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2U6IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL2EvYi9j/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkgYS9iL2P/OiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy9hL2IvY/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMvYS9iL2P/LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-prefix",
+      "desc": "the path is reported with its prefix",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/yxwdy1vbmUK/ixwdy10d28K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--prefix",
+        "pre"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry pre/�: open @ROOT/home/vault/entries/pre/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/pre/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry pre/�: open @ROOT/home/vault/entries/pre/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/pre/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IHByZS//OiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy9wcmUv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy9wcmUv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkgcHJlL/86IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL3ByZS//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2U6IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL3ByZS//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-quarantine",
+      "desc": "the quarantine ID is printed before the failure",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/yxwdy1vbmUK/ixwdy10d28K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--quarantine"
+      ],
+      "exit": 1,
+      "stdout": "Quarantine import ID: import-<DATE>-<RAND>\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry quarantine/import-<DATE>-<RAND>/�: open @ROOT/home/vault/entries/quarantine/import-<DATE>-<RAND>/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/quarantine/import-<DATE>-<RAND>/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry quarantine/import-<DATE>-<RAND>/�: open @ROOT/home/vault/entries/quarantine/import-<DATE>-<RAND>/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/quarantine/import-<DATE>-<RAND>/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IHF1YXJhbnRpbmUvaW1wb3J0LTxEQVRFPi08UkFORD4v/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMvcXVhcmFudGluZS9pbXBvcnQtPERBVEU+LTxSQU5EPi//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2U6IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL3F1YXJhbnRpbmUvaW1wb3J0LTxEQVRFPi08UkFORD4v/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkgcXVhcmFudGluZS9pbXBvcnQtPERBVEU+LTxSQU5EPi//OiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy9xdWFyYW50aW5lL2ltcG9ydC08REFURT4tPFJBTkQ+L/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMvcXVhcmFudGluZS9pbXBvcnQtPERBVEU+LTxSQU5EPi//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-skip-existing",
+      "desc": "--skip-existing finds nothing to skip and fails on the write",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/yxwdy1vbmUK/ixwdy10d28K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--skip-existing"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IP86IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkg/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-overwrite",
+      "desc": "--overwrite finds nothing to delete and fails on the write",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQK/yxwdy1vbmUK/ixwdy10d28K"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--overwrite"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IP86IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkg/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-overwrite-existing-valid",
+      "desc": "--overwrite replaces the valid existing entry first, then the invalid path fails",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKb2ssbmV3LXB3Cv8scDIK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ],
+        [
+          "set",
+          "ok.password",
+          "--value",
+          "Old-Password-1234"
+        ],
+        [
+          "set",
+          "ok.username",
+          "--value",
+          "old-user"
+        ],
+        [
+          "set",
+          "ok.extra",
+          "--value",
+          "old-extra-field"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv",
+        "--overwrite"
+      ],
+      "exit": 1,
+      "stdout": "Imported: ok\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IP86IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkg/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "[{\"path\":\"ok\",\"has_value\":true,\"field_count\":1}]\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "[\n  {\n    \"data\": {\n      \"password\": \"new-pw\"\n    },\n    \"path\": \"ok\"\n  }\n]\nExported 1 entries\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-overlong",
+      "desc": "an overlong encoding is refused too",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKYcCvLHAxCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry a��: open @ROOT/home/vault/entries/a��.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/a��.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry a��: open @ROOT/home/vault/entries/a��.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/a��.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IGHArzogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMvYcCvLmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2U6IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL2HAry5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkgYcCvOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy9hwK8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMvYcCvLmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-surrogate",
+      "desc": "a surrogate encoding is refused too",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKYe2ggCxwMQo="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry a���: open @ROOT/home/vault/entries/a���.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/a���.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry a���: open @ROOT/home/vault/entries/a���.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/a���.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IGHtoIA6IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL2HtoIAuYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMvYe2ggC5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkgYe2ggDogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMvYe2ggC5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy9h7aCALmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-lone-c1",
+      "desc": "a lone C1 byte is refused too",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKYYUscDEK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry a�: open @ROOT/home/vault/entries/a�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/a�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry a�: open @ROOT/home/vault/entries/a�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/a�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IGGFOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy9hhS5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy9hhS5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkgYYU6IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL2GFLmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2U6IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL2GFLmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-chrome",
+      "desc": "a Chrome profile name with an invalid byte",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "bmFtZSx1cmwsdXNlcm5hbWUscGFzc3dvcmQsbm90ZQr/LGh0dHBzOi8vYS5leGFtcGxlLHUscCwK"
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "Detected Chrome / Chromium CSV export from header row\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IP86IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkg/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-chrome-duplicate",
+      "desc": "the second of two equal names is the suffixed path, but the first already fails",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "bmFtZSx1cmwsdXNlcm5hbWUscGFzc3dvcmQsbm90ZQr/LGh0dHBzOi8vYS5leGFtcGxlLHUscCwK/yxodHRwczovL2IuZXhhbXBsZSx1LHAsCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "Detected Chrome / Chromium CSV export from header row\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IP86IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkg/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-limit-first",
+      "desc": "the field-length check runs before the file system is touched",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQsbm90ZXMK/yxwMSz+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/go="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: field \"notes\" exceeds maximum length of 4096 characters\nError: cannot write entry: field \"notes\" exceeds maximum length of 4096 characters\n",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-limit-within",
+      "desc": "a value within the limit does not change the failure",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQsbm90ZXMK/yxwMSz+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+Cg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IP86IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkg/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-control-char",
+      "desc": "a rejected path fails the existence check before any write",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQKImH/AWIiLHAxCg=="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot check entry: cannot read entry a�\u0001b: entry path \"a\\xff\\x01b\": invalid path: path contains control character 0x01: entry path \"a\\xff\\x01b\": invalid path: path contains control character 0x01\nError: cannot check entry: cannot read entry a�\u0001b: entry path \"a\\xff\\x01b\": invalid path: path contains control character 0x01: entry path \"a\\xff\\x01b\": invalid path: path contains control character 0x01\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IGNoZWNrIGVudHJ5OiBjYW5ub3QgcmVhZCBlbnRyeSBh/wFiOiBlbnRyeSBwYXRoICJhXHhmZlx4MDFiIjogaW52YWxpZCBwYXRoOiBwYXRoIGNvbnRhaW5zIGNvbnRyb2wgY2hhcmFjdGVyIDB4MDE6IGVudHJ5IHBhdGggImFceGZmXHgwMWIiOiBpbnZhbGlkIHBhdGg6IHBhdGggY29udGFpbnMgY29udHJvbCBjaGFyYWN0ZXIgMHgwMQpFcnJvcjogY2Fubm90IGNoZWNrIGVudHJ5OiBjYW5ub3QgcmVhZCBlbnRyeSBh/wFiOiBlbnRyeSBwYXRoICJhXHhmZlx4MDFiIjogaW52YWxpZCBwYXRoOiBwYXRoIGNvbnRhaW5zIGNvbnRyb2wgY2hhcmFjdGVyIDB4MDE6IGVudHJ5IHBhdGggImFceGZmXHgwMWIiOiBpbnZhbGlkIHBhdGg6IHBhdGggY29udGFpbnMgY29udHJvbCBjaGFyYWN0ZXIgMHgwMQo=",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
+    },
+    {
+      "id": "invalid-bytes-write-valid-value-invalid-path",
+      "desc": "an invalid value does not matter once the path fails",
+      "platform": "darwin",
+      "files": [
+        {
+          "name": "c.csv",
+          "base64": "dGl0bGUscGFzc3dvcmQsbm90ZXMK/yxw/ixu/Qo="
+        }
+      ],
+      "seed": [
+        [
+          "init"
+        ]
+      ],
+      "argv": [
+        "import",
+        "c.csv"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\nError: cannot write entry: cannot create entry �: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence: open @ROOT/home/vault/entries/�.age.tmp-<N>: illegal byte sequence\n",
+      "stderr_b64": "U1lNVkFVTFRfUEFTU1BIUkFTRSBpcyBhY3RpdmUg4oCUIGVudmlyb25tZW50IHBhc3NwaHJhc2VzIGFyZSB2aXNpYmxlIGluIHByb2Nlc3MgbGlzdGluZ3MgYW5kIGNyYXNoIGR1bXBzLgpFcnJvcjogY2Fubm90IHdyaXRlIGVudHJ5OiBjYW5ub3QgY3JlYXRlIGVudHJ5IP86IG9wZW4gQFJPT1QvaG9tZS92YXVsdC9lbnRyaWVzL/8uYWdlLnRtcC08Tj46IGlsbGVnYWwgYnl0ZSBzZXF1ZW5jZTogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlCkVycm9yOiBjYW5ub3Qgd3JpdGUgZW50cnk6IGNhbm5vdCBjcmVhdGUgZW50cnkg/zogb3BlbiBAUk9PVC9ob21lL3ZhdWx0L2VudHJpZXMv/y5hZ2UudG1wLTxOPjogaWxsZWdhbCBieXRlIHNlcXVlbmNlOiBvcGVuIEBST09UL2hvbWUvdmF1bHQvZW50cmllcy//LmFnZS50bXAtPE4+OiBpbGxlZ2FsIGJ5dGUgc2VxdWVuY2UK",
+      "post": [
+        {
+          "argv": [
+            "list",
+            "--json"
+          ],
+          "exit": 0,
+          "stdout": "null\n"
+        },
+        {
+          "argv": [
+            "export",
+            "--format",
+            "json",
+            "--yes"
+          ],
+          "exit": 0,
+          "stdout": "No entries found in vault.\n"
+        }
+      ]
     }
   ]
 }

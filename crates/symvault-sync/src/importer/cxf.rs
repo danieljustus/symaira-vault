@@ -396,6 +396,7 @@ fn item_entry(item: &CxfItem, collection_path: &str) -> Option<ImportedEntry> {
         data,
         warnings: (!warnings.is_empty()).then_some(warnings),
         secret_type,
+        ..ImportedEntry::default()
     })
 }
 

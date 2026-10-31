@@ -22,6 +22,14 @@
 //!    seed element is replaced by the working directory.
 //! 2. Quarantine IDs: exactly `import-YYYYMMDD-<8 lowercase hex>` with a valid
 //!    calendar date becomes `import-<DATE>-<RAND>`.
+//! 3. Temporary entry files: exactly `.age.tmp-` followed by digits (the random
+//!    suffix of a failed write) becomes `.age.tmp-<N>`.
+//!
+//! Streams are compared as raw bytes. Go echoes an entry path that is not valid
+//! UTF-8 unchanged, so such a stream is recorded as `stdout_b64`/`stderr_b64`
+//! (authoritative when present; the text field is only a readable copy).
+//! A case with platform `darwin` depends on macOS refusing non-UTF-8 file
+//! names and runs on macOS only (Linux creates such a file; see ADR 0030).
 //!
 //! Post commands compare stdout and exit status only (export stderr carries a
 //! wall-clock log line in the oracle).
@@ -34,7 +42,7 @@ use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 const PASSPHRASE: &str = "correct horse battery staple";
-const EXPECTED_CASES: usize = 293;
+const EXPECTED_CASES: usize = 345;
 
 #[derive(Debug, Deserialize)]
 struct Oracle {
@@ -82,7 +90,33 @@ struct Case {
     stdout: String,
     stderr: String,
     #[serde(default)]
+    stdout_b64: String,
+    #[serde(default)]
+    stderr_b64: String,
+    #[serde(default)]
     post: Vec<Step>,
+}
+
+impl Case {
+    /// The exact bytes of a recorded stream: the base64 form when the stream
+    /// is not valid UTF-8, the text otherwise.
+    fn stream_bytes(&self, text: &str, b64: &str) -> Vec<u8> {
+        if b64.is_empty() {
+            text.as_bytes().to_vec()
+        } else {
+            decode_base64(b64)
+        }
+    }
+
+    /// Whether this host can run the case.
+    fn runs_here(&self) -> bool {
+        match self.platform.as_str() {
+            "any" => true,
+            "unix" => cfg!(unix),
+            "darwin" => cfg!(target_os = "macos"),
+            other => panic!("case {}: unknown platform {other:?}", self.id),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -231,20 +265,61 @@ impl Sandbox {
             .expect("run symvault")
     }
 
-    /// Normalization rule 1 (paths) and rule 2 (quarantine IDs).
-    fn normalize(&self, text: &str) -> String {
-        let mut text = text.to_owned();
+    /// Normalization rule 1 (paths), rule 2 (quarantine IDs) and rule 3
+    /// (temporary entry file suffixes), on raw bytes.
+    fn normalize(&self, raw: &[u8]) -> Vec<u8> {
+        let mut text = raw.to_vec();
         for (dir, marker) in [(&self.work, "@WORK"), (&self.root, "@ROOT")] {
             if let Ok(resolved) = std::fs::canonicalize(dir) {
                 let resolved = resolved.to_string_lossy().into_owned();
                 if resolved != dir.to_string_lossy() {
-                    text = text.replace(&resolved, marker);
+                    text = replace_bytes(&text, resolved.as_bytes(), marker.as_bytes());
                 }
             }
-            text = text.replace(dir.to_string_lossy().as_ref(), marker);
+            text = replace_bytes(&text, dir.to_string_lossy().as_bytes(), marker.as_bytes());
         }
-        normalize_quarantine_ids(&text)
+        normalize_temp_suffixes(&normalize_quarantine_ids(&text))
     }
+}
+
+fn replace_bytes(text: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
+    if from.is_empty() {
+        return text.to_vec();
+    }
+    let mut out = Vec::with_capacity(text.len());
+    let mut index = 0;
+    while index < text.len() {
+        if text[index..].starts_with(from) {
+            out.extend_from_slice(to);
+            index += from.len();
+        } else {
+            out.push(text[index]);
+            index += 1;
+        }
+    }
+    out
+}
+
+/// Rule 3: `.age.tmp-` followed by one or more digits becomes
+/// `.age.tmp-<N>`.
+fn normalize_temp_suffixes(text: &[u8]) -> Vec<u8> {
+    const MARK: &[u8] = b".age.tmp-";
+    let mut out = Vec::with_capacity(text.len());
+    let mut index = 0;
+    while index < text.len() {
+        let rest = &text[index..];
+        let digits = rest.get(MARK.len()..).map_or(0, |tail| {
+            tail.iter().take_while(|byte| byte.is_ascii_digit()).count()
+        });
+        if rest.starts_with(MARK) && digits > 0 {
+            out.extend_from_slice(b".age.tmp-<N>");
+            index += MARK.len() + digits;
+        } else {
+            out.push(text[index]);
+            index += 1;
+        }
+    }
+    out
 }
 
 fn valid_date(digits: &[u8]) -> bool {
@@ -272,9 +347,8 @@ fn valid_date(digits: &[u8]) -> bool {
 /// becomes `import-<DATE>-<RAND>`; any other shape is left untouched so it
 /// stays visible as a difference. Mirrors the generator's regexp
 /// `import-([0-9]{8})-[0-9a-f]{8}` plus its date check.
-fn normalize_quarantine_ids(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out = String::with_capacity(text.len());
+fn normalize_quarantine_ids(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
     let mut index = 0;
     while index < bytes.len() {
         let rest = &bytes[index..];
@@ -286,31 +360,26 @@ fn normalize_quarantine_ids(text: &str) -> String {
                 .iter()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte));
         if shaped && valid_date(&rest[7..15]) {
-            out.push_str("import-<DATE>-<RAND>");
+            out.extend_from_slice(b"import-<DATE>-<RAND>");
             index += 24;
         } else {
-            // Advance one UTF-8 character.
-            let width = text[index..].chars().next().map_or(1, char::len_utf8);
-            out.push_str(&text[index..index + width]);
-            index += width;
+            out.push(bytes[index]);
+            index += 1;
         }
     }
     out
 }
 
-fn stream(sandbox: &Sandbox, raw: &[u8], what: &str, problems: &mut Vec<String>) -> String {
-    match String::from_utf8(raw.to_vec()) {
-        Ok(text) => sandbox.normalize(&text),
-        Err(_) => {
-            problems.push(format!("{what}: output is not valid UTF-8"));
-            sandbox.normalize(&String::from_utf8_lossy(raw))
-        }
-    }
-}
-
-fn compare(label: &str, want: &str, got: &str, problems: &mut Vec<String>) {
+fn compare_bytes(label: &str, want: &[u8], got: &[u8], problems: &mut Vec<String>) {
     if want != got {
-        problems.push(format!("{label}\n    want: {want:?}\n    got:  {got:?}"));
+        problems.push(format!(
+            "{label}\n    want: {:?}\n    got:  {:?}",
+            String::from_utf8_lossy(want),
+            String::from_utf8_lossy(got)
+        ));
+        if String::from_utf8_lossy(want) == String::from_utf8_lossy(got) {
+            problems.push(format!("{label}: the texts agree; the raw bytes differ"));
+        }
     }
 }
 
@@ -336,16 +405,26 @@ fn run_case(binary: &str, case: &Case) -> Vec<String> {
     }
     let output = sandbox.run(binary, &case.argv);
     let exit = exit_code(&output);
-    let stdout = stream(&sandbox, &output.stdout, "stdout", &mut problems);
-    let stderr = stream(&sandbox, &output.stderr, "stderr", &mut problems);
+    let stdout = sandbox.normalize(&output.stdout);
+    let stderr = sandbox.normalize(&output.stderr);
     if exit != case.exit {
         problems.push(format!("exit: want {} got {}", case.exit, exit));
     }
-    compare("stdout", &case.stdout, &stdout, &mut problems);
-    compare("stderr", &case.stderr, &stderr, &mut problems);
+    compare_bytes(
+        "stdout",
+        &case.stream_bytes(&case.stdout, &case.stdout_b64),
+        &stdout,
+        &mut problems,
+    );
+    compare_bytes(
+        "stderr",
+        &case.stream_bytes(&case.stderr, &case.stderr_b64),
+        &stderr,
+        &mut problems,
+    );
     for (index, post) in case.post.iter().enumerate() {
         let output = sandbox.run(binary, &post.argv);
-        let post_stdout = stream(&sandbox, &output.stdout, "post stdout", &mut problems);
+        let post_stdout = sandbox.normalize(&output.stdout);
         let label = format!("post[{index}] {:?}", post.argv);
         if exit_code(&output) != post.exit {
             problems.push(format!(
@@ -354,9 +433,9 @@ fn run_case(binary: &str, case: &Case) -> Vec<String> {
                 exit_code(&output)
             ));
         }
-        compare(
+        compare_bytes(
             &format!("{label} stdout"),
-            &post.stdout,
+            post.stdout.as_bytes(),
             &post_stdout,
             &mut problems,
         );
@@ -379,13 +458,7 @@ fn import_command_matches_frozen_go_oracle() {
     let mut skipped = 0;
     let mut failures: Vec<String> = Vec::new();
     for case in &fixture.cases {
-        assert!(
-            matches!(case.platform.as_str(), "any" | "unix"),
-            "case {}: platform {:?}",
-            case.id,
-            case.platform
-        );
-        if case.platform == "unix" && !cfg!(unix) {
+        if !case.runs_here() {
             skipped += 1;
             continue;
         }
@@ -405,10 +478,20 @@ fn import_command_matches_frozen_go_oracle() {
         EXPECTED_CASES,
         "every case is accounted for"
     );
+    // Only a case the platform cannot run may be skipped: the unix-only
+    // permission case off Unix, and the darwin-only file-name cases off macOS.
+    let darwin_only = fixture
+        .cases
+        .iter()
+        .filter(|case| case.platform == "darwin")
+        .count();
     assert!(
-        executed >= EXPECTED_CASES - 1,
-        "only the unix-only permission case may be skipped"
+        darwin_only > 0 && executed >= EXPECTED_CASES - 1 - darwin_only,
+        "only the platform-gated cases may be skipped"
     );
+    if cfg!(target_os = "macos") {
+        assert_eq!(skipped, 0, "macOS runs every case");
+    }
     assert!(
         failures.is_empty(),
         "{} of {} import-command cases differ from the Go oracle:\n{}",
@@ -420,15 +503,13 @@ fn import_command_matches_frozen_go_oracle() {
 
 #[test]
 fn quarantine_id_normalization_is_narrow() {
+    let text = |input: &str| String::from_utf8(normalize_quarantine_ids(input.as_bytes())).unwrap();
     // Valid shape, valid date: rewritten.
     assert_eq!(
-        normalize_quarantine_ids("x quarantine/import-20261031-0a1b2c3d/a"),
+        text("x quarantine/import-20261031-0a1b2c3d/a"),
         "x quarantine/import-<DATE>-<RAND>/a"
     );
-    assert_eq!(
-        normalize_quarantine_ids("import-20240229-ffffffff"),
-        "import-<DATE>-<RAND>"
-    );
+    assert_eq!(text("import-20240229-ffffffff"), "import-<DATE>-<RAND>");
     // Wrong shape or impossible date: left visible.
     for kept in [
         "import-20261031-0a1b2c3",
@@ -439,13 +520,35 @@ fn quarantine_id_normalization_is_narrow() {
         "import-alpha",
         "Import-20261031-0a1b2c3d",
     ] {
-        assert_eq!(normalize_quarantine_ids(kept), kept, "{kept}");
+        assert_eq!(text(kept), kept, "{kept}");
     }
     // Multi-byte text around an ID survives.
     assert_eq!(
-        normalize_quarantine_ids("é import-20261031-0a1b2c3d ü"),
+        text("é import-20261031-0a1b2c3d ü"),
         "é import-<DATE>-<RAND> ü"
     );
+    // Invalid bytes around an ID survive untouched.
+    assert_eq!(
+        normalize_quarantine_ids(b"\xff import-20261031-0a1b2c3d/\xfe"),
+        b"\xff import-<DATE>-<RAND>/\xfe"
+    );
+}
+
+#[test]
+fn temp_suffix_normalization_is_narrow() {
+    assert_eq!(
+        normalize_temp_suffixes(b"open /r/entries/\xff.age.tmp-3097833264: x"),
+        b"open /r/entries/\xff.age.tmp-<N>: x"
+    );
+    // No digits, or another extension: untouched.
+    for kept in [
+        &b"a.age.tmp-"[..],
+        b"a.age.tmp-x1",
+        b"a.age.tmp1",
+        b"a.tmp-12",
+    ] {
+        assert_eq!(normalize_temp_suffixes(kept), kept);
+    }
 }
 
 fn digest_of(root: &Path, names: &[String]) -> String {

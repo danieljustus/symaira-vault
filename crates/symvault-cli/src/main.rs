@@ -4960,16 +4960,18 @@ fn run_import(
             "Import summary: {} imported, {} skipped",
             result.imported, result.skipped
         ));
-        Ok::<(), String>(())
+        Ok::<(), import_commands::ApplyError>(())
     })();
     match result {
         Ok(()) => ExitCode::SUCCESS,
         // Cobra and the root executor each print a failure of this command.
+        // The message is the exact Go byte string: an entry path that is not
+        // valid UTF-8 appears in it unchanged.
         Err(error) if !is_not_initialized(&error) => {
-            print_error_like_go(&error);
+            print_error_bytes_like_go(&error.0);
             ExitCode::from(1)
         }
-        Err(error) => finish_vault_result(Err(error)),
+        Err(error) => finish_vault_result(Err(error.lossy())),
     }
 }
 
@@ -5258,8 +5260,15 @@ fn deprecated_stub_message(message: &str) -> ExitCode {
 /// `auth rotate-passphrase` and `get`'s mutually-exclusive flags. The duplicate
 /// is contract parity, not a copy-paste bug.
 fn print_error_like_go(message: &str) {
+    print_error_bytes_like_go(message.as_bytes());
+}
+
+fn print_error_bytes_like_go(message: &[u8]) {
+    let mut stderr = io::stderr();
     for _ in 0..2 {
-        let _ = writeln!(io::stderr(), "Error: {message}");
+        let _ = stderr.write_all(b"Error: ");
+        let _ = stderr.write_all(message);
+        let _ = stderr.write_all(b"\n");
     }
 }
 

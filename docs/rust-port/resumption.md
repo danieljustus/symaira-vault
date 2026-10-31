@@ -1,5 +1,36 @@
 # Rust migration handover — 2026-09-09
 
+## IO-001 invalid-byte representation, 2026-10-31
+
+Question closed: does `ImportedEntry` (`String` paths and values) lose data against Go? Probed with the
+REAL Go binary (oracle `bf7f687b`, macOS plus a `linux/arm64` container): Go keeps imported strings as
+raw bytes. Paths reach dry-run/progress lines and every error text unchanged, values are re-encoded by
+`encoding/json` when stored (one U+FFFD per invalid byte), the 4096-byte field limit counts raw bytes,
+and creating a file with a non-UTF-8 name fails on macOS (`EILSEQ`) but succeeds on Linux (where Go then
+leaves unreadable entries: collapsed manifest keys, `entry not found`).
+
+Rust: `ImportedEntry` gains `raw_path` and `raw_value_len` (`#[serde(skip)]`, empty for UTF-8 input);
+CSV/profile/pass importers keep raw bytes, de-duplicate and `path.Join` on them; the invented
+`distinct CSV paths collapse` error and `ImportError::PathCollision` are gone. `import_commands::apply`
+works on path bytes (new `Reporter::line_bytes`, `ApplyError(Vec<u8>)`, byte-level `go_invalid_path_text`,
+`validate_field_lengths` with raw lengths; the import/replace callbacks take the raw-length map). The
+write of a non-UTF-8 path runs Go's `mkdir`/`open` sequence, so macOS produces Go's exact text; a file
+system that accepts the name gets an explicit refusal (ADR 0030 item 4, bounded divergence).
+
+Corpus: `importcligen` 293 -> 345 cases (52 `invalid-bytes-*`: 33 `any`, 19 `darwin`). Harness additions:
+`stdout_b64`/`stderr_b64` (raw bytes; text field only readable), normalization rule 3
+(`.age.tmp-<digits>` -> `.age.tmp-<N>`), platform `darwin` (other hosts keep the recorded case in
+`--check`, the Rust replay skips it). Regenerate with `make import-cli-regenerate` on a macOS host only;
+verified diff: the first 293 cases byte-identical, `generator_digest` and notes changed, 52 appended.
+
+Red before: 39 of the 52 new cases differed against the pre-change binary (replayed with the same
+rules). Not covered, still open: argv-borne invalid bytes (`--prefix`, `--mapping`, source path in error
+text; clap rejects non-UTF-8 values Go accepts) and invalid bytes in a pass store path (Go side not
+observable on macOS; Rust adapter unit-tested). Observed once or twice under heavy host load in the
+replay: `e2e-csv-many-rows` failing with `failed to read .git/objects/<xx>: No such file or directory`
+from the store (valid paths, not touched by this slice; reran green 20+ times, also with the pre-change
+binary) - treat as a pre-existing store/Git race if it recurs.
+
 ## IO-001 pass importer against real gpg, 2026-10-31
 
 `passgpggen` (new, oracle `fca3f894`, sources `internal/importer/{importer,pass,totp}.go`,

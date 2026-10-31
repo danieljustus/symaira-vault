@@ -10,7 +10,7 @@
 use symvault_core::go_quote;
 
 /// `strconv.Quote` of a Go string that may hold invalid UTF-8.
-pub(super) fn quote_bytes(bytes: &[u8]) -> String {
+pub fn quote_bytes(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len() + 2);
     out.push('"');
     let mut rest = bytes;

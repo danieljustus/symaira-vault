@@ -5,6 +5,7 @@ mod onepux;
 pub use cxf::parse as parse_cxf;
 mod pass;
 mod totp;
+pub use gourl::quote_bytes as go_quote_bytes;
 pub use onepux::parse_1pux;
 pub use pass::{import_pass, import_pass_with_gpg, parse_pass_entry, parse_pass_entry_bytes};
 pub use totp::{parse_totp, parse_totp_bytes};
@@ -29,11 +30,19 @@ pub enum ImportError {
     /// `encoding/json` errors of the Bitwarden parser).
     #[error("{0}")]
     Decode(String),
-    #[error("distinct CSV paths collapse to the same UTF-8 path: {0}")]
-    PathCollision(String),
     #[error("import I/O failed: {0}")]
     Io(#[from] std::io::Error),
 }
+/// One entry the importer produced.
+///
+/// Go strings carry arbitrary bytes, so the Go importer can return a path or a
+/// value that is not valid UTF-8, and the command then echoes the path as raw
+/// bytes and counts value lengths in raw bytes. `path` and the string values
+/// hold the text `encoding/json` would emit (one U+FFFD per invalid byte),
+/// which is also what the vault stores for a value. The two `raw_*` fields
+/// keep what that text cannot: the exact path bytes and the exact byte length
+/// of a value. They are empty for every UTF-8 entry, so existing consumers and
+/// the serialized form are unchanged.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ImportedEntry {
     pub path: String,
@@ -43,6 +52,54 @@ pub struct ImportedEntry {
     pub warnings: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub secret_type: Option<String>,
+    /// The exact bytes of the Go path, set only when they are not valid UTF-8
+    /// (then `path` is their `encoding/json` text).
+    #[serde(skip)]
+    pub raw_path: Option<Vec<u8>>,
+    /// The exact byte length of a string value in `data`, set only when it
+    /// differs from the length of the stored text.
+    #[serde(skip)]
+    pub raw_value_len: BTreeMap<String, usize>,
+}
+
+impl ImportedEntry {
+    /// The exact bytes of the Go path.
+    #[must_use]
+    pub fn path_bytes(&self) -> &[u8] {
+        self.raw_path.as_deref().unwrap_or(self.path.as_bytes())
+    }
+
+    /// The Go byte length of the top-level string value `key`, which is what
+    /// Go's field-length limit counts.
+    #[must_use]
+    pub fn value_len(&self, key: &str) -> Option<usize> {
+        match self.data.get(key) {
+            Some(Value::String(text)) => {
+                Some(self.raw_value_len.get(key).copied().unwrap_or(text.len()))
+            }
+            _ => None,
+        }
+    }
+
+    /// Sets the path from the exact bytes Go produced.
+    pub(crate) fn set_path_bytes(&mut self, bytes: Vec<u8>) {
+        self.path = go_string_from_bytes(&bytes);
+        self.raw_path = match String::from_utf8(bytes) {
+            Ok(_) => None,
+            Err(error) => Some(error.into_bytes()),
+        };
+    }
+
+    /// Stores a string value taken from exact Go bytes.
+    pub(crate) fn set_string_bytes(&mut self, key: &str, bytes: &[u8]) {
+        let text = go_string_from_bytes(bytes);
+        if text.len() == bytes.len() {
+            self.raw_value_len.remove(key);
+        } else {
+            self.raw_value_len.insert(key.to_owned(), bytes.len());
+        }
+        self.data.insert(key.to_owned(), Value::String(text));
+    }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Format {
@@ -176,7 +233,6 @@ pub fn parse_csv_profile(
     }
     let mut result = Vec::new();
     let mut used = std::collections::BTreeSet::new();
-    let mut emitted_paths = BTreeMap::<String, Vec<u8>>::new();
     let mut row = csv::ByteRecord::new();
     while reader
         .read_byte_record(&mut row)
@@ -199,66 +255,55 @@ pub fn parse_csv_profile(
                 .or_else(|| columns.get(&lower_go_bytes(column.as_bytes())))
                 .and_then(|i| raw_row.get(*i))
         };
-        let mut path = String::new();
-        let mut path_key = None;
-        let mut data = BTreeMap::new();
+        // The path is kept as the exact Go bytes: Go normalizes and compares
+        // raw strings, so two titles that differ only in an invalid byte are
+        // two paths even though their text is the same.
+        let mut path_key: Vec<u8> = Vec::new();
+        let mut entry = ImportedEntry::default();
         let mut warnings = None;
         for (field, col) in mapping {
             let Some(val) = get(col) else { continue };
             match field.as_str() {
                 "title" | "path" => {
-                    if path.is_empty() && !val.is_empty() {
-                        path = normalize_path(val);
-                        path_key = get_raw(col).map(|raw| normalize_path_key(raw));
+                    if path_key.is_empty() && !val.is_empty() {
+                        path_key = match get_raw(col) {
+                            Some(raw) => normalize_path_key(raw),
+                            None => normalize_path_key(val.as_bytes()),
+                        };
                     }
                 }
                 "otp" | "totp.secret" => {
                     if !val.is_empty() {
-                        insert_totp(&mut data, &mut warnings, val);
+                        insert_totp(&mut entry.data, &mut warnings, val);
                     }
                 }
-                _ => {
-                    data.insert(field.clone(), Value::String(val.into()));
-                }
+                _ => match get_raw(col) {
+                    Some(raw) => entry.set_string_bytes(field, raw),
+                    None => {
+                        entry.data.insert(field.clone(), Value::String(val.into()));
+                    }
+                },
             }
         }
-        if path.is_empty()
+        if path_key.is_empty()
             && matches!(format, Format::Chrome | Format::Firefox)
             && let Some(url) = get("url")
         {
-            path = normalize_path(&host_from_url(url).to_lowercase());
-            path_key = Some(normalize_path_key(path.as_bytes()));
+            path_key =
+                normalize_path_key(normalize_path(&host_from_url(url).to_lowercase()).as_bytes());
         }
-        let raw_path_key = path_key
-            .clone()
-            .unwrap_or_else(|| normalize_path_key(path.as_bytes()));
-        if format != Format::Csv && !path.is_empty() {
-            let base = path.clone();
-            let base_key = raw_path_key.clone();
-            let mut candidate_key = base_key.clone();
+        if format != Format::Csv && !path_key.is_empty() {
+            let base_key = path_key.clone();
             let mut suffix = 2;
-            while used.contains(&candidate_key) {
-                path = format!("{base}-{suffix}");
-                candidate_key = path_key_with_suffix(&base_key, suffix);
+            while used.contains(&path_key) {
+                path_key = path_key_with_suffix(&base_key, suffix);
                 suffix += 1;
             }
-            used.insert(candidate_key);
+            used.insert(path_key.clone());
         }
-        if !path.is_empty() {
-            if let Some(previous_key) = emitted_paths.get(&path) {
-                if previous_key != &raw_path_key {
-                    return Err(ImportError::PathCollision(path));
-                }
-            } else {
-                emitted_paths.insert(path.clone(), raw_path_key);
-            }
-        }
-        result.push(ImportedEntry {
-            path,
-            data,
-            warnings,
-            secret_type: None,
-        });
+        entry.set_path_bytes(path_key);
+        entry.warnings = warnings;
+        result.push(entry);
     }
     Ok(result)
 }
@@ -342,6 +387,13 @@ fn path_key_with_suffix(base: &[u8], suffix: usize) -> Vec<u8> {
     key.push(b'-');
     key.extend(suffix.to_string().as_bytes());
     key
+}
+
+/// Go's `strings.TrimSpace` over exact Go string bytes: an invalid sequence
+/// decodes as one non-space `RuneError` per byte, so it ends the trim.
+#[must_use]
+pub fn go_trim_space(bytes: &[u8]) -> &[u8] {
+    trim_go_space_bytes(bytes)
 }
 
 fn trim_go_space_bytes(mut bytes: &[u8]) -> &[u8] {
@@ -810,6 +862,7 @@ pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> 
             data: d,
             warnings,
             secret_type: (item.kind == 2).then(|| "payment".into()),
+            ..ImportedEntry::default()
         });
     }
     Ok(out)

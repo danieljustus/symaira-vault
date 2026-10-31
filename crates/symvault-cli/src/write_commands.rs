@@ -89,16 +89,20 @@ pub fn set_fields(
     path: &str,
     data: BTreeMap<String, Value>,
 ) -> Result<(), String> {
-    write_fields(root, identity, path, data, false, "set")
+    write_fields(root, identity, path, data, &BTreeMap::new(), false, "set")
 }
 
+/// Imports one entry. `raw_lengths` holds the exact Go byte length of the
+/// string values whose stored text differs in length (Go's field limit counts
+/// the bytes of the imported string, not of its JSON text).
 pub fn import_fields(
     root: &Path,
     identity: &Identity,
     path: &str,
     data: BTreeMap<String, Value>,
+    raw_lengths: &BTreeMap<String, usize>,
 ) -> Result<(), String> {
-    write_fields(root, identity, path, data, false, "import")
+    write_fields(root, identity, path, data, raw_lengths, false, "import")
 }
 
 pub fn replace_fields(
@@ -106,8 +110,39 @@ pub fn replace_fields(
     identity: &Identity,
     path: &str,
     data: BTreeMap<String, Value>,
+    raw_lengths: &BTreeMap<String, usize>,
 ) -> Result<(), String> {
-    write_fields(root, identity, path, data, true, "import")
+    write_fields(root, identity, path, data, raw_lengths, true, "import")
+}
+
+/// Go's `ValidateFieldLengths`: no string value may exceed 4096 bytes, nested
+/// objects included. `raw_lengths` overrides the length of a top-level string
+/// whose Go byte string was longer or shorter than its stored text.
+pub fn validate_field_lengths(
+    data: &BTreeMap<String, Value>,
+    raw_lengths: &BTreeMap<String, usize>,
+) -> Result<(), String> {
+    fn validate(key: &str, value: &Value, raw: Option<usize>) -> Result<(), String> {
+        match value {
+            Value::String(text) if raw.unwrap_or(text.len()) > 4096 => {
+                return Err(format!(
+                    "field {} exceeds maximum length of 4096 characters",
+                    symvault_core::go_quote(key)
+                ));
+            }
+            Value::Object(map) => {
+                for (key, value) in map {
+                    validate(key, value, None)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    for (key, value) in data {
+        validate(key, value, raw_lengths.get(key).copied())?;
+    }
+    Ok(())
 }
 
 pub fn set_secret_type(
@@ -148,28 +183,11 @@ fn write_fields(
     identity: &Identity,
     path: &str,
     data: BTreeMap<String, Value>,
+    raw_lengths: &BTreeMap<String, usize>,
     replace: bool,
     action: &str,
 ) -> Result<(), String> {
-    fn validate(key: &str, value: &Value) -> Result<(), String> {
-        match value {
-            Value::String(text) if text.len() > 4096 => {
-                return Err(format!(
-                    "field {key:?} exceeds maximum length of 4096 characters"
-                ));
-            }
-            Value::Object(map) => {
-                for (key, value) in map {
-                    validate(key, value)?;
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-    for (key, value) in &data {
-        validate(key, value)?;
-    }
+    validate_field_lengths(&data, raw_lengths)?;
     let store = symvault_store::Store::open_with_legacy_migration(root, identity)
         .map_err(|error| error.to_string())?;
     let (mut entry, new) = if replace {

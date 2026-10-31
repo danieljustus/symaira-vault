@@ -87,11 +87,11 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
         &root,
         &identity,
         &options,
-        |_, _, path, data| {
+        |_, _, path, data, _| {
             writes.push((path.to_owned(), data));
             Ok(())
         },
-        |_, _, _, _| panic!("unexpected replacement"),
+        |_, _, _, _, _| panic!("unexpected replacement"),
         |_, _, _, _| panic!("unexpected secret metadata"),
     )
     .expect("import");
@@ -113,17 +113,21 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
         &root,
         &identity,
         &malformed_options,
-        |_, _, _, _| {
+        |_, _, _, _, _| {
             malformed_writes += 1;
             Ok(())
         },
-        |_, _, _, _| Ok(()),
+        |_, _, _, _, _| Ok(()),
         |_, _, _, _| panic!("unexpected secret metadata"),
     )
     .expect_err("malformed import must fail");
     assert!(error.contains("parse import source"));
     assert_eq!(malformed_writes, 0);
 
+    // Distinct raw paths that share one text form (`\xFF`, `\xFE`) are two
+    // entries in Go. The native store holds text paths, so the write stops
+    // before any callback: macOS refuses the file name like Go does, every
+    // other host gets an explicit refusal (ADR 0030). Nothing is written.
     let collision = root.join("collision.csv");
     fs::write(
         &collision,
@@ -140,15 +144,28 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
         &root,
         &identity,
         &collision_options,
-        |_, _, _, _| {
+        |_, _, _, _, _| {
             collision_writes += 1;
             Ok(())
         },
-        |_, _, _, _| Ok(()),
+        |_, _, _, _, _| Ok(()),
         |_, _, _, _| panic!("unexpected secret metadata"),
     )
-    .expect_err("colliding paths must fail before writes");
-    assert!(error.contains("distinct CSV paths"));
+    .expect_err("an entry path that is not valid UTF-8 cannot be written");
+    // The `imports` prefix is joined before the write, as in Go.
+    assert!(
+        error.starts_with("cannot write entry: cannot create entry imports/\u{FFFD}: "),
+        "{error}"
+    );
+    if cfg!(target_os = "macos") {
+        // APFS refuses the raw name exactly as it does for Go.
+        assert!(error.ends_with(": illegal byte sequence"), "{error}");
+    } else {
+        assert!(
+            error.ends_with("the native store only persists UTF-8 entry paths"),
+            "{error}"
+        );
+    }
     assert_eq!(collision_writes, 0);
     assert!(
         Store::open(&root, &identity)
@@ -208,8 +225,8 @@ fn failed_overwrite_keeps_the_existing_entry() {
         &root,
         &identity,
         &options,
-        |_, _, _, _| panic!("overwrite must use replacement callback"),
-        |_, _, _, _| Err("injected replacement failure".into()),
+        |_, _, _, _, _| panic!("overwrite must use replacement callback"),
+        |_, _, _, _, _| Err("injected replacement failure".into()),
         |_, _, _, _| panic!("metadata must not run after replacement failure"),
     )
     .expect_err("replacement failure must be returned");
@@ -309,11 +326,11 @@ fn quarantine_import_uses_go_batch_id_shape_and_rejects_prefix() {
         &root,
         &identity,
         &options,
-        |_, _, path, _| {
+        |_, _, path, _, _| {
             written_path = Some(path.to_owned());
             Ok(())
         },
-        |_, _, _, _| panic!("unexpected replacement"),
+        |_, _, _, _, _| panic!("unexpected replacement"),
         |_, _, _, _| panic!("unexpected secret metadata"),
     )
     .expect("quarantine import");
@@ -342,8 +359,8 @@ fn quarantine_import_uses_go_batch_id_shape_and_rejects_prefix() {
         &root,
         &identity,
         &conflicting,
-        |_, _, _, _| panic!("conflict must be rejected before writes"),
-        |_, _, _, _| panic!("unexpected replacement"),
+        |_, _, _, _, _| panic!("conflict must be rejected before writes"),
+        |_, _, _, _, _| panic!("unexpected replacement"),
         |_, _, _, _| panic!("unexpected secret metadata"),
     )
     .expect_err("quarantine and prefix conflict");

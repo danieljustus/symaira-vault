@@ -175,6 +175,10 @@ func noPost(in caseInput) caseInput { in.noPost = true; return in }
 
 func unix(in caseInput) caseInput { in.platform = "unix"; return in }
 
+// darwin marks a case that depends on macOS refusing to create a file whose
+// name is not valid UTF-8 (EILSEQ); Linux creates such a file instead.
+func darwin(in caseInput) caseInput { in.platform = "darwin"; return in }
+
 func withPost(in caseInput, post ...[]string) caseInput { in.extraPost = post; return in }
 
 // allCases is the full corpus. Order is the fixture order.
@@ -541,5 +545,128 @@ func allCases() []caseInput {
 		noPost(c("vault-not-initialized-oversized", "the size cap fails before the vault check", []fileSpec{{Name: "huge.csv", SparseSize: 100*1024*1024 + 1}}, nil, imp("huge.csv")...)),
 	)
 
+	add(invalidByteCases()...)
+
+	return cs
+}
+
+// csvBytes joins CSV lines (raw bytes) into one source file.
+func csvBytes(lines ...string) []byte { return []byte(strings.Join(lines, "\n") + "\n") }
+
+// invalidByteCases freezes what the Go importer, the vault writer and the read
+// paths do with values and entry paths that are not valid UTF-8 (IO-001, the
+// ImportedEntry invalid-byte representation).
+//
+// Go keeps imported strings as raw bytes. A path therefore reaches the
+// progress output and every error text unchanged, while values are re-encoded
+// by encoding/json when the entry is stored (one U+FFFD per invalid byte). The
+// 4096-byte field limit counts the raw bytes. Creating the entry file with a
+// non-UTF-8 name fails on macOS (EILSEQ) and succeeds on Linux, so the write
+// cases are darwin-gated.
+func invalidByteCases() []caseInput {
+	var cs []caseInput
+	add := func(in ...caseInput) { cs = append(cs, in...) }
+	csvOf := func(name string, lines ...string) []fileSpec { return one(bin(name, csvBytes(lines...))) }
+	dry := func(id, desc string, files []fileSpec, args ...string) caseInput {
+		return c(id, desc, files, seedOf(), imp(append(args, "--dry-run")...)...)
+	}
+	long := func(unit string, count int) string { return strings.Repeat(unit, count) }
+
+	// 15a. Dry-run echoes the raw path bytes.
+	two := csvOf("c.csv", "title,password", "\xff,pw-one", "\xfe,pw-two")
+	add(
+		dry("invalid-bytes-dry-run-lone-bytes", "two titles that differ only in their invalid byte stay two distinct raw paths", two, "c.csv"),
+		dry("invalid-bytes-dry-run-classes", "truncated 2/3/4-byte sequences, overlong, surrogate, out-of-range, 5-byte, lone C1 and a valid NEL (trimmed) in titles",
+			csvOf("c.csv", "title,password", "a\xc3,p1", "a\xe2\x82,p2", "a\xf0\x9f,p3", "a\xc0\xaf,p4", "a\xed\xa0\x80,p5", "a\xf4\x90\x80\x80,p6", "a\xf8\x88\x80\x80\x80,p7", "a\x85,p8", "a\xc2\x85,p9", "caf\xc3\xa9,p10"), "c.csv"),
+		dry("invalid-bytes-dry-run-duplicate", "the generic CSV importer keeps two rows with the same invalid path", csvOf("c.csv", "title,password", "\xff,p1", "\xff,p2"), "c.csv"),
+		dry("invalid-bytes-dry-run-nested", "invalid bytes inside a nested path", csvOf("c.csv", "title,password", "a/\xff/b,p1", "a\xfe/b\xfd,p2"), "c.csv"),
+		dry("invalid-bytes-dry-run-prefix", "--prefix joins the raw path with path.Join", two, "c.csv", "--prefix", "a/b"),
+		dry("invalid-bytes-dry-run-prefix-clean", "path.Join cleans repeated and dot segments around an invalid path; spaces become dashes and edge slashes go",
+			csvOf("c.csv", "title,password", "\"/\xff/\",p1", "x//\xff,p2", "x/./\xff,p3", " \xff  ,p4", "\xff a,p5", "\xff-a,p6"), "c.csv", "--prefix", "p"),
+		dry("invalid-bytes-dry-run-clean-without-prefix", "without a prefix a clean path prints raw and a rejected one fails the existence check",
+			csvOf("c.csv", "title,password", "\"/\xff/\",p1", "x//\xff,p2"), "c.csv"),
+		dry("invalid-bytes-dry-run-quarantine", "--quarantine joins the raw path under the quarantine ID", two, "c.csv", "--quarantine"),
+		dry("invalid-bytes-dry-run-skip-existing", "--skip-existing reports no existing entry for a raw path", two, "c.csv", "--skip-existing"),
+		dry("invalid-bytes-dry-run-control-char", "a control character after an invalid byte is rejected with the raw path and a quoted copy",
+			csvOf("c.csv", "title,password", "\"a\xff\x01b\",p1"), "c.csv"),
+		dry("invalid-bytes-dry-run-control-char-prefix", "the same rejection under a prefix", csvOf("c.csv", "title,password", "\"a\xff\x01b\",p1"), "c.csv", "--prefix", "p"),
+		dry("invalid-bytes-dry-run-del", "DEL after an invalid byte is accepted", csvOf("c.csv", "title,password", "\"\xff\x7fx\",p1"), "c.csv"),
+		dry("invalid-bytes-dry-run-tab", "a tab after an invalid byte is a control character", csvOf("c.csv", "title,password", "\"b\xff\tz\",p1"), "c.csv"),
+		dry("invalid-bytes-dry-run-dotdot", "a '..' next to an invalid byte becomes a dash before the path check", csvOf("c.csv", "title,password", "\xff..\xfe,p1", "..\xff,p2"), "c.csv"),
+		dry("invalid-bytes-dry-run-windows-chars", "characters invalid on Windows are removed around an invalid byte", csvOf("c.csv", "title,password", "a:\xff*b?,p1", "<\xfe>|\xfd\\x,p2"), "c.csv"),
+	)
+
+	// 15b. Profiles de-duplicate on the raw bytes.
+	add(
+		dry("invalid-bytes-dry-run-chrome-dedupe", "Chrome names that differ only in an invalid byte are distinct; a duplicate gets -2 on the raw bytes, including a literal -2",
+			csvOf("c.csv", "name,url,username,password,note", "\xff,https://a.example,u,p,", "\xff,https://b.example,u,p,", "\xfe,https://c.example,u,p,", "\xff-2,https://d.example,u,p,", "\xff-2,https://e.example,u,p,"), "c.csv"),
+		dry("invalid-bytes-dry-run-chrome-url-host", "a nameless Chrome row falls back to the URL host: an invalid byte becomes U+FFFD there and the paths then collide as text",
+			csvOf("c.csv", "name,url,username,password,note", ",https://a\xff.example/x,u,p,", ",https://a\xfe.example/x,u,p,"), "c.csv"),
+		dry("invalid-bytes-dry-run-firefox-host", "Firefox hosts with invalid bytes de-duplicate as text",
+			csvOf("c.csv", "url,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged", "https://\xff.example/login,u,p,,,{g},1,2,3", "https://\xfe.example/login,u,p,,,{g},1,2,3", "https://\xff.example/login,u,p,,,{g},1,2,3"), "c.csv"),
+		dry("invalid-bytes-dry-run-apple-dedupe", "Apple titles with invalid bytes de-duplicate on the raw bytes",
+			csvOf("c.csv", "Title,URL,Username,Password,Notes,OTPAuth", "\xff,,u,p,,", "\xfe,,u,p,,", "\xff,,u,p,,", "\xff-2,,u,p,,"), "c.csv"),
+		dry("invalid-bytes-dry-run-normalized-collision", "raw paths that normalize to one path (space becomes a dash) get a suffix",
+			csvOf("c.csv", "name,url,username,password,note", "\xff a,https://a.example,u,p,", "\xff-a,https://b.example,u,p,", "\xff  a,https://c.example,u,p,"), "c.csv"),
+	)
+
+	// 15c. Values are re-encoded when the entry is stored.
+	add(
+		c("invalid-bytes-values-persisted", "invalid bytes in every value class are stored as one U+FFFD per byte, and a literal U+FFFD is kept",
+			csvOf("c.csv", "title,username,password,notes,url", "ok,u\xff1,pw\xfe\xc3\xa9\xc3,n\xed\xa0\x80\xc0\xaf\xc2\x85,http://a\xff.example", "ok2,\xef\xbf\xbd,\xf4\x90\x80\x80,\xe2\x82\xe2\x82,"), seedOf(), imp("c.csv")...),
+		c("invalid-bytes-values-chrome", "Chrome values with invalid bytes under a valid name",
+			csvOf("c.csv", "name,url,username,password,note", "site,https://x.example/\xff,us\xfe,pw\xfd,no\xfc"), seedOf(), imp("c.csv")...),
+		c("invalid-bytes-values-overwrite-merge", "invalid-byte values merge into an existing entry like any other value",
+			csvOf("c.csv", "title,username,password", "ok,\xffnew,pw\xfe"), seedOf(existingEntry("ok")...), imp("c.csv")...),
+		c("invalid-bytes-header-alias-mapping", "a header with an invalid byte is reachable through its lower-cased alias, where each invalid byte is U+FFFD",
+			csvOf("c.csv", "ti\xfftle,password", "ok,p1"), seedOf(), imp("c.csv", "--mapping", "title=ti\ufffdtle,password=password")...),
+		c("invalid-bytes-header-raw-exact-mapping", "the mapping cannot name the raw header (U+FFFD is not the invalid byte), so the title column is unmapped",
+			csvOf("c.csv", "ti\xfftle,password", "ok,p1"), seedOf(), imp("c.csv")...),
+	)
+
+	// 15d. The 4096-byte field limit counts raw bytes.
+	add(
+		c("invalid-bytes-limit-exact", "4096 invalid bytes are within the limit and stored as 4096 U+FFFD", csvOf("c.csv", "title,password,notes", "ok,p1,"+long("\xff", 4096)), seedOf(), imp("c.csv")...),
+		c("invalid-bytes-limit-over", "4097 invalid bytes exceed the limit", csvOf("c.csv", "title,password,notes", "ok,p1,"+long("\xff", 4097)), seedOf(), imp("c.csv")...),
+		c("invalid-bytes-limit-truncated-sequences", "2048 truncated 3-byte sequences are 4096 raw bytes: within the limit", csvOf("c.csv", "title,password,notes", "ok,p1,"+long("\xe2\x82", 2048)), seedOf(), imp("c.csv")...),
+		c("invalid-bytes-limit-truncated-over", "2049 truncated 3-byte sequences are 4098 raw bytes: over the limit", csvOf("c.csv", "title,password,notes", "ok,p1,"+long("\xe2\x82", 2049)), seedOf(), imp("c.csv")...),
+		c("invalid-bytes-limit-mixed-valid", "valid two-byte characters count their UTF-8 bytes next to invalid ones: 2047*2+2 = 4096", csvOf("c.csv", "title,password,notes", "ok,p1,"+long("\xc3\xa9", 2047)+"\xff\xfe"), seedOf(), imp("c.csv")...),
+		c("invalid-bytes-limit-mixed-over", "one byte more", csvOf("c.csv", "title,password,notes", "ok,p1,"+long("\xc3\xa9", 2047)+"\xff\xfe\xfd"), seedOf(), imp("c.csv")...),
+		c("invalid-bytes-limit-password-over", "the limit applies to the password field too", csvOf("c.csv", "title,password", "ok,"+long("\xfe", 4097)), seedOf(), imp("c.csv")...),
+		c("invalid-bytes-limit-dry-run", "--dry-run never checks field lengths", csvOf("c.csv", "title,password,notes", "ok,p1,"+long("\xff", 4097)), seedOf(), imp("c.csv", "--dry-run")...),
+	)
+
+	// 15e. Writing an entry whose path is not valid UTF-8 (darwin: EILSEQ).
+	write := func(id, desc string, files []fileSpec, seed [][]string, args ...string) caseInput {
+		return darwin(c(id, desc, files, seed, imp(args...)...))
+	}
+	add(
+		write("invalid-bytes-write-lone-byte", "creating the entry file for a lone invalid byte fails", two, seedOf(), "c.csv"),
+		write("invalid-bytes-write-after-valid", "entries before the failing one are stored; the import stops at the failure",
+			csvOf("c.csv", "title,password", "ok1,p1", "\xff,p2", "ok2,p3"), seedOf(), "c.csv"),
+		write("invalid-bytes-write-parent-segment", "an invalid byte in the first directory fails the mkdir", csvOf("c.csv", "title,password", "a\xff/b,p1"), seedOf(), "c.csv"),
+		write("invalid-bytes-write-middle-segment", "an invalid byte in a middle directory fails the mkdir of that directory", csvOf("c.csv", "title,password", "a/b\xff/c,p1"), seedOf(), "c.csv"),
+		write("invalid-bytes-write-file-segment", "an invalid byte only in the file name fails the temporary file", csvOf("c.csv", "title,password", "a/b/c\xff,p1"), seedOf(), "c.csv"),
+		write("invalid-bytes-write-prefix", "the path is reported with its prefix", two, seedOf(), "c.csv", "--prefix", "pre"),
+		write("invalid-bytes-write-quarantine", "the quarantine ID is printed before the failure", two, seedOf(), "c.csv", "--quarantine"),
+		write("invalid-bytes-write-skip-existing", "--skip-existing finds nothing to skip and fails on the write", two, seedOf(), "c.csv", "--skip-existing"),
+		write("invalid-bytes-write-overwrite", "--overwrite finds nothing to delete and fails on the write", two, seedOf(), "c.csv", "--overwrite"),
+		write("invalid-bytes-write-overwrite-existing-valid", "--overwrite replaces the valid existing entry first, then the invalid path fails",
+			csvOf("c.csv", "title,password", "ok,new-pw", "\xff,p2"), seedOf(existingEntry("ok")...), "c.csv", "--overwrite"),
+		write("invalid-bytes-write-overlong", "an overlong encoding is refused too", csvOf("c.csv", "title,password", "a\xc0\xaf,p1"), seedOf(), "c.csv"),
+		write("invalid-bytes-write-surrogate", "a surrogate encoding is refused too", csvOf("c.csv", "title,password", "a\xed\xa0\x80,p1"), seedOf(), "c.csv"),
+		write("invalid-bytes-write-lone-c1", "a lone C1 byte is refused too", csvOf("c.csv", "title,password", "a\x85,p1"), seedOf(), "c.csv"),
+		write("invalid-bytes-write-chrome", "a Chrome profile name with an invalid byte", csvOf("c.csv", "name,url,username,password,note", "\xff,https://a.example,u,p,"), seedOf(), "c.csv"),
+		write("invalid-bytes-write-chrome-duplicate", "the second of two equal names is the suffixed path, but the first already fails",
+			csvOf("c.csv", "name,url,username,password,note", "\xff,https://a.example,u,p,", "\xff,https://b.example,u,p,"), seedOf(), "c.csv"),
+		write("invalid-bytes-write-limit-first", "the field-length check runs before the file system is touched",
+			csvOf("c.csv", "title,password,notes", "\xff,p1,"+long("\xfe", 4097)), seedOf(), "c.csv"),
+		write("invalid-bytes-write-limit-within", "a value within the limit does not change the failure",
+			csvOf("c.csv", "title,password,notes", "\xff,p1,"+long("\xfe", 4096)), seedOf(), "c.csv"),
+		write("invalid-bytes-write-control-char", "a rejected path fails the existence check before any write",
+			csvOf("c.csv", "title,password", "\"a\xff\x01b\",p1"), seedOf(), "c.csv"),
+		write("invalid-bytes-write-valid-value-invalid-path", "an invalid value does not matter once the path fails",
+			csvOf("c.csv", "title,password,notes", "\xff,p\xfe,n\xfd"), seedOf(), "c.csv"),
+	)
 	return cs
 }

@@ -90,7 +90,8 @@ fn writes_preserve_other_fields_reject_corruption_and_delete() {
             std::collections::BTreeMap::from([(
                 "password".into(),
                 serde_json::json!("x".repeat(4097))
-            )])
+            )]),
+            &std::collections::BTreeMap::new()
         )
         .is_err()
     );

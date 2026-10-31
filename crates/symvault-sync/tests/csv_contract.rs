@@ -59,11 +59,6 @@ fn csv_profiles_and_paths_match_production_go() {
         } else {
             importer::parse(format, &input)
         };
-        if case["name"] == "chrome_distinct_invalid_titles" {
-            let error = result.expect_err("Rust cannot safely represent these distinct Go paths");
-            assert!(error.to_string().contains("distinct CSV paths"));
-            continue;
-        }
         assert_eq!(
             result.is_err(),
             case["failed"].as_bool().unwrap(),
@@ -123,13 +118,57 @@ fn csv_profiles_and_paths_match_production_go() {
     }
 }
 
+/// Go keeps an imported path as raw bytes; the text form (one U+FFFD per
+/// invalid byte) is what `encoding/json` emits, so two paths that differ only
+/// in their invalid bytes are the same text but still two paths.
 #[test]
-fn chrome_csv_rejects_distinct_invalid_byte_paths_that_collapse_in_rust() {
-    let input = b"name,url,username,password,note\n\xFF,https://one.example,u1,p1,\n\xFE,https://two.example,u2,p2,\n";
-    let error = importer::parse(Format::Chrome, input)
-        .expect_err("distinct byte paths cannot share one Rust UTF-8 path");
-    assert!(error.to_string().contains("distinct CSV paths"));
-    assert!(error.to_string().contains('\u{FFFD}'));
+fn chrome_csv_keeps_distinct_invalid_byte_paths() {
+    let input = b"name,url,username,password,note\n\xFF,https://one.example,u1,p1,\n\xFE,https://two.example,u2,p2,\n\xFF,https://three.example,u3,p3,\n";
+    let entries = importer::parse(Format::Chrome, input).expect("Go imports these rows");
+    let paths: Vec<&[u8]> = entries.iter().map(|entry| entry.path_bytes()).collect();
+    assert_eq!(paths, [&b"\xFF"[..], b"\xFE", b"\xFF-2"]);
+    assert_eq!(entries[0].path, "\u{FFFD}");
+    assert_eq!(entries[1].path, "\u{FFFD}");
+    assert_eq!(entries[2].path, "\u{FFFD}-2");
+    assert_eq!(entries[0].raw_path.as_deref(), Some(&b"\xFF"[..]));
+    // A valid path carries no raw copy: the text is the path.
+    let valid = importer::parse(
+        Format::Chrome,
+        b"name,url,username,password,note\nok,https://a.example,u,p,\n",
+    )
+    .unwrap();
+    assert_eq!(valid[0].raw_path, None);
+    assert_eq!(valid[0].path_bytes(), b"ok");
+}
+
+#[test]
+fn generic_csv_keeps_equal_invalid_paths_and_raw_value_lengths() {
+    let input = b"title,password,notes\n\xFF,pw\xFF\xFE,n\xE2\x82\n\xFF,\xC3\xA9,\n";
+    let entries = importer::parse(Format::Csv, input).expect("generic CSV never collides");
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].path_bytes(), b"\xFF");
+    assert_eq!(entries[1].path_bytes(), b"\xFF");
+    // The stored text re-encodes every invalid byte; Go's 4096-byte limit
+    // counts the bytes of the imported string.
+    assert_eq!(entries[0].data["password"], "pw\u{FFFD}\u{FFFD}");
+    assert_eq!(entries[0].value_len("password"), Some(4));
+    assert_eq!(entries[0].value_len("notes"), Some(3));
+    assert_eq!(entries[0].data["notes"], "n\u{FFFD}\u{FFFD}");
+    // A valid value keeps its text length and needs no raw length.
+    assert_eq!(entries[1].value_len("password"), Some(2));
+    assert!(entries[1].raw_value_len.is_empty());
+    assert_eq!(entries[1].value_len("absent"), None);
+}
+
+#[test]
+fn csv_profile_paths_from_a_url_host_are_text() {
+    // `strings.ToLower` turns an invalid byte into U+FFFD before the path is
+    // normalized, so a host path is valid text and de-duplicates as text.
+    let input = b"name,url,username,password,note\n,https://a\xFF.example/x,u,p,\n,https://a\xFE.example/x,u,p,\n";
+    let entries = importer::parse(Format::Chrome, input).unwrap();
+    assert_eq!(entries[0].path, "a\u{FFFD}.example");
+    assert_eq!(entries[1].path, "a\u{FFFD}.example-2");
+    assert_eq!(entries[0].raw_path, None);
 }
 
 #[test]

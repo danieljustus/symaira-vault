@@ -4,10 +4,8 @@
 // The command receives a Go-compatible allowlisted environment and no
 // caller environment is inherited implicitly.
 
-use super::{ImportError, ImportedEntry, go_string_from_bytes, normalize_path};
-use serde_json::Value;
+use super::{ImportError, ImportedEntry, go_string_from_bytes, normalize_path_key};
 use std::{
-    collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
     process::Command,
@@ -315,28 +313,19 @@ pub fn parse_pass_entry_bytes(path: &Path, content: &[u8]) -> ImportedEntry {
     let normalized = normalized.strip_suffix(b"\n").unwrap_or(&normalized);
     let mut lines = normalized.split(|byte| *byte == b'\n');
     let password = lines.next().unwrap_or_default();
-    let mut data = BTreeMap::new();
-    data.insert(
-        "password".into(),
-        Value::String(go_string_from_bytes(password)),
-    );
+    let mut entry = ImportedEntry::default();
+    entry.set_string_bytes("password", password);
     let mut notes: Vec<&[u8]> = Vec::new();
     let mut warnings = None;
     for line in lines {
         if let Some(value) = line.strip_prefix(b"url: ") {
-            data.insert(
-                "url".into(),
-                Value::String(go_string_from_bytes(go_trim_space(value))),
-            );
+            entry.set_string_bytes("url", go_trim_space(value));
         } else if let Some(value) = line.strip_prefix(b"username: ") {
-            data.insert(
-                "username".into(),
-                Value::String(go_string_from_bytes(go_trim_space(value))),
-            );
+            entry.set_string_bytes("username", go_trim_space(value));
         } else if line.starts_with(b"otpauth://") {
             match super::totp::parse_totp_bytes(line) {
                 Ok(totp) => {
-                    data.insert("totp".into(), totp);
+                    entry.data.insert("totp".into(), totp);
                 }
                 Err(error) => warnings
                     .get_or_insert_with(Vec::new)
@@ -347,19 +336,30 @@ pub fn parse_pass_entry_bytes(path: &Path, content: &[u8]) -> ImportedEntry {
         }
     }
     if !notes.is_empty() {
-        data.insert(
-            "notes".into(),
-            Value::String(go_string_from_bytes(&notes.join(&b'\n'))),
-        );
+        entry.set_string_bytes("notes", &notes.join(&b'\n'));
     }
-    let raw_path = path.to_string_lossy();
-    let raw_path = raw_path.strip_suffix(".gpg").unwrap_or(&raw_path);
-    let raw_path = to_slash(raw_path);
-    ImportedEntry {
-        path: normalize_path(&raw_path),
-        data,
-        warnings,
-        secret_type: None,
+    // Go keeps the relative path as a byte string; a name that is not valid
+    // UTF-8 reaches the vault path unchanged.
+    let full_path = path_bytes(path);
+    let raw_path = full_path
+        .strip_suffix(b".gpg".as_slice())
+        .unwrap_or(&full_path);
+    entry.set_path_bytes(normalize_path_key(&to_slash(raw_path)));
+    entry.warnings = warnings;
+    entry
+}
+
+/// The exact bytes of a path: the OS bytes on Unix, where a file name is a
+/// byte string, and the UTF-8 text elsewhere.
+fn path_bytes(path: &Path) -> Vec<u8> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_os_str().as_bytes().to_vec()
+    }
+    #[cfg(not(unix))]
+    {
+        path.to_string_lossy().into_owned().into_bytes()
     }
 }
 
@@ -378,14 +378,16 @@ fn replace_all(input: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
     out
 }
 
-fn to_slash(path: &str) -> String {
+fn to_slash(path: &[u8]) -> Vec<u8> {
     #[cfg(windows)]
     {
-        path.replace('\\', "/")
+        path.iter()
+            .map(|byte| if *byte == b'\\' { b'/' } else { *byte })
+            .collect()
     }
     #[cfg(not(windows))]
     {
-        path.to_owned()
+        path.to_vec()
     }
 }
 
@@ -406,6 +408,32 @@ mod tests {
         assert_eq!(entry.data["url"], "https://example.test");
         assert_eq!(entry.data["username"], "user");
         assert_eq!(entry.data["notes"], "comment\nsecond");
+    }
+
+    /// Go keeps the store-relative path and the plaintext as byte strings: a
+    /// file name that is not valid UTF-8 reaches the vault path unchanged and
+    /// the limit on a value counts its raw bytes. The text forms hold one
+    /// U+FFFD per invalid byte, as `encoding/json` emits them.
+    #[cfg(unix)]
+    #[test]
+    fn parser_keeps_raw_path_and_value_bytes() {
+        use std::os::unix::ffi::OsStrExt;
+        let path = Path::new(std::ffi::OsStr::from_bytes(b"dir/a\xFF\xC3.gpg"));
+        let entry = parse_pass_entry_bytes(
+            path,
+            b"pw\xFF\xFE\nurl:  u\xFD \nusername: \xC3\nnote\xE2\x82\n",
+        );
+        assert_eq!(entry.raw_path.as_deref(), Some(&b"dir/a\xFF\xC3"[..]));
+        assert_eq!(entry.path, "dir/a\u{FFFD}\u{FFFD}");
+        assert_eq!(entry.value_len("password"), Some(4));
+        assert_eq!(entry.value_len("url"), Some(2));
+        assert_eq!(entry.value_len("username"), Some(1));
+        assert_eq!(entry.value_len("notes"), Some(6));
+        assert_eq!(entry.data["password"], "pw\u{FFFD}\u{FFFD}");
+        // A UTF-8 path and values stay plain text.
+        let plain = parse_pass_entry_bytes(Path::new("x.gpg"), b"pw\n");
+        assert_eq!(plain.raw_path, None);
+        assert!(plain.raw_value_len.is_empty());
     }
 
     #[test]

@@ -132,9 +132,13 @@ fn pass_content_matches_source_bound_go_fixture() {
         let gpg = root.path().join("fake-gpg");
         std::fs::write(&gpg, "#!/bin/sh\ncat \"$4\"\n").unwrap();
         std::fs::set_permissions(&gpg, std::fs::Permissions::from_mode(0o700)).unwrap();
+        // Compare the serialized entries: the Go oracle records the text Go's
+        // JSON encoder emits, while the Rust entry also keeps the raw bytes
+        // of an invalid-UTF-8 value (`raw_value_len`) for Go's field limit.
+        let actual = symvault_sync::importer::import_pass_with_gpg(&store, &gpg).unwrap();
         assert_eq!(
-            symvault_sync::importer::import_pass_with_gpg(&store, &gpg).unwrap(),
-            expected
+            serde_json::to_value(&actual).unwrap(),
+            serde_json::to_value(&expected).unwrap()
         );
     }
 }
