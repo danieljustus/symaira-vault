@@ -26,8 +26,12 @@ fixture regenerated provenance-neutral: source digest unchanged, only that case 
 
 Declared open: update apply/check/info beyond the dev-build branch, `intake watch` beyond `--once`, live
 `approval`/`device approval-pair|accept|join`/`remote init` flows, `--color`/`--theme`; `doctor` is pinned with
-`--no-network`; Touch ID availability is normalised (rule 7: Go's LAContext probe says true here, the Rust JXA
-probe says false inside the sandbox). The corpus is darwin-only (`oracle.goos`); other hosts skip it visibly.
+`--no-network`; Touch ID availability is normalised (rule 7: it depends on the Mac's sensor). The worker first saw Go true and Rust
+false here; that was a Rust bug, not a sandbox effect: every JXA adapter in `symvault-platform/src/macos.rs`
+reported through `console.log`, which osascript writes to stderr, so `run_jxa` read an empty stdout. Touch ID
+probe and unlock, the secure prompt and the approval dialog all failed silently. Fixed by ending each script
+in its result expression (and asking Go's biometric-only policy 1, not 2); `jxa_reports_through_the_last_expression_on_stdout`
+and `jxa_scripts_never_report_through_console_log` pin it, and `auth status` now matches Go (true/true) on this host. The corpus is darwin-only (`oracle.goos`); other hosts skip it visibly.
 
 ## IO-001 invalid-byte representation, 2026-10-31
 
