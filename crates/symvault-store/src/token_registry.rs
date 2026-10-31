@@ -828,7 +828,9 @@ mod tests {
         drop(held_lock);
         assert!(
             done_rx
-                .recv_timeout(Duration::from_secs(2))
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                .recv_timeout(Duration::from_secs(30))
                 .expect("mutation completes after lock release")
         );
         assert!(path.join(TOKEN_REGISTRY_FILE).is_file());

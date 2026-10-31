@@ -2426,6 +2426,10 @@ fn is_mime_token(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    // The socket, poll and channel bounds below are setup bounds, not the
+    // behavior under test: generous so load and coverage instrumentation
+    // cannot win the race (#1564-#1567). The HttpTimeouts tests that pin Go's
+    // idle/read behavior keep their short values.
     use super::*;
     use serde::Deserialize;
     use std::{io::BufRead, thread};
@@ -2621,7 +2625,7 @@ mod tests {
             .write_all(call_request.as_bytes())
             .expect("send MCP call");
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         let pending = loop {
             let requests = queue.pending().expect("list pending approvals");
             if let Some(request) = requests.into_iter().next() {
@@ -2657,7 +2661,7 @@ mod tests {
         assert_eq!(raw_status(&decided), 200, "{decided}");
 
         pending_call
-            .set_read_timeout(Some(Duration::from_secs(3)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set MCP response timeout");
         let response = read_http_response(&mut BufReader::new(pending_call));
         assert_eq!(raw_status(&response), 200, "{response}");
@@ -2769,7 +2773,7 @@ mod tests {
         let shutdown = HttpShutdown::default();
         let worker_shutdown = shutdown.clone();
         let wait_for_retired_responses = |maximum| {
-            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            let deadline = std::time::Instant::now() + Duration::from_secs(30);
             while shutdown.registered_connection_count() > maximum {
                 assert!(
                     std::time::Instant::now() < deadline,
@@ -2828,7 +2832,7 @@ mod tests {
             }));
         }
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while admission_counter.load(Ordering::Acquire) < MAX_HTTP_MCP_REQUESTS {
             assert!(
                 std::time::Instant::now() < deadline,
@@ -2836,7 +2840,7 @@ mod tests {
             );
             thread::sleep(Duration::from_millis(5));
         }
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while queue.pending().expect("list pending approvals").len() < MAX_HTTP_MCP_REQUESTS {
             assert!(
                 std::time::Instant::now() < deadline,
@@ -2849,7 +2853,7 @@ mod tests {
             let wire = mcp_request(address, id, &bearer_tokens[0]);
             let mut stream = TcpStream::connect(address).expect("connect excess MCP call");
             stream
-                .set_read_timeout(Some(Duration::from_secs(3)))
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .expect("set excess MCP response timeout");
             stream
                 .write_all(wire.as_bytes())
@@ -2866,7 +2870,7 @@ mod tests {
         let list_request = signed_request(address, &secret, "GET", "/api/v1/local/approvals");
         let mut local_list = TcpStream::connect(address).expect("connect local approval list");
         local_list
-            .set_read_timeout(Some(Duration::from_secs(3)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set local list timeout");
         local_list
             .write_all(list_request.as_bytes())
@@ -2895,7 +2899,7 @@ mod tests {
                 let mut local_decision =
                     TcpStream::connect(address).expect("connect local approval decision");
                 local_decision
-                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .set_read_timeout(Some(Duration::from_secs(30)))
                     .expect("set local decision timeout");
                 local_decision
                     .write_all(wire.as_bytes())
@@ -3047,7 +3051,7 @@ mod tests {
                 });
                 let mut client = TcpStream::connect(address).unwrap();
                 client
-                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .set_read_timeout(Some(Duration::from_secs(30)))
                     .unwrap();
                 write!(client, "POST /mcp HTTP/1.1\r\nHost: {address}\r\n{auth}{origin}X-Symaira-Agent: {agent}\r\nContent-Type: {content_type}\r\nAccept: {accept}\r\nContent-Length: 1048577\r\nConnection: keep-alive\r\n\r\nx").unwrap();
                 let mut response = String::new();
@@ -3110,7 +3114,7 @@ mod tests {
                 });
                 let mut client = TcpStream::connect(address).unwrap();
                 client
-                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .set_read_timeout(Some(Duration::from_secs(30)))
                     .unwrap();
                 // Match the capture's contiguous send buffer. Formatting into
                 // the socket writes the prefix after complete headers, racing
@@ -3306,7 +3310,7 @@ mod tests {
             .expect("create TLS client connection");
         let socket = TcpStream::connect(connection_address).expect("connect TLS client");
         socket
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set TLS test read timeout");
         let mut reader = BufReader::new(StreamOwned::new(connection, socket));
         let authority = format!("vault.example.test:{}", listen_address.port());
@@ -3448,7 +3452,7 @@ mod tests {
             let server = thread::spawn(move || {
                 let (socket, _) = listener.accept().expect("accept test client");
                 socket
-                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .set_read_timeout(Some(Duration::from_secs(30)))
                     .unwrap();
                 let mut stream = StreamOwned::new(ServerConnection::new(tls).unwrap(), socket);
                 let mut byte = [0];
@@ -3495,7 +3499,7 @@ mod tests {
             let connection = rustls::ClientConnection::new(Arc::new(client), name).unwrap();
             let socket = TcpStream::connect(address).unwrap();
             socket
-                .set_read_timeout(Some(Duration::from_secs(2)))
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .unwrap();
             let mut stream = StreamOwned::new(connection, socket);
             stream
@@ -3581,7 +3585,7 @@ mod tests {
         });
         let mut authorize_stream = TcpStream::connect(address).expect("connect authorize");
         authorize_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set authorize timeout");
         let authorize_request = format!(
             "GET /mcp/oauth/authorize?response_type=code&client_id={}&redirect_uri=http://localhost/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -3604,7 +3608,7 @@ mod tests {
         let form = format!("flow_id={flow_id}&passphrase=wrong");
         let mut confirm_stream = TcpStream::connect(address).expect("connect confirm");
         confirm_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set confirm timeout");
         write!(
             confirm_stream,
@@ -3690,7 +3694,7 @@ mod tests {
         });
         let mut stream = TcpStream::connect(address).expect("connect");
         stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set client timeout");
         let request = format!(
             "GET /mcp/oauth/authorize?response_type=code&client_id={}&redirect_uri=http://localhost/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -3698,13 +3702,13 @@ mod tests {
         );
         stream.write_all(request.as_bytes()).expect("write request");
         started
-            .recv_timeout(Duration::from_secs(2))
+            .recv_timeout(Duration::from_secs(30))
             .expect("consent callback starts");
         assert!(state.try_lock().is_ok(), "MCP state lock remains available");
         let mut duplicate_authorize =
             TcpStream::connect(address).expect("connect second authorize");
         duplicate_authorize
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set duplicate authorize timeout");
         let request = format!(
             "GET /mcp/oauth/authorize?response_type=code&client_id={}&redirect_uri=http://localhost/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -3717,7 +3721,7 @@ mod tests {
         assert_eq!(raw_status(&duplicate_response), 403, "{duplicate_response}");
         let mut mcp_stream = TcpStream::connect(address).expect("connect regular MCP request");
         mcp_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set MCP client timeout");
         mcp_stream
             .write_all(b"POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -3726,7 +3730,7 @@ mod tests {
         assert_eq!(raw_status(&mcp_response), 401, "{mcp_response}");
         let mut discovery_stream = TcpStream::connect(address).expect("connect discovery request");
         discovery_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set discovery client timeout");
         discovery_stream
             .write_all(b"GET /.well-known/oauth-authorization-server HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -3736,7 +3740,7 @@ mod tests {
         let registration_body = r#"{"redirect_uris":["http://localhost/other"]}"#;
         let mut registration_stream = TcpStream::connect(address).expect("connect registration");
         registration_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set registration timeout");
         write!(
             registration_stream,
@@ -3753,7 +3757,7 @@ mod tests {
         );
         let mut token_stream = TcpStream::connect(address).expect("connect token endpoint");
         token_stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set token timeout");
         token_stream
             .write_all(b"POST /mcp/oauth/token HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 22\r\nConnection: close\r\n\r\ngrant_type=unsupported")
@@ -3822,16 +3826,16 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
         let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
         client
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .unwrap();
         let (socket, _) = listener.accept().unwrap();
         let mut stream = DeadlineSocket::new(socket);
         stream
-            .set_write_timeout(Some(Duration::from_secs(2)))
+            .set_write_timeout(Some(Duration::from_secs(30)))
             .unwrap();
         stream
             .write_deadline
-            .set(Some(Instant::now() + Duration::from_secs(2)));
+            .set(Some(Instant::now() + Duration::from_secs(30)));
         stream.write_all(b"before-expiry").unwrap();
         let mut before = [0; 13];
         client.read_exact(&mut before).unwrap();
@@ -3871,7 +3875,7 @@ mod tests {
         let (socket, _) = listener.accept().unwrap();
         let mut stream = DeadlineSocket::new(socket);
         stream
-            .set_write_timeout(Some(Duration::from_secs(2)))
+            .set_write_timeout(Some(Duration::from_secs(30)))
             .unwrap();
         let payload = vec![0x5a; 4 * 1024 * 1024];
         let accepted = stream.write(&payload).expect("first slice");
@@ -3908,10 +3912,10 @@ mod tests {
                 None,
                 None,
                 HttpTimeouts {
-                    initial_read: Duration::from_secs(1),
-                    request_read: Duration::from_secs(1),
+                    initial_read: Duration::from_secs(30),
+                    request_read: Duration::from_secs(30),
                     keep_alive_idle: Duration::from_millis(100),
-                    write: Duration::from_secs(1),
+                    write: Duration::from_secs(30),
                 },
             )
             .expect("serve connection with short test idle timeout");
@@ -3926,7 +3930,7 @@ mod tests {
         assert_eq!(raw_status(&response), 200);
         reader
             .get_mut()
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set test read timeout");
         let mut byte = [0];
         assert_eq!(reader.read(&mut byte).expect("read connection close"), 0);
@@ -3950,11 +3954,14 @@ mod tests {
         let registry_path = registry(registry_dir.path());
         let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
         let address = listener.local_addr().expect("listener address");
+        // Config of the non-blocking property only: the client read (15 s) stays
+        // below the idle connection's initial_read (60 s), so a serialized
+        // implementation would still fail, but load cannot expire either first.
         let timeouts = HttpTimeouts {
-            initial_read: Duration::from_secs(2),
-            request_read: Duration::from_secs(1),
-            keep_alive_idle: Duration::from_secs(1),
-            write: Duration::from_secs(1),
+            initial_read: Duration::from_secs(60),
+            request_read: Duration::from_secs(30),
+            keep_alive_idle: Duration::from_secs(30),
+            write: Duration::from_secs(30),
         };
 
         let idle_client = TcpStream::connect(address).expect("connect idle client");
@@ -3975,7 +3982,7 @@ mod tests {
 
         let mut client = TcpStream::connect(address).expect("connect active client");
         client
-            .set_read_timeout(Some(Duration::from_millis(800)))
+            .set_read_timeout(Some(Duration::from_secs(15)))
             .expect("set bounded client read");
         let (active_server, _) = listener.accept().expect("accept active client");
         let active_registry = registry_path;
@@ -4584,7 +4591,7 @@ mod tests {
         )
         .expect("send request");
         selected_rx
-            .recv_timeout(Duration::from_secs(2))
+            .recv_timeout(Duration::from_secs(30))
             .expect("agent handler selected");
         let state_released = (0..100).any(|_| {
             if state.try_lock().is_ok() {

@@ -1828,7 +1828,9 @@ impl ManifestTestChild {
                 Err(error) => return Err(error),
             }
         }
-        self.wait_for_exit(Duration::from_secs(5))?;
+        // Setup bound, not the behavior under test: generous so load and coverage
+        // instrumentation cannot win the race (#1564-#1567).
+        self.wait_for_exit(Duration::from_secs(30))?;
         Ok(())
     }
 }

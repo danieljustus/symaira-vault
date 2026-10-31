@@ -362,10 +362,12 @@ fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
             };
             stream.set_nonblocking(false).expect("blocking auth socket");
             stream
-                .set_read_timeout(Some(Duration::from_secs(3)))
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .expect("bound auth request read");
             stream
-                .set_write_timeout(Some(Duration::from_secs(3)))
+                .set_write_timeout(Some(Duration::from_secs(30)))
                 .expect("bound auth response write");
             // A single read can leave part of Git's GET headers unread. Closing
             // that socket resets the connection on Windows before curl observes
@@ -419,7 +421,7 @@ fn auth_remote_waits_for_fragmented_headers_before_replying() {
         .write_all(b"\r\nConnection: close\r\n\r\n")
         .expect("finish headers");
     client
-        .set_read_timeout(Some(Duration::from_secs(3)))
+        .set_read_timeout(Some(Duration::from_secs(30)))
         .expect("bound final reply");
     let mut response = String::new();
     client

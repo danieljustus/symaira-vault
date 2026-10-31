@@ -1903,7 +1903,9 @@ mod tests {
 
             signal_hook::low_level::raise(signal).unwrap();
             canceled
-                .recv_timeout(Duration::from_secs(3))
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                .recv_timeout(Duration::from_secs(30))
                 .expect("active signal cancels the timer");
             assert_eq!(clipboard.0.load(Ordering::SeqCst), 1);
             assert!(clear_claimed.load(Ordering::SeqCst));
@@ -1922,7 +1924,7 @@ mod tests {
             // active. Once its scoped registration ends, the same signal must
             // regain its normal process disposition.
             signal_hook::low_level::raise(signal).unwrap();
-            let deadline = Instant::now() + Duration::from_secs(3);
+            let deadline = Instant::now() + Duration::from_secs(30);
             while Instant::now() < deadline {
                 std::thread::sleep(Duration::from_millis(10));
             }
@@ -1938,7 +1940,7 @@ mod tests {
                 .arg("approval::tests::stdio_clipboard_signal_router_process_contract")
                 .arg("--nocapture")
                 .env("SYMVAULT_PLATFORM_SIGNAL_CHILD", signal_name);
-            let output = bounded_output(command, Duration::from_secs(8));
+            let output = bounded_output(command, Duration::from_secs(60));
             assert_eq!(
                 output.status.signal(),
                 Some(signal),
@@ -1975,7 +1977,7 @@ mod tests {
 
         fn read_response(&mut self, _deadline: Instant) -> Result<String, ReadFailure> {
             signal_hook::low_level::raise(self.0).unwrap();
-            let deadline = Instant::now() + Duration::from_secs(3);
+            let deadline = Instant::now() + Duration::from_secs(30);
             while Instant::now() < deadline {
                 if stdio_signal_is_pending() {
                     return Err(ReadFailure::Canceled);

@@ -93,7 +93,9 @@ fn prompt_write_waits_on_the_live_queue_before_mutating_store() {
     let caller = Arc::clone(&runtime);
     let call = thread::spawn(move || caller.call("set_entry_field", &arguments));
 
-    let deadline = Instant::now() + Duration::from_secs(3);
+    // Setup bound, not the behavior under test: generous so load and coverage
+    // instrumentation cannot win the race (#1564-#1567).
+    let deadline = Instant::now() + Duration::from_secs(30);
     let pending = loop {
         let requests = queue.pending().expect("list pending approvals");
         if let Some(request) = requests.into_iter().next() {

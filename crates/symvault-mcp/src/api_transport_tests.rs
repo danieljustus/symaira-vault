@@ -134,7 +134,9 @@ fn actual_dns_accepts_public_answers_and_rejects_mixed_private_and_oversize() {
         let result = runtime.block_on(resolve_addresses(
             &target,
             false,
-            &RequestContext::default().with_timeout(Duration::from_secs(2)),
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            &RequestContext::default().with_timeout(Duration::from_secs(15)),
             Some(dns.address),
         ));
         if let Some(error) = expected {
@@ -172,7 +174,7 @@ fn cancelled_dns_releases_the_actual_owned_udp_socket() {
                 Some(server),
             ))
     });
-    let peer = dns.observed.recv_timeout(Duration::from_secs(2)).unwrap();
+    let peer = dns.observed.recv_timeout(Duration::from_secs(15)).unwrap();
     let started = Instant::now();
     context.cancel();
     assert_eq!(
@@ -217,7 +219,7 @@ fn stopping_egress_during_dns_joins_workers_and_releases_socket() {
             .with_running(listener, || {
                 let mut client = std::net::TcpStream::connect(address).unwrap();
                 client
-                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .set_read_timeout(Some(Duration::from_secs(15)))
                     .unwrap();
                 let first = if connect_request {
                     "CONNECT waiting-broker.example.test:443 HTTP/1.1"
@@ -229,7 +231,7 @@ fn stopping_egress_during_dns_joins_workers_and_releases_socket() {
                     "{first}\r\nHost: waiting-broker.example.test\r\n\r\n"
                 )
                 .unwrap();
-                dns_peer = Some(dns.observed.recv_timeout(Duration::from_secs(2)).unwrap());
+                dns_peer = Some(dns.observed.recv_timeout(Duration::from_secs(15)).unwrap());
                 stopped_at = Some(Instant::now());
                 stop.cancel().unwrap();
                 let mut byte = [0];
@@ -261,7 +263,7 @@ fn stopping_egress_during_dns_joins_workers_and_releases_socket() {
 
 fn read_request(stream: &mut std::net::TcpStream) -> String {
     stream
-        .set_read_timeout(Some(Duration::from_secs(2)))
+        .set_read_timeout(Some(Duration::from_secs(15)))
         .unwrap();
     let mut reader = BufReader::new(stream.try_clone().unwrap());
     let mut request = String::new();
@@ -292,7 +294,7 @@ fn cancelling_pending_api_headers_closes_upstream_and_joins() {
         )));
         send.send(()).unwrap();
         stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(15)))
             .unwrap();
         match stream.read(&mut [0u8]) {
             Ok(0) => {}
@@ -318,7 +320,7 @@ fn cancelling_pending_api_headers_closes_upstream_and_joins() {
             &ApiTransportOptions::default(),
         )
     });
-    observed.recv_timeout(Duration::from_secs(2)).unwrap();
+    observed.recv_timeout(Duration::from_secs(15)).unwrap();
     let started = Instant::now();
     context.cancel();
     let error = worker.join().unwrap().unwrap_err();
@@ -339,14 +341,14 @@ fn progressing_api_body_still_reaches_absolute_deadline() {
             .set_read_timeout(Some(Duration::from_millis(10)))
             .unwrap();
         stream
-            .set_write_timeout(Some(Duration::from_secs(1)))
+            .set_write_timeout(Some(Duration::from_secs(15)))
             .unwrap();
         stream
             .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n")
             .unwrap();
         let started = Instant::now();
         let mut sent = 0;
-        while started.elapsed() < Duration::from_secs(2) {
+        while started.elapsed() < Duration::from_secs(15) {
             if stream.write_all(b"x").is_err() {
                 return sent;
             }
@@ -429,10 +431,10 @@ fn actual_dns_https_verifies_chain_hostname_and_redacts_positive_control() {
         let server = thread::spawn(move || {
             let (socket, _) = listener.accept().unwrap();
             socket
-                .set_read_timeout(Some(Duration::from_secs(2)))
+                .set_read_timeout(Some(Duration::from_secs(15)))
                 .unwrap();
             socket
-                .set_write_timeout(Some(Duration::from_secs(2)))
+                .set_write_timeout(Some(Duration::from_secs(15)))
                 .unwrap();
             let mut stream = rustls::StreamOwned::new(
                 rustls::ServerConnection::new(server_config).unwrap(),

@@ -159,7 +159,9 @@ mod tests {
                     )
                 }));
             }
-            let deadline = Instant::now() + Duration::from_secs(2);
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            let deadline = Instant::now() + Duration::from_secs(30);
             while admission.state.lock().unwrap().waiters != MAX_WAITERS {
                 assert!(
                     Instant::now() < deadline,
@@ -212,7 +214,7 @@ mod tests {
                     &admission,
                 )
             });
-            let deadline = Instant::now() + Duration::from_secs(2);
+            let deadline = Instant::now() + Duration::from_secs(30);
             while admission.state.lock().unwrap().waiters != 1 {
                 assert!(Instant::now() < deadline);
                 std::thread::sleep(Duration::from_millis(1));

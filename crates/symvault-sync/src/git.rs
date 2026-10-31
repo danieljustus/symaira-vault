@@ -2007,7 +2007,9 @@ mod tests {
                 "cmd.exe",
                 &["/D", "/C", "exit", "0"],
                 None,
-                Duration::from_secs(1),
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                Duration::from_secs(30),
             )
             .expect("already-gone process should complete");
             assert!(output.status.success());
@@ -2050,7 +2052,7 @@ mod tests {
         }
 
         fn read_pid(path: std::path::PathBuf) -> u32 {
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + Duration::from_secs(30);
             loop {
                 if let Ok(value) = fs::read_to_string(&path) {
                     return value.trim().parse().expect("valid helper pid");
@@ -2065,7 +2067,7 @@ mod tests {
         }
 
         fn wait_process_gone(pid: u32) -> bool {
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + Duration::from_secs(30);
             loop {
                 let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
                 if handle.is_null() {

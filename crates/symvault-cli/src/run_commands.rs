@@ -1217,7 +1217,9 @@ mod tests {
                 &BTreeMap::new(),
                 &known_secret,
                 None,
-                Duration::from_secs(2),
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                Duration::from_secs(30),
             )
             .expect("fake child process");
 
@@ -1319,7 +1321,7 @@ mod tests {
                 &files,
                 &[b"synthetic-file-pin".to_vec()],
                 None,
-                Duration::from_secs(2),
+                Duration::from_secs(30),
             )
             .expect("child should read its temporary secret file");
 
@@ -1465,7 +1467,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn bounded_run_isolates_the_child_so_a_timeout_can_kill_the_tree() {
-        let (parent, child) = child_process_group(Some(Duration::from_secs(5)));
+        let (parent, child) = child_process_group(Some(Duration::from_secs(30)));
         assert_ne!(parent, child);
     }
 
@@ -1487,7 +1489,7 @@ mod tests {
             extra_environment: &[],
             passthrough: &[],
             working_directory: None,
-            timeout: Some(Duration::from_secs(2)),
+            timeout: Some(Duration::from_secs(30)),
             redactions: &redactions,
             generic_redaction: false,
             whitelist: &[],

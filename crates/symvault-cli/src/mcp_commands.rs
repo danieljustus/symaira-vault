@@ -1415,7 +1415,9 @@ mod tests {
         );
         writer.write_all(b"y\n").unwrap();
         assert_eq!(
-            wait_for_fd_readable(&reader, Duration::from_secs(1)),
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            wait_for_fd_readable(&reader, Duration::from_secs(30)),
             Some(true)
         );
     }

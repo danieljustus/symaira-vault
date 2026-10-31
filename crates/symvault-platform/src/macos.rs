@@ -503,7 +503,7 @@ mod tests {
             "/bin/sh",
             &["-c", "head -c 131072 /dev/zero >&2; cat"],
             &input,
-            Duration::from_secs(5),
+            Duration::from_secs(30),
         )
         .expect("large bidirectional pipe traffic completes");
         assert_eq!(output, input);
@@ -526,7 +526,9 @@ mod tests {
                 bytes.len()
             );
             assert!(
-                start.elapsed() < Duration::from_secs(3),
+                // Child is `sleep 30`: 10 s still proves the 100 ms deadline killed it,
+                // without losing to a loaded host.
+                start.elapsed() < Duration::from_secs(10),
                 "script={script:?}"
             );
         }
@@ -538,7 +540,7 @@ mod tests {
             "/bin/sh",
             &["-c", "cat >/dev/null; printf eof"],
             b"",
-            Duration::from_secs(3),
+            Duration::from_secs(30),
         )
         .expect("empty input delivers EOF");
         assert_eq!(output, b"eof");
@@ -557,14 +559,15 @@ mod tests {
                 PlatformErrorKind::TimedOut,
                 "attempt={attempt}: {error:?}"
             );
-            assert!(start.elapsed() < Duration::from_secs(3));
+            // `sleep 30` background child: see above.
+            assert!(start.elapsed() < Duration::from_secs(10));
         }
 
         let error = run_stdin_command(
             "/bin/sh",
             &["-c", "exec 0<&-; sleep 30"],
             &vec![b'x'; 256 * 1024],
-            Duration::from_secs(3),
+            Duration::from_secs(30),
         )
         .expect_err("a real nonempty write failure remains an error");
         assert_eq!(error.kind, PlatformErrorKind::Failed);

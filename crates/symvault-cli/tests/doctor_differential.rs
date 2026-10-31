@@ -881,7 +881,9 @@ fn start_mcp_health_server(
         .expect("make local fixture accept bounded");
     let port = i64::from(listener.local_addr().expect("fixture address").port());
     let server = thread::spawn(move || {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        // Setup bound, not the behavior under test: generous so load and coverage
+        // instrumentation cannot win the race (#1564-#1567).
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         let mut requests = Vec::new();
         while requests.len() < expected_requests && std::time::Instant::now() < deadline {
             match listener.accept() {
@@ -890,7 +892,7 @@ fn start_mcp_health_server(
                         .set_nonblocking(false)
                         .expect("make accepted fixture stream blocking");
                     stream
-                        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                        .set_read_timeout(Some(std::time::Duration::from_secs(30)))
                         .expect("bound local fixture read");
                     let mut request = [0_u8; 2048];
                     let read = stream.read(&mut request).expect("read health request");

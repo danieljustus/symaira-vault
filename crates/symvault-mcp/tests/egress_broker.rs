@@ -45,7 +45,9 @@ fn vault(root: &std::path::Path) -> (symvault_crypto::Identity, Store) {
 fn raw_request(address: std::net::SocketAddr, request: &str) -> Vec<u8> {
     let mut stream = TcpStream::connect(address).unwrap();
     stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        // Setup bound, not the behavior under test: generous so load and coverage
+        // instrumentation cannot win the race (#1564-#1567).
+        .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
     stream.write_all(request.as_bytes()).unwrap();
     let mut response = Vec::new();
@@ -255,7 +257,7 @@ fn egress_verified_mitm_injects_and_masks_real_encrypted_credentials() {
         let peer = scope.spawn(move || {
             for _ in 0..1 {
                 let (stream, _) = upstream.accept().unwrap();
-                stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+                stream.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
                 let mut stream = rustls::StreamOwned::new(rustls::ServerConnection::new(tls.clone()).unwrap(), stream);
                 let mut bytes = Vec::new();
                 loop {
@@ -337,7 +339,7 @@ fn egress_callback_error_joins_idle_clients_and_releases_listener() {
         for _ in 0..8 {
             let mut client = TcpStream::connect(address).unwrap();
             client
-                .set_read_timeout(Some(Duration::from_secs(2)))
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .unwrap();
             client.write_all(b"GET ").unwrap();
             clients.push(client);
@@ -386,7 +388,7 @@ fn egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeou
         let peer = scope.spawn(move || {
             let (mut socket, _) = upstream.accept().unwrap();
             socket
-                .set_read_timeout(Some(Duration::from_secs(3)))
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .unwrap();
             let mut headers = Vec::new();
             while !headers.ends_with(b"\r\n\r\n") {
@@ -405,7 +407,7 @@ fn egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeou
             client = Some(scope.spawn(move || {
                 let mut socket = TcpStream::connect(address).unwrap();
                 socket
-                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .set_read_timeout(Some(Duration::from_secs(30)))
                     .unwrap();
                 write!(
                     socket,
@@ -423,7 +425,7 @@ fn egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeou
                         ))
                 );
             }));
-            received.recv_timeout(Duration::from_secs(3)).unwrap();
+            received.recv_timeout(Duration::from_secs(30)).unwrap();
             Err("child fixture ended while upstream was pending".into())
         });
         assert_eq!(

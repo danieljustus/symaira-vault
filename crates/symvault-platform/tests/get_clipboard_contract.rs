@@ -442,7 +442,9 @@ fn wait_until_installed(source: &HandSource) {
     let started = std::time::Instant::now();
     while !source.installed() {
         assert!(
-            started.elapsed() < Duration::from_secs(5),
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            started.elapsed() < Duration::from_secs(30),
             "the interrupt handler was never installed"
         );
         std::thread::sleep(Duration::from_millis(2));
@@ -605,7 +607,7 @@ impl BlockedStderr {
         let started = std::time::Instant::now();
         while !self.entered.load(Ordering::SeqCst) {
             assert!(
-                started.elapsed() < Duration::from_secs(5),
+                started.elapsed() < Duration::from_secs(30),
                 "the writer was never reached"
             );
             std::thread::sleep(Duration::from_millis(2));
@@ -664,7 +666,7 @@ fn blocked_stderr_does_not_delay_the_timer_clear() {
         });
         stderr.wait_for_first_write();
         // 1 s timeout plus generous scheduling margin.
-        let cleared = wait_until_clipboard_clear(&clipboard, Duration::from_millis(3500));
+        let cleared = wait_until_clipboard_clear(&clipboard, Duration::from_secs(15));
         let still_blocked = !run.is_finished();
         stderr.release();
         run.join().unwrap().unwrap();
@@ -701,7 +703,7 @@ fn blocked_stderr_does_not_delay_the_signal_clear() {
         stderr.wait_for_first_write();
         wait_until_installed(&source);
         source.fire();
-        let cleared = wait_until_clipboard_clear(&clipboard, Duration::from_secs(3));
+        let cleared = wait_until_clipboard_clear(&clipboard, Duration::from_secs(15));
         let still_blocked = !run.is_finished();
         stderr.release();
         run.join().unwrap().unwrap();

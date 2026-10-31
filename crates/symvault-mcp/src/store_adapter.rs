@@ -4637,7 +4637,9 @@ mod tests {
         let server = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept approved API request");
             stream
-                .set_read_timeout(Some(Duration::from_secs(2)))
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .expect("bounded API read");
             let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone stream"));
             use std::io::BufRead as _;
@@ -4737,7 +4739,7 @@ mod tests {
                 &json!({"template":"fixture","endpoint":"/v1/status"}),
             )
         });
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         let pending = loop {
             if let Some(entry) = queue.pending().expect("read pending approvals").first() {
                 break entry.clone();

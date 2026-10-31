@@ -795,10 +795,12 @@ fn run_source_bound_api_template_fixture(before_setup: impl FnOnce()) {
                 .set_nonblocking(false)
                 .expect("make accepted API stream blocking");
             stream
-                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                // Setup bound, not the behavior under test: generous so load and coverage
+                // instrumentation cannot win the race (#1564-#1567).
+                .set_read_timeout(Some(std::time::Duration::from_secs(30)))
                 .expect("bound API request read");
             stream
-                .set_write_timeout(Some(std::time::Duration::from_secs(2)))
+                .set_write_timeout(Some(std::time::Duration::from_secs(30)))
                 .expect("bound API response write");
             let mut reader = BufReader::new(stream.try_clone().expect("clone API request stream"));
             let mut first_line = String::new();

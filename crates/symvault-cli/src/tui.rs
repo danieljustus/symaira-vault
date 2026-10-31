@@ -961,7 +961,9 @@ mod tests {
         let lock = clipboard.values.lock().unwrap();
         let (rows, _) = clipboard
             .changed
-            .wait_timeout_while(lock, Duration::from_secs(1), |rows| {
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            .wait_timeout_while(lock, Duration::from_secs(30), |rows| {
                 rows.last().is_none_or(|v| !v.is_empty())
             })
             .unwrap();

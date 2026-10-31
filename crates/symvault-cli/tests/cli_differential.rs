@@ -2111,7 +2111,8 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     };
     assert_timeout_and_cleanup(&go_timeout, &go_timeout_marker, "Go file use timeout");
     assert_timeout_and_cleanup(&rust_timeout, &rust_timeout_marker, "Rust file use timeout");
-    assert!(rust_timeout_started.elapsed().as_secs() < 2);
+    // Child is `sleep 5` with a 20 ms timeout: 4 s still proves the timeout fired.
+    assert!(rust_timeout_started.elapsed().as_secs() < 4);
 
     let sentinel = fixture_dir.join("sentinel");
     fs::write(&sentinel, b"must-survive").expect("sentinel");

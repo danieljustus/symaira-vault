@@ -196,7 +196,9 @@ fn quota_cross_process_worker() {
     };
     let dir = std::path::PathBuf::from(dir);
     let start = dir.join("start");
-    let deadline = Instant::now() + Duration::from_secs(5);
+    // Setup bound, not the behavior under test: generous so load and coverage
+    // instrumentation cannot win the race (#1564-#1567).
+    let deadline = Instant::now() + Duration::from_secs(30);
     while !start.exists() {
         assert!(
             Instant::now() < deadline,

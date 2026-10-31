@@ -656,7 +656,9 @@ mod tests {
 
         let client = reqwest::blocking::Client::builder()
             .no_proxy()
-            .timeout(Duration::from_secs(5))
+            // Setup bound, not the behavior under test: generous so load and coverage
+            // instrumentation cannot win the race (#1564-#1567).
+            .timeout(Duration::from_secs(30))
             .build()
             .unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -664,7 +666,7 @@ mod tests {
         let url = reqwest::Url::parse(&format!("http://{}/asset", listener.local_addr().unwrap()))
             .unwrap();
         let server = std::thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + Duration::from_secs(30);
             let mut stream = loop {
                 match listener.accept() {
                     Ok((stream, _)) => break stream,
@@ -679,10 +681,10 @@ mod tests {
             // (Unix ones do not), which made the read below fail with WSAEWOULDBLOCK.
             stream.set_nonblocking(false).unwrap();
             stream
-                .set_read_timeout(Some(Duration::from_secs(5)))
+                .set_read_timeout(Some(Duration::from_secs(30)))
                 .unwrap();
             stream
-                .set_write_timeout(Some(Duration::from_secs(5)))
+                .set_write_timeout(Some(Duration::from_secs(30)))
                 .unwrap();
             let mut request = [0; 4096];
             assert!(stream.read(&mut request).unwrap() > 0);

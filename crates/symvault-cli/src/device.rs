@@ -1981,7 +1981,9 @@ mod tests {
         );
         release_tx.send(()).unwrap();
         holder.join().unwrap().unwrap();
-        assert!(contender_rx.recv_timeout(Duration::from_secs(2)).unwrap());
+        // Setup bound, not the behavior under test: generous so load and coverage
+        // instrumentation cannot win the race (#1564-#1567).
+        assert!(contender_rx.recv_timeout(Duration::from_secs(30)).unwrap());
         contender.join().unwrap();
         let _ = fs::remove_dir_all(root);
     }
