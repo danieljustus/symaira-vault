@@ -34,7 +34,7 @@
       "scripts/rust-port/cmd/exportcligen/run.go",
       "scripts/rust-port/cmd/exportcligen/seeds.go"
     ],
-    "generator_digest": "18b49b2f868d0e497a7fb072c4c980abe59dd9cdbeb0fd2c41b2fca3eda549e5"
+    "generator_digest": "297362a5b0f38058db5ac9f7d94dd3a4d86e8731d4221e555d6d81293205d439"
   },
   "normalization": {
     "root": "stdout, stderr and symlink targets: the sandbox root (and its symlink-resolved form) is replaced by $ROOT",

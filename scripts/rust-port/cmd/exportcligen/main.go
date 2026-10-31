@@ -212,11 +212,20 @@ func main() {
 		cases = append(cases, first)
 	}
 
+	// The observations are compared across platforms: they are identical on
+	// darwin and linux. `goos` records where the fixture was generated, so a
+	// check keeps the recorded value and reports the verifying platform.
+	recordedGOOS := runtime.GOOS
+	if *check {
+		if recordedGOOS, err = readRecordedGOOS(*output); err != nil {
+			fatal("read fixture platform: %v", err)
+		}
+	}
 	content, err := marshalJSON(fixture{
 		SchemaVersion: 1,
 		Oracle: oracle{
 			Commit: commitLabel, CommitSHA: resolved, Release: releaseLabel,
-			GoVersion: pinnedGoVersion, GOOS: runtime.GOOS,
+			GoVersion: pinnedGoVersion, GOOS: recordedGOOS,
 			SourceFiles: sources, SourceDigest: sourceDigest,
 			GeneratorFiles: generatorFiles, GeneratorDigest: generatorDigest,
 		},
@@ -236,7 +245,7 @@ func main() {
 		if !bytes.Equal(existing, content) {
 			fatal("fixture is stale; regenerate deliberately")
 		}
-		fmt.Printf("PASS export/backup/restore CLI fixture (%s)\n", summary)
+		fmt.Printf("PASS export/backup/restore CLI fixture (%s; recorded on %s, verified on %s)\n", summary, recordedGOOS, runtime.GOOS)
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(*output), 0o750); err != nil {
@@ -246,6 +255,25 @@ func main() {
 		fatal("write fixture: %v", err)
 	}
 	fmt.Printf("WROTE %s (%s)\n", *output, summary)
+}
+
+func readRecordedGOOS(path string) (string, error) {
+	raw, err := os.ReadFile(path) // #nosec G304 -- repository fixture path
+	if err != nil {
+		return "", err
+	}
+	var existing struct {
+		Oracle struct {
+			GOOS string `json:"goos"`
+		} `json:"oracle"`
+	}
+	if err := json.Unmarshal(raw, &existing); err != nil {
+		return "", err
+	}
+	if existing.Oracle.GOOS == "" {
+		return "", fmt.Errorf("fixture records no goos")
+	}
+	return existing.Oracle.GOOS, nil
 }
 
 func readSeeds(path string) (map[string][]FileSpec, error) {
