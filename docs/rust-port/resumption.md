@@ -1,5 +1,15 @@
 # Rust migration handover — 2026-09-09
 
+## IO-001/IO-002 command CLIs gated, 2026-10-31
+
+Gate `59c8c7cc` green on macOS arm64 (1477 Rust tests, 112 Go packages) and Linux arm64 (1467
+tests in the test and llvm-cov stages; import 293 and export/backup/restore 173 Go re-verifications).
+Gate hardening on the way: the import replay hides a system gpg (`<work>/bin` + mirrored
+`/usr/bin:/bin` without `gpg*`), both replays keep `LLVM_PROFILE_FILE` after `env_clear()`, the
+export `--check` keeps the recorded `goos`, and a sweep raised test-only setup deadlines in 26 files
+(#1564-#1567). Residuals: IO-001 invalid-byte API representation and real GPG compatibility; IO-002
+tar header residuals.
+
 ## IO-001 complete import CLI, 2026-10-31
 
 `importcligen` (new, oracle `bf7f687b`, source files `cmd/admin/import.go` + `internal/importer` +
