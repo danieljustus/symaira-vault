@@ -1,5 +1,52 @@
 # Rust migration handover — 2026-09-09
 
+## IO-001 pass importer against real gpg, 2026-10-31
+
+`passgpggen` (new, oracle `fca3f894`, sources `internal/importer/{importer,pass,totp}.go`,
+`internal/crypto/totp.go`, `internal/secrets/filter.go`) freezes 36 pass stores into
+`testdata/port/sync/pass-gpg.json`: an armored test-only key (empty passphrase, disposable
+`GNUPGHOME`), ciphertexts made by the real gpg binary, and the entries/warnings/complete error text of
+the REAL Go importer (`importer.New(FormatPass)` over the opened directory). `--check` imports the
+recorded key, decrypts the stored ciphertexts (never re-encrypts) and re-runs the Go importer; it keeps
+the recorded `goos`/gpg version, so it is platform independent. `pass_gpg_contract.rs` imports the same
+key and runs `import_pass` with the system gpg (fail closed without gpg). Gate: `make
+pass-gpg-differential` = `scripts/rust-port/check_pass_gpg.sh`, part of `sync-io-differential`.
+
+Pinned environment: `LC_ALL=C` (Go forwards LC_ALL, and gpg words its errors per locale),
+`GNUPGHOME`/`HOME` disposable and short (agent socket path limit), `pinentry-program /usr/bin/false`.
+What of gpg's stderr reaches Go: nothing on success; on failure `decrypt pass entry <path>: ` + the
+whole trimmed stderr (key ids and creation dates are fixed by the stored ciphertext). Two narrow rules,
+documented in the fixture and implemented identically in generator and test: N1 replaces
+`filepath.Clean(argument)` by `@STORE` (an un-cleaned spelling stays visible); N2 applies only to three
+`version_variant` cases and only when the gpg version line differs from the recorded one (gpg 2.4.4 vs
+2.5.24): listed optional lines are removed and consecutive duplicates collapsed on both sides, otherwise
+byte-identical. Every other case is compared byte for byte on both gpg versions.
+
+Red before: 13 of 36 cases differed (and 54 of 121 `otpauth://` entries): store arguments `a//b`,
+`./x`, `a/../x`, `.` (Go prints `path.Join`-cleaned paths), unreadable directory/root wording
+(`walk pass store: open <path>: permission denied`), decrypt failure ahead of an unreadable directory
+(Go decrypts while walking, Rust walked first), symlinked store root (Go's `WalkDir` lstat()s the root
+and does not descend; a trailing slash resolves it), `net/url.Parse` rejections the `url` crate accepts
+(`%zz` in the path) or words differently (28 entries), `%q` quoting of TOTP algorithms (Rust Debug).
+Fixed at the root: `pass.rs` is a streaming `WalkDir` port (cleaned joins, root lstat, Go error text,
+`exit status N`/`signal: killed` for empty stderr), plaintext stays bytes until the last per-field lossy
+conversion (Go quotes invalid bytes as `\xNN` in warnings), new `importer/gourl.rs` ports `net/url.Parse`
+(escape/host/port/IPv6/`netip.ParseAddr` errors, fragment, control bytes), `ParseQuery` (first value,
+bad-escape/semicolon pairs dropped, 10000-parameter cap) and byte-level `strconv.Quote`; `ParseTOTP`
+uses it with Go `Atoi` wording and simple-case `ToUpper`; `symvault-core` TOTP algorithm errors use
+`go_quote`. Negative control: adding `--quiet` to the production gpg arguments fails 17 cases; the
+source was restored byte-identically (sha256 compared).
+
+Evidence (2026-10-31, local): macOS arm64 (gpg 2.5.24) check script green; Linux arm64 image (gpg
+2.4.4) `make pass-gpg-differential` green under plain `cargo test` and `cargo llvm-cov nextest -p
+symvault-sync` (163 tests); `cargo test -p symvault-sync --all-features` and `symvault-cli --test
+import_command_contract --test import_commands` green; workspace clippy `-D warnings` and fmt clean;
+no gpg-agent left (pgrep) on host or in the container. Gotchas: `os.Exit` skips defers, so the generator
+kills agents through a cleanup list; the first Linux run caught the gpg 2.4 extra
+`no valid OpenPGP data found` line for a cut armor. Residuals: non-UTF-8 store paths in error text (Rust
+`Path::display` is lossy, Go prints raw bytes), signal names beyond the common set, Windows (not a
+supported target). Invalid-byte API representation of `ImportedEntry` stays open.
+
 ## IO-001/IO-002 command CLIs gated, 2026-10-31
 
 Gate `59c8c7cc` green on macOS arm64 (1477 Rust tests, 112 Go packages) and Linux arm64 (1467

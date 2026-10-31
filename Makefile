@@ -422,7 +422,7 @@ device-list-differential:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_device_list_differential.py
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/devicelistdriver --report "$(DEVICE_LIST_REPORT)"
 
-sync-io-differential: export-differential export-cli-differential restore-errors-differential cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
+sync-io-differential: export-differential export-cli-differential restore-errors-differential cxf-import-differential onepass-import-differential pass-gpg-differential csv-import-differential pairing-fixtures-check git-io-differential
 	GOFLAGS= GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
 	# Other sync integration suites already run through the prerequisites above.
 	$(CARGO) test -p symvault-sync --all-features --locked --lib \
@@ -845,6 +845,7 @@ help:
 	@echo "  policy-fixtures-generate - Regenerate frozen Go-oracle policy/tier fixtures"
 	@echo "  policy-fixtures-check    - Verify Go-oracle policy/tier fixtures have not drifted"
 	@echo "  sync-io-differential - Verify Go-generated sync/import/archive/intake contracts"
+	@echo "  pass-gpg-differential - Verify the pass importer against real gpg (Go oracle)"
 	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
 	@echo "  crypto-differential - Verify Go↔Rust age and KDF cross-decryption"
 	@echo "  crypto-fuzz-smoke - Run the bounded Argon2id parser fuzz smoke"
@@ -999,6 +1000,12 @@ mcp-render-differential:
 onepass-import-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/import1passgen -check
 	$(CARGO) test -p symvault-sync --test onepass_contract --locked
+
+# IO-001: the pass importer against REAL gpg (disposable GNUPGHOME, test-only
+# keys). Go re-verification of the frozen corpus, then the Rust replay.
+.PHONY: pass-gpg-differential
+pass-gpg-differential:
+	GO="$(GO)" CARGO="$(CARGO)" GO_TOOLCHAIN="$(GO_TOOLCHAIN)" ./scripts/rust-port/check_pass_gpg.sh
 
 .PHONY: mcp-prompts-differential
 mcp-prompts-differential: mcp-ordered-fixtures-check

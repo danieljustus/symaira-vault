@@ -88,7 +88,9 @@ pub fn validate_totp_params(
         && !matches!(algorithm_upper.as_str(), "SHA1" | "SHA256" | "SHA512")
     {
         return Err(TotpError::new(format!(
-            "invalid TOTP algorithm {algorithm:?}: must be SHA1, SHA256, or SHA512"
+            "invalid TOTP algorithm {}: must be SHA1, SHA256, or SHA512",
+            // Go's %q, not Rust's Debug: control and non-printable runes differ.
+            crate::go_quote(algorithm)
         )));
     }
     if digits != 0 && digits != 6 && digits != 8 {

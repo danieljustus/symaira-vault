@@ -1,12 +1,13 @@
 mod cxf;
 mod gojson;
+mod gourl;
 mod onepux;
 pub use cxf::parse as parse_cxf;
 mod pass;
 mod totp;
 pub use onepux::parse_1pux;
-pub use pass::{import_pass, import_pass_with_gpg, parse_pass_entry};
-pub use totp::parse_totp;
+pub use pass::{import_pass, import_pass_with_gpg, parse_pass_entry, parse_pass_entry_bytes};
+pub use totp::{parse_totp, parse_totp_bytes};
 
 use gojson::{Context, GoDecode, GoStruct, Reader, decode_struct};
 use serde::{Deserialize, Serialize};
