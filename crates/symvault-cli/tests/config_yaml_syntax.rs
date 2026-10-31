@@ -101,12 +101,12 @@ struct Fixture {
 }
 
 /// Cases whose Go output the native CLI must reproduce byte for byte.
-const MATCHING_CASES: usize = 93;
+const MATCHING_CASES: usize = 94;
 /// Comparisons the replay executes: every recorded config observation, one
 /// `doctor` run per case and the five `agent list` runs.
-const REPLAYED_COMPARISONS: usize = 438;
+const REPLAYED_COMPARISONS: usize = 441;
 /// Inputs on which the native CLI is known to differ from Go.
-const OPEN_DIVERGENCES: usize = 33;
+const OPEN_DIVERGENCES: usize = 32;
 
 fn fixture() -> Fixture {
     const CONTENT: &[u8] = include_bytes!("../../../testdata/port/cli/config-yaml-syntax.json");

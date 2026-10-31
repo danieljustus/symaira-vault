@@ -535,7 +535,7 @@ impl<'a> Volatile<'a> {
     /// Verifies the declared shapes on stdout and rewrites them.
     fn discover(&mut self, stdout: Vec<u8>) -> Result<Vec<u8>, String> {
         let mut stdout = stdout;
-        for rule in self.rules.to_vec() {
+        for rule in self.rules.iter().cloned() {
             if let Some(length) = rule.strip_prefix("gen-pw:") {
                 let length: usize = length.parse().map_err(|_| format!("bad rule {rule}"))?;
                 stdout = replace_generated_password(&stdout, length)?;
@@ -555,7 +555,7 @@ impl<'a> Volatile<'a> {
         let mut text = text.to_vec();
         if let Some(token) = &self.token {
             text = replace_bytes(&text, token.as_bytes(), b"<TOKEN>");
-            text = replace_bytes(&text, token[..6].as_bytes(), b"<TOKEN6>");
+            text = replace_bytes(&text, &token.as_bytes()[..6], b"<TOKEN6>");
         }
         if self.has("now-ts") {
             text = replace_now_timestamps(&text, self.now);

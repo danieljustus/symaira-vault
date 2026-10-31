@@ -300,12 +300,10 @@ fn native_cli_matches_go_output_format_gate() {
 /// is the full argument vector of a recorded case; `open_not_initialized_cases_
 /// are_still_open` fails when one starts to match so the list cannot go stale.
 ///
-/// - `delete x`: the native command prompts before it checks the vault (exit 0).
 /// - `device approval-pair`, `device revoke x`: single-line / different wording.
 /// - `file use x x`, `run x`: clap requires the `--` separator before the
 ///   command, Go takes positional arguments (a CLI-002 parser difference).
 const OPEN_NOT_INITIALIZED: &[&[&str]] = &[
-    &["delete", "x"],
     &["device", "approval-pair"],
     &["device", "revoke", "x"],
     &["file", "use", "x", "x"],

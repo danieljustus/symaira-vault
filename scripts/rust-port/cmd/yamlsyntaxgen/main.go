@@ -240,6 +240,7 @@ func inputs() []input {
 		{"whitespace_ideographic_space", "accepted", "only U+3000 and a newline", []byte("\u3000\n")},
 		{"whitespace_line_separator", "accepted", "only U+2028 and a newline", []byte("\u2028\n")},
 		{"whitespace_mixed_unicode", "accepted", "ASCII and Unicode white space mixed", []byte(" \t\r\n\v\f\u00a0\u0085\u3000 \n")},
+		{"empty_flow_mapping_root", "accepted", "a document that is an empty flow mapping", []byte("{}\n")},
 	}
 }
 
@@ -331,8 +332,6 @@ func openInputs() []openEntry {
 			kindWording, []string{"get", "set"}, "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with 'parent is a unknown(0) node, not a mapping' and 'root node is a unknown(0), not a mapping', the native CLI with 'cannot load config: missing YAML document'"},
 		{input{"document_start_only", "accepted", "a config that is only a document start marker", []byte("---\n")},
 			kindWording, []string{"get", "set"}, "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with the scalar-node wording of null_root"},
-		{input{"empty_flow_mapping_root", "accepted", "a document that is an empty flow mapping", []byte("{}\n")},
-			kindWording, []string{"get"}, "validate agrees; config get fails on both sides with exit 6, Go with `key \"vaultDir\" not found: key \"vaultDir\" not found` (the cause is appended), the native CLI with the bare message"},
 		{input{"empty_file", "accepted", "a zero-byte config", []byte("")},
 			kindWording, []string{"get", "set"}, "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with the 'unknown(0) node' wording of comment_only, the native CLI with 'missing YAML document'"},
 		{input{"ascii_spaces_only", "accepted", "a config that is only spaces", []byte("   ")},

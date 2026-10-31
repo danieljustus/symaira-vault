@@ -394,9 +394,10 @@ fn revoke_errors_match_the_oracle_message_and_exit_status() {
         &home,
     );
     assert_eq!(unknown.status.code(), Some(1), "{unknown:?}");
+    // cobra and the root executor each print the error (oracle `bf7f687b`).
     assert_eq!(
         String::from_utf8_lossy(&unknown.stderr),
-        "Error: approval device \"dev-nope\" not found\n"
+        "Error: approval device \"dev-nope\" not found\nError: approval device \"dev-nope\" not found\n"
     );
 
     let too_many = run(

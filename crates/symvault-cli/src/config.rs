@@ -178,6 +178,7 @@ fn reindent_two_spaces(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut stack: Vec<IndentLevel> = Vec::new();
     let mut key_column: Option<usize> = None;
+    let mut comments: Vec<(&str, &str)> = Vec::new();
     // (owner column in the input, owner column in the output, first content column)
     let mut block: Option<(usize, usize, Option<usize>)> = None;
     for line in text.split_inclusive('\n') {
@@ -204,14 +205,8 @@ fn reindent_two_spaces(text: &str) -> String {
             continue;
         }
         if content.starts_with('#') {
-            let depth = stack
-                .iter()
-                .rev()
-                .find(|level| level.column <= column)
-                .map_or(0, |level| level.depth);
-            out.push_str(&" ".repeat(depth * 2));
-            out.push_str(content);
-            out.push_str(newline);
+            // A head comment sits at the indent of the node that follows it.
+            comments.push((content, newline));
             continue;
         }
         let dash = content == "-" || content.starts_with("- ");
@@ -251,6 +246,11 @@ fn reindent_two_spaces(text: &str) -> String {
                 compact_sequence: true,
             });
         }
+        for (comment, comment_newline) in comments.drain(..) {
+            out.push_str(&" ".repeat(depth * 2));
+            out.push_str(comment);
+            out.push_str(comment_newline);
+        }
         out.push_str(&" ".repeat(depth * 2));
         out.push_str(content);
         out.push_str(newline);
@@ -282,6 +282,10 @@ fn reindent_two_spaces(text: &str) -> String {
             };
             block = Some((owner_column, new_owner, None));
         }
+    }
+    for (comment, comment_newline) in comments {
+        out.push_str(comment);
+        out.push_str(comment_newline);
     }
     out
 }

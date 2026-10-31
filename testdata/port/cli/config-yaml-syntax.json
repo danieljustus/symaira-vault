@@ -17,7 +17,7 @@
       "internal/health/doctor_vault.go"
     ],
     "source_digest": "2dcc63c1eaca1c45b64d530a9423385b6057a90aebd0aad2db214a34a8440cc8",
-    "generator_digest": "77419a6138d7c858081897942cf795154f15af0d4087a6a3a80d8471d6be49ef"
+    "generator_digest": "749f4de04cce17392e3e954650e836444f9af14138835e9448593b36074913b6"
   },
   "doctor_ids": [
     "vault.config.parses",
@@ -10240,6 +10240,92 @@
           }
         ]
       }
+    },
+    {
+      "name": "empty_flow_mapping_root",
+      "class": "accepted",
+      "description": "a document that is an empty flow mapping",
+      "config_hex": "7b7d0a",
+      "config_text": "\"{}\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
     }
   ],
   "open_divergences": [
@@ -12524,29 +12610,6 @@
           "stdout": "",
           "stderr": "Error: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nError: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
           "config_unchanged": true
-        }
-      ]
-    },
-    {
-      "name": "empty_flow_mapping_root",
-      "description": "a document that is an empty flow mapping",
-      "kind": "wording",
-      "reason": "validate agrees; config get fails on both sides with exit 6, Go with `key \"vaultDir\" not found: key \"vaultDir\" not found` (the cause is appended), the native CLI with the bare message",
-      "config_hex": "7b7d0a",
-      "config_text": "\"{}\\n\"",
-      "observations": [
-        {
-          "command": "get",
-          "args": [
-            "config",
-            "get",
-            "vaultDir",
-            "--file",
-            "__CONFIG__"
-          ],
-          "exit_code": 6,
-          "stdout": "",
-          "stderr": "Error: key \"vaultDir\" not found: key \"vaultDir\" not found\nError: key \"vaultDir\" not found: key \"vaultDir\" not found\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
         }
       ]
     },

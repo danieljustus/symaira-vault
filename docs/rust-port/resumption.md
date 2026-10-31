@@ -1,5 +1,27 @@
 # Rust migration handover — 2026-09-09
 
+## CLI-006 positive output matrix, 2026-10-31
+
+`outputmodegen` (oracle `bf7f687b`, darwin) records text, `--json`, `--output yaml`, `--output json` and
+`--quiet` for the 47 gate rows that do not refuse both formats: 379 cases, 47 paths, 6 frozen seeds, in
+`testdata/port/cli/output-modes.json`; `crates/symvault-cli/tests/output_modes.rs` replays them byte for byte
+(stdout, stderr, exit, file-tree effect). Targets: `make output-modes-cli-differential` (re-verifies against a
+rebuilt oracle, then replays) and `make output-modes-regenerate`.
+
+Rust fixes the matrix forced: `get --print` writes the `expose_plaintext` audit entry; `auth set` refuses
+`--json`/`--output` (gate rows with `valid_args: 0` are probe artefacts); `update apply|check|info` accept
+`--quiet`/`--output`, apply's report goes to stderr; `template generate` `--output` is the file flag and
+`required flag(s) "type"` follows cobra; `generate manpages` accepts `--quiet`, uses the XDG default config path
+and the `2-Jan-2006` HISTORY date; `doctor` order (`mcp.tokens` after `recipients.recovery`), no `tags` in JSON,
+migration warning not silenced by `--quiet`; `agent install --json`; intake JSON keeps Go field order and stat
+errors; config `git:` writes `commit_template` first; device errors are doubled; yaml renderer shared via
+`symvault-gojson::yaml`.
+
+Declared open: update apply/check/info beyond the dev-build branch, `intake watch` beyond `--once`, live
+`approval`/`device approval-pair|accept|join`/`remote init` flows, `--color`/`--theme`; `doctor` is pinned with
+`--no-network`; Touch ID availability is normalised (rule 7: Go's LAContext probe says true here, the Rust JXA
+probe says false inside the sandbox). The corpus is darwin-only (`oracle.goos`); other hosts skip it visibly.
+
 ## IO-001 invalid-byte representation, 2026-10-31
 
 Question closed: does `ImportedEntry` (`String` paths and values) lose data against Go? Probed with the
