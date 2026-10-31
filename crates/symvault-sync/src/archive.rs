@@ -279,7 +279,7 @@ fn lexical_clean(path: &Path) -> PathBuf {
 }
 
 /// Go's `path.Clean` over slash-separated names.
-fn go_path_clean(path: &[u8]) -> Vec<u8> {
+pub fn go_path_clean(path: &[u8]) -> Vec<u8> {
     if path.is_empty() {
         return b".".to_vec();
     }

@@ -377,15 +377,19 @@ enum Command {
     },
     /// Create a compressed vault backup archive.
     Backup {
+        // OsString, not PathBuf: clap's PathBuf parser rejects an empty value,
+        // but Go accepts `backup ""` and writes `.tar.gz`.
         #[arg(value_name = "ARCHIVE_PATH")]
-        archive: PathBuf,
+        archive: OsString,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "exclude_git")]
         exclude_git: bool,
     },
     /// Restore a vault from a backup archive.
     Restore {
+        // OsString for the same reason as `backup`: Go reports `stat : no such
+        // file or directory` for an empty archive argument.
         #[arg(value_name = "ARCHIVE_PATH")]
-        archive: PathBuf,
+        archive: OsString,
     },
     /// Add or export binary file attachments.
     File {
@@ -433,9 +437,15 @@ enum Command {
     },
     /// Export vault entries to CSV or JSON.
     Export {
-        #[arg(long, value_name = "FORMAT", required = true)]
+        // pflag keeps the last occurrence of a repeated string flag.
+        #[arg(
+            long,
+            value_name = "FORMAT",
+            required = true,
+            overrides_with = "format"
+        )]
         format: String,
-        #[arg(long, default_value = "")]
+        #[arg(long, default_value = "", overrides_with = "mapping")]
         mapping: String,
         #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
@@ -1513,14 +1523,14 @@ fn run_cli() -> ExitCode {
         }) => run_backup(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
-            &archive,
+            Path::new(&archive),
             exclude_git,
             cli.quiet,
         ),
         Some(Command::Restore { archive }) => run_restore(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
-            &archive,
+            Path::new(&archive),
             cli.quiet,
         ),
         Some(Command::File { command }) => run_file(
@@ -2277,7 +2287,11 @@ fn run_cli() -> ExitCode {
             cli._profile.as_deref(),
             &format,
             &mapping,
-            cli.output.as_deref().map(Path::new),
+            // `--output ""` is the stdout default (fsutil.CreateSensitiveOutput).
+            cli.output
+                .as_deref()
+                .filter(|output| !output.is_empty())
+                .map(Path::new),
             yes,
             cli.quiet,
         ),
@@ -4031,6 +4045,25 @@ fn run_generate_manpages(directory: &Path) -> ExitCode {
     finish_vault_result(result)
 }
 
+/// Go's executor for the `export`, `backup` and `restore` bodies: cobra prints
+/// the returned error, `ExecuteRoot` prints it again, then the exit-class hint.
+/// An uninitialized vault is exit 3 with its own hint; everything else these
+/// commands return is a plain exit-1 error. (`--quiet` does not reach `cliout`
+/// before flags are parsed, so neither line is ever suppressed.)
+fn finish_go_command_result(result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            if is_not_initialized(&error) {
+                write_not_initialized(&error);
+                return ExitCode::from(3);
+            }
+            print_error_like_go(&error);
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn run_backup(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
@@ -4047,7 +4080,7 @@ fn run_backup(
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_go_command_result(result)
 }
 
 fn run_restore(
@@ -4065,7 +4098,7 @@ fn run_restore(
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_go_command_result(result)
 }
 
 fn run_export(
@@ -4080,13 +4113,13 @@ fn run_export(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         let format = export_commands::ExportFormat::parse(format)?;
-        let mapping = export_commands::parse_mapping(mapping)?;
+        let mapping = export_commands::parse_mapping(mapping)
+            .map_err(|error| format!("invalid mapping: {error}"))?;
         let options = export_commands::ExportOptions {
             format,
             mapping,
             output: output.map(Path::to_path_buf),
             yes,
-            quiet,
         };
         let exported = export_commands::run_export(
             &vault,
@@ -4117,7 +4150,7 @@ fn run_export(
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_go_command_result(result)
 }
 
 fn run_migrate_session(
@@ -4940,19 +4973,21 @@ fn run_import(
     }
 }
 
+/// Go's `cli.ConfirmInteractive` as `export` uses it: the prompt goes to stderr,
+/// one line is read from stdin, and only `y` (any case, surrounding space
+/// trimmed) confirms. End of input before any byte is an error, not a refusal.
 fn confirm_export() -> Result<bool, String> {
-    eprint!("Export all vault entries as plaintext? [y/N] ");
+    eprint!("Export all vault entries as plaintext? (y/N): ");
     io::stderr()
         .flush()
-        .map_err(|error| format!("export confirmation prompt: {error}"))?;
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|error| format!("export confirmation: {error}"))?;
-    Ok(matches!(
-        input.trim().to_ascii_lowercase().as_str(),
-        "y" | "yes"
-    ))
+        .map_err(|error| format!("export confirmation failed: read confirmation: {error}"))?;
+    let mut answer = Vec::new();
+    std::io::BufRead::read_until(&mut io::stdin().lock(), b'\n', &mut answer)
+        .map_err(|error| format!("export confirmation failed: read confirmation: {error}"))?;
+    if answer.is_empty() {
+        return Err("export confirmation failed: read confirmation: EOF".to_owned());
+    }
+    Ok(String::from_utf8_lossy(&answer).trim().to_lowercase() == "y")
 }
 
 fn run_unlock(
