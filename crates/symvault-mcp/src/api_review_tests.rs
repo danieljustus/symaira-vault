@@ -35,7 +35,7 @@ fn protocol_context_cancels_actual_encrypted_api_request() {
     let (send, observed) = std::sync::mpsc::channel();
     let upstream = std::thread::spawn(move || {
         let (mut socket, _) = listener.accept().unwrap();
-        socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        socket.set_read_timeout(Some(Duration::from_secs(15))).unwrap();
         let mut bytes = Vec::new();
         while !bytes.ends_with(b"\r\n\r\n") && bytes.len() < 16384 {
             let mut byte = [0];
@@ -54,7 +54,7 @@ fn protocol_context_cancels_actual_encrypted_api_request() {
         assert_eq!(API_REVIEW_REQUESTS.with(|n| n.get()), 1);
         response
     });
-    observed.recv_timeout(Duration::from_secs(2)).unwrap();
+    observed.recv_timeout(Duration::from_secs(15)).unwrap();
     let started = std::time::Instant::now();
     context.cancel();
     let response = worker.join().unwrap();
@@ -82,7 +82,10 @@ fn review_echo_server_with_bytes(
     listener.set_nonblocking(true).unwrap();
     std::thread::spawn(move || {
         use std::io::{BufRead, Write};
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        // Setup bounds only; none of these is the behavior under test. Under
+        // coverage instrumentation a 1 s request timeout let the client give
+        // up before the echo arrived (broken pipe, #1567).
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         let mut stream = loop {
             match listener.accept() {
                 Ok((stream, _)) => break stream,
@@ -99,10 +102,10 @@ fn review_echo_server_with_bytes(
         // blocking accepted socket, not a race against request arrival.
         stream.set_nonblocking(false).unwrap();
         stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_secs(15)))
             .unwrap();
         stream
-            .set_write_timeout(Some(Duration::from_secs(2)))
+            .set_write_timeout(Some(Duration::from_secs(15)))
             .unwrap();
         let mut reader = std::io::BufReader::new(stream.try_clone().unwrap());
         let mut line = String::new();
@@ -399,7 +402,7 @@ fn api_review_path_utf8_boundary_is_rejected_before_reads() {
     let result = runtime
         .call(
             "execute_api_request",
-            &json!({"template":"fixture","endpoint":"/v1/__TOKEN__%bc","timeout":1}),
+            &json!({"template":"fixture","endpoint":"/v1/__TOKEN__%bc","timeout":15}),
         )
         .unwrap();
     assert!(result.is_error);
@@ -510,7 +513,7 @@ fn review_assert_substitution_echo_with_bytes(
     let server = review_echo_server_with_bytes(listener, echo);
     let result = runtime.call(
         "execute_api_request",
-        &json!({"template":"fixture","endpoint":endpoint,"timeout":1}),
+        &json!({"template":"fixture","endpoint":endpoint,"timeout":15}),
     );
     let wire = server.join().unwrap();
     let result = result.unwrap();
@@ -551,7 +554,7 @@ fn api_review_policy_denies_before_resolution_and_network() {
     }]));
     API_REVIEW_READS.with(|count| count.set(0));
     API_REVIEW_REQUESTS.with(|count| count.set(0));
-    let args = json!({"template":"fixture","endpoint":"/v1/status","timeout":1});
+    let args = json!({"template":"fixture","endpoint":"/v1/status","timeout":15});
     runtime.authorize("execute_api_request", &args).unwrap();
     let result = runtime.call("execute_api_request", &args);
     assert_eq!(
@@ -657,7 +660,7 @@ fn api_review_entry_policy_matches_corrected_go_observations() {
         API_REVIEW_READS.with(|count| count.set(0));
         API_REVIEW_REQUESTS.with(|count| count.set(0));
         let result = runtime.call("execute_api_request", &json!({
-            "template":"fixture", "endpoint":"/v1/status", "timeout":1,
+            "template":"fixture", "endpoint":"/v1/status", "timeout":15,
             "path":"unrelated-allowed-entry",
         }));
         if let Some(server) = server {
@@ -692,7 +695,7 @@ fn api_review_ipv6_handler_allows_private_and_denies_controls() {
     let server = review_echo_server(listener);
     let result = runtime.call(
         "execute_api_request",
-        &json!({"template":"fixture","endpoint":"/v1/status","timeout":1}),
+        &json!({"template":"fixture","endpoint":"/v1/status","timeout":15}),
     );
     let wire = server.join().unwrap();
     let result = result.unwrap();
@@ -713,7 +716,7 @@ fn api_review_ipv6_handler_allows_private_and_denies_controls() {
     let denied = runtime
         .call(
             "execute_api_request",
-            &json!({"template":"fixture","endpoint":"/v1/status","timeout":1}),
+            &json!({"template":"fixture","endpoint":"/v1/status","timeout":15}),
         )
         .unwrap();
     assert!(denied.is_error, "{}", denied.text);
@@ -768,7 +771,7 @@ fn api_review_go_escape_contract() {
 fn api_review_ipv6_handler_reaches_header_guard_without_network() {
     let root = tempdir().unwrap();
     let runtime = review_api_runtime(root.path(), "http://[::1]:9".into());
-    let args = json!({"template":"fixture","endpoint":"/v1/status","headers":{"Host":"example.org"},"timeout":1});
+    let args = json!({"template":"fixture","endpoint":"/v1/status","headers":{"Host":"example.org"},"timeout":15});
     runtime.authorize("execute_api_request", &args).unwrap();
     let result = runtime.call("execute_api_request", &args).unwrap();
     assert!(result.is_error);
@@ -899,7 +902,7 @@ fn api_review_ipv6_private_and_non_loopback_controls_precede_resolution() {
         let result = runtime
             .call(
                 "execute_api_request",
-                &json!({"template":"fixture","endpoint":"/v1/status","timeout":1}),
+                &json!({"template":"fixture","endpoint":"/v1/status","timeout":15}),
             )
             .unwrap();
         assert!(result.is_error);
@@ -933,7 +936,7 @@ fn api_review_policy_default_deny_and_explicit_run_allow() {
         }]));
         API_REVIEW_READS.with(|count| count.set(0));
         API_REVIEW_REQUESTS.with(|count| count.set(0));
-        let args = json!({"template":"fixture","endpoint":"/v1/status","headers":{"Host":"example.org"},"timeout":1});
+        let args = json!({"template":"fixture","endpoint":"/v1/status","headers":{"Host":"example.org"},"timeout":15});
         runtime.authorize("execute_api_request", &args).unwrap();
         let result = runtime.call("execute_api_request", &args);
         if allowed {
