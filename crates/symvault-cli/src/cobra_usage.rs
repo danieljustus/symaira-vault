@@ -63,6 +63,12 @@ const JOIN_PAIRING_FILE_MESSAGE: &str =
 /// Integer-valued flags, by command path and long name.
 const INT_FLAGS: &[(&str, &str)] = &[("generate", "length")];
 
+/// Flags cobra's `MarkFlagRequired` makes mandatory, by command path. Cobra
+/// reports the unset ones after the argument validator and the root
+/// `PersistentPreRunE` (the output-format gate) and before the command body, as
+/// `required flag(s) "a", "b" not set`, in flag registration order.
+const REQUIRED_FLAGS: &[(&str, &[&str])] = &[("export", &["format"])];
+
 /// Local bool flags of commands the native CLI parses by hand (no clap
 /// definition, so the tree cannot type them). pflag parses them before cobra
 /// validates arguments, and a local flag shadows a persistent one of the same
@@ -569,6 +575,19 @@ fn refused_format(path: &str, json_flag: bool, output: Option<&str>) -> Option<S
         .map(str::to_owned)
 }
 
+/// Cobra's `validateRequiredFlags` message, if a required flag is unset.
+fn missing_required_flags(path: &str, set: &[String]) -> Option<String> {
+    let (_, required) = REQUIRED_FLAGS
+        .iter()
+        .find(|(command, _)| *command == path)?;
+    let missing: Vec<String> = required
+        .iter()
+        .filter(|name| !set.iter().any(|seen| seen == **name))
+        .map(|name| format!("\"{name}\""))
+        .collect();
+    (!missing.is_empty()).then(|| format!("required flag(s) {} not set", missing.join(", ")))
+}
+
 fn doubled(message: &str) -> String {
     format!("Error: {message}\nError: {message}\n")
 }
@@ -921,6 +940,9 @@ fn invalid_argument(value: &str, arg: &Arg, parser: &str, reason: &str) -> Strin
 
 struct Parsed {
     positionals: Vec<String>,
+    /// Long names of the flags that appeared on the command line (pflag
+    /// `Changed`), whatever their value.
+    set: Vec<String>,
     /// The flags an argument validator reads.
     validator: ValidatorFlags,
     json_flag: bool,
@@ -936,6 +958,7 @@ fn parse_flags(
 ) -> Result<Parsed, String> {
     let mut parsed = Parsed {
         positionals: Vec::new(),
+        set: Vec::new(),
         validator: ValidatorFlags::default(),
         json_flag: false,
         output: None,
@@ -981,6 +1004,9 @@ fn parse_flags(
             };
             if is_help_arg(arg) {
                 continue;
+            }
+            if let Some(long) = arg.get_long() {
+                parsed.set.push(long.to_owned());
             }
             if !is_bool_arg(arg) {
                 let value = match inline {
@@ -1028,6 +1054,11 @@ fn parse_flags(
                     return Err(format!("unknown shorthand flag: {short:?} in -{rest}"));
                 };
                 at += 1;
+                if !is_help_arg(arg)
+                    && let Some(long) = arg.get_long()
+                {
+                    parsed.set.push(long.to_owned());
+                }
                 if is_help_arg(arg) || is_bool_arg(arg) {
                     // pflag: `-y=value` hands everything after the `=` to the flag, but only
                     // when something follows it; a bare `-y=` leaves `=` as the next shorthand.
@@ -1116,8 +1147,22 @@ fn unknown_command(word: &str) -> Verdict {
     }
 }
 
-/// Evaluates `args` (without the program name) the way cobra does.
-pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
+/// Evaluates `args` (without the program name) the way cobra does: command
+/// resolution, flag parsing, the argument validator and the output-format gate.
+/// `error_taxonomy`'s fixture rows model exactly that stage, so this entry point
+/// stops there; [`evaluate_with_required`] adds the required-flag stage after it.
+#[cfg(test)]
+pub fn evaluate(args: &[String], root: Command) -> Verdict {
+    evaluate_stages(args, root, false)
+}
+
+/// [`evaluate`] plus cobra's `validateRequiredFlags`, which runs after the
+/// gate and before the command body.
+pub fn evaluate_with_required(args: &[String], root: Command) -> Verdict {
+    evaluate_stages(args, root, true)
+}
+
+fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdict {
     if args
         .iter()
         .take_while(|token| *token != "--")
@@ -1193,6 +1238,9 @@ pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
     if let Some(format) = refused_format(&path_text, parsed.json_flag, parsed.output.as_deref()) {
         return fail(&gate_message(&format, &path_text), 9);
     }
+    if required && let Some(message) = missing_required_flags(&path_text, &parsed.set) {
+        return fail(&message, 1);
+    }
     Verdict::Proceed
 }
 
@@ -1206,7 +1254,7 @@ pub fn check(args: &[std::ffi::OsString], root: Command) -> Option<std::process:
         .map(|arg| arg.to_str().map(str::to_owned))
         .collect();
     let strings = strings?;
-    match evaluate(&strings, root) {
+    match evaluate_with_required(&strings, root) {
         Verdict::Proceed => None,
         Verdict::Fail { stderr, code } => {
             let _ = std::io::stderr().write_all(stderr.as_bytes());
@@ -1235,6 +1283,34 @@ mod tests {
         assert_eq!(levenshtein("lst", "list"), 1);
         assert_eq!(levenshtein("LIST", "list"), 0);
         assert_eq!(levenshtein("e", "get"), 2);
+    }
+
+    #[test]
+    fn required_flags_follow_cobra_order_and_wording() {
+        let run = |args: &[&str]| {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            evaluate_with_required(&args, root())
+        };
+        let missing = fail("required flag(s) \"format\" not set", 1);
+        assert_eq!(run(&["export", "-y"]), missing);
+        assert_eq!(run(&["export"]), missing);
+        // Any occurrence counts as set, even an empty value or a repeat.
+        assert_eq!(run(&["export", "--format", ""]), Verdict::Proceed);
+        assert_eq!(
+            run(&["export", "--format=csv", "--format=json"]),
+            Verdict::Proceed
+        );
+        // The argument validator and the gate come first.
+        assert!(matches!(
+            run(&["export", "extra"]),
+            Verdict::Fail { ref stderr, .. } if stderr.contains("unknown command \"extra\"")
+        ));
+        assert!(matches!(
+            run(&["export", "--json"]),
+            Verdict::Fail { code: 9, .. }
+        ));
+        // `evaluate` itself stays at the validator/gate stage.
+        assert_eq!(evaluate(&["export".to_owned()], root()), Verdict::Proceed);
     }
 
     #[test]

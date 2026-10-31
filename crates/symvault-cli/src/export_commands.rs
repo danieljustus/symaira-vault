@@ -3,11 +3,13 @@
 //! The dispatcher supplies confirmation, unlock, and audit callbacks. Keeping
 //! those boundaries injectable lets the export contract be tested without a
 //! real keychain while preserving the production order: warn and confirm,
-//! unlock, read entries, write output, then record the audit event.
+//! unlock, list entries, create the output file, read entries, write output,
+//! then record the audit event (the output file exists before the first entry
+//! is read, so a failing read leaves it empty, exactly as in Go).
 
 use std::{
     collections::BTreeMap,
-    fs::{self, OpenOptions},
+    fs::OpenOptions,
     io::{self, Write},
     path::Path,
 };
@@ -40,7 +42,6 @@ pub struct ExportOptions {
     pub mapping: BTreeMap<String, String>,
     pub output: Option<std::path::PathBuf>,
     pub yes: bool,
-    pub quiet: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -63,7 +64,9 @@ pub(crate) fn audit_export(
     logger
         .append(LogEntry {
             timestamp: go_timestamp_seconds(),
-            agent: "symvault".to_owned(),
+            // Go builds the logger as audit.New("symvault", ...) (the file name)
+            // but never sets LogEntry.Agent, so the record's agent is empty.
+            agent: String::new(),
             action: "export".to_owned(),
             ok: true,
             ..LogEntry::default()
@@ -143,9 +146,10 @@ where
 {
     const WARNING: &str =
         "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.";
-    if !options.yes || !options.quiet {
-        eprintln!("{WARNING}");
-    }
+    // Go prints it through cliout.Warnf with --yes and plainly otherwise; the
+    // quiet switch only reaches cliout before the flags are parsed, so --quiet
+    // never hides it.
+    eprintln!("{WARNING}");
     if !options.yes && !confirm()? {
         eprintln!("Export canceled.");
         return Ok(ExportResult {
@@ -155,7 +159,7 @@ where
         });
     }
 
-    let identity = unlock().map_err(|error| format!("unlock vault: {error}"))?;
+    let identity = unlock()?;
     let store = symvault_store::Store::open_with_legacy_migration(vault, &identity)
         .map_err(|error| format!("open vault: {error}"))?;
     let reader = store.read_session(&identity);
@@ -169,12 +173,20 @@ where
             canceled: false,
         });
     }
+    // Go creates (and truncates) the output file before it reads a single
+    // entry, so a failing read leaves an empty file behind.
+    let mut sink = open_output(options.output.as_deref())?;
     let entries = paths
         .iter()
         .map(|path| {
-            let entry = reader
-                .get(path)
-                .map_err(|error| format!("read entry {path}: {error}"))?;
+            let entry = reader.get(path).map_err(|error| {
+                // The JSON path wraps the worker error again ("export entries").
+                let prefix = match options.format {
+                    ExportFormat::Json => "export entries: ",
+                    ExportFormat::Csv => "",
+                };
+                format!("{prefix}read entry {path}: cannot read entry {path}: {error}")
+            })?;
             Ok(ExportEntry {
                 path: path.clone(),
                 data: entry.data,
@@ -192,7 +204,9 @@ where
         }
     }
     let output = render(options.format, &entries, &options.mapping)?;
-    write_output(options.output.as_deref(), &output)?;
+    sink.write_all(&output)
+        .and_then(|()| sink.flush())
+        .map_err(|error| format!("export entries: {error}"))?;
     if let Err(error) = audit(vault, entries.len()) {
         eprintln!("Warning: audit log write failed: {error}");
     }
@@ -209,48 +223,32 @@ fn has_attachment(data: &BTreeMap<String, serde_json::Value>) -> bool {
     })
 }
 
-fn write_output(path: Option<&Path>, bytes: &[u8]) -> Result<(), String> {
-    match path {
-        None => io::stdout()
-            .write_all(bytes)
-            .map_err(|error| format!("write export: {error}")),
-        Some(path) => {
-            let mut options = OpenOptions::new();
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            let mut file = options
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .open(path)
-                .map_err(|error| format!("create output file: {error}"))?;
-            set_private_permissions(&file)?;
-            file.write_all(bytes)
-                .map_err(|error| format!("write output file: {error}"))?;
-            file.flush()
-                .map_err(|error| format!("flush output file: {error}"))
-        }
-    }
-}
-
-fn set_private_permissions(file: &fs::File) -> Result<(), String> {
+/// `fsutil.CreateSensitiveOutput`: stdout for no path, otherwise
+/// `OpenFile(O_CREATE|O_WRONLY|O_TRUNC, 0600)`. The mode only applies to a file
+/// created here (and is subject to the umask); an existing file keeps its mode.
+fn open_output(path: Option<&Path>) -> Result<Box<dyn Write>, String> {
+    let Some(path) = path else {
+        return Ok(Box::new(io::stdout()));
+    };
+    let mut options = OpenOptions::new();
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = file
-            .metadata()
-            .map_err(|error| format!("inspect output file: {error}"))?
-            .permissions();
-        permissions.set_mode(0o600);
-        file.set_permissions(permissions)
-            .map_err(|error| format!("protect output file: {error}"))?;
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
     }
-    #[cfg(not(unix))]
-    let _ = file;
-    Ok(())
+    options
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
+        .map(|file| Box::new(file) as Box<dyn Write>)
+        .map_err(|error| {
+            format!(
+                "create output file: open {}: {}",
+                path.display(),
+                symvault_sync::archive::go_reason(&error)
+            )
+        })
 }
 
 #[cfg(test)]

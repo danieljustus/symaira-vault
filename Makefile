@@ -422,7 +422,7 @@ device-list-differential:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_device_list_differential.py
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/devicelistdriver --report "$(DEVICE_LIST_REPORT)"
 
-sync-io-differential: export-differential restore-errors-differential cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
+sync-io-differential: export-differential export-cli-differential restore-errors-differential cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
 	GOFLAGS= GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
 	# Other sync integration suites already run through the prerequisites above.
 	$(CARGO) test -p symvault-sync --all-features --locked --lib \
@@ -599,6 +599,12 @@ yaml-syntax-cli-differential:
 .PHONY: error-taxonomy-cli-differential
 error-taxonomy-cli-differential:
 	./scripts/rust-port/check_error_taxonomy_cli.sh
+
+# IO-002: `export`, `backup` and `restore` end to end against the pinned Go
+# binary (173 cases, oracle bf7f687b), then the Rust replay.
+.PHONY: export-cli-differential
+export-cli-differential:
+	./scripts/rust-port/check_export_cli.sh
 
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build

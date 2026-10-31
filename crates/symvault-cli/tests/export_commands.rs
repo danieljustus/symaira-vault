@@ -116,7 +116,6 @@ fn cancellation_precedes_unlock_and_file_creation() {
             mapping: BTreeMap::new(),
             output: Some(output.clone()),
             yes: false,
-            quiet: true,
         },
         || Ok(false),
         || panic!("canceled export must not unlock"),
