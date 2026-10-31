@@ -89,6 +89,9 @@ pub enum IntakeError {
     EmptySource(String),
     #[error("source is not a stable regular file: {0}")]
     InvalidSource(String),
+    /// A failed `lstat` of the source, spelled as Go reports it.
+    #[error("{0}")]
+    Stat(String),
     #[error("source exceeds limit")]
     Limit,
     #[error("staged copy verification failed")]
@@ -353,8 +356,15 @@ impl Spool {
         limit: u64,
     ) -> Result<(Vec<u8>, Provenance, PathBuf, fs::Metadata), IntakeError> {
         let path = path.as_ref();
-        let m =
-            fs::symlink_metadata(path).map_err(|e| IntakeError::InvalidSource(e.to_string()))?;
+        let m = fs::symlink_metadata(path).map_err(|e| {
+            // Go: `stat "<arg>": lstat <arg>: <reason>`.
+            IntakeError::Stat(format!(
+                "stat {:?}: lstat {}: {}",
+                path.display().to_string(),
+                path.display(),
+                crate::importer::go_io_reason(&e)
+            ))
+        })?;
         if !m.is_file() {
             return Err(IntakeError::InvalidSource(path.display().to_string()));
         }

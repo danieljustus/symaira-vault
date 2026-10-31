@@ -34,7 +34,10 @@ const (
 
 	sharesJSON = `{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"work/example","secret_field":"password","nonce":"n1","status":"approved","created_at":"2025-02-03T04:05:06Z","expires_at":"2099-01-01T00:00:00Z"}]}`
 
-	devicesJSON = `[{"name":"laptop","public_key":"age1laptop","added_at":"2026-09-14T12:34:56.123+02:00"},{"name":"phone","public_key":"age1phone","added_at":"2026-01-01T00:00:00Z","last_seen":"2026-09-14T10:11:12.9Z"}]`
+	// A second valid age recipient (the public example key of the age spec).
+	otherAgeKey = "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg"
+
+	devicesJSON = `[{"name":"laptop","public_key":"` + otherAgeKey + `","added_at":"2026-09-14T12:34:56.123+02:00"},{"name":"phone","public_key":"` + ageKey + `","added_at":"2026-01-01T00:00:00Z","last_seen":"2026-09-14T10:11:12.9Z"}]`
 )
 
 // seedPlans are the frozen starting vaults. Their commands are recorded in the
@@ -60,7 +63,7 @@ func seedPlans() []seedPlan {
 		{name: "audited", steps: with(seedStep{WriteTo: "home/.symvault/audit-hermes.log", Text: auditLog})},
 		{name: "recipients", steps: with(argv("recipients", "add", ageKey, "--reencrypt"))},
 		{name: "shared", steps: with(seedStep{WriteTo: "home/vault/mcp-shares.json", Text: sharesJSON})},
-		{name: "devices", steps: with(seedStep{WriteTo: "home/vault/.symvault/devices.json", Text: devicesJSON})},
+		{name: "devices", steps: with(argv("recipients", "add", ageKey), seedStep{WriteTo: "home/vault/.symvault/devices.json", Text: devicesJSON})},
 	}
 }
 
@@ -146,7 +149,7 @@ func allCaseSpecs() []caseSpec {
 	add(caseSpec{id: "audit-export-empty", path: "audit export", desc: "export an empty audit log", seed: "entries", argv: flags("audit", "export")})
 
 	// --- doctor --------------------------------------------------------------
-	add(caseSpec{id: "doctor", path: "doctor", desc: "doctor on a settled vault", seed: "entries", argv: flags("doctor"), opaque: []string{"home/vault/mcp-tokens.json"}})
+	add(caseSpec{id: "doctor", path: "doctor", desc: "doctor on a settled vault", seed: "entries", argv: flags("doctor", "--no-network"), opaque: []string{"home/vault/mcp-tokens.json"}})
 
 	// --- agent ---------------------------------------------------------------
 	add(caseSpec{id: "agent-list", path: "agent list", desc: "agents of the default config", seed: "entries", argv: flags("agent", "list")})

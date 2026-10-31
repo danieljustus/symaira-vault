@@ -85,6 +85,13 @@ pub(crate) fn run(
                         index += 1;
                         continue;
                     }
+                    if let Some(value) = bool_flag(&arg, "quiet") {
+                        if let Err(code) = value {
+                            return code;
+                        }
+                        index += 1;
+                        continue;
+                    }
                     match arg.as_ref() {
                         "--output" => {
                             let Some(format) = rest.get(index + 1) else {
@@ -150,6 +157,13 @@ fn apply_dry_run(rest: &[OsString], output_format: &str, json_flag: bool) -> Exi
             match value {
                 Ok(value) => *slot = value,
                 Err(code) => return code,
+            }
+            index += 1;
+            continue;
+        }
+        if let Some(value) = bool_flag(&arg, "quiet") {
+            if let Err(code) = value {
+                return code;
             }
             index += 1;
             continue;
@@ -302,7 +316,9 @@ fn check(rest: &[OsString], output_format: &str, json_flag: bool, root_quiet: bo
     let mut local_quiet = false;
     let mut force = false;
     let mut extra_word = None;
-    for arg in rest.iter().skip(1) {
+    let mut output_json = output_format == "json";
+    let mut index = 1;
+    while let Some(arg) = rest.get(index) {
         let arg = arg.to_string_lossy();
         let local = [
             ("json", &mut local_json),
@@ -314,15 +330,28 @@ fn check(rest: &[OsString], output_format: &str, json_flag: bool, root_quiet: bo
         match local {
             Some((Ok(value), slot)) => *slot = value,
             Some((Err(code), _)) => return code,
-            None => {
-                extra_word.get_or_insert_with(|| arg.into_owned());
-            }
+            None => match arg.as_ref() {
+                "--output" => {
+                    let Some(format) = rest.get(index + 1) else {
+                        return unknown_command("symvault update check", "--output", false);
+                    };
+                    output_json = format == "json";
+                    index += 1;
+                }
+                value if value.starts_with("--output=") => {
+                    output_json = value.trim_start_matches("--output=") == "json";
+                }
+                extra => {
+                    extra_word.get_or_insert_with(|| extra.to_owned());
+                }
+            },
         }
+        index += 1;
     }
     if let Some(extra) = extra_word {
         return unknown_command("symvault update check", &extra, false);
     }
-    let want_json = json_flag || output_format == "json" || local_json;
+    let want_json = json_flag || output_json || local_json;
     let quiet = root_quiet || local_quiet;
 
     let version = crate::VERSION.trim();
@@ -850,20 +879,21 @@ fn apply_stable_update(info: &InstallInfo, force: bool, want_json: bool) -> Exit
         let _ = out.write_all(stdout.as_bytes());
         return ExitCode::SUCCESS;
     }
-    let mut stdout = std::io::stdout().lock();
+    // cobra's `cmd.Printf` writes to `OutOrStderr`, like the `info` report.
+    let mut stderr = std::io::stderr().lock();
     if result.current_version == new_version {
         let _ = writeln!(
-            stdout,
+            stderr,
             "Symaira Vault is already up to date ({new_version})."
         );
     } else {
         let _ = writeln!(
-            stdout,
+            stderr,
             "Updated Symaira Vault: {} -> {new_version}",
             result.current_version
         );
-        let _ = writeln!(stdout, "Installation method: {}", info.method);
-        let _ = writeln!(stdout, "Binary: {}", binary_path.display());
+        let _ = writeln!(stderr, "Installation method: {}", info.method);
+        let _ = writeln!(stderr, "Binary: {}", binary_path.display());
     }
     ExitCode::SUCCESS
 }

@@ -1,5 +1,6 @@
 use std::{
     io,
+    ops::Not as _,
     path::{Component, Path, PathBuf},
 };
 
@@ -21,28 +22,45 @@ pub fn generate(_command: clap::Command, requested_dir: &Path) -> Result<PathBuf
         .map_err(|error| format!("resolve manpage directory: {error}"))?;
     create_directory(&output_dir).map_err(|error| format!("create manpage directory: {error}"))?;
     let date = man_date().map_err(|error| format!("generate manpages: {error}"))?;
-    write_pages(&output_dir, &date).map_err(|error| format!("generate manpages: {error}"))?;
+    write_pages(&output_dir, &date.0, &date.1)
+        .map_err(|error| format!("generate manpages: {error}"))?;
     Ok(output_dir)
 }
 
 /// Write actual generated Go pages, substituting the live date and config path.
-fn write_pages(output_dir: &Path, date: &str) -> io::Result<()> {
+fn write_pages(output_dir: &Path, date: &str, history_date: &str) -> io::Result<()> {
     // The revised Go renderer treats only the live config path as literal
     // text after Markdown rendering. Help still uses the unescaped path.
-    let config_path = literal_roff_text(
-        &symvault_core::config::PathResolver::new()
-            .config_path()
-            .to_string_lossy(),
-    );
+    let config_path = literal_roff_text(&default_config_path().to_string_lossy());
     for (name, page) in &crate::cli_artifacts::DATA.manpages {
-        let rendered = page.replace("__CONFIG_PATH__", &config_path).replacen(
-            "\"Jan 1970\"",
-            &format!("\"{date}\""),
-            1,
-        );
+        let rendered = page
+            .replace("__CONFIG_PATH__", &config_path)
+            .replacen("\"Jan 1970\"", &format!("\"{date}\""), 1)
+            .replace(
+                "\n1-Jan-1970 Auto generated",
+                &format!("\n{history_date} Auto generated"),
+            );
         std::fs::write(output_dir.join(name), rendered)?;
     }
     Ok(())
+}
+
+/// Go's `filepath.Join(config.DefaultConfigDir(), "config.yaml")`: the XDG
+/// default, never the legacy `~/.symvault` directory an existing install may
+/// still read from.
+fn default_config_path() -> PathBuf {
+    let value = |name: &str| std::env::var(name).unwrap_or_default();
+    let home = if cfg!(windows) && value("USERPROFILE").is_empty().not() {
+        value("USERPROFILE")
+    } else {
+        value("HOME")
+    };
+    symvault_core::config::resolve_paths(&symvault_core::config::PathEnvironment {
+        home,
+        xdg_config_home: value("XDG_CONFIG_HOME"),
+        ..Default::default()
+    })
+    .config_path()
 }
 
 /// Keep path data out of roff syntax. Controls have visible Go-style escapes,
@@ -79,7 +97,7 @@ fn literal_roff_text(text: &str) -> String {
 
 /// Render the page date the way cobra's `fillHeader` does: local time, using
 /// the current instant or the instant pinned by `SOURCE_DATE_EPOCH`.
-fn man_date() -> Result<String, String> {
+fn man_date() -> Result<(String, String), String> {
     let utc_moment = match std::env::var_os("SOURCE_DATE_EPOCH") {
         Some(raw) if !raw.is_empty() => {
             let raw = raw
@@ -97,10 +115,11 @@ fn man_date() -> Result<String, String> {
     let local_offset = time::UtcOffset::local_offset_at(utc_moment)
         .map_err(|error| format!("cannot determine local timezone: {error}"))?;
     let moment = utc_moment.to_offset(local_offset);
-    Ok(format!(
-        "{} {}",
-        MONTHS[(u8::from(moment.month()) - 1) as usize],
-        moment.year()
+    let month = MONTHS[(u8::from(moment.month()) - 1) as usize];
+    // cobra renders the trailing HISTORY line with Go's `2-Jan-2006` layout.
+    Ok((
+        format!("{month} {}", moment.year()),
+        format!("{}-{month}-{}", moment.day(), moment.year()),
     ))
 }
 

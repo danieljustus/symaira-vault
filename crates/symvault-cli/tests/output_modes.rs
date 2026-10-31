@@ -41,8 +41,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -66,6 +66,16 @@ struct Oracle {
     generator_files: Vec<String>,
     generator_digest: String,
     gate_digest: String,
+    #[serde(default)]
+    goos: String,
+}
+
+/// The Go `runtime.GOOS` spelling of the platform this test runs on.
+fn recording_goos() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "darwin",
+        other => other,
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,7 +92,9 @@ struct FileNode {
 
 #[derive(Debug, Deserialize)]
 struct SeedStep {
+    /// Recorded for provenance; the seed itself is replayed from its files.
     #[serde(default)]
+    #[allow(dead_code)]
     argv: Vec<String>,
 }
 
@@ -319,6 +331,21 @@ fn normalize_temp_suffixes(text: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Rule 7: the Touch ID hardware probe of `auth status` becomes `<BOOL>`.
+fn normalize_touch_id(text: &[u8]) -> Vec<u8> {
+    let mut text = text.to_vec();
+    for form in ["Touch ID available: ", "\"touchIDAvailable\":"] {
+        for value in ["true", "false"] {
+            text = replace_bytes(
+                &text,
+                format!("{form}{value}").as_bytes(),
+                format!("{form}<BOOL>").as_bytes(),
+            );
+        }
+    }
+    text
+}
+
 const DATED_ID_PREFIXES: [&str; 3] = ["tok", "intake", "import"];
 
 /// Rule 3: `<prefix>-YYYYMMDD-<8 lowercase hex>` with a valid calendar date.
@@ -391,7 +418,12 @@ fn find_pair_token(text: &[u8]) -> Result<String, String> {
     let index = text
         .windows(HEAD.len())
         .position(|window| window == HEAD)
-        .ok_or_else(|| format!("pair-token: no Token line in {:?}", String::from_utf8_lossy(text)))?;
+        .ok_or_else(|| {
+            format!(
+                "pair-token: no Token line in {:?}",
+                String::from_utf8_lossy(text)
+            )
+        })?;
     let start = index + HEAD.len();
     let token = text
         .get(start..start + 32)
@@ -699,7 +731,7 @@ impl Sandbox {
         }
     }
 
-    /// Rules 1, 2, 3 and 6.
+    /// Rules 1, 2, 3, 6 and 7.
     fn normalize(&self, raw: &[u8]) -> Vec<u8> {
         let mut text = raw.to_vec();
         for form in Self::forms(&self.binary) {
@@ -708,7 +740,7 @@ impl Sandbox {
         for form in Self::forms(&self.root) {
             text = replace_bytes(&text, form.as_bytes(), b"$ROOT");
         }
-        normalize_dated_ids(&normalize_temp_suffixes(&text))
+        normalize_touch_id(&normalize_dated_ids(&normalize_temp_suffixes(&text)))
     }
 
     fn snapshot(&self) -> BTreeMap<String, TreeNode> {
@@ -892,6 +924,14 @@ fn output_modes_match_frozen_go_oracle() {
     let fixture = load_fixture();
     assert_eq!(fixture.schema_version, 1, "fixture schema version");
     assert_eq!(fixture.cases.len(), EXPECTED_CASES, "fixture case count");
+    if fixture.oracle.goos != recording_goos() {
+        eprintln!(
+            "SKIP output-mode corpus recorded on {}, running on {}; the gate runs it on the recording platform",
+            fixture.oracle.goos,
+            recording_goos()
+        );
+        return;
+    }
     let mut ids: Vec<&str> = fixture.cases.iter().map(|case| case.id.as_str()).collect();
     ids.sort_unstable();
     ids.dedup();
@@ -910,7 +950,9 @@ fn output_modes_match_frozen_go_oracle() {
     let next = AtomicUsize::new(0);
     let executed = AtomicUsize::new(0);
     let failures: Mutex<Vec<(String, String, String)>> = Mutex::new(Vec::new());
-    let threads = std::thread::available_parallelism().map_or(2, usize::from).min(8);
+    let threads = std::thread::available_parallelism()
+        .map_or(2, usize::from)
+        .min(8);
     std::thread::scope(|scope| {
         for _ in 0..threads {
             scope.spawn(|| {
@@ -1108,7 +1150,9 @@ fn volatile_rules_are_narrow() {
         "{\"password\":\"<PW>\"}\n"
     );
     assert!(replace_generated_password(b"short\n", 20).is_err());
-    assert!(replace_generated_password(b"aB3dE5gH7jK9mN1pQ3rS aB3dE5gH7jK9mN1pQ3rS\n", 20).is_err());
+    assert!(
+        replace_generated_password(b"aB3dE5gH7jK9mN1pQ3rS aB3dE5gH7jK9mN1pQ3rS\n", 20).is_err()
+    );
     assert!(replace_generated_password(b"aB3dE5gH7jK9mN1pQ3rSt\n", 20).is_err());
     // Rule 5.
     assert_eq!(
@@ -1126,7 +1170,11 @@ fn volatile_rules_are_narrow() {
         )),
         "a <NOW> b 2025-02-03T04:05:06Z c 2026-10-31T23:30:00+00:00"
     );
-    assert_eq!(scan_timestamp(b"2026-10-31T22:00:00"), 0, "no zone is no stamp");
+    assert_eq!(
+        scan_timestamp(b"2026-10-31T22:00:00"),
+        0,
+        "no zone is no stamp"
+    );
 }
 
 #[test]

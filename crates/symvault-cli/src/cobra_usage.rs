@@ -67,7 +67,8 @@ const INT_FLAGS: &[(&str, &str)] = &[("generate", "length")];
 /// reports the unset ones after the argument validator and the root
 /// `PersistentPreRunE` (the output-format gate) and before the command body, as
 /// `required flag(s) "a", "b" not set`, in flag registration order.
-const REQUIRED_FLAGS: &[(&str, &[&str])] = &[("export", &["format"])];
+const REQUIRED_FLAGS: &[(&str, &[&str])] =
+    &[("export", &["format"]), ("template generate", &["type"])];
 
 /// Local bool flags of commands the native CLI parses by hand (no clap
 /// definition, so the tree cannot type them). pflag parses them before cobra
@@ -381,6 +382,7 @@ const JSON_REFUSED: &[&str] = &[
     "audit export",
     "audit rotate-key",
     "auth rotate-passphrase",
+    "auth set",
     "backup",
     "broker",
     "dynamic generate",
@@ -456,6 +458,7 @@ const OUTPUT_REFUSED: &[&str] = &[
     "audit",
     "audit rotate-key",
     "auth rotate-passphrase",
+    "auth set",
     "auth status",
     "backup",
     "broker",
@@ -1581,6 +1584,15 @@ mod tests {
         let mut refused = 0;
         for row in &fixture.gate {
             let stripped = row.path.trim_start_matches("symvault ");
+            if stripped == "auth set" {
+                // Go validates `auth set`'s arguments with a custom closure, which
+                // the taxonomy probe does not recognise as an arity error, so its
+                // row records 0 valid arguments and "not refused". With the one
+                // required argument the gate refuses both formats; that refusal is
+                // byte-pinned by `output_modes` (auth-set.json/.yaml/.output-json).
+                assert!(JSON_REFUSED.contains(&stripped) && OUTPUT_REFUSED.contains(&stripped));
+                continue;
+            }
             assert_eq!(
                 JSON_REFUSED.contains(&stripped),
                 row.json_refused,

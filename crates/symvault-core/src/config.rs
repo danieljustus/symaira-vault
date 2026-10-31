@@ -2271,6 +2271,13 @@ fn write_vault(out: &mut String, v: &VaultConfig) -> Result<(), ConfigError> {
 }
 fn write_git(out: &mut String, v: &GitConfig) -> Result<(), ConfigError> {
     let mut body = String::new();
+    // Go's `GitConfig` declares `commit_template` first.
+    if !v.commit_template.is_empty() {
+        body.push_str(&format!(
+            "    commit_template: {}\n",
+            yaml_scalar(&v.commit_template)?
+        ));
+    }
     // Preserve an explicit false. Go's raw SaveTo struct uses `omitempty`
     // and consequently reloads false as its true default; retaining the
     // operator's disablement is the safer Rust writer behavior.
@@ -2280,12 +2287,6 @@ fn write_git(out: &mut String, v: &GitConfig) -> Result<(), ConfigError> {
         body.push_str(&format!(
             "    auto_pull_interval: {}\n",
             format_duration(v.auto_pull_interval)
-        ));
-    }
-    if !v.commit_template.is_empty() {
-        body.push_str(&format!(
-            "    commit_template: {}\n",
-            yaml_scalar(&v.commit_template)?
         ));
     }
     if body.is_empty() {

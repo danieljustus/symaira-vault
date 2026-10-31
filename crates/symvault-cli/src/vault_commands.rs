@@ -17,6 +17,7 @@ use symvault_core::config::{AgentProfile, Config, GitConfig, VaultConfig};
 use symvault_crypto::{
     Argon2idParams, Identity, SecretBytes, encrypt_identity_argon2id, generate_identity,
 };
+use symvault_gojson::yaml::{self, Node};
 use symvault_store::{Entry, Store};
 use symvault_sync::safeio;
 
@@ -262,8 +263,33 @@ pub fn write_list<W: Write>(
             }
             writeln!(output).map_err(|error| error.to_string())
         }
+        "yaml" => {
+            // yaml.v3 marshals the struct with lower-cased field names and no
+            // omitempty, so every field is present.
+            let node = Node::Seq(
+                entries
+                    .iter()
+                    .map(|entry| {
+                        Node::Map(vec![
+                            ("path".to_owned(), Node::Str(entry.path.clone())),
+                            ("type".to_owned(), Node::Str(entry.secret_type.clone())),
+                            ("usagehint".to_owned(), Node::Str(entry.usage_hint.clone())),
+                            ("autorotate".to_owned(), Node::Bool(entry.auto_rotate)),
+                            ("hasvalue".to_owned(), Node::Bool(entry.has_value)),
+                            (
+                                "fieldcount".to_owned(),
+                                Node::Int(i64::try_from(entry.field_count).unwrap_or(i64::MAX)),
+                            ),
+                        ])
+                    })
+                    .collect(),
+            );
+            output
+                .write_all(yaml::to_string(&node).as_bytes())
+                .map_err(|error| error.to_string())
+        }
         other => Err(format!(
-            "unknown output format: {other:?} (valid: text, json)"
+            "unknown output format: {other:?} (valid: text, json, yaml)"
         )),
     }
 }
@@ -306,6 +332,9 @@ pub fn write_get_at<W: Write, E: Write>(
                 serde_json::to_writer(&mut *output, value).map_err(|e| e.to_string())?;
                 writeln!(output).map_err(|e| e.to_string())
             }
+            "yaml" => output
+                .write_all(yaml::to_string(&Node::from_json(value)).as_bytes())
+                .map_err(|e| e.to_string()),
             other => Err(format!(
                 "unknown output format: {other:?} (valid: text, json, yaml)"
             )),
@@ -344,8 +373,42 @@ pub fn write_get_at<W: Write, E: Write>(
                 serde_json::to_writer(&mut *output, &value).map_err(|e| e.to_string())?;
                 writeln!(output).map_err(|e| e.to_string())
             }
+            "yaml" => {
+                if quiet {
+                    return Ok(());
+                }
+                let totp = match entry_totp(entry, unix_time).ok().flatten() {
+                    Some(totp) => Node::Map(vec![
+                        ("code".to_owned(), Node::Str(totp.code)),
+                        ("period".to_owned(), Node::Int(totp.period)),
+                        ("remaining".to_owned(), Node::Int(totp.remaining)),
+                    ]),
+                    None => Node::Null,
+                };
+                let node = Node::Map(vec![
+                    (
+                        "fields".to_owned(),
+                        Node::Map(
+                            entry
+                                .data
+                                .iter()
+                                .map(|(name, value)| (name.clone(), Node::from_json(value)))
+                                .collect(),
+                        ),
+                    ),
+                    ("totp".to_owned(), totp),
+                    ("path".to_owned(), Node::Str(path.clone())),
+                    (
+                        "modified".to_owned(),
+                        Node::Str(modified_text(&entry.metadata.updated)),
+                    ),
+                ]);
+                output
+                    .write_all(yaml::to_string(&node).as_bytes())
+                    .map_err(|e| e.to_string())
+            }
             other => Err(format!(
-                "unknown output format: {other:?} (valid: text, json)"
+                "unknown output format: {other:?} (valid: text, json, yaml)"
             )),
         },
     }

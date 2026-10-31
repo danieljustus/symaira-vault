@@ -20,6 +20,8 @@
 //! `symvault-mcp` needs it and must not take a dependency on the storage layer,
 //! and duplicating it in two crates would let the two copies drift.
 
+pub mod yaml;
+
 use serde::Serialize;
 use serde_json::ser::{Formatter, Serializer};
 use std::io;

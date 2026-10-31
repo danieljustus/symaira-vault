@@ -34,6 +34,9 @@
 //     upper-case base32 token (and the 6-character prefix repeated in the join
 //     instructions) replaced by "<TOKEN>"/"<TOKEN6>".
 //  6. Failed-write temporary suffix ".age.tmp-<digits>" becomes ".age.tmp-<N>".
+//  7. Touch ID probe. "Touch ID available: true|false" and
+//     "\"touchIDAvailable\":true|false" of `auth status` become "<BOOL>": the
+//     value depends on the Mac's sensor, not on the command.
 //
 // Sandbox: TZ=UTC, NO_COLOR=1, CI=1, SYMVAULT_PASSPHRASE with
 // SYMVAULT_ALLOW_ENV_PASSPHRASE=1, stdin is /dev/null unless a case supplies
@@ -106,6 +109,10 @@ type oracle struct {
 	GeneratorFiles  []string `json:"generator_files"`
 	GeneratorDigest string   `json:"generator_digest"`
 	GateDigest      string   `json:"gate_digest"`
+	// GOOS is the platform the corpus was recorded on: doctor probes the host
+	// (osascript, pbcopy) and several commands print platform paths, so the
+	// replay only compares on the recording platform.
+	GOOS string `json:"goos"`
 }
 
 // fileNode is one entry of a frozen seed tree or of an observed tree.
@@ -329,7 +336,22 @@ func (s *sandbox) normalize(text string) string {
 		text = strings.ReplaceAll(text, form, rootMarker)
 	}
 	text = normalizeTempSuffixes(text)
-	return normalizeDatedIDs(text)
+	return normalizeTouchID(normalizeDatedIDs(text))
+}
+
+// touchIDForms are the two spellings in which `auth status` reports the
+// hardware probe (rule 7).
+var touchIDForms = []string{"Touch ID available: ", `"touchIDAvailable":`}
+
+// normalizeTouchID is rule 7: whether this Mac offers Touch ID is a hardware
+// probe, not command behavior, so its boolean becomes "<BOOL>".
+func normalizeTouchID(text string) string {
+	for _, form := range touchIDForms {
+		for _, value := range []string{"true", "false"} {
+			text = strings.ReplaceAll(text, form+value, form+"<BOOL>")
+		}
+	}
+	return text
 }
 
 // normalizeTempSuffixes is rule 6.
@@ -1195,7 +1217,7 @@ func main() {
 		Oracle: oracle{
 			Commit: pinnedOracleCommit, CommitSHA: resolved, Release: pinnedOracleRelease,
 			GoVersion: "go1.26.6", SourceFiles: sources, SourceDigest: sourceDigest,
-			GeneratorFiles: generatorFiles, GeneratorDigest: generatorDigest, GateDigest: gateDigest,
+			GeneratorFiles: generatorFiles, GeneratorDigest: generatorDigest, GateDigest: gateDigest, GOOS: runtime.GOOS,
 		},
 		Notes:     fixtureNotes(),
 		Seeds:     seedList,

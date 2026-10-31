@@ -624,6 +624,10 @@ enum GenerateCommand {
     Manpages {
         #[arg(value_name = "DIRECTORY")]
         directory: PathBuf,
+        /// The persistent `--quiet` does not reach this nested command through
+        /// `generate`'s own local flag; Go accepts it and prints the result anyway.
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quiet")]
+        quiet: bool,
     },
 }
 
@@ -1453,7 +1457,7 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Generate {
-            subcommand: Some(GenerateCommand::Manpages { directory }),
+            subcommand: Some(GenerateCommand::Manpages { directory, .. }),
             ..
         }) => run_generate_manpages(&directory),
         Some(Command::Generate {
@@ -2116,7 +2120,8 @@ fn run_cli() -> ExitCode {
                         config_only,
                         force,
                         quiet,
-                        output,
+                        // The persistent `--json` overrides the format.
+                        output: if cli.json { "json".to_owned() } else { output },
                     },
                     &mut output_stream,
                     &mut io::stderr().lock(),
@@ -2368,7 +2373,8 @@ fn run_cli() -> ExitCode {
             cli._profile.as_deref(),
             &path,
             yes,
-            cli.json || cli.output.as_deref() == Some("json"),
+            cli.output.as_deref().unwrap_or("text"),
+            cli.json,
             cli.quiet,
         ),
         Some(Command::Import {
@@ -2543,7 +2549,9 @@ fn run_cli() -> ExitCode {
                 if let Some(path) = output {
                     symvault_sync::safeio::write_atomic(Path::new(&path), rendered.as_bytes())
                         .map_err(|error| format!("write output file: {error}"))?;
-                    if cli.json || cli.output.as_deref() == Some("json") {
+                    // `--output` is this command's own file flag, so it never
+                    // selects the JSON report; only the persistent `--json` does.
+                    if cli.json {
                         println!(
                             "{}",
                             serde_json::json!({"output_path": path, "dry_run": dry_run})
@@ -2567,10 +2575,10 @@ fn run_cli() -> ExitCode {
                 }
             };
             let vault = vault.as_path();
-            // `device join` fails inside its RunE like the commands that print each error
-            // twice (cobra, then the root executor); the other device commands do not
-            // have a frozen oracle line yet and keep the single line.
-            let doubled_errors = matches!(command, DeviceCommand::Join { .. });
+            // Every device command fails inside its RunE, so cobra and the root
+            // executor each print the error (`output-modes.json` freezes this for
+            // accept, add, approval-pair, approval-revoke and revoke).
+            let doubled_errors = true;
             let result = match command {
                 DeviceCommand::Pair { .. } => device::pair(vault, cli.quiet),
                 DeviceCommand::Join {
@@ -3602,7 +3610,26 @@ fn run_get(
             }
             return Ok(());
         }
-        let result = result?;
+        let result = match result {
+            Err(error) if error.starts_with("cannot read entry: entry not found: ") => {
+                let path = error.trim_start_matches("cannot read entry: entry not found: ");
+                return Err(reported(
+                    2,
+                    &format!("entry not found: {path}: entry not found"),
+                    Some("Try: symvault find <search-term>"),
+                ));
+            }
+            other => other?,
+        };
+        if print {
+            let (path, field) = match &result {
+                vault_commands::GetResult::Entry { path, .. } => (path.as_str(), ""),
+                vault_commands::GetResult::Field { path, field, .. } => {
+                    (path.as_str(), field.as_str())
+                }
+            };
+            emit_exposure_audit(&vault, path, field);
+        }
         let format = if json { "json" } else { output };
         let clipboard = symvault_platform::get_clipboard::native_get_clipboard();
         let clock = symvault_platform::get_clipboard::RealClock::with_termination_signals();
@@ -3625,6 +3652,48 @@ fn run_get(
         )
     })();
     finish_vault_result(result)
+}
+
+/// Go's `emitExposureAudit`: `get --print` records that plaintext left the
+/// vault. Best effort, like Go: a failing audit log only warns.
+fn emit_exposure_audit(vault: &Path, path: &str, field: &str) {
+    use sha2::{Digest, Sha256};
+    let runtime = runtime_session_manager();
+    let Some(keyring) = runtime.keyring.as_deref() else {
+        eprintln!("Warning: audit log open failed: audit keyring unavailable");
+        return;
+    };
+    let mut logger = match symvault_store::audit::open_with_keyring(
+        "symvault",
+        vault,
+        keyring,
+        symvault_store::audit::RotationConfig::default(),
+    ) {
+        Ok(logger) => logger,
+        Err(error) => {
+            eprintln!("Warning: audit log open failed: {error}");
+            return;
+        }
+    };
+    let argv = std::env::args().collect::<Vec<_>>().join(" ");
+    let digest = Sha256::digest(argv.as_bytes());
+    let argv_hash: String = digest
+        .iter()
+        .take(8)
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    if let Err(error) = logger.append(symvault_store::audit::LogEntry {
+        timestamp: export_commands::go_timestamp_seconds(),
+        agent: "symvault".to_owned(),
+        action: "expose_plaintext".to_owned(),
+        path: path.to_owned(),
+        field: field.to_owned(),
+        argv_hash,
+        ok: true,
+        ..symvault_store::audit::LogEntry::default()
+    }) {
+        eprintln!("Warning: audit log write failed: {error}");
+    }
 }
 
 /// What `get` needs from the outside world to choose between printing and
@@ -3771,15 +3840,58 @@ fn run_find(
             return Ok(());
         }
         if json || output == "json" {
-            let value = serde_json::json!({ "matches": matches });
-            serde_json::to_writer(io::stdout().lock(), &value)
+            // Go marshals the struct: `path` before `fields`.
+            #[derive(serde::Serialize)]
+            struct FindMatch<'a> {
+                path: &'a str,
+                fields: &'a [String],
+            }
+            #[derive(serde::Serialize)]
+            struct FindResult<'a> {
+                matches: Vec<FindMatch<'a>>,
+            }
+            let value = FindResult {
+                matches: matches
+                    .iter()
+                    .map(|item| FindMatch {
+                        path: &item.path,
+                        fields: &item.fields,
+                    })
+                    .collect(),
+            };
+            // `PrintResult` disables HTML escaping.
+            let encoded = serde_json::to_string(&value).map_err(|error| error.to_string())?;
+            println!("{encoded}");
+            return Ok(());
+        }
+        if output == "yaml" {
+            use symvault_gojson::yaml::{self, Node};
+            let node = Node::Map(vec![(
+                "matches".to_owned(),
+                Node::Seq(
+                    matches
+                        .iter()
+                        .map(|item| {
+                            Node::Map(vec![
+                                ("path".to_owned(), Node::Str(item.path.clone())),
+                                (
+                                    "fields".to_owned(),
+                                    Node::Seq(item.fields.iter().cloned().map(Node::Str).collect()),
+                                ),
+                            ])
+                        })
+                        .collect(),
+                ),
+            )]);
+            io::stdout()
+                .lock()
+                .write_all(yaml::to_string(&node).as_bytes())
                 .map_err(|error| error.to_string())?;
-            println!();
             return Ok(());
         }
         if output != "text" {
             return Err(format!(
-                "unknown output format: {output:?} (valid: text, json)"
+                "unknown output format: {output:?} (valid: text, json, yaml)"
             ));
         }
         let mut stdout = io::stdout().lock();
@@ -3849,6 +3961,9 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = error.strip_prefix(REPORTED_PREFIX) {
+                return ExitCode::from(code.parse().unwrap_or(1));
+            }
             if is_not_initialized(&error) {
                 write_not_initialized(&error);
                 return ExitCode::from(3);
@@ -3927,6 +4042,7 @@ fn run_recipients(
                     quiet,
                     &mut io::stdout().lock(),
                 )
+                .map_err(recipient_failure)
             }
             RecipientsCommand::Remove {
                 recipient,
@@ -3958,10 +4074,29 @@ fn run_recipients(
                     quiet,
                     &mut io::stdout().lock(),
                 )
+                .map_err(recipient_failure)
             }
         }
     })();
     finish_vault_result(result)
+}
+
+/// Go's exit classes for the recipient mutations: an invalid key is a usage
+/// error (9), an unknown recipient is `ErrEntryNotFound` (2) with its hint.
+fn recipient_failure(error: String) -> String {
+    if error.starts_with("invalid recipient: must be a valid age public key") {
+        return reported(9, &error, None);
+    }
+    if error.starts_with("recipient ") && error.ends_with(" not found") {
+        return reported(
+            2,
+            &format!("{error}: entry not found"),
+            Some(
+                "Try: symvault list to browse entries, or symvault find <term> to search by keyword.",
+            ),
+        );
+    }
+    error
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3983,10 +4118,13 @@ fn run_generate(
             return utility_commands::render_password(
                 &mut io::stdout().lock(),
                 password.as_str(),
+                // `generate` declares its own `--quiet`, which shadows the global
+                // flag: the global quiet mode is never set, so the password is
+                // always printed unless it is being stored.
                 utility_commands::OutputOptions {
                     format: output,
                     json,
-                    quiet: global_quiet,
+                    quiet: false,
                 },
             );
         };
@@ -4809,39 +4947,74 @@ fn run_delete(
     profile: Option<&str>,
     path: &str,
     yes: bool,
+    output: &str,
     json: bool,
     quiet: bool,
 ) -> ExitCode {
+    let format = if json { "json" } else { output };
+    let print_structured = |value: serde_json::Value| -> Result<(), String> {
+        match format {
+            "yaml" => io::stdout()
+                .lock()
+                .write_all(
+                    symvault_gojson::yaml::to_string(&symvault_gojson::yaml::Node::from_json(
+                        &value,
+                    ))
+                    .as_bytes(),
+                )
+                .map_err(|error| error.to_string()),
+            _ => {
+                println!("{value}");
+                Ok(())
+            }
+        }
+    };
     let result = (|| {
+        // Go's `WithVault` unlocks (and warns about an environment passphrase)
+        // before the confirmation prompt.
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
         if !yes {
             eprint!("Delete {path}? (y/N): ");
             io::stderr()
                 .flush()
                 .map_err(|error| format!("delete confirmation prompt: {error}"))?;
             let mut answer = String::new();
-            io::stdin()
+            let read = io::stdin()
                 .read_line(&mut answer)
                 .map_err(|error| format!("delete confirmation: {error}"))?;
+            if read == 0 {
+                return Err(reported(1, "read confirmation: EOF", None));
+            }
             if !answer.trim().eq_ignore_ascii_case("y") {
-                if json {
-                    println!(
-                        "{}",
-                        serde_json::json!({"deleted": false, "path": path, "canceled": true})
-                    );
-                } else if !quiet {
+                if format == "text" {
                     eprintln!("Canceled");
+                } else {
+                    print_structured(
+                        serde_json::json!({"deleted": false, "path": path, "canceled": true}),
+                    )?;
                 }
                 return Ok::<(), String>(());
             }
         }
-        let vault = resolve_vault(explicit_vault, profile)?;
-        require_initialized(&vault)?;
-        let identity = device::unlock_vault(&vault)?;
-        write_commands::delete(&vault, &identity, path)?;
-        if json {
-            println!("{}", serde_json::json!({"deleted": true, "path": path}));
-        } else if !quiet {
-            println!("Deleted: {path}");
+        match write_commands::delete(&vault, &identity, path) {
+            Ok(()) => {}
+            Err(error) if error.starts_with("entry not found: ") => {
+                return Err(reported(
+                    2,
+                    &format!("cannot delete entry: {error}: entry not found"),
+                    Some("Try: symvault find <search-term>"),
+                ));
+            }
+            Err(error) => return Err(error),
+        }
+        if format == "text" {
+            if !quiet {
+                println!("Deleted: {path}");
+            }
+        } else {
+            print_structured(serde_json::json!({"deleted": true, "path": path}))?;
         }
         Ok::<(), String>(())
     })();
@@ -5261,6 +5434,22 @@ fn deprecated_stub_message(message: &str) -> ExitCode {
 /// is contract parity, not a copy-paste bug.
 fn print_error_like_go(message: &str) {
     print_error_bytes_like_go(message.as_bytes());
+}
+
+/// Marker of an error that was already written to stderr in Go's shape; the
+/// remainder is the exit status. `finish_vault_result` only maps it to an exit
+/// code, so handlers can reproduce Go's per-command exit classes (`not found`
+/// = 2, usage = 9, ...) without a second error channel.
+const REPORTED_PREFIX: &str = "\u{1}reported:";
+
+/// Writes `Error: <message>` twice (cobra, then `ExecuteRoot`), then the
+/// optional hint line, and returns the marker for `finish_vault_result`.
+fn reported(code: u8, message: &str, hint: Option<&str>) -> String {
+    print_error_like_go(message);
+    if let Some(hint) = hint {
+        let _ = writeln!(io::stderr(), "{hint}");
+    }
+    format!("{REPORTED_PREFIX}{code}")
 }
 
 fn print_error_bytes_like_go(message: &[u8]) {

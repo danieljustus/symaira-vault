@@ -54,7 +54,14 @@ pub fn get(path: &Path, key: &str, output: &str, quiet: bool) -> Result<(), Conf
     go_syntax_gate(&bytes)?;
     let source = std::str::from_utf8(&bytes)
         .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
-    let value = lookup_scalar(source, key)?;
+    let value = lookup_scalar(source, key).map_err(|error| {
+        if error.starts_with("key ") && error.ends_with(" not found") {
+            // Go wraps the lookup failure in a config error that repeats it.
+            ConfigFailure::GoConfigError(format!("key {key:?} not found: {error}"))
+        } else {
+            ConfigFailure::Plain(error)
+        }
+    })?;
     if quiet {
         return Ok(());
     }
@@ -105,6 +112,8 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Confi
     if !rendered.ends_with('\n') {
         rendered.push('\n');
     }
+    // Go re-encodes the whole document with a two-space indent.
+    let rendered = reindent_two_spaces(&rendered);
     atomic_write(path, rendered.as_bytes())?;
     // Go rejects traversal on its post-write reload, even when Windows
     // resolves the raw rename destination through a parent component.
@@ -117,12 +126,164 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Confi
         );
     }
     if let Err(error) = symvault_core::config::Config::load(path) {
+        if let Some(go) = go_duration_unmarshal_error(&error.to_string(), &rendered) {
+            return Err(ConfigFailure::GoConfigError(format!(
+                "config is invalid after update: {go}: {go}"
+            )));
+        }
         return Err(format!("config is invalid after update: {error}").into());
     }
     if !quiet {
         println!("Set {key} = {value}");
     }
     Ok(())
+}
+
+/// yaml.v3's decode error for a duration key holding a non-duration string:
+/// `yaml: unmarshal errors:\n  line N: cannot unmarshal !!str `v` into
+/// time.Duration` (values longer than ten bytes are cut to seven plus `...`).
+fn go_duration_unmarshal_error(message: &str, rendered: &str) -> Option<String> {
+    let (key, rest) = message.rsplit_once(" has invalid duration ")?;
+    let key = key.rsplit(' ').next()?;
+    let value = rest.trim().trim_matches('"');
+    let leaf = key.rsplit('.').next()?;
+    let line = rendered
+        .lines()
+        .position(|line| line.trim_start().starts_with(&format!("{leaf}:")))?
+        + 1;
+    let shown = if value.len() > 10 {
+        format!("{}...", &value[..7])
+    } else {
+        value.to_owned()
+    };
+    Some(format!(
+        "yaml: unmarshal errors:\n  line {line}: cannot unmarshal !!str `{shown}` into time.Duration"
+    ))
+}
+
+#[derive(Clone, Copy)]
+struct IndentLevel {
+    column: usize,
+    depth: usize,
+    /// A sequence written at its parent key's column (`key:\n- item`).
+    compact_sequence: bool,
+}
+
+/// Re-indents block YAML to yaml.v3's two-space style: every mapping or
+/// sequence level is two columns deeper than its parent, a sequence under a
+/// mapping key is indented, and the content of `- key: v` lines lines up two
+/// columns after the dash. A document already in this style is unchanged.
+/// Block scalar content stays two columns inside its owner.
+fn reindent_two_spaces(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut stack: Vec<IndentLevel> = Vec::new();
+    let mut key_column: Option<usize> = None;
+    // (owner column in the input, owner column in the output, first content column)
+    let mut block: Option<(usize, usize, Option<usize>)> = None;
+    for line in text.split_inclusive('\n') {
+        let newline = if line.ends_with('\n') { "\n" } else { "" };
+        let body = line.trim_end_matches('\n');
+        let column = body.len() - body.trim_start_matches(' ').len();
+        let content = &body[column..];
+        if let Some((owner_old, owner_new, first)) = &mut block {
+            if content.is_empty() {
+                out.push_str(line);
+                continue;
+            }
+            if column > *owner_old {
+                let first_column = *first.get_or_insert(column);
+                out.push_str(&" ".repeat(*owner_new + 2 + column - first_column));
+                out.push_str(content);
+                out.push_str(newline);
+                continue;
+            }
+            block = None;
+        }
+        if content.is_empty() {
+            out.push_str(line);
+            continue;
+        }
+        if content.starts_with('#') {
+            let depth = stack
+                .iter()
+                .rev()
+                .find(|level| level.column <= column)
+                .map_or(0, |level| level.depth);
+            out.push_str(&" ".repeat(depth * 2));
+            out.push_str(content);
+            out.push_str(newline);
+            continue;
+        }
+        let dash = content == "-" || content.starts_with("- ");
+        while let Some(top) = stack.last() {
+            if top.column > column || (top.column == column && top.compact_sequence && !dash) {
+                stack.pop();
+            } else {
+                break;
+            }
+        }
+        let mut depth = match stack.last() {
+            Some(top) if top.column == column => top.depth,
+            Some(top) => {
+                let depth = top.depth + 1;
+                stack.push(IndentLevel {
+                    column,
+                    depth,
+                    compact_sequence: false,
+                });
+                depth
+            }
+            None => {
+                stack.push(IndentLevel {
+                    column,
+                    depth: 0,
+                    compact_sequence: false,
+                });
+                0
+            }
+        };
+        if dash && key_column == Some(column) {
+            // `key:\n- item`: the compact sequence is one level inside its key.
+            depth += 1;
+            stack.push(IndentLevel {
+                column,
+                depth,
+                compact_sequence: true,
+            });
+        }
+        out.push_str(&" ".repeat(depth * 2));
+        out.push_str(content);
+        out.push_str(newline);
+
+        let mut owner_column = column;
+        let mut tail = content;
+        if dash {
+            tail = content[1..].trim_start_matches(' ');
+            if !tail.is_empty() {
+                owner_column = column + (content.len() - tail.len());
+                stack.push(IndentLevel {
+                    column: owner_column,
+                    depth: depth + 1,
+                    compact_sequence: false,
+                });
+            }
+        }
+        key_column = tail.ends_with(':').then_some(owner_column);
+        let header = tail.rsplit(' ').next().unwrap_or("");
+        let is_block_header = matches!(header.as_bytes().first(), Some(b'|' | b'>'))
+            && header[1..]
+                .chars()
+                .all(|c| matches!(c, '-' | '+' | '0'..='9'));
+        if is_block_header {
+            let new_owner = if dash && owner_column != column {
+                depth * 2 + 2
+            } else {
+                depth * 2
+            };
+            block = Some((owner_column, new_owner, None));
+        }
+    }
+    out
 }
 
 fn ensure_mapping_parents(document: &yaml_edit::Document, key: &str) -> Result<(), String> {
@@ -882,5 +1043,41 @@ mod tests {
             b"owned by another writer"
         );
         let _ = fs::remove_dir_all(root);
+    }
+}
+
+#[cfg(test)]
+mod reindent_tests {
+    use super::reindent_two_spaces;
+
+    #[test]
+    fn four_space_documents_become_two_space() {
+        let input = "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\nvault:\n    authMethod: passphrase\n";
+        assert_eq!(
+            reindent_two_spaces(input),
+            "agents:\n  cli:\n    allowedPaths:\n      - '*'\n    canWrite: true\nvault:\n  authMethod: passphrase\n"
+        );
+    }
+
+    #[test]
+    fn two_space_documents_are_unchanged() {
+        let input = "a:\n  b:\n    - x\n    - y: 1\n      z: 2\n  c: |\n    text\n    more\nd: 1\n";
+        assert_eq!(reindent_two_spaces(input), input);
+    }
+
+    #[test]
+    fn compact_sequences_and_dash_maps_are_indented() {
+        assert_eq!(
+            reindent_two_spaces("a:\n- x\n- y\nb: 1\n"),
+            "a:\n  - x\n  - y\nb: 1\n"
+        );
+        assert_eq!(
+            reindent_two_spaces("a:\n        - k: 1\n          m: 2\nb: 1\n"),
+            "a:\n  - k: 1\n    m: 2\nb: 1\n"
+        );
+        assert_eq!(
+            reindent_two_spaces("a:\n    # note\n    b: 1\n"),
+            "a:\n  # note\n  b: 1\n"
+        );
     }
 }

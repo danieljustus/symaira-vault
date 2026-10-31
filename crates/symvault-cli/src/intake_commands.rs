@@ -135,27 +135,26 @@ pub fn files(
             Some(write_batch(&root, &identity, &mut results)?)
         };
         if json {
-            let mut out = serde_json::Map::new();
+            let mut out = Vec::new();
             if let Some(batch) = &batch {
-                out.insert("import_id".into(), batch.id.clone().into());
+                out.push(("import_id", Ordered::Value(batch.id.clone().into())));
             }
-            out.insert(
-                "results".into(),
-                results
-                    .iter()
-                    .map(public_result)
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into(),
-            );
-            // The IO-003 contract is semantic JSON; object ordering is not a
-            // byte contract. Keep all secret suggestion values out of output.
-            let encoded = symvault_gojson::to_string(&out).map_err(|e| (1, e.to_string()))?;
-            let value: serde_json::Value =
-                serde_json::from_str(&encoded).map_err(|e| (1, e.to_string()))?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&value).map_err(|e| (1, e.to_string()))?
-            );
+            out.push((
+                "results",
+                Ordered::Array(
+                    results
+                        .iter()
+                        .map(public_result)
+                        .collect::<Result<Vec<_>, _>>()?,
+                ),
+            ));
+            // Keep all secret suggestion values out of output. Go marshals
+            // structs, so fields keep declaration order.
+            let mut encoded = String::new();
+            Ordered::Object(out)
+                .write_pretty(0, &mut encoded)
+                .map_err(|e| (1, e))?;
+            println!("{encoded}");
         } else {
             let mut accepted = 0;
             for result in &results {
@@ -279,50 +278,123 @@ fn local_offset_at(moment: time::OffsetDateTime) -> time::UtcOffset {
     time::UtcOffset::local_offset_at(moment).unwrap_or(time::UtcOffset::UTC)
 }
 
-fn public_result(result: &FileResult) -> Result<serde_json::Value, Error> {
-    let mut out = serde_json::Map::new();
-    out.insert("file".into(), result.file.clone().into());
-    out.insert("status".into(), result.status.clone().into());
+/// JSON whose object fields keep insertion order (Go struct declaration order),
+/// printed like `json.MarshalIndent(v, "", "  ")` with HTML escaping.
+enum Ordered {
+    Value(serde_json::Value),
+    Object(Vec<(&'static str, Ordered)>),
+    Array(Vec<Ordered>),
+}
+
+impl Ordered {
+    fn write_pretty(&self, depth: usize, out: &mut String) -> Result<(), String> {
+        let pad = |level: usize| "  ".repeat(level);
+        match self {
+            Self::Value(value) => {
+                out.push_str(&symvault_gojson::to_string(value).map_err(|e| e.to_string())?);
+            }
+            Self::Object(fields) if fields.is_empty() => out.push_str("{}"),
+            Self::Array(items) if items.is_empty() => out.push_str("[]"),
+            Self::Object(fields) => {
+                out.push_str("{\n");
+                for (index, (key, value)) in fields.iter().enumerate() {
+                    out.push_str(&pad(depth + 1));
+                    out.push_str(&symvault_gojson::to_string(key).map_err(|e| e.to_string())?);
+                    out.push_str(": ");
+                    value.write_pretty(depth + 1, out)?;
+                    out.push_str(if index + 1 == fields.len() {
+                        "\n"
+                    } else {
+                        ",\n"
+                    });
+                }
+                out.push_str(&pad(depth));
+                out.push('}');
+            }
+            Self::Array(items) => {
+                out.push_str("[\n");
+                for (index, item) in items.iter().enumerate() {
+                    out.push_str(&pad(depth + 1));
+                    item.write_pretty(depth + 1, out)?;
+                    out.push_str(if index + 1 == items.len() {
+                        "\n"
+                    } else {
+                        ",\n"
+                    });
+                }
+                out.push_str(&pad(depth));
+                out.push(']');
+            }
+        }
+        Ok(())
+    }
+}
+
+fn public_result(result: &FileResult) -> Result<Ordered, Error> {
+    let mut out = vec![
+        ("file", Ordered::Value(result.file.clone().into())),
+        ("status", Ordered::Value(result.status.clone().into())),
+    ];
     if let Some(reason) = &result.reason {
-        out.insert("reason".into(), reason.clone().into());
+        out.push(("reason", Ordered::Value(reason.clone().into())));
     }
     if let Some(p) = &result.provenance {
         let stamp = time::OffsetDateTime::from_unix_timestamp_nanos(p.mtime_unix_nanoseconds)
             .map_err(|e| (1, format!("encode intake output: {e}")))?;
         // Go keeps `fi.ModTime()` in time.Local, so the JSON carries the host offset.
         let stamp = stamp.to_offset(local_offset_at(stamp));
-        out.insert("provenance".into(), serde_json::json!({"source_path":p.source_path,"source_name":p.source_name,
-            "source_type":source_type(p.source_type),"size":p.size,"sha256":p.sha256,"mtime":GoTime::from_offset_datetime(stamp).to_rfc3339_nano()}));
+        out.push((
+            "provenance",
+            Ordered::Object(vec![
+                ("source_path", Ordered::Value(p.source_path.clone().into())),
+                ("source_name", Ordered::Value(p.source_name.clone().into())),
+                (
+                    "source_type",
+                    Ordered::Value(source_type(p.source_type).into()),
+                ),
+                ("size", Ordered::Value(p.size.into())),
+                ("sha256", Ordered::Value(p.sha256.clone().into())),
+                (
+                    "mtime",
+                    Ordered::Value(GoTime::from_offset_datetime(stamp).to_rfc3339_nano().into()),
+                ),
+            ]),
+        ));
     }
     if !result.suggestions.is_empty() {
-        out.insert(
-            "suggestions".into(),
-            result
-                .suggestions
-                .iter()
-                .map(|s| {
-                    let mut v = serde_json::Map::new();
-                    v.insert("path".into(), s.path.clone().into());
-                    v.insert("field".into(), s.field.clone().into());
-                    v.insert("confidence".into(), s.confidence.into());
-                    if let Some(w) = &s.warning
-                        && !w.is_empty()
-                    {
-                        v.insert("warning".into(), w.clone().into());
-                    }
-                    if s.attachment {
-                        v.insert("attachment".into(), true.into());
-                    }
-                    v
-                })
-                .collect::<Vec<_>>()
-                .into(),
-        );
+        out.push((
+            "suggestions",
+            Ordered::Array(
+                result
+                    .suggestions
+                    .iter()
+                    .map(|s| {
+                        let mut v = vec![
+                            ("path", Ordered::Value(s.path.clone().into())),
+                            ("field", Ordered::Value(s.field.clone().into())),
+                            ("confidence", Ordered::Value(s.confidence.into())),
+                        ];
+                        if let Some(w) = &s.warning
+                            && !w.is_empty()
+                        {
+                            v.push(("warning", Ordered::Value(w.clone().into())));
+                        }
+                        if s.attachment {
+                            v.push(("attachment", Ordered::Value(true.into())));
+                        }
+                        Ordered::Object(v)
+                    })
+                    .collect(),
+            ),
+        ));
     }
     if !result.duplicate_paths.is_empty() {
-        out.insert("duplicates".into(), result.duplicate_paths.clone().into());
+        out.push((
+            "duplicates",
+            Ordered::Value(result.duplicate_paths.clone().into()),
+        ));
     }
-    Ok(out.into())
+    Ok(Ordered::Object(out))
 }
 
 pub fn finish(result: Result<(), Error>) -> ExitCode {
@@ -477,7 +549,16 @@ fn validate_directory(path: &Path) -> Result<(), Error> {
     if path.as_os_str().is_empty() {
         return Err((9, "watch: watch directory is required".into()));
     }
-    let meta = fs::metadata(path).map_err(|e| (9, format!("watch: stat watch directory: {e}")))?;
+    let meta = fs::metadata(path).map_err(|e| {
+        (
+            9,
+            format!(
+                "watch: stat watch directory: stat {}: {}",
+                path.display(),
+                symvault_sync::importer::go_io_reason(&e)
+            ),
+        )
+    })?;
     if !meta.is_dir() {
         return Err((
             9,

@@ -37,8 +37,6 @@ pub struct DoctorResult {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub tags: Vec<String>,
     pub fixable: bool,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub fixed: bool,
@@ -60,7 +58,6 @@ impl DoctorResult {
             status,
             message: message.into(),
             hint: None,
-            tags: Vec::new(),
             fixable,
             fixed: false,
             fix: None,
@@ -69,11 +66,6 @@ impl DoctorResult {
 
     pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
         self.hint = Some(hint.into());
-        self
-    }
-
-    pub fn with_tags(mut self, tags: Vec<String>) -> Self {
-        self.tags = tags;
         self
     }
 
@@ -202,6 +194,11 @@ const ALL_CHECKS: &[CheckDef] = &[
         run: check_recipients_recovery,
     },
     CheckDef {
+        id: "mcp.tokens",
+        tags: &[],
+        run: check_mcp_tokens,
+    },
+    CheckDef {
         id: "audit.log",
         tags: &[],
         run: check_audit_log,
@@ -275,11 +272,6 @@ const ALL_CHECKS: &[CheckDef] = &[
         id: "mcp.server.reachable",
         tags: &["network"],
         run: check_mcp_server,
-    },
-    CheckDef {
-        id: "mcp.tokens",
-        tags: &[],
-        run: check_mcp_tokens,
     },
     CheckDef {
         id: "mcp.approval.tls",
@@ -901,16 +893,14 @@ fn check_git_last_sync(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult 
             "no sync recorded yet",
             false,
         )
-        .with_hint("run `symvault git push` to sync your vault")
-        .with_tags(vec!["network".into()]),
+        .with_hint("run `symvault git push` to sync your vault"),
         Err(err) => DoctorResult::new(
             "git.lastsync.fresh",
             "Last sync fresh",
             Status::Warn,
             format!("cannot determine last sync time: {err}"),
             false,
-        )
-        .with_tags(vec!["network".into()]),
+        ),
         Ok(content) => {
             let trimmed = content.trim();
             match time::OffsetDateTime::parse(
@@ -924,8 +914,7 @@ fn check_git_last_sync(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult 
                     "no sync recorded yet",
                     false,
                 )
-                .with_hint("run `symvault git push` to sync your vault")
-                .with_tags(vec!["network".into()]),
+                .with_hint("run `symvault git push` to sync your vault"),
                 Ok(sync_time) => {
                     let now = time::OffsetDateTime::now_utc();
                     let diff = now - sync_time;
@@ -940,7 +929,6 @@ fn check_git_last_sync(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult 
                             false,
                         )
                         .with_hint("run `symvault git pull` to sync latest changes")
-                        .with_tags(vec!["network".into()])
                     } else {
                         DoctorResult::new(
                             "git.lastsync.fresh",
@@ -949,7 +937,6 @@ fn check_git_last_sync(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult 
                             format!("last sync {age_str} ago"),
                             false,
                         )
-                        .with_tags(vec!["network".into()])
                     }
                 }
             }
@@ -2032,11 +2019,11 @@ fn check_mcp_tokens(vault_dir: &Path, opts: &DoctorOptions) -> DoctorResult {
             }
         };
         if let Some(id) = migrated_id {
-            if !opts.quiet {
-                eprintln!(
-                    "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id={id}).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy {id}"
-                );
-            }
+            // Go's `cliout.Warnf` is not silenced by the persistent `--quiet`
+            // at this point (output-modes `doctor.quiet` pins the warning).
+            eprintln!(
+                "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id={id}).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy {id}"
+            );
             if let Err(error) = remove_legacy_token_file(&legacy_path)
                 && !opts.quiet
             {
