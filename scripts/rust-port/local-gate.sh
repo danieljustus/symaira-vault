@@ -76,12 +76,17 @@ run_linux() {
   # ponytail: Miri takes about an hour; opt in for slices touching
   # symvault-core. The closing hosted CI run always includes it.
   [ "${RUN_MIRI:-0}" = 1 ] && targets="$targets rust-miri"
+  # One target volume per worktree: cargo names workspace-member artifacts
+  # by workspace-relative path, so a shared target dir reuses test binaries
+  # whose env!("CARGO_MANIFEST_DIR") points into another (or a removed)
+  # worktree, and fixture reads fail with ENOENT.
+  target_volume="symvault-gate-target-$(printf '%s' "$root" | shasum -a 256 | cut -c1-12)"
   # shellcheck disable=SC2086 # $targets is a word list
   # Same absolute paths as the host so a worktree's .git file still resolves.
   docker run --rm -v "$root:$root" -v "$common:$common" -w "$root" \
     -v symvault-gate-registry:/home/dev/.cargo/registry \
     -v symvault-gate-go:/home/dev/go \
-    -v symvault-gate-target:/home/dev/target \
+    -v "$target_volume:/home/dev/target" \
     -e CARGO_TARGET_DIR=/home/dev/target \
     -e CARGO_INCREMENTAL=0 -e GOCACHE=/home/dev/go/cache \
     -e RUST_TEST_THREADS=1 \
