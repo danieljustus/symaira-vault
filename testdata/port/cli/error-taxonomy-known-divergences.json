@@ -43,36 +43,6 @@
     {
       "expected_rust": {
         "exit_code": 1,
-        "stderr": "Error: load config: read config: No such file or directory (os error 2)\nError: load config: read config: No such file or directory (os error 2)\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_agent_list_dd1",
-      "reason": "missing config.yaml is worded `read config: No such file or directory (os error 2)`; Go prints `open <path>: no such file or directory`, twice",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "Error: load config: read config: No such file or directory (os error 2)\nError: load config: read config: No such file or directory (os error 2)\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_agent_list_x1",
-      "reason": "missing config.yaml is worded `read config: No such file or directory (os error 2)`; Go prints `open <path>: no such file or directory`, twice",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "Error: load config: read config: No such file or directory (os error 2)\nError: load config: read config: No such file or directory (os error 2)\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_agent_list_x2",
-      "reason": "missing config.yaml is worded `read config: No such file or directory (os error 2)`; Go prints `open <path>: no such file or directory`, twice",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
         "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
         "stdout": ""
       },

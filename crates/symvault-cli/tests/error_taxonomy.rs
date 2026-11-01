@@ -181,7 +181,7 @@ const EXTRA_POSITIONAL_EXCLUSIONS: usize = 7;
 const EXTRA_POSITIONALS_UNINITIALIZED: usize = 138;
 const EXTRA_POSITIONALS_INITIALIZED: usize = 82;
 const RUN_FILE_USE_ARGV_PER_STATE: usize = 82;
-const KNOWN_DIVERGENT_UNINITIALIZED: usize = 15;
+const KNOWN_DIVERGENT_UNINITIALIZED: usize = 12;
 const KNOWN_DIVERGENT_INITIALIZED: usize = 4;
 /// Scenarios of the host-dependent commands (`mcp|serve install|status`, three
 /// variants uninitialized and two initialized each), skipped off darwin.
@@ -234,11 +234,6 @@ fn expected_skips(darwin_only: usize) -> usize {
 /// A different exit code, lost output or a parser regression therefore cannot hide
 /// behind an entry.
 const KNOWN_BODY_DIVERGENCES: &[(&str, &str, &str)] = &[
-    (
-        "agent_list",
-        "uninitialized",
-        "missing config.yaml is worded `read config: No such file or directory (os error 2)`; Go prints `open <path>: no such file or directory`, twice",
-    ),
     (
         "migrate_kdf",
         "uninitialized",
