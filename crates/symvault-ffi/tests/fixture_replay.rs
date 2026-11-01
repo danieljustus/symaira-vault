@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{FUNCTIONS, load_fixture, replay};
+use common::{FUNCTIONS, load_fixture, replay, replay_matching};
 
 #[test]
 fn replays_every_recorded_case_through_the_c_abi() {
@@ -50,4 +50,48 @@ fn fixture_provenance_is_complete() {
     assert_eq!(oracle["go_version"], "go1.26.6");
     assert!(oracle["dependencies"]["filippo.io/age"].is_string());
     assert_eq!(fixture["functions"].as_array().map(Vec::len), Some(13));
+}
+
+/// Stack, in bytes, the deep-document replay runs on. iOS gives secondary
+/// threads 512 KiB; half of that must be enough for any input.
+const SMALL_STACK: usize = 256 * 1024;
+
+/// A document nested thousands of levels deep used to abort the process (stack
+/// overflow, which `catch_unwind` cannot contain). Every deep case of the
+/// fixture, up to and beyond `encoding/json`'s 10 000-level limit, must give
+/// Go's answer on a thread with a stack far smaller than the default.
+#[test]
+fn deeply_nested_documents_fit_a_small_stack() {
+    fn is_deep_case(id: &str) -> bool {
+        id.starts_with("WriteEntryJSON/json-deep-") || id.starts_with("WriteEntryJSON/json-limit-")
+    }
+    let fixture = load_fixture();
+    let expected = fixture["cases"]
+        .as_array()
+        .expect("cases")
+        .iter()
+        .filter(|case| is_deep_case(case["id"].as_str().expect("id")))
+        .count();
+    assert!(
+        fixture["cases"]
+            .as_array()
+            .expect("cases")
+            .iter()
+            .any(|case| case["id"] == "WriteEntryJSON/json-deep-object-10001"),
+        "the 10 001-level case is missing from the fixture"
+    );
+    let handle = std::thread::Builder::new()
+        .name("small-stack".to_owned())
+        .stack_size(SMALL_STACK)
+        .spawn(move || replay_matching(&fixture, is_deep_case))
+        .expect("spawn the small-stack thread");
+    let (counts, failures) = handle.join().expect("the replay must not panic");
+    // Every deep case writes once.
+    assert_eq!(
+        counts.get("WriteEntryJSON").copied().unwrap_or(0),
+        expected,
+        "{counts:?}"
+    );
+    assert!(expected >= 28, "only {expected} deep cases");
+    assert!(failures.is_empty(), "{failures:#?}");
 }

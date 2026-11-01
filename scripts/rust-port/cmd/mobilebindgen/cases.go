@@ -124,7 +124,39 @@ func makeSeed(tmp string) (seedData, error) {
 		return nil
 	})
 	sort.Slice(s.Vault.Files, func(i, j int) bool { return s.Vault.Files[i].Path < s.Vault.Files[j].Path })
-	return s, err
+	if err != nil {
+		return s, err
+	}
+	return s, addDerivedSeed(&s)
+}
+
+// storedMinusZero is an entry document as a Go-written vault can hold it: Go
+// marshals a float64 -0 as the integer literal "-0" and reads it back as -0.
+const storedMinusZero = `{"data":{"neg":-0,"negfloat":-0.0,"zero":0,"mixed":[-0,0.5]},"meta":{"created":"2020-01-02T03:04:05Z","updated":"2020-01-02T03:04:05Z","version":1},"secret_meta":{}}`
+
+// addDerivedSeed adds seed ciphertexts that are encrypted to the seed vault's
+// recipient. It only creates what is missing, so --keep-seed leaves every
+// existing byte of the seed alone.
+func addDerivedSeed(s *seedData) error {
+	if _, ok := s.X25519["stored-minus-zero"]; ok {
+		return nil
+	}
+	ct, err := mobilebind.EncryptWithPublicKey(s.Vault.Recipient, []byte(storedMinusZero))
+	if err != nil {
+		return err
+	}
+	s.X25519["stored-minus-zero"] = b64(ct)
+	return nil
+}
+
+// seedFileB64 returns the bytes of a file of the frozen seed vault.
+func seedFileB64(sd seedData, path string) string {
+	for _, f := range sd.Vault.Files {
+		if f.Path == path {
+			return f.B64
+		}
+	}
+	panic("seed vault has no file " + path)
 }
 
 func allBytes() []byte {
@@ -522,6 +554,52 @@ func buildCases(sd seedData) []caseSpec {
 	add(vsingle("manifest-missing-rebuilt", "OpenVaultWithPassphrase", open(vpass, vaultArg), mutation{Op: "remove", Path: "manifest.age"}))
 	add(vsingle("entries-dir-missing", "OpenVaultWithPassphrase", open(vpass, vaultArg), mutation{Op: "remove", Path: "entries"}))
 
+	add(vsingle("identity-is-symlink", "OpenVaultWithPassphrase", open(vpass, vaultArg),
+		mutation{Op: "rename", Path: "identity.age", Target: "identity-real.age"}, mutation{Op: "symlink", Path: "identity.age", Target: "identity-real.age"}))
+	add(vsingle("identity-is-dangling-symlink", "OpenVaultWithPassphrase", open(vpass, vaultArg),
+		mutation{Op: "symlink", Path: "identity.age", Target: "nowhere.age"}))
+	add(vsingle("identity-is-symlink-outside-root", "OpenVaultWithPassphrase", open(vpass, vaultArg),
+		mutation{Op: "rename", Path: "identity.age", Target: "../identity-outside.age"}, mutation{Op: "symlink", Path: "identity.age", Target: "../identity-outside.age"}))
+	add(vsingle("config-is-symlink", "OpenVaultWithPassphrase", open(vpass, vaultArg),
+		mutation{Op: "rename", Path: "config.yaml", Target: "config-real.yaml"}, mutation{Op: "symlink", Path: "config.yaml", Target: "config-real.yaml"}))
+	add(vsingle("manifest-is-symlink", "OpenVaultWithPassphrase", open(vpass, vaultArg),
+		mutation{Op: "rename", Path: "manifest.age", Target: "manifest-real.age"}, mutation{Op: "symlink", Path: "manifest.age", Target: "manifest-real.age"}))
+	add(vsingle("entries-dir-is-symlink", "OpenVaultWithPassphrase", open(vpass, vaultArg),
+		mutation{Op: "rename", Path: "entries", Target: "entries-real"}, mutation{Op: "symlink", Path: "entries", Target: "entries-real"}))
+	// Go rewrites config.yaml to the full merged config on every open of a
+	// config without legacy_mode; the file, and the tree around it, are state.
+	{
+		c := caseSpec{ID: "OpenVaultWithPassphrase/fresh-init-config-and-tree-after-open", Group: "OpenVaultWithPassphrase", Steps: []stepSpec{
+			fixed("InitVault", args(callArgs{VaultDir: vaultArg, Passphrase: "init pass"})),
+			fixed("OpenVaultWithPassphrase", args(callArgs{VaultDir: vaultArg, Passphrase: "init pass"})),
+		}}
+		c.randomized = map[int]*shape{1: {StringPrefix: "AGE-SECRET-KEY-1", StringCharset: "bech32-upper", Length: 74}}
+		c.afterTree = true
+		c.afterPaths = []string{"config.yaml", "identity.age", "entries", "manifest.age"}
+		c.afterText = map[string]bool{"config.yaml": true}
+		add(c)
+	}
+	for _, r := range []struct {
+		id   string
+		muts []mutation
+	}{
+		{"seed-vault-state-after-open", nil},
+		{"init-style-config-with-legacy-file", []mutation{
+			{Op: "write", Path: "config.yaml", Text: "vault:\n    format_version: 2\nvaultDir: /placeholder/vault\n"},
+			{Op: "write", Path: "stray.age", B64: sd.X25519["hello"]}}},
+		{"config-without-vault-section", []mutation{{Op: "write", Path: "config.yaml", Text: "vaultDir: /placeholder/vault\n"}}},
+		{"config-with-legacy-mode-true", []mutation{{Op: "write", Path: "config.yaml", Text: "vault:\n    legacy_mode: true\n    format_version: 2\nvaultDir: /placeholder/vault\n"}}},
+		{"manifest-removed-config-init-style", []mutation{
+			{Op: "write", Path: "config.yaml", Text: "vault:\n    format_version: 2\nvaultDir: /placeholder/vault\n"},
+			{Op: "remove", Path: "manifest.age"}}},
+	} {
+		c := vsingle(r.id, "OpenVaultWithPassphrase", open(vpass, vaultArg), r.muts...)
+		c.afterTree = true
+		c.afterPaths = []string{"config.yaml"}
+		c.afterText = map[string]bool{"config.yaml": true}
+		add(c)
+	}
+
 	// ---- ReadEntryJSON ----------------------------------------------------
 	read := func(path, id, dir string, normalize ...string) stepSpec {
 		return fixed("ReadEntryJSON", args(callArgs{VaultDir: dir, EntryPath: path, Identity: id}), normalize...)
@@ -561,6 +639,41 @@ func buildCases(sd seedData) []caseSpec {
 	add(vsingle("manifest-missing", "ReadEntryJSON", read("top", vid, vaultArg), mutation{Op: "remove", Path: "manifest.age"}))
 	add(vsingle("legacy-top-level-entry", "ReadEntryJSON", read("legacy", vid, vaultArg),
 		mutation{Op: "write", Path: "legacy.age", B64: sd.X25519["legacy-entry"]}))
+
+	add(vsingle("stored-minus-zero", "ReadEntryJSON", read("negzero", vid, vaultArg),
+		mutation{Op: "write", Path: "entries/negzero.age", B64: sd.X25519["stored-minus-zero"]}))
+	// config.yaml is rewritten by Go's vault.Open (legacy-mode detection).
+	rewrite := func(group, id string, st stepSpec, muts ...mutation) {
+		c := vsingle(id, group, st, muts...)
+		c.afterTree = true
+		c.afterPaths = []string{"config.yaml"}
+		c.afterText = map[string]bool{"config.yaml": true}
+		add(c)
+	}
+	initStyle := mutation{Op: "write", Path: "config.yaml", Text: "vault:\n    format_version: 2\nvaultDir: /placeholder/vault\n"}
+	rewrite("ReadEntryJSON", "config-rewritten-init-style", read("top", vid, vaultArg), initStyle)
+	rewrite("ReadEntryJSON", "config-rewritten-init-style-legacy-file", read("top", vid, vaultArg), initStyle,
+		mutation{Op: "write", Path: "stray.age", B64: sd.X25519["hello"]})
+	rewrite("ReadEntryJSON", "config-rewritten-no-vault-section", read("top", vid, vaultArg),
+		mutation{Op: "write", Path: "config.yaml", Text: "vaultDir: /placeholder/vault\n"})
+	rewrite("ReadEntryJSON", "config-untouched-when-legacy-mode-set", read("top", vid, vaultArg))
+	// Symlinks (the harness replays them identically in Go, Rust and Swift).
+	rename := func(from, to string) mutation { return mutation{Op: "rename", Path: from, Target: to} }
+	link := func(path, target string) mutation { return mutation{Op: "symlink", Path: path, Target: target} }
+	add(vsingle("entry-is-symlink", "ReadEntryJSON", read("top", vid, vaultArg),
+		rename("entries/top.age", "entries/top-real.age"), link("entries/top.age", "top-real.age")))
+	add(vsingle("entry-is-symlink-outside-root", "ReadEntryJSON", read("top", vid, vaultArg),
+		rename("entries/top.age", "../outside.age"), link("entries/top.age", "../../outside.age")))
+	add(vsingle("entry-is-dangling-symlink", "ReadEntryJSON", read("top", vid, vaultArg),
+		link("entries/top.age", "nowhere.age")))
+	add(vsingle("entries-subdir-is-symlink", "ReadEntryJSON", read("work/github", vid, vaultArg),
+		rename("entries/work", "entries/work-real"), link("entries/work", "work-real")))
+	add(vsingle("entries-dir-is-symlink", "ReadEntryJSON", read("top", vid, vaultArg),
+		rename("entries", "entries-real"), link("entries", "entries-real")))
+	add(vsingle("manifest-is-symlink", "ReadEntryJSON", read("top", vid, vaultArg),
+		rename("manifest.age", "manifest-real.age"), link("manifest.age", "manifest-real.age")))
+	add(vsingle("identity-is-symlink-entry-read", "ReadEntryJSON", read("top", vid, vaultArg),
+		rename("identity.age", "identity-real.age"), link("identity.age", "identity-real.age")))
 
 	// ---- WriteEntryJSON (each followed by a normalised read) ----------------
 	writeRead := func(id, path, js string, extra ...stepSpec) caseSpec {
@@ -622,6 +735,68 @@ func buildCases(sd seedData) []caseSpec {
 		c.Steps = append(c.Steps, fixed("ListEntriesJSON", args(callArgs{VaultDir: vaultArg, Identity: vid})))
 		add(c)
 	}
+	// ---- nesting, size and budget limits (FFI-001 review F1/F3) -------------
+	// Documents are generated from repeated parts so a 10 000-level or
+	// megabyte-sized input costs a few bytes in the fixture. "Depth N" is the
+	// number of containers below the data object (objects: {"a":{"a":...1}}).
+	limitCase := func(id string, readBack bool, parts []jsonPart) {
+		c := caseSpec{ID: "WriteEntryJSON/" + id, Group: "WriteEntryJSON", Vault: true, Steps: []stepSpec{
+			fixed("WriteEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "deep/x", EntryJSONParts: parts, Identity: vid}))}}
+		if readBack {
+			c.Steps = append(c.Steps, fixed("ReadEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "deep/x", Identity: vid}), "timestamps"))
+		}
+		c.Steps = append(c.Steps, fixed("ListEntriesJSON", args(callArgs{VaultDir: vaultArg, Identity: vid})))
+		add(c)
+	}
+	objectsAt := func(n int, leaf, tail string) []jsonPart {
+		return []jsonPart{{Text: `{"data":`}, {Text: `{"a":`, Repeat: n}, {Text: leaf}, {Text: `}`, Repeat: n}, {Text: tail}}
+	}
+	arraysAt := func(n int, leaf string) []jsonPart {
+		return []jsonPart{{Text: `{"data":{"k":`}, {Text: `[`, Repeat: n}, {Text: leaf}, {Text: `]`, Repeat: n}, {Text: `}}`}}
+	}
+	limitCase("json-deep-object-32-accepted", true, objectsAt(32, "1", "}"))
+	for _, n := range []int{33, 129, 5000, 9999, 10000, 10001} {
+		limitCase(fmt.Sprintf("json-deep-object-%d", n), false, objectsAt(n, "1", "}"))
+	}
+	limitCase("json-deep-array-31-accepted", true, arraysAt(31, "1"))
+	for _, n := range []int{32, 33, 129, 5000, 9998, 9999, 10001} {
+		limitCase(fmt.Sprintf("json-deep-array-%d", n), false, arraysAt(n, "1"))
+	}
+	// A number that does not fit float64 is reported wherever it sits, and a
+	// later type error outranks the store's depth limit.
+	limitCase("json-deep-object-5000-huge-number", false, objectsAt(5000, "1e999", "}"))
+	limitCase("json-deep-object-5000-then-type-error", false, objectsAt(5000, "1", `,"canary":1}`))
+	limitCase("json-deep-object-5000-then-syntax-error", false, objectsAt(5000, "1", `,}`))
+	limitCase("json-deep-object-unterminated-10001", false, []jsonPart{{Text: `{"data":`}, {Text: `{"a":`, Repeat: 10001}})
+	limitCase("json-deep-array-unterminated-5000", false, []jsonPart{{Text: `{"data":{"k":`}, {Text: `[`, Repeat: 5000}})
+	// The four store budgets all surface as one text that names neither path
+	// nor value.
+	limitCase("json-limit-string-1MiB-accepted-boundary-minus", false, []jsonPart{{Text: `{"data":{"v":"`}, {Text: strings.Repeat("x", 1024), Repeat: 1023}, {Text: `"}}`}})
+	limitCase("json-limit-string-over-1MiB", false, []jsonPart{{Text: `{"data":{"v":"`}, {Text: strings.Repeat("x", 1024), Repeat: 1024}, {Text: `x"}}`}})
+	limitCase("json-limit-array-items-1024-accepted", true, []jsonPart{{Text: `{"data":{"k":[`}, {Text: `0,`, Repeat: 1023}, {Text: `0]}}`}})
+	limitCase("json-limit-array-items-1025", false, []jsonPart{{Text: `{"data":{"k":[`}, {Text: `0,`, Repeat: 1024}, {Text: `0]}}`}})
+	limitCase("json-limit-key-over-1MiB", false, []jsonPart{{Text: `{"data":{"`}, {Text: strings.Repeat("k", 1024), Repeat: 1024}, {Text: `k":1}}`}})
+	manyFields := func(prefix, suffix string, n int) string {
+		var b strings.Builder
+		b.WriteString(prefix)
+		for i := 0; i < n; i++ {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			fmt.Fprintf(&b, `"k%04d":1`, i)
+		}
+		b.WriteString(suffix)
+		return b.String()
+	}
+	limitCase("json-limit-top-level-fields-1025", false, []jsonPart{{Text: manyFields(`{"data":{`, `}}`, 1025)}})
+	limitCase("json-limit-nested-fields-1025", false, []jsonPart{{Text: manyFields(`{"data":{"o":{`, `}}}`, 1025)}})
+	// Go stores -0 as the literal "-0" and reads it back as -0.
+	for _, w := range []struct{ n, j string }{
+		{"numbers-minus-zero-forms", `{"data":{"a":-0,"b":-0.0,"c":-0e0,"d":0,"e":-1e-400,"f":[-0,0.0]}}`},
+	} {
+		add(writeRead(w.n, "new/negzero", w.j))
+	}
+
 	for _, p := range []struct{ n, p string }{
 		{"empty", ""}, {"dot", "."}, {"dotdot", ".."}, {"traversal", "../x"}, {"traversal-nested", "work/../../x"}, {"absolute", "/abs"},
 		{"dot-segment", "a/./b"}, {"double-slash", "a//b"}, {"trailing-slash", "work/"}, {"nul", "a\x00b"}, {"deep-65", strings.Repeat("a/", 64) + "a"},
@@ -649,6 +824,34 @@ func buildCases(sd seedData) []caseSpec {
 		mutation{Op: "write", Path: "config.yaml", Text: "vault: [unclosed\n"}))
 	add(vsingle("entries-dir-missing", "WriteEntryJSON", fixed("WriteEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "x/y", EntryJSON: `{"data":{"k":"v"}}`, Identity: vid})),
 		mutation{Op: "remove", Path: "entries"}))
+
+	// A missing config.yaml means default settings for Write/List/Verify.
+	{
+		c := vsingle("config-missing", "WriteEntryJSON", fixed("WriteEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "new/entry", EntryJSON: `{"data":{"k":"v"}}`, Identity: vid})),
+			mutation{Op: "remove", Path: "config.yaml"})
+		c.Steps = append(c.Steps,
+			fixed("ListEntriesJSON", args(callArgs{VaultDir: vaultArg, Identity: vid})),
+			fixed("VerifyManifestIntegrity", args(callArgs{VaultDir: vaultArg, Identity: vid})),
+			fixed("ReadEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "new/entry", Identity: vid}), "timestamps"))
+		c.afterTree = true
+		c.afterPaths = []string{"entries"}
+		add(c)
+	}
+	add(vsingle("config-empty", "WriteEntryJSON", fixed("WriteEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "new/entry", EntryJSON: `{"data":{"k":"v"}}`, Identity: vid})),
+		mutation{Op: "write", Path: "config.yaml", Text: ""}))
+	add(vsingle("config-is-directory", "WriteEntryJSON", fixed("WriteEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "new/entry", EntryJSON: `{"data":{"k":"v"}}`, Identity: vid})),
+		mutation{Op: "remove", Path: "config.yaml"}, mutation{Op: "mkdir", Path: "config.yaml"}))
+	add(vsingle("config-missing-identity-file-missing", "WriteEntryJSON", fixed("WriteEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "new/entry", EntryJSON: `{"data":{"k":"v"}}`, Identity: vid})),
+		mutation{Op: "remove", Path: "config.yaml"}, mutation{Op: "remove", Path: "identity.age"}))
+	add(vsingle("identity-file-missing", "WriteEntryJSON", fixed("WriteEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "new/entry", EntryJSON: `{"data":{"k":"v"}}`, Identity: vid})),
+		mutation{Op: "remove", Path: "identity.age"}))
+	add(vsingle("config-missing-dir-missing", "WriteEntryJSON", fixed("WriteEntryJSON", args(callArgs{VaultDir: "$ROOT/missing", EntryPath: "new/entry", EntryJSON: `{"data":{"k":"v"}}`, Identity: vid}))))
+	add(vsingle("entry-is-symlink-overwrite", "WriteEntryJSON", fixed("WriteEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "top", EntryJSON: `{"data":{"k":"over"}}`, Identity: vid})),
+		mutation{Op: "rename", Path: "entries/top.age", Target: "entries/top-real.age"}, mutation{Op: "symlink", Path: "entries/top.age", Target: "top-real.age"}))
+	add(vsingle("entries-subdir-is-symlink", "WriteEntryJSON", fixed("WriteEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "work/new", EntryJSON: `{"data":{"k":"v"}}`, Identity: vid})),
+		mutation{Op: "rename", Path: "entries/work", Target: "entries/work-real"}, mutation{Op: "symlink", Path: "entries/work", Target: "work-real"}))
+	add(vsingle("entries-dir-is-symlink", "WriteEntryJSON", fixed("WriteEntryJSON", args(callArgs{VaultDir: vaultArg, EntryPath: "x/y", EntryJSON: `{"data":{"k":"v"}}`, Identity: vid})),
+		mutation{Op: "rename", Path: "entries", Target: "entries-real"}, mutation{Op: "symlink", Path: "entries", Target: "entries-real"}))
 
 	// ---- ListEntriesJSON --------------------------------------------------
 	list := func(prefix, id, dir string) stepSpec {
@@ -685,6 +888,34 @@ func buildCases(sd seedData) []caseSpec {
 		mutation{Op: "write", Path: "entries/extra.age", B64: sd.X25519["hello"]}, mutation{Op: "remove", Path: "manifest.age"}))
 	add(vsingle("entry-file-removed-manifest-stale", "ListEntriesJSON", list("", vid, vaultArg), mutation{Op: "remove", Path: "entries/top.age"}))
 
+	rmConfig := mutation{Op: "remove", Path: "config.yaml"}
+	add(vsingle("config-missing", "ListEntriesJSON", list("", vid, vaultArg), rmConfig))
+	add(vsingle("config-missing-prefix", "ListEntriesJSON", list("work/", vid, vaultArg), rmConfig))
+	add(vsingle("config-missing-manifest-removed", "ListEntriesJSON", list("", vid, vaultArg), rmConfig, mutation{Op: "remove", Path: "manifest.age"}))
+	add(vsingle("config-missing-manifest-junk", "ListEntriesJSON", list("", vid, vaultArg), rmConfig, mutation{Op: "write", Path: "manifest.age", Text: "junk"}))
+	add(vsingle("config-missing-legacy-file", "ListEntriesJSON", list("", vid, vaultArg), rmConfig, mutation{Op: "remove", Path: "manifest.age"},
+		mutation{Op: "write", Path: "stray.age", B64: sd.X25519["hello"]}))
+	add(vsingle("config-missing-wrong-identity", "ListEntriesJSON", list("", id2, vaultArg), rmConfig))
+	add(vsingle("config-missing-dir-missing", "ListEntriesJSON", list("", vid, "$ROOT/missing")))
+	add(vsingle("config-missing-dir-is-file", "ListEntriesJSON", list("", vid, "$ROOT/vault/identity.age"), rmConfig))
+	add(vsingle("config-empty", "ListEntriesJSON", list("", vid, vaultArg), mutation{Op: "write", Path: "config.yaml", Text: ""}))
+	add(vsingle("config-is-directory", "ListEntriesJSON", list("", vid, vaultArg), rmConfig, mutation{Op: "mkdir", Path: "config.yaml"}))
+	add(vsingle("config-missing-identity-file-missing", "ListEntriesJSON", list("", vid, vaultArg), rmConfig, mutation{Op: "remove", Path: "identity.age"}))
+	add(vsingle("identity-file-missing", "ListEntriesJSON", list("", vid, vaultArg), mutation{Op: "remove", Path: "identity.age"}))
+	add(vsingle("config-missing-no-entries-dir", "ListEntriesJSON", list("", vid, vaultArg), rmConfig, mutation{Op: "remove", Path: "entries"}, mutation{Op: "remove", Path: "manifest.age"}))
+	add(vsingle("entry-is-symlink", "ListEntriesJSON", list("", vid, vaultArg), mutation{Op: "remove", Path: "manifest.age"},
+		mutation{Op: "rename", Path: "entries/top.age", Target: "entries/top-real.age"}, mutation{Op: "symlink", Path: "entries/top.age", Target: "top-real.age"}))
+	add(vsingle("entries-subdir-is-symlink", "ListEntriesJSON", list("", vid, vaultArg), mutation{Op: "remove", Path: "manifest.age"},
+		mutation{Op: "rename", Path: "entries/work", Target: "entries/work-real"}, mutation{Op: "symlink", Path: "entries/work", Target: "work-real"}))
+	add(vsingle("entries-subdir-is-symlink-manifest-present", "ListEntriesJSON", list("", vid, vaultArg),
+		mutation{Op: "rename", Path: "entries/work", Target: "entries/work-real"}, mutation{Op: "symlink", Path: "entries/work", Target: "work-real"}))
+	add(vsingle("entries-subdir-is-symlink-prefix", "ListEntriesJSON", list("work/", vid, vaultArg),
+		mutation{Op: "rename", Path: "entries/work", Target: "entries/work-real"}, mutation{Op: "symlink", Path: "entries/work", Target: "work-real"}))
+	add(vsingle("entries-dir-is-symlink", "ListEntriesJSON", list("", vid, vaultArg), mutation{Op: "remove", Path: "manifest.age"},
+		mutation{Op: "rename", Path: "entries", Target: "entries-real"}, mutation{Op: "symlink", Path: "entries", Target: "entries-real"}))
+	add(vsingle("manifest-is-symlink", "ListEntriesJSON", list("", vid, vaultArg),
+		mutation{Op: "rename", Path: "manifest.age", Target: "manifest-real.age"}, mutation{Op: "symlink", Path: "manifest.age", Target: "manifest-real.age"}))
+
 	// ---- VerifyManifestIntegrity ------------------------------------------
 	verify := func(id, dir string) stepSpec {
 		return fixed("VerifyManifestIntegrity", args(callArgs{VaultDir: dir, Identity: id}))
@@ -712,6 +943,24 @@ func buildCases(sd seedData) []caseSpec {
 	}
 	add(vsingle("config-junk", "VerifyManifestIntegrity", verify(vid, vaultArg), mutation{Op: "write", Path: "config.yaml", Text: "vault: [unclosed\n"}))
 	add(vsingle("entries-dir-missing", "VerifyManifestIntegrity", verify(vid, vaultArg), mutation{Op: "remove", Path: "entries"}))
+
+	add(vsingle("config-missing", "VerifyManifestIntegrity", verify(vid, vaultArg), rmConfig))
+	add(vsingle("config-missing-tampered-entry", "VerifyManifestIntegrity", verify(vid, vaultArg), rmConfig, mutation{Op: "flip", Path: "entries/top.age", Offset: 100}))
+	add(vsingle("config-missing-manifest-missing", "VerifyManifestIntegrity", verify(vid, vaultArg), rmConfig, mutation{Op: "remove", Path: "manifest.age"}))
+	add(vsingle("config-empty", "VerifyManifestIntegrity", verify(vid, vaultArg), mutation{Op: "write", Path: "config.yaml", Text: ""}))
+	add(vsingle("config-is-directory", "VerifyManifestIntegrity", verify(vid, vaultArg), rmConfig, mutation{Op: "mkdir", Path: "config.yaml"}))
+	add(vsingle("config-missing-identity-file-missing", "VerifyManifestIntegrity", verify(vid, vaultArg), rmConfig, mutation{Op: "remove", Path: "identity.age"}))
+	add(vsingle("identity-file-missing", "VerifyManifestIntegrity", verify(vid, vaultArg), mutation{Op: "remove", Path: "identity.age"}))
+	add(vsingle("manifest-is-symlink", "VerifyManifestIntegrity", verify(vid, vaultArg),
+		mutation{Op: "rename", Path: "manifest.age", Target: "manifest-real.age"}, mutation{Op: "symlink", Path: "manifest.age", Target: "manifest-real.age"}))
+	add(vsingle("manifest-is-dangling-symlink", "VerifyManifestIntegrity", verify(vid, vaultArg),
+		mutation{Op: "remove", Path: "manifest.age"}, mutation{Op: "symlink", Path: "manifest.age", Target: "nowhere.age"}))
+	add(vsingle("entry-is-symlink", "VerifyManifestIntegrity", verify(vid, vaultArg),
+		mutation{Op: "rename", Path: "entries/top.age", Target: "entries/top-real.age"}, mutation{Op: "symlink", Path: "entries/top.age", Target: "top-real.age"}))
+	// Go verifies the manifest entries in map order, so only a symlink that
+	// affects exactly one entry has a deterministic first failure.
+	add(vsingle("entries-subdir-is-symlink", "VerifyManifestIntegrity", verify(vid, vaultArg),
+		mutation{Op: "rename", Path: "entries/notes", Target: "entries/notes-real"}, mutation{Op: "symlink", Path: "entries/notes", Target: "notes-real"}))
 
 	return cs
 }

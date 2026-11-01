@@ -18,16 +18,20 @@ import (
 // callArgs carries the arguments of one pkg/mobilebind call. An absent field is
 // the empty string, which is exactly what the Go API receives for "".
 type callArgs struct {
-	Identity      string `json:"identity,omitempty"`
-	Recipient     string `json:"recipient,omitempty"`
-	Pubkey        string `json:"pubkey,omitempty"`
-	Passphrase    string `json:"passphrase,omitempty"`
-	VaultDir      string `json:"vaultDir,omitempty"`
-	EntryPath     string `json:"entryPath,omitempty"`
-	EntryJSON     string `json:"entryJSON,omitempty"`
-	Prefix        string `json:"prefix,omitempty"`
-	PlaintextB64  string `json:"plaintext_b64,omitempty"`
-	CiphertextB64 string `json:"ciphertext_b64,omitempty"`
+	Identity   string `json:"identity,omitempty"`
+	Recipient  string `json:"recipient,omitempty"`
+	Pubkey     string `json:"pubkey,omitempty"`
+	Passphrase string `json:"passphrase,omitempty"`
+	VaultDir   string `json:"vaultDir,omitempty"`
+	EntryPath  string `json:"entryPath,omitempty"`
+	EntryJSON  string `json:"entryJSON,omitempty"`
+	// EntryJSONParts, when present, replaces EntryJSON by the concatenation of
+	// its parts (each text repeated Repeat times; 0 or absent means once).
+	// Deeply nested or megabyte-sized documents stay a few bytes in the fixture.
+	EntryJSONParts []jsonPart `json:"entryJSON_parts,omitempty"`
+	Prefix         string     `json:"prefix,omitempty"`
+	PlaintextB64   string     `json:"plaintext_b64,omitempty"`
+	CiphertextB64  string     `json:"ciphertext_b64,omitempty"`
 	// PlaintextPattern, when positive, replaces PlaintextB64 by pattern(n).
 	PlaintextPattern int `json:"plaintext_pattern_len,omitempty"`
 	// CiphertextRef names a seed ciphertext ("x25519:chunk+"); CiphertextEdit
@@ -35,6 +39,29 @@ type callArgs struct {
 	// the 64 KiB-chunk cases from inflating the fixture.
 	CiphertextRef  string `json:"ciphertext_ref,omitempty"`
 	CiphertextEdit string `json:"ciphertext_edit,omitempty"`
+}
+
+// jsonPart is one repeated segment of a generated entryJSON.
+type jsonPart struct {
+	Text   string `json:"text"`
+	Repeat int    `json:"repeat,omitempty"`
+}
+
+func (a callArgs) entryJSON() string {
+	if len(a.EntryJSONParts) == 0 {
+		return a.EntryJSON
+	}
+	var b strings.Builder
+	for _, p := range a.EntryJSONParts {
+		n := p.Repeat
+		if n < 1 {
+			n = 1
+		}
+		for i := 0; i < n; i++ {
+			b.WriteString(p.Text)
+		}
+	}
+	return b.String()
 }
 
 // curSeed resolves CiphertextRef; set once per run before any invoke.
@@ -144,7 +171,7 @@ func invoke(fn string, a callArgs) observation {
 		o.str, o.err = mobilebind.ReadEntryJSON(a.VaultDir, a.EntryPath, a.Identity)
 	case "WriteEntryJSON":
 		o.kind = "none"
-		o.err = mobilebind.WriteEntryJSON(a.VaultDir, a.EntryPath, a.EntryJSON, a.Identity)
+		o.err = mobilebind.WriteEntryJSON(a.VaultDir, a.EntryPath, a.entryJSON(), a.Identity)
 	case "ListEntriesJSON":
 		o.kind = "string"
 		o.str, o.err = mobilebind.ListEntriesJSON(a.VaultDir, a.Prefix, a.Identity)
@@ -278,12 +305,14 @@ func expandArgs(a callArgs, root string) callArgs {
 
 // mutation edits the materialised vault before a case runs.
 type mutation struct {
-	Op     string `json:"op"` // remove, write, flip, truncate, mkdir, symlink
+	Op     string `json:"op"` // remove, write, flip, truncate, mkdir, symlink, rename
 	Path   string `json:"path"`
 	Text   string `json:"text,omitempty"`
 	B64    string `json:"b64,omitempty"`
 	Offset int    `json:"offset,omitempty"`
 	Size   int    `json:"size,omitempty"`
+	// Target is the link text of "symlink" and the new path (below the vault
+	// directory) of "rename".
 	Target string `json:"target,omitempty"`
 }
 
@@ -315,6 +344,8 @@ func applyMutation(vaultDir string, m mutation) error {
 	case "symlink":
 		_ = os.Remove(target)
 		return os.Symlink(m.Target, target)
+	case "rename":
+		return os.Rename(target, filepath.Join(vaultDir, filepath.FromSlash(m.Target)))
 	}
 	return fmt.Errorf("unknown mutation %q", m.Op)
 }
@@ -375,6 +406,10 @@ func snapshotAfter(vaultDir, root string, paths []string, wantTree bool, textPat
 				return nil
 			}
 			rel, _ := filepath.Rel(vaultDir, p)
+			// Lock and cache files are implementation detail (see makeSeed).
+			if rel == ".lock" || rel == ".search-index" {
+				return nil
+			}
 			out.Tree = append(out.Tree, filepath.ToSlash(rel))
 			return nil
 		})

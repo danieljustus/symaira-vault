@@ -17,7 +17,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::slice;
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::api;
 
@@ -36,12 +36,14 @@ impl SvBuf {
         }
     }
 
-    fn from_vec(mut bytes: Vec<u8>) -> Self {
+    /// Moves `bytes` into an exactly sized allocation owned by the caller. The
+    /// source is zeroized when it drops, so no stale copy of a secret is left
+    /// behind by a reallocation (`shrink_to_fit`) or by an ignored out-parameter.
+    fn from_secret(bytes: &Zeroizing<Vec<u8>>) -> Self {
         if bytes.is_empty() {
             return Self::empty();
         }
-        bytes.shrink_to_fit();
-        let boxed = bytes.into_boxed_slice();
+        let boxed = bytes.as_slice().to_vec().into_boxed_slice();
         let len = boxed.len();
         Self {
             ptr: Box::into_raw(boxed).cast::<u8>(),
@@ -57,7 +59,8 @@ const BAD_ARGS: i32 = 3;
 
 enum Payload {
     Nothing,
-    Bytes(Vec<u8>),
+    /// Zeroized on drop, including when the caller passed no `out` pointer.
+    Bytes(Zeroizing<Vec<u8>>),
     Flag(bool),
 }
 
@@ -121,10 +124,10 @@ unsafe fn run(
         if let Some(message) = message
             && !err.is_null()
         {
-            err.write(SvBuf::from_vec(message.into_bytes()));
+            err.write(SvBuf::from_secret(&Zeroizing::new(message.into_bytes())));
         }
         match payload {
-            Some(Payload::Bytes(data)) if !out.is_null() => out.write(SvBuf::from_vec(data)),
+            Some(Payload::Bytes(data)) if !out.is_null() => out.write(SvBuf::from_secret(&data)),
             Some(Payload::Flag(value)) if !flag.is_null() => flag.write(i32::from(value)),
             _ => {}
         }
@@ -133,11 +136,11 @@ unsafe fn run(
 }
 
 fn ok_text(result: Result<impl AsRef<str>, String>) -> Result<Result<Payload, String>, BadArgs> {
-    Ok(result.map(|text| Payload::Bytes(text.as_ref().as_bytes().to_vec())))
+    Ok(result.map(|text| Payload::Bytes(Zeroizing::new(text.as_ref().as_bytes().to_vec()))))
 }
 
 fn ok_bytes(result: Result<impl AsRef<[u8]>, String>) -> Result<Result<Payload, String>, BadArgs> {
-    Ok(result.map(|data| Payload::Bytes(data.as_ref().to_vec())))
+    Ok(result.map(|data| Payload::Bytes(Zeroizing::new(data.as_ref().to_vec()))))
 }
 
 /// Releases a buffer returned by this library, zeroizing it first.

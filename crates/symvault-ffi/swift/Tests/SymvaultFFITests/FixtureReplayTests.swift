@@ -66,6 +66,15 @@ final class FixtureReplayTests: XCTestCase {
 
     func s(_ args: JSON, _ key: String) -> String { args[key] as? String ?? "" }
 
+    /// `entryJSON`, or the concatenation of `entryJSON_parts` (each text
+    /// repeated `repeat` times), so 10 000-level documents stay tiny in the fixture.
+    func entryJSON(_ args: JSON) -> String {
+        guard let parts = args["entryJSON_parts"] as? [JSON] else { return s(args, "entryJSON") }
+        return parts.map { part in
+            String(repeating: part["text"] as? String ?? "", count: max(part["repeat"] as? Int ?? 1, 1))
+        }.joined()
+    }
+
     func plaintext(_ args: JSON) -> Data {
         if let length = args["plaintext_pattern_len"] as? Int, length > 0 {
             return Data((0..<length).map { UInt8($0 % 251) })
@@ -128,7 +137,7 @@ final class FixtureReplayTests: XCTestCase {
             case "WriteEntryJSON":
                 try SymvaultFFI.writeEntryJSON(
                     vaultDir: s(args, "vaultDir"), entryPath: s(args, "entryPath"),
-                    entryJSON: s(args, "entryJSON"), identity: s(args, "identity"))
+                    entryJSON: entryJSON(args), identity: s(args, "identity"))
             case "ListEntriesJSON":
                 outcome.string = try SymvaultFFI.listEntriesJSON(
                     vaultDir: s(args, "vaultDir"), prefix: s(args, "prefix"),
@@ -293,10 +302,18 @@ final class FixtureReplayTests: XCTestCase {
         return args
     }
 
-    func runStep(_ step: JSON, _ seed: JSON, _ root: String) -> String? {
+    /// Runs one step; returns the mismatch against the fixture (nil = matches Go)
+    /// together with the outcome Rust produced.
+    func runStep(_ step: JSON, _ seed: JSON, _ root: String) -> (String?, Outcome) {
         let function = step["function"] as? String ?? ""
         let args = expandRoot(step["args"] as? JSON ?? [:], root)
         let outcome = call(function, args, seed)
+        return (verdict(step, function, args, outcome, seed, root), outcome)
+    }
+
+    func verdict(_ step: JSON, _ function: String, _ args: JSON, _ outcome: Outcome, _ seed: JSON, _ root: String)
+        -> String?
+    {
         let normalize = step["normalize"] as? [String] ?? []
         let want = step["want"] as? JSON ?? [:]
         if let shape = want["shape"] as? JSON {
@@ -404,6 +421,9 @@ final class FixtureReplayTests: XCTestCase {
         case "symlink":
             try? fm.removeItem(atPath: target)
             XCTAssertEqual(symlink(mutation["target"] as? String ?? "", target), 0)
+        case "rename":
+            let destination = vault + "/" + (mutation["target"] as? String ?? "")
+            XCTAssertEqual(rename(target, destination), 0)
         default:
             XCTFail("unknown mutation \(mutation)")
         }
@@ -412,6 +432,8 @@ final class FixtureReplayTests: XCTestCase {
     func collect(_ base: String, _ directory: String, _ out: inout [String]) {
         let fm = FileManager.default
         for name in (try? fm.contentsOfDirectory(atPath: directory)) ?? [] {
+            // Lock and cache files are implementation detail, as in the Go snapshot.
+            if name == ".lock" || name == ".search-index" { continue }
             let path = directory + "/" + name
             out.append(String(path.dropFirst(base.count + 1)))
             var isDirectory: ObjCBool = false
@@ -460,7 +482,7 @@ final class FixtureReplayTests: XCTestCase {
         let divergences = try Self.loadJSON("known-divergences.json")
         let known = Dictionary(
             uniqueKeysWithValues: (divergences["cases"] as? [JSON] ?? []).map {
-                ($0["id"] as? String ?? "", $0["reason"] as? String ?? "")
+                ($0["id"] as? String ?? "", ($0["reason"] as? String ?? "", $0["expected_rust"] as? String))
             })
         let seed = try XCTUnwrap(fixture["seed"] as? JSON)
         let files = try XCTUnwrap((seed["vault"] as? JSON)?["files"] as? [JSON])
@@ -481,9 +503,20 @@ final class FixtureReplayTests: XCTestCase {
             for (index, step) in steps.enumerated() {
                 let function = step["function"] as? String ?? ""
                 counts[function, default: 0] += 1
-                let problem = runStep(step, seed, root)
-                if known[id] != nil {
-                    if problem == nil { failures.append("\(id): listed in known-divergences.json but now matches Go; remove the entry") }
+                let (problem, outcome) = runStep(step, seed, root)
+                if let (reason, expectedRust) = known[id] {
+                    // A recorded divergence must still differ from Go, and Rust's
+                    // answer must be exactly `expected_rust`: an entry cannot hide
+                    // a different failure.
+                    if problem == nil {
+                        failures.append("\(id): listed in known-divergences.json but now matches Go; remove the entry")
+                    } else {
+                        let actual = normalizePaths(outcome.error, root)
+                        if outcome.ok || expectedRust == nil || actual != expectedRust! {
+                            failures.append(
+                                "\(id) step \(index): known divergence (\(reason)) must return exactly \(String(describing: expectedRust)), got ok=\(outcome.ok) \(actual)")
+                        }
+                    }
                 } else if let problem {
                     failures.append("\(id) step \(index) (\(function)): \(problem)")
                 }

@@ -428,6 +428,7 @@ func drive(in *os.File, out *os.File) error {
 func run() error {
 	output := flag.String("output", defaultOutput, "fixture path")
 	check := flag.Bool("check", false, "re-run Go against the recorded seed and compare without writing")
+	keepSeed := flag.Bool("keep-seed", false, "generate from the seed already stored in the output fixture (adding only missing derived seed material) instead of drawing a new one; existing cases stay byte-identical")
 	driveMode := flag.Bool("drive", false, "answer JSON-line calls on stdin with the real Go functions")
 	flag.Parse()
 	if *driveMode {
@@ -452,6 +453,19 @@ func run() error {
 			return fmt.Errorf("recorded fixture is not valid JSON: %w", err)
 		}
 		sd = old.Seed
+	} else if *keepSeed {
+		if existing, err = os.ReadFile(path); err != nil { // #nosec G304 -- operator-chosen fixture path
+			return err
+		}
+		var old fixture
+		if err := json.Unmarshal(existing, &old); err != nil {
+			return fmt.Errorf("recorded fixture is not valid JSON: %w", err)
+		}
+		sd = old.Seed
+		if err := addDerivedSeed(&sd); err != nil {
+			return fmt.Errorf("seed: %w", err)
+		}
+		existing = nil
 	} else {
 		tmp, err := os.MkdirTemp("", "mobilebindgen-seed-")
 		if err != nil {

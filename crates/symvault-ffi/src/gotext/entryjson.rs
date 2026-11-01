@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Number, Value};
 use symvault_store::{AttachmentInfo, Entry, EntryMetadata, SecretMetadata, WriteRecord};
+use zeroize::{Zeroize, Zeroizing};
 
 use super::quote;
 use super::timefmt::canonical_rfc3339;
@@ -57,27 +58,6 @@ impl Syntax<'_> {
         let byte = self.peek().ok_or_else(Self::eof)?;
         self.position += 1;
         Ok(byte)
-    }
-
-    fn value(&mut self, after: &str) -> Check {
-        self.skip_space();
-        let byte = self.next()?;
-        match byte {
-            b'{' => self.object(),
-            b'[' => self.array(),
-            b'"' => self.string(),
-            b'-' | b'0'..=b'9' => {
-                self.position -= 1;
-                self.number()
-            }
-            b't' => self.literal(b"rue", "true"),
-            b'f' => self.literal(b"alse", "false"),
-            b'n' => self.literal(b"ull", "null"),
-            other => Err(self.bad(other, "looking for beginning of value")),
-        }
-        .map(|()| {
-            let _ = after;
-        })
     }
 
     fn literal(&mut self, rest: &[u8], name: &str) -> Check {
@@ -159,61 +139,129 @@ impl Syntax<'_> {
         Ok(())
     }
 
-    fn array(&mut self) -> Check {
-        self.skip_space();
-        if self.peek() == Some(b']') {
-            self.position += 1;
-            return Ok(());
-        }
+    /// One JSON value, without recursion: open containers live on `open`
+    /// (a heap `Vec`), so no input can consume more native stack than a
+    /// constant. `encoding/json`'s scanner refuses more than
+    /// [`MAX_NESTING_DEPTH`] open containers with `exceeded max depth`.
+    fn document(&mut self) -> Check {
+        let mut open: Vec<Container> = Vec::new();
         loop {
-            self.value("after array element")?;
+            // A value starts here.
             self.skip_space();
-            match self.next()? {
-                b',' => {}
-                b']' => return Ok(()),
-                other => return Err(self.bad(other, "after array element")),
+            let byte = self.next()?;
+            let complete = match byte {
+                b'{' | b'[' => {
+                    if open.len() >= MAX_NESTING_DEPTH {
+                        return Err(self.bad(byte, "exceeded max depth"));
+                    }
+                    self.skip_space();
+                    let closer = if byte == b'{' { b'}' } else { b']' };
+                    if self.peek() == Some(closer) {
+                        self.position += 1;
+                        true
+                    } else {
+                        if byte == b'{' {
+                            self.object_key()?;
+                            open.push(Container::Object);
+                        } else {
+                            open.push(Container::Array);
+                        }
+                        false
+                    }
+                }
+                b'"' => {
+                    self.string()?;
+                    true
+                }
+                b'-' | b'0'..=b'9' => {
+                    self.position -= 1;
+                    self.number()?;
+                    true
+                }
+                b't' => {
+                    self.literal(b"rue", "true")?;
+                    true
+                }
+                b'f' => {
+                    self.literal(b"alse", "false")?;
+                    true
+                }
+                b'n' => {
+                    self.literal(b"ull", "null")?;
+                    true
+                }
+                other => return Err(self.bad(other, "looking for beginning of value")),
+            };
+            if !complete {
+                continue;
+            }
+            // Close every container this value finishes; stop at the first
+            // separator that announces another value.
+            loop {
+                match open.last() {
+                    None => {
+                        self.skip_space();
+                        return match self.peek() {
+                            Some(byte) => Err(self.bad(byte, "after top-level value")),
+                            None => Ok(()),
+                        };
+                    }
+                    Some(Container::Array) => {
+                        self.skip_space();
+                        match self.next()? {
+                            b',' => break,
+                            b']' => {
+                                open.pop();
+                            }
+                            other => return Err(self.bad(other, "after array element")),
+                        }
+                    }
+                    Some(Container::Object) => {
+                        self.skip_space();
+                        match self.next()? {
+                            b',' => {
+                                self.object_key()?;
+                                break;
+                            }
+                            b'}' => {
+                                open.pop();
+                            }
+                            other => return Err(self.bad(other, "after object key:value pair")),
+                        }
+                    }
+                }
             }
         }
     }
 
-    fn object(&mut self) -> Check {
+    /// `"key" :` of an object member.
+    fn object_key(&mut self) -> Check {
         self.skip_space();
-        if self.peek() == Some(b'}') {
-            self.position += 1;
-            return Ok(());
+        match self.next()? {
+            b'"' => self.string()?,
+            other => {
+                return Err(self.bad(other, "looking for beginning of object key string"));
+            }
         }
-        loop {
-            self.skip_space();
-            match self.next()? {
-                b'"' => self.string()?,
-                other => {
-                    return Err(self.bad(other, "looking for beginning of object key string"));
-                }
-            }
-            self.skip_space();
-            match self.next()? {
-                b':' => {}
-                other => return Err(self.bad(other, "after object key")),
-            }
-            self.value("after object key:value pair")?;
-            self.skip_space();
-            match self.next()? {
-                b',' => {}
-                b'}' => return Ok(()),
-                other => return Err(self.bad(other, "after object key:value pair")),
-            }
+        self.skip_space();
+        match self.next()? {
+            b':' => Ok(()),
+            other => Err(self.bad(other, "after object key")),
         }
     }
 }
 
+/// `encoding/json`'s `maxNestingDepth`.
+const MAX_NESTING_DEPTH: usize = 10_000;
+
+#[derive(Clone, Copy)]
+enum Container {
+    Array,
+    Object,
+}
+
 fn check_valid(data: &[u8]) -> Check {
-    let mut syntax = Syntax { data, position: 0 };
-    syntax.value("after top-level value")?;
-    syntax.skip_space();
-    match syntax.peek() {
-        Some(byte) => Err(syntax.bad(byte, "after top-level value")),
-        None => Ok(()),
-    }
+    Syntax { data, position: 0 }.document()
 }
 
 // ---------------------------------------------------------------------------
@@ -227,6 +275,32 @@ enum Node {
     Text(String),
     Array(Vec<Node>),
     Object(Vec<(String, Node)>),
+}
+
+impl Drop for Node {
+    /// Dropping a deeply nested tree member by member would recurse once per
+    /// level; hand the children to a work list instead. Every text, number
+    /// literal and object key passes through [`scrub`] first: the tree holds
+    /// the plaintext of the entry being written.
+    fn drop(&mut self) {
+        let mut pending: Vec<Node> = Vec::new();
+        scrub(self, &mut pending);
+        while let Some(mut node) = pending.pop() {
+            scrub(&mut node, &mut pending);
+        }
+    }
+}
+
+fn scrub(node: &mut Node, children: &mut Vec<Node>) {
+    match node {
+        Node::Text(text) | Node::Number(text) => text.zeroize(),
+        Node::Array(items) => children.append(items),
+        Node::Object(members) => children.extend(members.drain(..).map(|(mut key, child)| {
+            key.zeroize();
+            child
+        })),
+        Node::Null | Node::Bool(_) => {}
+    }
 }
 
 impl Node {
@@ -257,52 +331,85 @@ impl Builder<'_> {
         }
     }
 
+    /// Builds the tree of an already validated document without recursion.
     fn node(&mut self) -> Node {
+        enum Open {
+            Array(Vec<Node>),
+            Object(Vec<(String, Node)>, String),
+        }
+        let mut open: Vec<Open> = Vec::new();
+        loop {
+            self.skip_space();
+            let mut finished = match self.data[self.position] {
+                b'{' => {
+                    self.position += 1;
+                    self.skip_space();
+                    if self.data[self.position] == b'}' {
+                        self.position += 1;
+                        Some(Node::Object(Vec::new()))
+                    } else {
+                        let key = self.member_key();
+                        open.push(Open::Object(Vec::new(), key));
+                        None
+                    }
+                }
+                b'[' => {
+                    self.position += 1;
+                    self.skip_space();
+                    if self.data[self.position] == b']' {
+                        self.position += 1;
+                        Some(Node::Array(Vec::new()))
+                    } else {
+                        open.push(Open::Array(Vec::new()));
+                        None
+                    }
+                }
+                _ => Some(self.scalar()),
+            };
+            while let Some(node) = finished.take() {
+                match open.last_mut() {
+                    None => return node,
+                    Some(Open::Array(items)) => {
+                        items.push(node);
+                        self.skip_space();
+                        let separator = self.data[self.position];
+                        self.position += 1;
+                        if separator == b']'
+                            && let Some(Open::Array(items)) = open.pop()
+                        {
+                            finished = Some(Node::Array(items));
+                        }
+                    }
+                    Some(Open::Object(members, key)) => {
+                        members.push((std::mem::take(key), node));
+                        self.skip_space();
+                        let separator = self.data[self.position];
+                        self.position += 1;
+                        if separator == b'}' {
+                            if let Some(Open::Object(members, _)) = open.pop() {
+                                finished = Some(Node::Object(members));
+                            }
+                        } else {
+                            *key = self.member_key();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// `"key" :` of an object member; returns the decoded key.
+    fn member_key(&mut self) -> String {
         self.skip_space();
-        let byte = self.data[self.position];
-        match byte {
-            b'{' => {
-                self.position += 1;
-                let mut members = Vec::new();
-                self.skip_space();
-                if self.data[self.position] == b'}' {
-                    self.position += 1;
-                    return Node::Object(members);
-                }
-                loop {
-                    self.skip_space();
-                    self.position += 1;
-                    let key = self.string_body();
-                    self.skip_space();
-                    self.position += 1;
-                    let value = self.node();
-                    members.push((key, value));
-                    self.skip_space();
-                    let separator = self.data[self.position];
-                    self.position += 1;
-                    if separator == b'}' {
-                        return Node::Object(members);
-                    }
-                }
-            }
-            b'[' => {
-                self.position += 1;
-                let mut items = Vec::new();
-                self.skip_space();
-                if self.data[self.position] == b']' {
-                    self.position += 1;
-                    return Node::Array(items);
-                }
-                loop {
-                    items.push(self.node());
-                    self.skip_space();
-                    let separator = self.data[self.position];
-                    self.position += 1;
-                    if separator == b']' {
-                        return Node::Array(items);
-                    }
-                }
-            }
+        self.position += 1;
+        let key = self.string_body();
+        self.skip_space();
+        self.position += 1;
+        key
+    }
+
+    fn scalar(&mut self) -> Node {
+        match self.data[self.position] {
             b'"' => {
                 self.position += 1;
                 Node::Text(self.string_body())
@@ -343,7 +450,7 @@ impl Builder<'_> {
     /// Decodes a string body (opening quote already consumed) like Go:
     /// invalid UTF-8 and lone surrogates become U+FFFD.
     fn string_body(&mut self) -> String {
-        let mut raw: Vec<u8> = Vec::new();
+        let mut raw: Zeroizing<Vec<u8>> = Zeroizing::new(Vec::new());
         loop {
             let byte = self.data[self.position];
             self.position += 1;
@@ -416,28 +523,63 @@ fn field_matches(key: &str, name: &str) -> bool {
     key == name || key.to_lowercase() == name
 }
 
-fn any_value(decoder: &mut Decoder, node: &Node, field: &str) -> Value {
+/// The store refuses a data value nested deeper than this (Go's
+/// `maxEntryDepth`, `symvault_store::MAX_ENTRY_DEPTH`). Everything beyond one
+/// level past it is replaced by `null`: the store rejects the entry at the
+/// first node deeper than the limit, so the discarded part is never persisted,
+/// and building it would cost native stack and memory for nothing. The
+/// discarded part is still *scanned* (iteratively) because Go reports a number
+/// that does not fit `float64` wherever it appears.
+const MATERIALIZED_DEPTH: usize = symvault_store::MAX_ENTRY_DEPTH + 1;
+
+fn number_value_or_mismatch(decoder: &mut Decoder, literal: &str, field: &str) -> Value {
+    match literal.parse::<f64>() {
+        Ok(number) if number.is_finite() => number_value(number),
+        _ => {
+            decoder.mismatch(&format!("number {literal}"), "alias", field, "float64");
+            Value::Null
+        }
+    }
+}
+
+/// Reports the number errors of a subtree that is not materialized, in
+/// document order, without recursion.
+fn scan_numbers(decoder: &mut Decoder, root: &Node, field: &str) {
+    let mut pending: Vec<&Node> = vec![root];
+    while let Some(node) = pending.pop() {
+        match node {
+            Node::Number(literal) => {
+                let _ = number_value_or_mismatch(decoder, literal, field);
+            }
+            Node::Array(items) => pending.extend(items.iter().rev()),
+            Node::Object(members) => pending.extend(members.iter().rev().map(|(_, child)| child)),
+            _ => {}
+        }
+    }
+}
+
+/// `depth` is the nesting level the store assigns to the value (1 for a value
+/// directly under `data`), so recursion is bounded by [`MATERIALIZED_DEPTH`].
+fn any_value(decoder: &mut Decoder, node: &Node, field: &str, depth: usize) -> Value {
+    if depth > MATERIALIZED_DEPTH {
+        scan_numbers(decoder, node, field);
+        return Value::Null;
+    }
     match node {
         Node::Null => Value::Null,
         Node::Bool(flag) => Value::Bool(*flag),
         Node::Text(text) => Value::String(text.clone()),
-        Node::Number(literal) => match literal.parse::<f64>() {
-            Ok(number) if number.is_finite() => number_value(number),
-            _ => {
-                decoder.mismatch(&format!("number {literal}"), "alias", field, "float64");
-                Value::Null
-            }
-        },
+        Node::Number(literal) => number_value_or_mismatch(decoder, literal, field),
         Node::Array(items) => Value::Array(
             items
                 .iter()
-                .map(|item| any_value(decoder, item, field))
+                .map(|item| any_value(decoder, item, field, depth + 1))
                 .collect(),
         ),
         Node::Object(members) => {
             let mut map = Map::new();
             for (key, value) in members {
-                map.insert(key.clone(), any_value(decoder, value, field));
+                map.insert(key.clone(), any_value(decoder, value, field, depth + 1));
             }
             Value::Object(map)
         }
@@ -753,7 +895,7 @@ pub(crate) fn decode_entry(text: &str) -> Result<Entry, String> {
                         Node::Null => {}
                         Node::Object(items) => {
                             for (name, item) in items {
-                                let decoded = any_value(&mut decoder, item, "data");
+                                let decoded = any_value(&mut decoder, item, "data", 1);
                                 entry.data.insert(name.clone(), decoded);
                             }
                         }
@@ -801,8 +943,35 @@ pub(crate) fn decode_entry(text: &str) -> Result<Entry, String> {
         }
     }
     match decoder.saved {
-        Some(message) => Err(message),
+        Some(message) => {
+            scrub_entry(&mut entry);
+            Err(message)
+        }
         None => Ok(entry),
+    }
+}
+
+/// Overwrites the plaintext of an entry's data before it is dropped: `serde_json`
+/// values do not zeroize themselves. Recursion is bounded by the store's nesting
+/// limit (values deeper than that are never materialized, see `any_value`).
+pub(crate) fn scrub_entry(entry: &mut Entry) {
+    for (mut key, mut value) in std::mem::take(&mut entry.data) {
+        key.zeroize();
+        scrub_value(&mut value);
+    }
+}
+
+fn scrub_value(value: &mut Value) {
+    match value {
+        Value::String(text) => text.zeroize(),
+        Value::Array(items) => items.iter_mut().for_each(scrub_value),
+        Value::Object(map) => {
+            for (mut key, mut item) in std::mem::take(map) {
+                key.zeroize();
+                scrub_value(&mut item);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
     }
 }
 
@@ -839,6 +1008,51 @@ mod tests {
         let entry = decode_entry(r#"{"data":{"k":"first","k":"second"},"DATA":{"z":1}}"#).unwrap();
         assert_eq!(entry.data["k"], "second");
         assert_eq!(entry.data["z"], 1);
+    }
+
+    /// The syntax check, the tree builder, the converter and the destructor
+    /// are all iterative: 10 000 nested levels (Go's limit) fit a 128 KiB stack.
+    #[test]
+    fn nesting_up_to_gos_limit_needs_no_native_recursion() {
+        let outcome = std::thread::Builder::new()
+            .stack_size(128 * 1024)
+            .spawn(|| {
+                let nested = |levels: usize, open: &str, close: &str| {
+                    format!("{}1{}", open.repeat(levels), close.repeat(levels))
+                };
+                assert_eq!(check_valid(nested(10_000, "[", "]").as_bytes()), Ok(()));
+                assert_eq!(
+                    check_valid(nested(10_001, "[", "]").as_bytes()),
+                    Err("invalid character '[' exceeded max depth".to_owned())
+                );
+                assert_eq!(
+                    check_valid(nested(10_001, "{\"a\":", "}").as_bytes()),
+                    Err("invalid character '{' exceeded max depth".to_owned())
+                );
+                // 9 998 arrays below the data object: valid JSON, far too deep
+                // for the store, which refuses it (see the fixture replay).
+                let document = format!("{{\"data\":{{\"k\":{}}}}}", nested(9_998, "[", "]"));
+                let entry = decode_entry(&document).expect("decodes");
+                assert!(entry.data.contains_key("k"));
+                // The tree of a 9 999-level document is dropped without recursion.
+                let tree = Builder {
+                    data: nested(9_999, "[", "]").as_bytes(),
+                    position: 0,
+                }
+                .node();
+                drop(tree);
+            })
+            .expect("spawn")
+            .join();
+        assert!(outcome.is_ok());
+    }
+
+    #[test]
+    fn scrub_overwrites_entry_plaintext() {
+        // Strings are overwritten in place; objects are emptied key by key.
+        let mut value: Value = serde_json::from_str(r#"["secret",["hunter2"],{"b":"x"}]"#).unwrap();
+        scrub_value(&mut value);
+        assert_eq!(value.to_string(), r#"["",[""],{}]"#);
     }
 
     #[test]

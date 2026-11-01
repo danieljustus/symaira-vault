@@ -58,6 +58,23 @@ fn s<'a>(args: &'a Value, key: &str) -> &'a str {
     args.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
+/// `entryJSON`, or the concatenation of `entryJSON_parts` (each `text`
+/// repeated `repeat` times; absent or 0 means once).
+fn entry_json(args: &Value) -> String {
+    let Some(parts) = args.get("entryJSON_parts").and_then(Value::as_array) else {
+        return s(args, "entryJSON").to_owned();
+    };
+    let mut document = String::new();
+    for part in parts {
+        let text = part["text"].as_str().expect("part text");
+        let repeat = part["repeat"].as_u64().unwrap_or(1).max(1);
+        for _ in 0..repeat {
+            document.push_str(text);
+        }
+    }
+    document
+}
+
 /// Resolves plaintext/ciphertext arguments (inline, pattern or seed reference).
 fn plaintext(args: &Value) -> Vec<u8> {
     match args.get("plaintext_pattern_len").and_then(Value::as_u64) {
@@ -156,7 +173,8 @@ pub fn call(function: &str, args: &Value, seed: &Value) -> Outcome {
     let vault_dir = s(args, "vaultDir").as_bytes();
     let passphrase = s(args, "passphrase").as_bytes();
     let entry_path = s(args, "entryPath").as_bytes();
-    let entry_json = s(args, "entryJSON").as_bytes();
+    let entry_json_text = entry_json(args);
+    let entry_json = entry_json_text.as_bytes();
     let prefix = s(args, "prefix").as_bytes();
     let recipient = s(args, "recipient").as_bytes();
     let pubkey = s(args, "pubkey").as_bytes();
@@ -476,7 +494,7 @@ fn check_exact(
         return Err(format!(
             "ok={} but fixture ok={wants_ok}; error {:?}; want error {:?}",
             outcome.ok,
-            outcome.error,
+            normalize_paths(&outcome.error, root),
             want["error"].as_str().unwrap_or("")
         ));
     }
@@ -544,7 +562,9 @@ fn substitute_out(args: &Value, produced: &Outcome) -> Value {
     args
 }
 
-fn run_step(step: &Value, seed: &Value, root: &str) -> Result<(), String> {
+/// Runs one recorded step; the outcome is returned even when it differs, so a
+/// recorded divergence can be asserted exactly.
+fn run_step(step: &Value, seed: &Value, root: &str) -> (Outcome, Result<(), String>) {
     let function = step["function"].as_str().expect("function");
     let args = step["args"].clone();
     let args = expand_root(&args, root);
@@ -554,29 +574,42 @@ fn run_step(step: &Value, seed: &Value, root: &str) -> Result<(), String> {
         .map(|list| list.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
     let want = &step["want"];
-    if let Some(shape) = want.get("shape") {
-        check_shape(&outcome, shape)?;
-        if shape["distinct_across_calls"].as_bool().unwrap_or(false) {
-            let again = call(function, &args, seed);
-            if again == outcome {
-                return Err("two calls produced identical output".to_owned());
-            }
+    let verdict = if let Some(shape) = want.get("shape") {
+        check_step_shape(function, &args, seed, root, &outcome, shape)
+    } else {
+        check_exact(&outcome, want, root, &normalize)
+    };
+    (outcome, verdict)
+}
+
+fn check_step_shape(
+    function: &str,
+    args: &Value,
+    seed: &Value,
+    root: &str,
+    outcome: &Outcome,
+    shape: &Value,
+) -> Result<(), String> {
+    check_shape(outcome, shape)?;
+    if shape["distinct_across_calls"].as_bool().unwrap_or(false) {
+        let again = call(function, args, seed);
+        if again == *outcome {
+            return Err("two calls produced identical output".to_owned());
         }
-        if let Some(roundtrip) = shape.get("roundtrip") {
-            let rt_function = roundtrip["function"].as_str().expect("roundtrip function");
-            let rt_args = expand_root(&substitute_out(&roundtrip["args"], &outcome), root);
-            let rt_outcome = call(rt_function, &rt_args, seed);
-            match roundtrip["want"].get("shape") {
-                Some(rt_shape) => {
-                    check_shape(&rt_outcome, rt_shape).map_err(|e| format!("roundtrip: {e}"))?
-                }
-                None => check_exact(&rt_outcome, &roundtrip["want"], root, &[])
-                    .map_err(|e| format!("roundtrip {rt_function}: {e}"))?,
-            }
-        }
-        return Ok(());
     }
-    check_exact(&outcome, want, root, &normalize)
+    if let Some(roundtrip) = shape.get("roundtrip") {
+        let rt_function = roundtrip["function"].as_str().expect("roundtrip function");
+        let rt_args = expand_root(&substitute_out(&roundtrip["args"], outcome), root);
+        let rt_outcome = call(rt_function, &rt_args, seed);
+        match roundtrip["want"].get("shape") {
+            Some(rt_shape) => {
+                check_shape(&rt_outcome, rt_shape).map_err(|e| format!("roundtrip: {e}"))?;
+            }
+            None => check_exact(&rt_outcome, &roundtrip["want"], root, &[])
+                .map_err(|e| format!("roundtrip {rt_function}: {e}"))?,
+        }
+    }
+    Ok(())
 }
 
 fn expand_root(args: &Value, root: &str) -> Value {
@@ -647,6 +680,10 @@ fn mutate(vault: &Path, mutation: &Value) {
                 .expect("truncate");
         }
         "mkdir" => fs::create_dir_all(&target).expect("mkdir"),
+        "rename" => {
+            let destination = vault.join(mutation["target"].as_str().expect("rename target"));
+            fs::rename(&target, destination).expect("rename");
+        }
         "symlink" => {
             #[cfg(unix)]
             {
@@ -707,6 +744,10 @@ fn check_after(after: &Value, base: &Path, root: &str) -> Result<(), String> {
 fn collect(base: &Path, dir: &Path, out: &mut Vec<String>) {
     for entry in fs::read_dir(dir).expect("read_dir").flatten() {
         let path = entry.path();
+        // Lock and cache files are implementation detail, as in the Go snapshot.
+        if matches!(entry.file_name().to_str(), Some(".lock" | ".search-index")) {
+            continue;
+        }
         out.push(
             path.strip_prefix(base)
                 .expect("prefix")
@@ -719,10 +760,18 @@ fn collect(base: &Path, dir: &Path, out: &mut Vec<String>) {
     }
 }
 
-/// Recorded Go behavior the Rust side deliberately does not reproduce yet
+/// One recorded, deliberate difference from Go
 /// (`testdata/port/ffi/known-divergences.json`, shared with the Swift test).
-/// The replay fails if an entry stops being needed.
-fn known_divergences() -> Vec<(String, String)> {
+pub struct Divergence {
+    pub id: String,
+    pub reason: String,
+    /// The exact (path-normalized) error text Rust returns instead of Go's.
+    pub expected_rust: String,
+}
+
+/// The replay fails if an entry stops being needed, or if Rust's text for the
+/// case is anything other than `expected_rust`.
+fn known_divergences() -> Vec<Divergence> {
     let text = fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../testdata/port/ffi/known-divergences.json"
@@ -733,17 +782,36 @@ fn known_divergences() -> Vec<(String, String)> {
         .as_array()
         .expect("cases")
         .iter()
-        .map(|entry| {
-            (
-                entry["id"].as_str().expect("id").to_owned(),
-                entry["reason"].as_str().expect("reason").to_owned(),
-            )
+        .map(|entry| Divergence {
+            id: entry["id"].as_str().expect("id").to_owned(),
+            reason: entry["reason"].as_str().expect("reason").to_owned(),
+            expected_rust: entry["expected_rust"]
+                .as_str()
+                .expect("expected_rust: every divergence pins Rust's exact text")
+                .to_owned(),
         })
         .collect()
 }
 
+/// `SYMVAULT_FFI_CASES=a,b` limits a replay to cases whose id contains one of
+/// the comma-separated fragments (used to prove one case red or green alone).
+fn case_selected(id: &str) -> bool {
+    match std::env::var("SYMVAULT_FFI_CASES") {
+        Ok(filter) if !filter.is_empty() => filter.split(',').any(|part| id.contains(part)),
+        _ => true,
+    }
+}
+
 /// Replays every case; returns per-function step counts and all mismatches.
 pub fn replay(fixture: &Value) -> (std::collections::BTreeMap<String, usize>, Vec<String>) {
+    replay_matching(fixture, case_selected)
+}
+
+/// [`replay`] restricted to the cases `select` accepts.
+pub fn replay_matching(
+    fixture: &Value,
+    select: impl Fn(&str) -> bool,
+) -> (std::collections::BTreeMap<String, usize>, Vec<String>) {
     let mut counts = std::collections::BTreeMap::new();
     let mut failures = Vec::new();
     let divergences = known_divergences();
@@ -754,6 +822,9 @@ pub fn replay(fixture: &Value) -> (std::collections::BTreeMap<String, usize>, Ve
         .clone();
     for case in fixture["cases"].as_array().expect("cases") {
         let id = case["id"].as_str().expect("id");
+        if !select(id) {
+            continue;
+        }
         let temp = tempfile::tempdir().expect("tempdir");
         let root = temp.path().to_string_lossy().into_owned();
         let vault = temp.path().join("vault");
@@ -766,15 +837,25 @@ pub fn replay(fixture: &Value) -> (std::collections::BTreeMap<String, usize>, Ve
         for (index, step) in case["steps"].as_array().expect("steps").iter().enumerate() {
             let function = step["function"].as_str().expect("function").to_owned();
             *counts.entry(function).or_insert(0) += 1;
-            let result = run_step(step, seed, &root);
-            if let Some((_, why)) = divergences.iter().find(|(case, _)| case == id) {
-                match result {
-                    Err(reason) => eprintln!("KNOWN DIVERGENCE {id}: {why}\n  {reason}"),
+            let (outcome, verdict) = run_step(step, seed, &root);
+            if let Some(known) = divergences.iter().find(|known| known.id == id) {
+                match verdict {
+                    Err(reason) => {
+                        let actual = normalize_paths(&outcome.error, &root);
+                        if outcome.ok || actual != known.expected_rust {
+                            failures.push(format!(
+                                "{id} step {index}: known divergence ({}) must return exactly {:?}, got ok={} {actual:?}",
+                                known.reason, known.expected_rust, outcome.ok
+                            ));
+                        } else {
+                            eprintln!("KNOWN DIVERGENCE {id}: {}\n  {reason}", known.reason);
+                        }
+                    }
                     Ok(()) => failures.push(format!(
-                        "{id}: listed in KNOWN_DIVERGENCES but now matches Go; remove the entry"
+                        "{id}: listed in known-divergences.json but now matches Go; remove the entry"
                     )),
                 }
-            } else if let Err(reason) = result {
+            } else if let Err(reason) = verdict {
                 failures.push(format!(
                     "{id} step {index} ({}): {reason}",
                     step["function"]

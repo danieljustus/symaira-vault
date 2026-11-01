@@ -6,18 +6,28 @@
  *
  * Conventions
  *  - Inputs are (pointer, length) byte pairs. A NULL pointer is valid only with
- *    length 0. Text arguments must be UTF-8 and need no terminator.
+ *    length 0. Arguments that name text (vault directory, entry path, prefix,
+ *    entry JSON, identity, recipient, public key) must be valid UTF-8; no
+ *    terminator is needed. Passphrases are raw bytes, exactly like Go's
+ *    []byte(passphrase): any byte sequence is accepted, including invalid UTF-8
+ *    and NUL, and the same bytes always derive the same key. (The Swift wrapper
+ *    takes a String and therefore always passes UTF-8.)
  *  - Every function returns a status:
  *        0  success
  *        1  Go-compatible failure: the exact Go error text is in *err
  *        2  an internal panic was contained at the boundary (text in *err)
- *        3  unusable arguments: NULL with a length, or invalid UTF-8 (text in *err)
- *  - Results are written to *out as a SvBuf owned by this library. Release
- *    every non-empty SvBuf (out and err) with symvault_buf_free, which zeroizes
- *    it first. *out and *err are always reset to empty before the call does
- *    anything else; a NULL out-parameter discards that output.
- *  - Secrets (identities, passphrases, plaintexts) are never retained by the
- *    library after the call returns.
+ *        3  unusable arguments: NULL with a length, or invalid UTF-8 in a text
+ *           argument (text in *err)
+ *  - Results are written to *out as a SvBuf owned by this library. *out and
+ *    *err are reset to empty before the call does anything else; a NULL
+ *    out-parameter discards that output (it is zeroized and freed inside the
+ *    call). Every non-empty SvBuf a call hands back - *out and *err are two
+ *    separate buffers - must be released exactly once with symvault_buf_free,
+ *    which zeroizes it first. Do not free one twice, do not free a copy of the
+ *    struct after freeing the original, and never free a buffer with free().
+ *  - The library keeps no copy of identities, passphrases or plaintexts after
+ *    the call returns. Copies the caller makes (for example Swift Strings and
+ *    Data built from a result) are outside the library's control.
  *  - Calls are thread-safe; vault operations on one directory serialize on the
  *    store's own locks.
  */

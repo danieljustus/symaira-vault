@@ -6,6 +6,7 @@
 //! Go would have accepted the string.
 
 use symvault_crypto::{Identity, Recipient, parse_identity, parse_recipient};
+use zeroize::Zeroizing;
 
 use super::{quote, trim_space};
 
@@ -32,16 +33,18 @@ fn polymod(values: &[u8]) -> u32 {
     chk
 }
 
-fn hrp_expand(hrp: &str) -> Vec<u8> {
-    let lower = symvault_core::go_to_lower(hrp);
+fn hrp_expand(hrp: &str) -> Zeroizing<Vec<u8>> {
+    let lower = Zeroizing::new(symvault_core::go_to_lower(hrp));
     let mut out: Vec<u8> = lower.bytes().map(|byte| byte >> 5).collect();
     out.push(0);
     out.extend(lower.bytes().map(|byte| byte & 31));
-    out
+    Zeroizing::new(out)
 }
 
-fn convert_bits(data: &[u8], from: u32, to: u32) -> Result<Vec<u8>, String> {
-    let mut out = Vec::new();
+/// The 5-bit groups and the decoded key are secret for an identity string, so
+/// they live in zeroizing containers.
+fn convert_bits(data: &[u8], from: u32, to: u32) -> Result<Zeroizing<Vec<u8>>, String> {
+    let mut out = Zeroizing::new(Vec::new());
     let mut acc = 0u32;
     let mut bits = 0u32;
     let max = (1u32 << to) - 1;
@@ -81,8 +84,9 @@ fn go_upper(text: &str) -> String {
 }
 
 /// `internal/bech32.Decode`.
-fn decode(text: &str) -> Result<(String, Vec<u8>), String> {
-    if symvault_core::go_to_lower(text) != text && go_upper(text) != text {
+fn decode(text: &str) -> Result<(String, Zeroizing<Vec<u8>>), String> {
+    let lower = Zeroizing::new(symvault_core::go_to_lower(text));
+    if lower.as_str() != text && Zeroizing::new(go_upper(text)).as_str() != text {
         return Err("mixed case".to_owned());
     }
     let position = text.rfind('1');
@@ -99,7 +103,7 @@ fn decode(text: &str) -> Result<(String, Vec<u8>), String> {
                     ));
                 }
             }
-            let mut data = Vec::new();
+            let mut data = Zeroizing::new(Vec::new());
             for (offset, c) in text[pos + 1..].char_indices() {
                 let folded = if c.is_ascii_uppercase() {
                     c.to_ascii_lowercase()
