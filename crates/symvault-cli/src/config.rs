@@ -12,6 +12,9 @@ pub enum ConfigFailure {
     /// A Go `ExitConfigError` that carries its cause in its text: the root
     /// handler prints `Error: …` twice and appends the doctor hint.
     GoConfigError(String),
+    /// The same, for a cause that is not valid UTF-8 (yaml.v3 cuts a value at
+    /// seven BYTES, which can split a character).
+    GoConfigBytes(Vec<u8>),
 }
 
 impl From<String> for ConfigFailure {
@@ -125,40 +128,22 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Confi
             "config is invalid after update: config file path escapes expected directory".into(),
         );
     }
+    // Go reloads the file into the typed config; yaml.v3's type errors come
+    // before any validation of the decoded values.
+    if let Some(cause) = crate::config_typed::unmarshal_errors(&rendered) {
+        let mut message = b"config is invalid after update: ".to_vec();
+        message.extend_from_slice(&cause);
+        message.extend_from_slice(b": ");
+        message.extend_from_slice(&cause);
+        return Err(ConfigFailure::GoConfigBytes(message));
+    }
     if let Err(error) = symvault_core::config::Config::load(path) {
-        if let Some(go) = go_duration_unmarshal_error(&error.to_string(), &rendered) {
-            return Err(ConfigFailure::GoConfigError(format!(
-                "config is invalid after update: {go}: {go}"
-            )));
-        }
         return Err(format!("config is invalid after update: {error}").into());
     }
     if !quiet {
         println!("Set {key} = {value}");
     }
     Ok(())
-}
-
-/// yaml.v3's decode error for a duration key holding a non-duration string:
-/// `yaml: unmarshal errors:\n  line N: cannot unmarshal !!str `v` into
-/// time.Duration` (values longer than ten bytes are cut to seven plus `...`).
-fn go_duration_unmarshal_error(message: &str, rendered: &str) -> Option<String> {
-    let (key, rest) = message.rsplit_once(" has invalid duration ")?;
-    let key = key.rsplit(' ').next()?;
-    let value = rest.trim().trim_matches('"');
-    let leaf = key.rsplit('.').next()?;
-    let line = rendered
-        .lines()
-        .position(|line| line.trim_start().starts_with(&format!("{leaf}:")))?
-        + 1;
-    let shown = if value.len() > 10 {
-        format!("{}...", &value[..7])
-    } else {
-        value.to_owned()
-    };
-    Some(format!(
-        "yaml: unmarshal errors:\n  line {line}: cannot unmarshal !!str `{shown}` into time.Duration"
-    ))
 }
 
 #[derive(Clone, Copy)]

@@ -23,6 +23,8 @@ mod completion_protocol;
 mod config;
 #[cfg(test)]
 mod config_override_tests;
+mod config_schema;
+mod config_typed;
 mod daemon_commands;
 mod deprecated_stubs;
 mod device;
@@ -2713,6 +2715,14 @@ fn run_cli() -> ExitCode {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(config::ConfigFailure::Plain(error)) => {
                     let _ = writeln!(io::stderr(), "Error: {error}");
+                    ExitCode::from(6)
+                }
+                Err(config::ConfigFailure::GoConfigBytes(error)) => {
+                    print_error_bytes_like_go(&error);
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Run 'symvault doctor' to diagnose and fix configuration issues."
+                    );
                     ExitCode::from(6)
                 }
                 Err(config::ConfigFailure::GoConfigError(error)) => {

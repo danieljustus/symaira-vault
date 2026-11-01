@@ -110,7 +110,7 @@
       "scripts/rust-port/cmd/outputmodegen/cases.go",
       "scripts/rust-port/cmd/outputmodegen/main.go"
     ],
-    "generator_digest": "2df7e8f5cbe6bc4178262b10ebd39369060851832f2f358b4db0c6c83dd13284",
+    "generator_digest": "e1156ca097d91ba501f0890cb5701a71606468fdfd2f058911a97798cb4ee67c",
     "gate_digest": "c2536c1ffaf681feaa8fa8824f7e302e9633b2c2711c9ecd98531283064e51f1",
     "goos": "darwin"
   },
@@ -10156,6 +10156,2162 @@
           "change": "changed",
           "kind": "file",
           "sha256": "ce822169daf4c13d88c69f8ffd7c40d0eae7e52f364bc80ace45fed733d43a40"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int.text",
+      "path": "config set",
+      "scenario": "config-set-int",
+      "mode": "text",
+      "desc": "set an int for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "12"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9f19eae1ce37c04c452293e1add14dc4734a53f4fa0cf9b43bacfdf4728e7dbf"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int.json",
+      "path": "config set",
+      "scenario": "config-set-int",
+      "mode": "json",
+      "desc": "set an int for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "12",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9f19eae1ce37c04c452293e1add14dc4734a53f4fa0cf9b43bacfdf4728e7dbf"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int.yaml",
+      "path": "config set",
+      "scenario": "config-set-int",
+      "mode": "yaml",
+      "desc": "set an int for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "12",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9f19eae1ce37c04c452293e1add14dc4734a53f4fa0cf9b43bacfdf4728e7dbf"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int.output-json",
+      "path": "config set",
+      "scenario": "config-set-int",
+      "mode": "output-json",
+      "desc": "set an int for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "12",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9f19eae1ce37c04c452293e1add14dc4734a53f4fa0cf9b43bacfdf4728e7dbf"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int.quiet",
+      "path": "config set",
+      "scenario": "config-set-int",
+      "mode": "quiet",
+      "desc": "set an int for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "12",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `12` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9f19eae1ce37c04c452293e1add14dc4734a53f4fa0cf9b43bacfdf4728e7dbf"
+        }
+      ]
+    },
+    {
+      "id": "config-set-zero.text",
+      "path": "config set",
+      "scenario": "config-set-zero",
+      "mode": "text",
+      "desc": "set the int 0 for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "0"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "aa3626e82cf50ead5f3beeb4cc8bcaf9fe93c2eeee2e1e0a08fce7f8a3de7717"
+        }
+      ]
+    },
+    {
+      "id": "config-set-zero.json",
+      "path": "config set",
+      "scenario": "config-set-zero",
+      "mode": "json",
+      "desc": "set the int 0 for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "0",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "aa3626e82cf50ead5f3beeb4cc8bcaf9fe93c2eeee2e1e0a08fce7f8a3de7717"
+        }
+      ]
+    },
+    {
+      "id": "config-set-zero.yaml",
+      "path": "config set",
+      "scenario": "config-set-zero",
+      "mode": "yaml",
+      "desc": "set the int 0 for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "0",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "aa3626e82cf50ead5f3beeb4cc8bcaf9fe93c2eeee2e1e0a08fce7f8a3de7717"
+        }
+      ]
+    },
+    {
+      "id": "config-set-zero.output-json",
+      "path": "config set",
+      "scenario": "config-set-zero",
+      "mode": "output-json",
+      "desc": "set the int 0 for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "0",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "aa3626e82cf50ead5f3beeb4cc8bcaf9fe93c2eeee2e1e0a08fce7f8a3de7717"
+        }
+      ]
+    },
+    {
+      "id": "config-set-zero.quiet",
+      "path": "config set",
+      "scenario": "config-set-zero",
+      "mode": "quiet",
+      "desc": "set the int 0 for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "0",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!int `0` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "aa3626e82cf50ead5f3beeb4cc8bcaf9fe93c2eeee2e1e0a08fce7f8a3de7717"
+        }
+      ]
+    },
+    {
+      "id": "config-set-float.text",
+      "path": "config set",
+      "scenario": "config-set-float",
+      "mode": "text",
+      "desc": "set a float for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "1.5"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d29c65bf887fcf97c71b8114f08b1b1e125b189cabd8e52de1f7b0eb1efbb60a"
+        }
+      ]
+    },
+    {
+      "id": "config-set-float.json",
+      "path": "config set",
+      "scenario": "config-set-float",
+      "mode": "json",
+      "desc": "set a float for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "1.5",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d29c65bf887fcf97c71b8114f08b1b1e125b189cabd8e52de1f7b0eb1efbb60a"
+        }
+      ]
+    },
+    {
+      "id": "config-set-float.yaml",
+      "path": "config set",
+      "scenario": "config-set-float",
+      "mode": "yaml",
+      "desc": "set a float for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "1.5",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d29c65bf887fcf97c71b8114f08b1b1e125b189cabd8e52de1f7b0eb1efbb60a"
+        }
+      ]
+    },
+    {
+      "id": "config-set-float.output-json",
+      "path": "config set",
+      "scenario": "config-set-float",
+      "mode": "output-json",
+      "desc": "set a float for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "1.5",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d29c65bf887fcf97c71b8114f08b1b1e125b189cabd8e52de1f7b0eb1efbb60a"
+        }
+      ]
+    },
+    {
+      "id": "config-set-float.quiet",
+      "path": "config set",
+      "scenario": "config-set-float",
+      "mode": "quiet",
+      "desc": "set a float for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "1.5",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!float `1.5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d29c65bf887fcf97c71b8114f08b1b1e125b189cabd8e52de1f7b0eb1efbb60a"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool.text",
+      "path": "config set",
+      "scenario": "config-set-bool",
+      "mode": "text",
+      "desc": "set a bool for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "true"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "67c20f1133d936ee2120c24d6adf7e546c278c03ffd463e348ca5e6a75b3f5a4"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool.json",
+      "path": "config set",
+      "scenario": "config-set-bool",
+      "mode": "json",
+      "desc": "set a bool for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "true",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "67c20f1133d936ee2120c24d6adf7e546c278c03ffd463e348ca5e6a75b3f5a4"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool.yaml",
+      "path": "config set",
+      "scenario": "config-set-bool",
+      "mode": "yaml",
+      "desc": "set a bool for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "true",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "67c20f1133d936ee2120c24d6adf7e546c278c03ffd463e348ca5e6a75b3f5a4"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool.output-json",
+      "path": "config set",
+      "scenario": "config-set-bool",
+      "mode": "output-json",
+      "desc": "set a bool for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "true",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "67c20f1133d936ee2120c24d6adf7e546c278c03ffd463e348ca5e6a75b3f5a4"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool.quiet",
+      "path": "config set",
+      "scenario": "config-set-bool",
+      "mode": "quiet",
+      "desc": "set a bool for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "true",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!bool `true` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "67c20f1133d936ee2120c24d6adf7e546c278c03ffd463e348ca5e6a75b3f5a4"
+        }
+      ]
+    },
+    {
+      "id": "config-set-seq.text",
+      "path": "config set",
+      "scenario": "config-set-seq",
+      "mode": "text",
+      "desc": "set a sequence for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "[1]"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "36a66f22950e926dff8617c0ab00dbd0c954603d11984fff94d1354d86bbaebd"
+        }
+      ]
+    },
+    {
+      "id": "config-set-seq.json",
+      "path": "config set",
+      "scenario": "config-set-seq",
+      "mode": "json",
+      "desc": "set a sequence for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "[1]",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "36a66f22950e926dff8617c0ab00dbd0c954603d11984fff94d1354d86bbaebd"
+        }
+      ]
+    },
+    {
+      "id": "config-set-seq.yaml",
+      "path": "config set",
+      "scenario": "config-set-seq",
+      "mode": "yaml",
+      "desc": "set a sequence for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "[1]",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "36a66f22950e926dff8617c0ab00dbd0c954603d11984fff94d1354d86bbaebd"
+        }
+      ]
+    },
+    {
+      "id": "config-set-seq.output-json",
+      "path": "config set",
+      "scenario": "config-set-seq",
+      "mode": "output-json",
+      "desc": "set a sequence for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "[1]",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "36a66f22950e926dff8617c0ab00dbd0c954603d11984fff94d1354d86bbaebd"
+        }
+      ]
+    },
+    {
+      "id": "config-set-seq.quiet",
+      "path": "config set",
+      "scenario": "config-set-seq",
+      "mode": "quiet",
+      "desc": "set a sequence for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "[1]",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!seq into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "36a66f22950e926dff8617c0ab00dbd0c954603d11984fff94d1354d86bbaebd"
+        }
+      ]
+    },
+    {
+      "id": "config-set-map.text",
+      "path": "config set",
+      "scenario": "config-set-map",
+      "mode": "text",
+      "desc": "set a mapping for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "{a: 1}"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e7f9ae2555e1b04567815e4a173eb42b89ae839e40cb1fa4a2db58f9f72e2d75"
+        }
+      ]
+    },
+    {
+      "id": "config-set-map.json",
+      "path": "config set",
+      "scenario": "config-set-map",
+      "mode": "json",
+      "desc": "set a mapping for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "{a: 1}",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e7f9ae2555e1b04567815e4a173eb42b89ae839e40cb1fa4a2db58f9f72e2d75"
+        }
+      ]
+    },
+    {
+      "id": "config-set-map.yaml",
+      "path": "config set",
+      "scenario": "config-set-map",
+      "mode": "yaml",
+      "desc": "set a mapping for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "{a: 1}",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e7f9ae2555e1b04567815e4a173eb42b89ae839e40cb1fa4a2db58f9f72e2d75"
+        }
+      ]
+    },
+    {
+      "id": "config-set-map.output-json",
+      "path": "config set",
+      "scenario": "config-set-map",
+      "mode": "output-json",
+      "desc": "set a mapping for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "{a: 1}",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e7f9ae2555e1b04567815e4a173eb42b89ae839e40cb1fa4a2db58f9f72e2d75"
+        }
+      ]
+    },
+    {
+      "id": "config-set-map.quiet",
+      "path": "config set",
+      "scenario": "config-set-map",
+      "mode": "quiet",
+      "desc": "set a mapping for a Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "{a: 1}",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!map into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e7f9ae2555e1b04567815e4a173eb42b89ae839e40cb1fa4a2db58f9f72e2d75"
+        }
+      ]
+    },
+    {
+      "id": "config-set-long.text",
+      "path": "config set",
+      "scenario": "config-set-long",
+      "mode": "text",
+      "desc": "set a long string for a Duration key (cut to seven bytes)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "abcdefghijkl"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "b7d6a688144f11ace72349cde632dc2303e2d85f09d290fe37ff9e18b5a56458"
+        }
+      ]
+    },
+    {
+      "id": "config-set-long.json",
+      "path": "config set",
+      "scenario": "config-set-long",
+      "mode": "json",
+      "desc": "set a long string for a Duration key (cut to seven bytes)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "abcdefghijkl",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "b7d6a688144f11ace72349cde632dc2303e2d85f09d290fe37ff9e18b5a56458"
+        }
+      ]
+    },
+    {
+      "id": "config-set-long.yaml",
+      "path": "config set",
+      "scenario": "config-set-long",
+      "mode": "yaml",
+      "desc": "set a long string for a Duration key (cut to seven bytes)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "abcdefghijkl",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "b7d6a688144f11ace72349cde632dc2303e2d85f09d290fe37ff9e18b5a56458"
+        }
+      ]
+    },
+    {
+      "id": "config-set-long.output-json",
+      "path": "config set",
+      "scenario": "config-set-long",
+      "mode": "output-json",
+      "desc": "set a long string for a Duration key (cut to seven bytes)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "abcdefghijkl",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "b7d6a688144f11ace72349cde632dc2303e2d85f09d290fe37ff9e18b5a56458"
+        }
+      ]
+    },
+    {
+      "id": "config-set-long.quiet",
+      "path": "config set",
+      "scenario": "config-set-long",
+      "mode": "quiet",
+      "desc": "set a long string for a Duration key (cut to seven bytes)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "abcdefghijkl",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `abcdefg...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "b7d6a688144f11ace72349cde632dc2303e2d85f09d290fe37ff9e18b5a56458"
+        }
+      ]
+    },
+    {
+      "id": "config-set-multibyte.text",
+      "path": "config set",
+      "scenario": "config-set-multibyte",
+      "mode": "text",
+      "desc": "set a long multibyte string for a Duration key (cut inside a character)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "ééééééééééé"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "stderr_b64": "RXJyb3I6IGNvbmZpZyBpcyBpbnZhbGlkIGFmdGVyIHVwZGF0ZTogeWFtbDogdW5tYXJzaGFsIGVycm9yczoKICBsaW5lIDY0OiBjYW5ub3QgdW5tYXJzaGFsICEhc3RyIGDDqcOpw6nDLi4uYCBpbnRvIHRpbWUuRHVyYXRpb246IHlhbWw6IHVubWFyc2hhbCBlcnJvcnM6CiAgbGluZSA2NDogY2Fubm90IHVubWFyc2hhbCAhIXN0ciBgw6nDqcOpwy4uLmAgaW50byB0aW1lLkR1cmF0aW9uCkVycm9yOiBjb25maWcgaXMgaW52YWxpZCBhZnRlciB1cGRhdGU6IHlhbWw6IHVubWFyc2hhbCBlcnJvcnM6CiAgbGluZSA2NDogY2Fubm90IHVubWFyc2hhbCAhIXN0ciBgw6nDqcOpwy4uLmAgaW50byB0aW1lLkR1cmF0aW9uOiB5YW1sOiB1bm1hcnNoYWwgZXJyb3JzOgogIGxpbmUgNjQ6IGNhbm5vdCB1bm1hcnNoYWwgISFzdHIgYMOpw6nDqcMuLi5gIGludG8gdGltZS5EdXJhdGlvbgpSdW4gJ3N5bXZhdWx0IGRvY3RvcicgdG8gZGlhZ25vc2UgYW5kIGZpeCBjb25maWd1cmF0aW9uIGlzc3Vlcy4K",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "401fd88f86342477f3a193b7e1df7120b0c54dd96e85b101839a38e46c59539b"
+        }
+      ]
+    },
+    {
+      "id": "config-set-multibyte.json",
+      "path": "config set",
+      "scenario": "config-set-multibyte",
+      "mode": "json",
+      "desc": "set a long multibyte string for a Duration key (cut inside a character)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "ééééééééééé",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "stderr_b64": "RXJyb3I6IGNvbmZpZyBpcyBpbnZhbGlkIGFmdGVyIHVwZGF0ZTogeWFtbDogdW5tYXJzaGFsIGVycm9yczoKICBsaW5lIDY0OiBjYW5ub3QgdW5tYXJzaGFsICEhc3RyIGDDqcOpw6nDLi4uYCBpbnRvIHRpbWUuRHVyYXRpb246IHlhbWw6IHVubWFyc2hhbCBlcnJvcnM6CiAgbGluZSA2NDogY2Fubm90IHVubWFyc2hhbCAhIXN0ciBgw6nDqcOpwy4uLmAgaW50byB0aW1lLkR1cmF0aW9uCkVycm9yOiBjb25maWcgaXMgaW52YWxpZCBhZnRlciB1cGRhdGU6IHlhbWw6IHVubWFyc2hhbCBlcnJvcnM6CiAgbGluZSA2NDogY2Fubm90IHVubWFyc2hhbCAhIXN0ciBgw6nDqcOpwy4uLmAgaW50byB0aW1lLkR1cmF0aW9uOiB5YW1sOiB1bm1hcnNoYWwgZXJyb3JzOgogIGxpbmUgNjQ6IGNhbm5vdCB1bm1hcnNoYWwgISFzdHIgYMOpw6nDqcMuLi5gIGludG8gdGltZS5EdXJhdGlvbgpSdW4gJ3N5bXZhdWx0IGRvY3RvcicgdG8gZGlhZ25vc2UgYW5kIGZpeCBjb25maWd1cmF0aW9uIGlzc3Vlcy4K",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "401fd88f86342477f3a193b7e1df7120b0c54dd96e85b101839a38e46c59539b"
+        }
+      ]
+    },
+    {
+      "id": "config-set-multibyte.yaml",
+      "path": "config set",
+      "scenario": "config-set-multibyte",
+      "mode": "yaml",
+      "desc": "set a long multibyte string for a Duration key (cut inside a character)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "ééééééééééé",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "stderr_b64": "RXJyb3I6IGNvbmZpZyBpcyBpbnZhbGlkIGFmdGVyIHVwZGF0ZTogeWFtbDogdW5tYXJzaGFsIGVycm9yczoKICBsaW5lIDY0OiBjYW5ub3QgdW5tYXJzaGFsICEhc3RyIGDDqcOpw6nDLi4uYCBpbnRvIHRpbWUuRHVyYXRpb246IHlhbWw6IHVubWFyc2hhbCBlcnJvcnM6CiAgbGluZSA2NDogY2Fubm90IHVubWFyc2hhbCAhIXN0ciBgw6nDqcOpwy4uLmAgaW50byB0aW1lLkR1cmF0aW9uCkVycm9yOiBjb25maWcgaXMgaW52YWxpZCBhZnRlciB1cGRhdGU6IHlhbWw6IHVubWFyc2hhbCBlcnJvcnM6CiAgbGluZSA2NDogY2Fubm90IHVubWFyc2hhbCAhIXN0ciBgw6nDqcOpwy4uLmAgaW50byB0aW1lLkR1cmF0aW9uOiB5YW1sOiB1bm1hcnNoYWwgZXJyb3JzOgogIGxpbmUgNjQ6IGNhbm5vdCB1bm1hcnNoYWwgISFzdHIgYMOpw6nDqcMuLi5gIGludG8gdGltZS5EdXJhdGlvbgpSdW4gJ3N5bXZhdWx0IGRvY3RvcicgdG8gZGlhZ25vc2UgYW5kIGZpeCBjb25maWd1cmF0aW9uIGlzc3Vlcy4K",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "401fd88f86342477f3a193b7e1df7120b0c54dd96e85b101839a38e46c59539b"
+        }
+      ]
+    },
+    {
+      "id": "config-set-multibyte.output-json",
+      "path": "config set",
+      "scenario": "config-set-multibyte",
+      "mode": "output-json",
+      "desc": "set a long multibyte string for a Duration key (cut inside a character)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "ééééééééééé",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "stderr_b64": "RXJyb3I6IGNvbmZpZyBpcyBpbnZhbGlkIGFmdGVyIHVwZGF0ZTogeWFtbDogdW5tYXJzaGFsIGVycm9yczoKICBsaW5lIDY0OiBjYW5ub3QgdW5tYXJzaGFsICEhc3RyIGDDqcOpw6nDLi4uYCBpbnRvIHRpbWUuRHVyYXRpb246IHlhbWw6IHVubWFyc2hhbCBlcnJvcnM6CiAgbGluZSA2NDogY2Fubm90IHVubWFyc2hhbCAhIXN0ciBgw6nDqcOpwy4uLmAgaW50byB0aW1lLkR1cmF0aW9uCkVycm9yOiBjb25maWcgaXMgaW52YWxpZCBhZnRlciB1cGRhdGU6IHlhbWw6IHVubWFyc2hhbCBlcnJvcnM6CiAgbGluZSA2NDogY2Fubm90IHVubWFyc2hhbCAhIXN0ciBgw6nDqcOpwy4uLmAgaW50byB0aW1lLkR1cmF0aW9uOiB5YW1sOiB1bm1hcnNoYWwgZXJyb3JzOgogIGxpbmUgNjQ6IGNhbm5vdCB1bm1hcnNoYWwgISFzdHIgYMOpw6nDqcMuLi5gIGludG8gdGltZS5EdXJhdGlvbgpSdW4gJ3N5bXZhdWx0IGRvY3RvcicgdG8gZGlhZ25vc2UgYW5kIGZpeCBjb25maWd1cmF0aW9uIGlzc3Vlcy4K",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "401fd88f86342477f3a193b7e1df7120b0c54dd96e85b101839a38e46c59539b"
+        }
+      ]
+    },
+    {
+      "id": "config-set-multibyte.quiet",
+      "path": "config set",
+      "scenario": "config-set-multibyte",
+      "mode": "quiet",
+      "desc": "set a long multibyte string for a Duration key (cut inside a character)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionTimeout",
+        "ééééééééééé",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration: yaml: unmarshal errors:\n  line 64: cannot unmarshal !!str `ééé\ufffd...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "stderr_b64": "RXJyb3I6IGNvbmZpZyBpcyBpbnZhbGlkIGFmdGVyIHVwZGF0ZTogeWFtbDogdW5tYXJzaGFsIGVycm9yczoKICBsaW5lIDY0OiBjYW5ub3QgdW5tYXJzaGFsICEhc3RyIGDDqcOpw6nDLi4uYCBpbnRvIHRpbWUuRHVyYXRpb246IHlhbWw6IHVubWFyc2hhbCBlcnJvcnM6CiAgbGluZSA2NDogY2Fubm90IHVubWFyc2hhbCAhIXN0ciBgw6nDqcOpwy4uLmAgaW50byB0aW1lLkR1cmF0aW9uCkVycm9yOiBjb25maWcgaXMgaW52YWxpZCBhZnRlciB1cGRhdGU6IHlhbWw6IHVubWFyc2hhbCBlcnJvcnM6CiAgbGluZSA2NDogY2Fubm90IHVubWFyc2hhbCAhIXN0ciBgw6nDqcOpwy4uLmAgaW50byB0aW1lLkR1cmF0aW9uOiB5YW1sOiB1bm1hcnNoYWwgZXJyb3JzOgogIGxpbmUgNjQ6IGNhbm5vdCB1bm1hcnNoYWwgISFzdHIgYMOpw6nDqcMuLi5gIGludG8gdGltZS5EdXJhdGlvbgpSdW4gJ3N5bXZhdWx0IGRvY3RvcicgdG8gZGlhZ25vc2UgYW5kIGZpeCBjb25maWd1cmF0aW9uIGlzc3Vlcy4K",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "401fd88f86342477f3a193b7e1df7120b0c54dd96e85b101839a38e46c59539b"
+        }
+      ]
+    },
+    {
+      "id": "config-set-max-lifetime.text",
+      "path": "config set",
+      "scenario": "config-set-max-lifetime",
+      "mode": "text",
+      "desc": "set an int for the other root Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionMaxLifetime",
+        "5"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d2deccdd7fed5ad2304d65ab48c00706a97ebefff301477b27eec4ff9cbaadec"
+        }
+      ]
+    },
+    {
+      "id": "config-set-max-lifetime.json",
+      "path": "config set",
+      "scenario": "config-set-max-lifetime",
+      "mode": "json",
+      "desc": "set an int for the other root Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionMaxLifetime",
+        "5",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d2deccdd7fed5ad2304d65ab48c00706a97ebefff301477b27eec4ff9cbaadec"
+        }
+      ]
+    },
+    {
+      "id": "config-set-max-lifetime.yaml",
+      "path": "config set",
+      "scenario": "config-set-max-lifetime",
+      "mode": "yaml",
+      "desc": "set an int for the other root Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionMaxLifetime",
+        "5",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d2deccdd7fed5ad2304d65ab48c00706a97ebefff301477b27eec4ff9cbaadec"
+        }
+      ]
+    },
+    {
+      "id": "config-set-max-lifetime.output-json",
+      "path": "config set",
+      "scenario": "config-set-max-lifetime",
+      "mode": "output-json",
+      "desc": "set an int for the other root Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionMaxLifetime",
+        "5",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d2deccdd7fed5ad2304d65ab48c00706a97ebefff301477b27eec4ff9cbaadec"
+        }
+      ]
+    },
+    {
+      "id": "config-set-max-lifetime.quiet",
+      "path": "config set",
+      "scenario": "config-set-max-lifetime",
+      "mode": "quiet",
+      "desc": "set an int for the other root Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "sessionMaxLifetime",
+        "5",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 65: cannot unmarshal !!int `5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d2deccdd7fed5ad2304d65ab48c00706a97ebefff301477b27eec4ff9cbaadec"
+        }
+      ]
+    },
+    {
+      "id": "config-set-nested.text",
+      "path": "config set",
+      "scenario": "config-set-nested",
+      "mode": "text",
+      "desc": "set an int for a nested Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.read_timeout",
+        "30"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e79fff4585686415d598d8ea84860c0ed332a78e80c933edee0ab5401654163b"
+        }
+      ]
+    },
+    {
+      "id": "config-set-nested.json",
+      "path": "config set",
+      "scenario": "config-set-nested",
+      "mode": "json",
+      "desc": "set an int for a nested Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.read_timeout",
+        "30",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e79fff4585686415d598d8ea84860c0ed332a78e80c933edee0ab5401654163b"
+        }
+      ]
+    },
+    {
+      "id": "config-set-nested.yaml",
+      "path": "config set",
+      "scenario": "config-set-nested",
+      "mode": "yaml",
+      "desc": "set an int for a nested Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.read_timeout",
+        "30",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e79fff4585686415d598d8ea84860c0ed332a78e80c933edee0ab5401654163b"
+        }
+      ]
+    },
+    {
+      "id": "config-set-nested.output-json",
+      "path": "config set",
+      "scenario": "config-set-nested",
+      "mode": "output-json",
+      "desc": "set an int for a nested Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.read_timeout",
+        "30",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e79fff4585686415d598d8ea84860c0ed332a78e80c933edee0ab5401654163b"
+        }
+      ]
+    },
+    {
+      "id": "config-set-nested.quiet",
+      "path": "config set",
+      "scenario": "config-set-nested",
+      "mode": "quiet",
+      "desc": "set an int for a nested Duration key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.read_timeout",
+        "30",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!int `30` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e79fff4585686415d598d8ea84860c0ed332a78e80c933edee0ab5401654163b"
+        }
+      ]
+    },
+    {
+      "id": "config-set-profile.text",
+      "path": "config set",
+      "scenario": "config-set-profile",
+      "mode": "text",
+      "desc": "set an int for a Duration key of an agent profile",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "agents.cli.approvalTimeout",
+        "30"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "715a4f95916edd0bcafb424e9888bfa59749deb7a35cbe9aa48898379e8e13d2"
+        }
+      ]
+    },
+    {
+      "id": "config-set-profile.json",
+      "path": "config set",
+      "scenario": "config-set-profile",
+      "mode": "json",
+      "desc": "set an int for a Duration key of an agent profile",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "agents.cli.approvalTimeout",
+        "30",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "715a4f95916edd0bcafb424e9888bfa59749deb7a35cbe9aa48898379e8e13d2"
+        }
+      ]
+    },
+    {
+      "id": "config-set-profile.yaml",
+      "path": "config set",
+      "scenario": "config-set-profile",
+      "mode": "yaml",
+      "desc": "set an int for a Duration key of an agent profile",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "agents.cli.approvalTimeout",
+        "30",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "715a4f95916edd0bcafb424e9888bfa59749deb7a35cbe9aa48898379e8e13d2"
+        }
+      ]
+    },
+    {
+      "id": "config-set-profile.output-json",
+      "path": "config set",
+      "scenario": "config-set-profile",
+      "mode": "output-json",
+      "desc": "set an int for a Duration key of an agent profile",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "agents.cli.approvalTimeout",
+        "30",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "715a4f95916edd0bcafb424e9888bfa59749deb7a35cbe9aa48898379e8e13d2"
+        }
+      ]
+    },
+    {
+      "id": "config-set-profile.quiet",
+      "path": "config set",
+      "scenario": "config-set-profile",
+      "mode": "quiet",
+      "desc": "set an int for a Duration key of an agent profile",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "agents.cli.approvalTimeout",
+        "30",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration: yaml: unmarshal errors:\n  line 16: cannot unmarshal !!int `30` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "715a4f95916edd0bcafb424e9888bfa59749deb7a35cbe9aa48898379e8e13d2"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool-key.text",
+      "path": "config set",
+      "scenario": "config-set-bool-key",
+      "mode": "text",
+      "desc": "set an int for a bool key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "useTouchID",
+        "12"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool\nError: config is invalid after update: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "3e30bc36282065907f0ee8a29608ffd34a5e5cfd59cb027863cf17f0e67c83f0"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool-key.json",
+      "path": "config set",
+      "scenario": "config-set-bool-key",
+      "mode": "json",
+      "desc": "set an int for a bool key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "useTouchID",
+        "12",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool\nError: config is invalid after update: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "3e30bc36282065907f0ee8a29608ffd34a5e5cfd59cb027863cf17f0e67c83f0"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool-key.yaml",
+      "path": "config set",
+      "scenario": "config-set-bool-key",
+      "mode": "yaml",
+      "desc": "set an int for a bool key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "useTouchID",
+        "12",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool\nError: config is invalid after update: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "3e30bc36282065907f0ee8a29608ffd34a5e5cfd59cb027863cf17f0e67c83f0"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool-key.output-json",
+      "path": "config set",
+      "scenario": "config-set-bool-key",
+      "mode": "output-json",
+      "desc": "set an int for a bool key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "useTouchID",
+        "12",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool\nError: config is invalid after update: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "3e30bc36282065907f0ee8a29608ffd34a5e5cfd59cb027863cf17f0e67c83f0"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool-key.quiet",
+      "path": "config set",
+      "scenario": "config-set-bool-key",
+      "mode": "quiet",
+      "desc": "set an int for a bool key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "useTouchID",
+        "12",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool\nError: config is invalid after update: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool: yaml: unmarshal errors:\n  line 67: cannot unmarshal !!int `12` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "3e30bc36282065907f0ee8a29608ffd34a5e5cfd59cb027863cf17f0e67c83f0"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool-word.text",
+      "path": "config set",
+      "scenario": "config-set-bool-word",
+      "mode": "text",
+      "desc": "set a non-boolean word for a bool key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "git.auto_push",
+        "sure"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool\nError: config is invalid after update: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "0a7329ea8d34564e963fd054c2b5af4a0296a19a749b06ae55e507df5773e395"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool-word.json",
+      "path": "config set",
+      "scenario": "config-set-bool-word",
+      "mode": "json",
+      "desc": "set a non-boolean word for a bool key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "git.auto_push",
+        "sure",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool\nError: config is invalid after update: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "0a7329ea8d34564e963fd054c2b5af4a0296a19a749b06ae55e507df5773e395"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool-word.yaml",
+      "path": "config set",
+      "scenario": "config-set-bool-word",
+      "mode": "yaml",
+      "desc": "set a non-boolean word for a bool key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "git.auto_push",
+        "sure",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool\nError: config is invalid after update: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "0a7329ea8d34564e963fd054c2b5af4a0296a19a749b06ae55e507df5773e395"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool-word.output-json",
+      "path": "config set",
+      "scenario": "config-set-bool-word",
+      "mode": "output-json",
+      "desc": "set a non-boolean word for a bool key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "git.auto_push",
+        "sure",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool\nError: config is invalid after update: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "0a7329ea8d34564e963fd054c2b5af4a0296a19a749b06ae55e507df5773e395"
+        }
+      ]
+    },
+    {
+      "id": "config-set-bool-word.quiet",
+      "path": "config set",
+      "scenario": "config-set-bool-word",
+      "mode": "quiet",
+      "desc": "set a non-boolean word for a bool key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "git.auto_push",
+        "sure",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool\nError: config is invalid after update: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool: yaml: unmarshal errors:\n  line 59: cannot unmarshal !!str `sure` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "0a7329ea8d34564e963fd054c2b5af4a0296a19a749b06ae55e507df5773e395"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-key.text",
+      "path": "config set",
+      "scenario": "config-set-int-key",
+      "mode": "text",
+      "desc": "set a string for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "abc"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "83faccd267c0184b688e8c7c43f7d5b2d8db6d74a43d6f1d994052a8acd2136d"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-key.json",
+      "path": "config set",
+      "scenario": "config-set-int-key",
+      "mode": "json",
+      "desc": "set a string for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "abc",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "83faccd267c0184b688e8c7c43f7d5b2d8db6d74a43d6f1d994052a8acd2136d"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-key.yaml",
+      "path": "config set",
+      "scenario": "config-set-int-key",
+      "mode": "yaml",
+      "desc": "set a string for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "abc",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "83faccd267c0184b688e8c7c43f7d5b2d8db6d74a43d6f1d994052a8acd2136d"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-key.output-json",
+      "path": "config set",
+      "scenario": "config-set-int-key",
+      "mode": "output-json",
+      "desc": "set a string for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "abc",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "83faccd267c0184b688e8c7c43f7d5b2d8db6d74a43d6f1d994052a8acd2136d"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-key.quiet",
+      "path": "config set",
+      "scenario": "config-set-int-key",
+      "mode": "quiet",
+      "desc": "set a string for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "abc",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `abc` into int\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "83faccd267c0184b688e8c7c43f7d5b2d8db6d74a43d6f1d994052a8acd2136d"
+        }
+      ]
+    },
+    {
+      "id": "config-set-seq-key.text",
+      "path": "config set",
+      "scenario": "config-set-seq-key",
+      "mode": "text",
+      "desc": "set a scalar for a sequence key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.trusted_proxy_ips",
+        "x"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9a763e63d2c47677e007e4aa339f20dca83718b42355853702d60489a1ec4bbc"
+        }
+      ]
+    },
+    {
+      "id": "config-set-seq-key.json",
+      "path": "config set",
+      "scenario": "config-set-seq-key",
+      "mode": "json",
+      "desc": "set a scalar for a sequence key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.trusted_proxy_ips",
+        "x",
+        "--json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9a763e63d2c47677e007e4aa339f20dca83718b42355853702d60489a1ec4bbc"
+        }
+      ]
+    },
+    {
+      "id": "config-set-seq-key.yaml",
+      "path": "config set",
+      "scenario": "config-set-seq-key",
+      "mode": "yaml",
+      "desc": "set a scalar for a sequence key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.trusted_proxy_ips",
+        "x",
+        "--output",
+        "yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9a763e63d2c47677e007e4aa339f20dca83718b42355853702d60489a1ec4bbc"
+        }
+      ]
+    },
+    {
+      "id": "config-set-seq-key.output-json",
+      "path": "config set",
+      "scenario": "config-set-seq-key",
+      "mode": "output-json",
+      "desc": "set a scalar for a sequence key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.trusted_proxy_ips",
+        "x",
+        "--output",
+        "json"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9a763e63d2c47677e007e4aa339f20dca83718b42355853702d60489a1ec4bbc"
+        }
+      ]
+    },
+    {
+      "id": "config-set-seq-key.quiet",
+      "path": "config set",
+      "scenario": "config-set-seq-key",
+      "mode": "quiet",
+      "desc": "set a scalar for a sequence key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.trusted_proxy_ips",
+        "x",
+        "--quiet"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string\nError: config is invalid after update: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string: yaml: unmarshal errors:\n  line 69: cannot unmarshal !!str `x` into []string\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9a763e63d2c47677e007e4aa339f20dca83718b42355853702d60489a1ec4bbc"
+        }
+      ]
+    },
+    {
+      "id": "config-set-yes-bool.text",
+      "path": "config set",
+      "scenario": "config-set-yes-bool",
+      "mode": "text",
+      "desc": "set a YAML 1.1 boolean word (accepted for a bool key)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "git.auto_push",
+        "yes"
+      ],
+      "exit": 0,
+      "stdout": "Set git.auto_push = yes\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "afc67a18b490363e3a98e2f10008bfeb42fb67fd19b84fe25d17a89edfcd7cd7"
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "git.auto_push"
+          ],
+          "exit": 0,
+          "stdout": "yes\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-yes-bool.json",
+      "path": "config set",
+      "scenario": "config-set-yes-bool",
+      "mode": "json",
+      "desc": "set a YAML 1.1 boolean word (accepted for a bool key)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "git.auto_push",
+        "yes",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "Set git.auto_push = yes\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "afc67a18b490363e3a98e2f10008bfeb42fb67fd19b84fe25d17a89edfcd7cd7"
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "git.auto_push"
+          ],
+          "exit": 0,
+          "stdout": "yes\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-yes-bool.yaml",
+      "path": "config set",
+      "scenario": "config-set-yes-bool",
+      "mode": "yaml",
+      "desc": "set a YAML 1.1 boolean word (accepted for a bool key)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "git.auto_push",
+        "yes",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "Set git.auto_push = yes\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "afc67a18b490363e3a98e2f10008bfeb42fb67fd19b84fe25d17a89edfcd7cd7"
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "git.auto_push"
+          ],
+          "exit": 0,
+          "stdout": "yes\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-yes-bool.output-json",
+      "path": "config set",
+      "scenario": "config-set-yes-bool",
+      "mode": "output-json",
+      "desc": "set a YAML 1.1 boolean word (accepted for a bool key)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "git.auto_push",
+        "yes",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "Set git.auto_push = yes\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "afc67a18b490363e3a98e2f10008bfeb42fb67fd19b84fe25d17a89edfcd7cd7"
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "git.auto_push"
+          ],
+          "exit": 0,
+          "stdout": "yes\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-yes-bool.quiet",
+      "path": "config set",
+      "scenario": "config-set-yes-bool",
+      "mode": "quiet",
+      "desc": "set a YAML 1.1 boolean word (accepted for a bool key)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "git.auto_push",
+        "yes",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "afc67a18b490363e3a98e2f10008bfeb42fb67fd19b84fe25d17a89edfcd7cd7"
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "git.auto_push"
+          ],
+          "exit": 0,
+          "stdout": "yes\n"
         }
       ]
     },

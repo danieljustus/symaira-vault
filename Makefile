@@ -585,6 +585,7 @@ config-profile-differential: config-profile-fixtures-check
 config-session-differential: rust-007-differential config-profile-differential cfg-sections-fixtures-check
 
 config-cli-differential:
+	python3 scripts/rust-port/gen_config_schema.py --check
 	./scripts/rust-port/check_config_cli.sh
 
 # CLI-005: go-yaml scanner/parser/reader error wording of config.yaml. Re-verifies

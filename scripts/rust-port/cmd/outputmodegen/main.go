@@ -223,8 +223,12 @@ type caseResult struct {
 	Exit     int               `json:"exit"`
 	Stdout   string            `json:"stdout"`
 	Stderr   string            `json:"stderr"`
-	Tree     []treeEntry       `json:"tree"`
-	Post     []step            `json:"post,omitempty"`
+	// StdoutB64/StderrB64 hold the exact normalized bytes when they are not
+	// valid UTF-8 (Stdout/Stderr then carry U+FFFD for readers only).
+	StdoutB64 string      `json:"stdout_b64,omitempty"`
+	StderrB64 string      `json:"stderr_b64,omitempty"`
+	Tree      []treeEntry `json:"tree"`
+	Post      []step      `json:"post,omitempty"`
 }
 
 // residual records a path (or one of its modes) the matrix cannot pin
@@ -349,9 +353,9 @@ func (s *sandbox) run(args []string, extraEnv map[string]string, stdin string) (
 		}
 		out.exit = exitErr.ExitCode()
 	}
-	if !utf8.Valid(stdout.Bytes()) || !utf8.Valid(stderr.Bytes()) {
-		return out, fmt.Errorf("%v: output is not valid UTF-8", args)
-	}
+	// Output is kept as raw bytes: yaml.v3 cuts a value at seven BYTES, so an
+	// error line can end inside a UTF-8 sequence. runCase records such text
+	// exactly (stdout_b64/stderr_b64) next to a lossy readable rendering.
 	out.stdout, out.stderr = stdout.String(), stderr.String()
 	return out, nil
 }
@@ -1064,6 +1068,12 @@ func runCase(goBinary string, seeds map[string]seedResult, spec caseSpec, mode s
 		Seed: spec.seed, Env: spec.env, Stdin: spec.stdin, Files: spec.files, Rules: spec.rules, Opaque: spec.opaque,
 		Argv: argv, Exit: got.exit,
 		Stdout: stdout, Stderr: vol.apply(box.normalize(got.stderr)),
+	}
+	if !utf8.ValidString(result.Stdout) {
+		result.StdoutB64 = base64.StdEncoding.EncodeToString([]byte(result.Stdout))
+	}
+	if !utf8.ValidString(result.Stderr) {
+		result.StderrB64 = base64.StdEncoding.EncodeToString([]byte(result.Stderr))
 	}
 	for _, text := range []string{result.Stdout, result.Stderr} {
 		if strings.Contains(text, "level=WARN") || strings.Contains(text, "level=ERROR") || wallClockLine(text) {

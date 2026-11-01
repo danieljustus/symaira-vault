@@ -51,7 +51,7 @@ use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
 
 const PASSPHRASE: &str = "correct horse battery staple";
-const EXPECTED_CASES: usize = 384;
+const EXPECTED_CASES: usize = 464;
 const EXPECTED_PATHS: usize = 47;
 const EXPECTED_SEEDS: usize = 6;
 const FIXTURE: &str = "../../testdata/port/cli/output-modes.json";
@@ -172,6 +172,12 @@ struct Case {
     exit: i32,
     stdout: String,
     stderr: String,
+    /// Exact bytes when the output is not valid UTF-8 (`stdout`/`stderr` then
+    /// carry U+FFFD for readers only).
+    #[serde(default)]
+    stdout_b64: String,
+    #[serde(default)]
+    stderr_b64: String,
     tree: Vec<TreeEntry>,
     #[serde(default)]
     post: Vec<Step>,
@@ -935,6 +941,15 @@ fn diff_trees(
 
 // --- case execution ----------------------------------------------------------------
 
+/// The recorded bytes: the exact `_b64` form when the Go output was not UTF-8.
+fn expected_bytes(text: &str, b64: &str) -> Vec<u8> {
+    if b64.is_empty() {
+        text.as_bytes().to_vec()
+    } else {
+        decode_base64(b64)
+    }
+}
+
 fn compare(label: &str, want: &[u8], got: &[u8], problems: &mut Vec<String>) {
     if want != got {
         problems.push(format!(
@@ -967,8 +982,8 @@ fn run_case(binary: &Path, seeds: &BTreeMap<&str, &Seed>, case: &Case) -> Vec<St
     if output.exit != case.exit {
         problems.push(format!("exit: want {} got {}", case.exit, output.exit));
     }
-    compare("stdout", case.stdout.as_bytes(), &stdout, &mut problems);
-    compare("stderr", case.stderr.as_bytes(), &stderr, &mut problems);
+    compare("stdout", &expected_bytes(&case.stdout, &case.stdout_b64), &stdout, &mut problems);
+    compare("stderr", &expected_bytes(&case.stderr, &case.stderr_b64), &stderr, &mut problems);
     let after = sandbox.snapshot();
     if volatile.has("pair-token") && volatile.token.is_none() {
         volatile.token = pair_token_from_tree(&after);
@@ -1291,6 +1306,8 @@ fn tree_normalization_hides_nothing_beyond_the_rules() {
         exit: 0,
         stdout: String::new(),
         stderr: String::new(),
+        stdout_b64: String::new(),
+        stderr_b64: String::new(),
         tree: Vec::new(),
         post: Vec::new(),
     };

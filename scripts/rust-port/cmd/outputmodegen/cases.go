@@ -134,6 +134,28 @@ func allCaseSpecs() []caseSpec {
 	add(caseSpec{id: "config-list", path: "config list", desc: "list the global config", seed: "entries", argv: flags("config", "list")})
 	add(caseSpec{id: "config-set", path: "config set", desc: "set a key", seed: "entries", argv: flags("config", "set", "sessionTimeout", "20m"), post: [][]string{{"config", "get", "sessionTimeout"}}})
 	add(caseSpec{id: "config-set-invalid", path: "config set", desc: "set an invalid value", seed: "entries", argv: flags("config", "set", "sessionTimeout", "not-a-duration")})
+	// yaml.v3 decodes into the typed config: a Duration field takes only a string
+	// time.ParseDuration accepts, every other YAML type is a decode error.
+	for _, bad := range []struct{ id, key, value, desc string }{
+		{"int", "sessionTimeout", "12", "an int for a Duration key"},
+		{"zero", "sessionTimeout", "0", "the int 0 for a Duration key"},
+		{"float", "sessionTimeout", "1.5", "a float for a Duration key"},
+		{"bool", "sessionTimeout", "true", "a bool for a Duration key"},
+		{"seq", "sessionTimeout", "[1]", "a sequence for a Duration key"},
+		{"map", "sessionTimeout", "{a: 1}", "a mapping for a Duration key"},
+		{"long", "sessionTimeout", "abcdefghijkl", "a long string for a Duration key (cut to seven bytes)"},
+		{"multibyte", "sessionTimeout", "ééééééééééé", "a long multibyte string for a Duration key (cut inside a character)"},
+		{"max-lifetime", "sessionMaxLifetime", "5", "an int for the other root Duration key"},
+		{"nested", "mcp.read_timeout", "30", "an int for a nested Duration key"},
+		{"profile", "agents.cli.approvalTimeout", "30", "an int for a Duration key of an agent profile"},
+		{"bool-key", "useTouchID", "12", "an int for a bool key"},
+		{"bool-word", "git.auto_push", "sure", "a non-boolean word for a bool key"},
+		{"int-key", "mcp.port", "abc", "a string for an int key"},
+		{"seq-key", "mcp.trusted_proxy_ips", "x", "a scalar for a sequence key"},
+	} {
+		add(caseSpec{id: "config-set-" + bad.id, path: "config set", desc: "set " + bad.desc, seed: "entries", argv: flags("config", "set", bad.key, bad.value)})
+	}
+	add(caseSpec{id: "config-set-yes-bool", path: "config set", desc: "set a YAML 1.1 boolean word (accepted for a bool key)", seed: "entries", argv: flags("config", "set", "git.auto_push", "yes"), post: [][]string{{"config", "get", "git.auto_push"}}})
 	add(caseSpec{id: "config-validate", path: "config validate", desc: "validate a valid config", seed: "entries", argv: flags("config", "validate")})
 	add(caseSpec{id: "config-validate-invalid", path: "config validate", desc: "validate a broken config", seed: "entries", argv: flags("config", "validate"),
 		files: []workFile{{Name: "../home/.symvault/config.yaml", Text: "vault: [unterminated\n"}}})
