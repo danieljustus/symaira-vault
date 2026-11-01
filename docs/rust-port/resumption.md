@@ -1,5 +1,37 @@
 # Rust migration handover — 2026-09-09
 
+## CLI-005c: 18 of the 28 pinned body divergences closed, 2026-11-01
+
+Branch `local/cli-005c` (base `ee263740`), one commit per class, each removing its
+pins from `KNOWN_BODY_DIVERGENCES` and re-recording
+`error-taxonomy-known-divergences.json` with the ignored `record_known_divergences`
+(the 10 remaining entries are byte-identical to the previous file). Every closed scenario
+now matches the Go oracle `0cc78062` byte for byte (exit code, stdout, stderr).
+
+| Class (scenarios) | Rust change |
+|---|---|
+| `auth rotate-passphrase` (2) | `read_passphrase` keeps the prompt label: `read Current passphrase: EOF` (Go's `ReadHiddenInput`) |
+| `unlock` without OS keyring (2) | `session cache is memory-only` is printed by cobra and `ExecuteRoot`, followed by the unlock flavour of the locked hint (Touch ID) |
+| `migrate pseudonymize` (2) | unlocks (env-passphrase warning, prompt) before the `(y/N)` confirmation; a failed confirmation read is reported twice |
+| `device pair` (3) | no initialization gate: prompt `Passphrase: `, ExitLocked `read passphrase: read Passphrase: EOF` twice + `Unlock with ...` hint, exit 4; an initialized vault is unchanged |
+| `agent list` (3) | `load config: open <path>: no such file or directory` (new `go_load_config_error`) |
+| `migrate v4` (3) | same wording, reported twice (`finish_vault_result_doubled`) |
+| `migrate kdf` (3) | `read vault identity (<path>): open <path>: no such file or directory`, reported twice |
+
+Side effects of the label fix: the unlock prompt (device and session paths) is now
+`Passphrase: ` like Go's `resolveUnlockPassphrase` instead of `Enter passphrase: `, and the
+`read passphrase:` wrapper of a failed prompt read matches Go's ExitLocked error.
+
+**Still open (10 scenarios): `dynamic generate` (5) and `setup` (5).** Both are not native
+subcommands (only their help pages are frozen). Matching the corpus needs only the clap
+argument errors (`required flag(s) "engine", "role" not set`) and the non-TTY guard of
+`setup` (`setup needs a TTY; ...`), but a command that fails correctly in the corpus and
+then does nothing on a TTY (`setup` wizard) or with both flags (`dynamic generate`
+engines `postgres` and `aws-sts`, leases) would claim a port that does not exist, so the
+pins stay until the commands are ported.
+
+Evidence: see the gate section below once the local gate has run at the tip.
+
 ## CLI-005b: host tools in the error-taxonomy corpus, 2026-11-01
 
 Branch `local/cli-005b` (base `18f7cd20`). Two defects of the extra-positional corpus:
