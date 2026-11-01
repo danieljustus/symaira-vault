@@ -67,6 +67,10 @@ requests and per-slice hosted CI runs are suspended for the port.
   gate. Go is the frozen oracle; it is tested only when a slice edits Go
   code (see rule 3).
 - Findings accumulate until the closing PR instead of surfacing per slice.
+- The Linux container uses one cargo target volume per worktree
+  (`symvault-gate-target-<sha256(root)[:12]>`); a shared volume reused test
+  binaries with another worktree's compile-time fixture paths. Old volumes
+  of removed worktrees are caches and may be deleted with `docker volume rm`.
 - The local gate mirrors `ci.yml` only. The 25 area workflows
   (`rust-http-*`, `rust-mcp-*`, `rust-pairing`, `rust-tui`, `rust-intake-cli`,
   `vault-read-resource-policy`, `kdf-resource-policy`, ...) also run Python

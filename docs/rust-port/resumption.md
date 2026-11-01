@@ -253,6 +253,17 @@ design, `ARCHS=arm64`); XCFramework signing/checksum for distribution; CI eviden
 `codeql.yml` steps; Go removal (`pkg/mobilebind`, gomobile tooling in `go.mod`) needs owner authorization. Next action: let the
 closing CI run the three macOS jobs on this branch and read the Rust-target install and XCFramework build steps there.
 
+
+## Local gate after CLI-005 and the per-worktree target volume, 2026-11-01
+
+`local/cli-005` (`9c35ff3a`..`18f7cd20`) and `local/cli-005b` (`556009aa`..`1d6d4ef4`) are fast-forwarded into
+`local/rust-port`; reviews APPROVE after two REQUEST_CHANGES rounds each. The first full gate on `1d6d4ef4` failed on
+Linux in `store-differential` (`symvault-store` `tests/audit.rs`: fixture `ENOENT`): every worktree shared the
+`symvault-gate-target` Docker volume, so cargo reused an `audit` test binary whose compile-time `CARGO_MANIFEST_DIR`
+pointed into another worktree. `ec61f76e` names the volume after the worktree path (first Linux run per worktree is a
+cold build). Gate `ec61f76e`: macos exit 0, linux exit 0 (receipts in `builds/symaira-vault/local-gate/receipts.jsonl`);
+no `symvault` LaunchAgent loaded afterwards. CLI-005 stays open: 28 pinned body divergences remain.
+
 ## CLI-006 positive output matrix, 2026-10-31 (review fixes 2026-11-01)
 
 `outputmodegen` (oracle `bf7f687b`, darwin) records text, `--json`, `--output yaml`, `--output json` and
