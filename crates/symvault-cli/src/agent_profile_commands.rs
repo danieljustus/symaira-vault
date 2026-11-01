@@ -63,7 +63,11 @@ pub(crate) fn export(
     if let Some(output_path) = output_path.filter(|path| !path.as_os_str().is_empty()) {
         let mut rendered = Vec::new();
         show(vault, name, None, &mut rendered)?;
-        safeio::write_atomic(output_path, &rendered)
+        // Go: `os.Create(filepath.Clean(path))` truncates in place and creates
+        // with 0666 &^ umask, not the 0600 of the atomic writer.
+        let mut file = fs::File::create(crate::agent_list_commands::clean_path(output_path))
+            .map_err(|error| format!("create output file: {error}"))?;
+        file.write_all(&rendered)
             .map_err(|error| format!("create output file: {error}"))?;
         return Ok(());
     }
