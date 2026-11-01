@@ -95,7 +95,7 @@ pass. No account or hosted service is required.
 
 ```bash
 make build
-bash scripts/build-vaultcore.sh  # requires full Xcode with the iOS SDK
+bash scripts/build-vaultcore.sh  # Rust SymvaultFFI XCFramework; needs full Xcode with the iOS SDK
 cd client
 xcodegen generate
 xcodebuild -project Symvault.xcodeproj -scheme Symvault -scmProvider system build

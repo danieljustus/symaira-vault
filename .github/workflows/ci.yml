@@ -593,7 +593,15 @@ jobs:
           cache: ${{ runner.environment != 'self-hosted' }}
           go-version: '1.26.10'
 
-      - name: Build Vaultcore framework
+      - name: Set up Rust (pinned toolchain + Apple targets for SymvaultFFI)
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.98.0 --profile minimal \
+            --target aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
+          rustup default 1.98.0
+          rustc --version
+
+      - name: Build Vaultcore framework (Rust SymvaultFFI XCFramework)
         run: scripts/build-vaultcore.sh
 
       - name: Install XcodeGen
@@ -691,6 +699,8 @@ jobs:
             if [[ "$path" == client/* ||
                   "$path" == assets/branding/* ||
                   "$path" == scripts/build-vaultcore.sh ||
+                  "$path" == scripts/rust-port/build-ffi-xcframework.sh ||
+                  "$path" == crates/symvault-ffi/* ||
                   "$path" == scripts/verify-vault-icon.sh ||
                   "$path" == .github/workflows/ci.yml ||
                   "$path" == .github/workflows/release.yml ||

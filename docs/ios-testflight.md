@@ -50,8 +50,10 @@ beim Upload ablehnen.
 
 Das erledigt:
 
-1. `Vaultcore.xcframework` unter `client/.build/mobilecore` erzeugen, falls es
-   fehlt.
+1. `SymvaultFFI.xcframework` (Rust-Kern, `crates/symvault-ffi`) unter
+   `client/.build/mobilecore` erzeugen, falls es fehlt. Braucht die gepinnte
+   Rust-Toolchain mit den Targets `aarch64-apple-ios` und
+   `aarch64-apple-ios-sim`.
 2. Das Xcode-Projekt mit XcodeGen generieren.
 3. Swift Package Dependencies auflösen.
 4. Einen unsignierten Release-App-Build für `iphoneos` bauen.

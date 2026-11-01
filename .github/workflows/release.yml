@@ -361,11 +361,21 @@ jobs:
           go-version: '1.26.10'
           cache: true
 
-      - name: Build Vaultcore XCFramework (for iOS target)
+      - name: Set up Rust (pinned toolchain + Apple targets for SymvaultFFI)
         run: |
-          # The SymvaultIOS app target consumes Vaultcore.xcframework
-          # (a gomobile bind of pkg/mobilebind). It is git-ignored and must
-          # be generated before xcodebuild resolves the SPM package graph.
+          set -euo pipefail
+          rustup toolchain install 1.98.0 --profile minimal \
+            --target aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
+          rustup default 1.98.0
+          rustc --version
+
+      - name: Build SymvaultFFI XCFramework (Rust core for iOS target)
+        run: |
+          # The SymvaultIOS app target consumes SymvaultFFI.xcframework
+          # (crates/symvault-ffi, ADR 0031: ios-arm64, ios-arm64-simulator,
+          # macos-arm64). It is git-ignored and must be generated before
+          # xcodebuild resolves the SPM package graph. The previous gomobile
+          # Vaultcore build stays behind SYMVAULT_VAULTCORE=gomobile.
           bash scripts/build-vaultcore.sh
 
       - name: Build symvault binary (for embedding)
