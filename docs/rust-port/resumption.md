@@ -91,7 +91,8 @@ CSV/profile/pass importers keep raw bytes, de-duplicate and `path.Join` on them;
 works on path bytes (new `Reporter::line_bytes`, `ApplyError(Vec<u8>)`, byte-level `go_invalid_path_text`,
 `validate_field_lengths` with raw lengths; the import/replace callbacks take the raw-length map). The
 write of a non-UTF-8 path runs Go's `mkdir`/`open` sequence, so macOS produces Go's exact text; a file
-system that accepts the name gets an explicit refusal (ADR 0030 item 4, bounded divergence).
+system that accepts the name gets an explicit refusal (ADR 0030 item 4, bounded divergence, approved by
+the owner 2026-11-01).
 
 Corpus: `importcligen` 293 -> 345 cases (52 `invalid-bytes-*`: 33 `any`, 19 `darwin`). Harness additions:
 `stdout_b64`/`stderr_b64` (raw bytes; text field only readable), normalization rule 3

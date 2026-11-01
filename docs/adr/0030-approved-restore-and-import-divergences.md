@@ -1,7 +1,7 @@
 # ADR 0030: Approved restore and import divergences from the Go oracle
 
-Status: accepted by the owner, 2026-10-30. Affects contract rows IO-001 and
-IO-002. Before this ADR these were recorded as unapproved divergences.
+Status: accepted by the owner, 2026-10-30 (items 1-3) and 2026-11-01 (item 4).
+Affects contract rows IO-001 and IO-002. Before this ADR these were recorded as unapproved divergences.
 
 ## Decisions
 
@@ -24,9 +24,8 @@ IO-002. Before this ADR these were recorded as unapproved divergences.
    `flate: corrupt input` without Go's decoder-internal `before offset N`, and
    invalid bytes in member names appear as U+FFFD in Rust messages where Go
    prints raw bytes. Writing an own inflater to match the offset is rejected.
-4. **PROPOSED, not yet approved by the owner (items 1-3 are accepted; this
-   one is not): entry paths that are not valid UTF-8 are refused where the file
-   system would accept them (IO-001).** Go keeps an imported path as raw bytes. Observed
+4. **Entry paths that are not valid UTF-8 are refused where the file system
+   would accept them (IO-001).** Accepted by the owner on 2026-11-01. Go keeps an imported path as raw bytes. Observed
    with the pinned oracle (`bf7f687b`, corpus `invalid-bytes-*`): the progress
    lines, `--skip-existing`, `--prefix`/`--quarantine` joins and every error
    text carry the raw bytes; two titles that differ only in an invalid byte are
@@ -50,8 +49,7 @@ IO-002. Before this ADR these were recorded as unapproved divergences.
    file system accepts and succeeds; Rust refuses with a pseudonymize-specific
    message. Not divergent: dry-run, skip-existing, joins, de-duplication,
    value re-encoding and the raw-byte field limit match Go on every host.
-   Recorded 2026-10-31; owner decision requested 2026-10-31 and still
-   pending. Until approved, IO-001 is not PASS.
+   Recorded 2026-10-31; accepted by the owner 2026-11-01.
 
 ## Rationale
 
