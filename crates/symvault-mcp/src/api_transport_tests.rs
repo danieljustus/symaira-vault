@@ -334,8 +334,25 @@ fn cancelling_pending_api_headers_closes_upstream_and_joins() {
 fn progressing_api_body_still_reaches_absolute_deadline() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
+    // A deadline that expires before the client connects must fail the
+    // test, not leave join() waiting on an accept that never comes (seen
+    // once under coverage on a loaded host: 1h43m in inet_csk_accept).
+    listener.set_nonblocking(true).unwrap();
     let upstream = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
+        let waiting = Instant::now();
+        let mut stream = loop {
+            match listener.accept() {
+                Ok((stream, _)) => break stream,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if waiting.elapsed() > Duration::from_secs(15) {
+                        return 0;
+                    }
+                    thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => panic!("accept failed: {error}"),
+            }
+        };
+        stream.set_nonblocking(false).unwrap();
         read_request(&mut stream);
         stream
             .set_read_timeout(Some(Duration::from_millis(10)))
@@ -384,7 +401,9 @@ fn progressing_api_body_still_reaches_absolute_deadline() {
         &BTreeMap::new(),
         b"",
         None,
-        &RequestContext::default().with_timeout(Duration::from_millis(150)),
+        // Long enough to connect and read headers on a loaded, instrumented
+        // host; still far below the 15 s the upstream keeps sending.
+        &RequestContext::default().with_timeout(Duration::from_millis(500)),
         &ApiTransportOptions::default(),
     )
     .unwrap_err();
@@ -393,7 +412,7 @@ fn progressing_api_body_still_reaches_absolute_deadline() {
         upstream.join().unwrap() >= 2,
         "response must make progress before timing out"
     );
-    assert!(started.elapsed() < Duration::from_secs(1));
+    assert!(started.elapsed() < Duration::from_secs(3));
 }
 
 #[test]
