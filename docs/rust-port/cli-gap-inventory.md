@@ -440,10 +440,13 @@ and an unreachable port. The Go implementation at oracle commit
 These branches are unreachable in the fixture matrix but exist in Go, so they are
 explicitly listed instead of being silently simplified:
 
-- `session.keyring`, `audit.keyring.orphans`: the non-test/non-CI branches need the
-  OS keyring layer. Outside test/CI `session.keyring` reports Go's **fail** branch
-  (the Rust session cache really has fallen back to memory), and
-  `audit.keyring.orphans` reports `warn` instead of a false "no orphans".
+- `session.cache`, `session.keyring`, `audit.keyring.orphans`: real checks since
+  DOCTOR-KEYRING-001 (2026-11-02, `local/doctor-keyring` `f2838fed`): the OS keyring probe,
+  `security dump-keychain` without `-d` (attributes only) and the orphan `--fix`.
+  Byte-identical to Go in the forced-memory states (`doctor_keyring_differential`) and, opt-in,
+  against the real login keychain. Remaining: a failing OS keyring probe prints the sanitized
+  platform error tail instead of go-keyring's; Rust calls `/usr/bin/security` where Go
+  resolves `security` through `PATH`; Linux/Windows probes are compiled and unit-tested only.
 - `vault.manifest.intact`: the branch with an existing `manifest.age` needs the
   identity/session to verify and uses Go's `msgSessionNeeded` text; additionally the
   hint points at `symvault verify --rebuild`, which is **not implemented in Rust

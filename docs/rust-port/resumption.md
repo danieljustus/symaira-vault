@@ -17,6 +17,45 @@ edit. Actual state at `62fa4449`:
 - Do not merge, rebase or push `local/rust-port` from another chat. No push at all until the closing step (user
   instruction in the owner chat: everything local, no GitHub).
 
+## Integration 2026-11-02: template, MCP payment/Perplexity, doctor keyring, config --fix
+
+Merged into `local/rust-port` after the green gate at `2ab41aa7` (macos and linux exit 0,
+receipts in `builds/symaira-vault/local-gate/receipts.jsonl`). Each branch had an independent
+review; findings were fixed and delta-reviewed before the merge.
+
+- TEMPLATE-001 (`local/gotemplate`, `30193ca8`): Go `text/template` interpreter in
+  `crates/symvault-sync/src/gotemplate/` for custom `.tmpl` templates and non-string refs, CLI
+  and MCP dry-run. Go corpus `testdata/port/template/gotemplate-corpus.json` (2349 cases,
+  `scripts/rust-port/cmd/gotemplategen`, `--check` non-writing, go1.26.10) replays
+  byte-identically; 220 CLI differential runs. Review F1 (float precision above 65535 panicked
+  in Rust's formatter) fixed with six Go-recorded cases. Residuals: JSON `-0` renders `0`
+  (serde_json in the store parses it as integer); `template generate` with a missing ref says
+  `entry not found: nope` where Go says `statat nope.age: ...`; an unwritable `--output` reports
+  the atomic-write error and an existing output file becomes 0600 (Go keeps its mode).
+- MCP-TOOLS-PP-001 (`local/mcp-payment-perplexity`, `8153c8b1`): native `prepare_payment`,
+  `perplexity_search`, `perplexity_ask`; Go fixtures `testdata/port/mcp/prepare-payment.json`
+  and `perplexity.json`; every JSON-RPC result now gets Go's HTML escaping (`go_escaped_raw`).
+  Review M1 fixed: a cancelled or expired call returns `payment denied: context canceled` /
+  `context deadline exceeded` before any prompt or autotype. Autotype uses
+  `native_autotype()` on macOS, Linux and Windows like Go's `DefaultAutotype()`. Recorded
+  deviations: an unknown approval mode fails closed in Rust (Go lets it through); Go drops the
+  payment enforcer when the config or tracker is unreadable (fail-open), Rust mirrors that
+  for parity, to be raised as a Go issue at the closing step.
+- DOCTOR-KEYRING-001 (`local/doctor-keyring`, `f2838fed`): see `cli-gap-inventory.md`.
+- CONFIG-FIX-001 (`local/config-fix`, `4df5f2da`): interactive `config validate --fix`; 65 PTY
+  scenarios against Go plus Go-recorded bytes. Recorded deviation: Rust keeps
+  `copyByDefault: false` on save; Go's `omitempty` drops it and the reload turns the opt-out
+  into opt-in. Core load/validate differences found on the way (`vaultDir: ''`,
+  `promptInjectionMode: weird`, `audit.maxSizeMb: abc`, `logging.level: [1]`,
+  `authMethod: bogus`, `sessionTimeout: 0s` text, `parse config:`/`invalid config:` prefixes)
+  are CONFIG-LOAD-001 (branch `local/config-load`).
+
+Open: SETUP-001 (review REQUEST_CHANGES: stale taxonomy pins, recipients textarea accepts input
+where Go's never does, PTY differential only outside the repo, passphrase zeroization),
+ADD-FORM-001 (review REQUEST_CHANGES: no in-repo Go differential, `add` errors printed once
+where Go prints twice, `SecretType::usage_hint` in `symvault-store` has `***` where Go has the
+`<token>`/`<key>`/`<encoded>` placeholders), CONFIG-LOAD-001.
+
 ## CLI-005c review fixes: unlock order and failed passphrase prompts, 2026-11-01
 
 Independent review of `58460a10..d7c01a1c` (REQUEST_CHANGES) found two defects that the
