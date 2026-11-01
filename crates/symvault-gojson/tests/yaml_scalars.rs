@@ -11,7 +11,7 @@ use serde_json::Value;
 use symvault_gojson::yaml::{Node, to_string};
 
 const FIXTURE: &str = "../../testdata/port/cli/yaml-scalars.json";
-const EXPECTED_ROWS: usize = 299;
+const EXPECTED_ROWS: usize = 306;
 
 fn fixture() -> Value {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(FIXTURE);

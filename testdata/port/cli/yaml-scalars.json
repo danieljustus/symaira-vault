@@ -10,7 +10,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/yamlscalargen/main.go"
     ],
-    "generator_digest": "1104c7cd3186d8348fc67f0b27919f60104858692f906760c08cdbee7c0f3364"
+    "generator_digest": "84581e4de826889fea51396e28381b0cd58253bacc8fe73cac80e867162a6496"
   },
   "notes": [
     "Every string is marshalled by the pinned gopkg.in/yaml.v3 in six positions: value of a map, key of a map, item of a sequence, field of a mapping inside a sequence inside a mapping, value two mappings deep, and the document root.",
@@ -937,6 +937,76 @@
       "nested": "list:\n    - k: <\n",
       "deep": "a:\n    b:\n        c: <\n",
       "root": "<\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0b+1",
+      "map_value": "k: \"0b+1\"\n",
+      "map_key": "\"0b+1\": v\n",
+      "seq_item": "- \"0b+1\"\n",
+      "nested": "list:\n    - k: \"0b+1\"\n",
+      "deep": "a:\n    b:\n        c: \"0b+1\"\n",
+      "root": "\"0b+1\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0b-1",
+      "map_value": "k: \"0b-1\"\n",
+      "map_key": "\"0b-1\": v\n",
+      "seq_item": "- \"0b-1\"\n",
+      "nested": "list:\n    - k: \"0b-1\"\n",
+      "deep": "a:\n    b:\n        c: \"0b-1\"\n",
+      "root": "\"0b-1\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0o-12",
+      "map_value": "k: \"0o-12\"\n",
+      "map_key": "\"0o-12\": v\n",
+      "seq_item": "- \"0o-12\"\n",
+      "nested": "list:\n    - k: \"0o-12\"\n",
+      "deep": "a:\n    b:\n        c: \"0o-12\"\n",
+      "root": "\"0o-12\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0o+12",
+      "map_value": "k: \"0o+12\"\n",
+      "map_key": "\"0o+12\": v\n",
+      "seq_item": "- \"0o+12\"\n",
+      "nested": "list:\n    - k: \"0o+12\"\n",
+      "deep": "a:\n    b:\n        c: \"0o+12\"\n",
+      "root": "\"0o+12\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".1_0",
+      "map_value": "k: \".1_0\"\n",
+      "map_key": "\".1_0\": v\n",
+      "seq_item": "- \".1_0\"\n",
+      "nested": "list:\n    - k: \".1_0\"\n",
+      "deep": "a:\n    b:\n        c: \".1_0\"\n",
+      "root": "\".1_0\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".5_6",
+      "map_value": "k: \".5_6\"\n",
+      "map_key": "\".5_6\": v\n",
+      "seq_item": "- \".5_6\"\n",
+      "nested": "list:\n    - k: \".5_6\"\n",
+      "deep": "a:\n    b:\n        c: \".5_6\"\n",
+      "root": "\".5_6\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".5e1_0",
+      "map_value": "k: \".5e1_0\"\n",
+      "map_key": "\".5e1_0\": v\n",
+      "seq_item": "- \".5e1_0\"\n",
+      "nested": "list:\n    - k: \".5e1_0\"\n",
+      "deep": "a:\n    b:\n        c: \".5e1_0\"\n",
+      "root": "\".5e1_0\"\n"
     },
     {
       "name": "timestamps",

@@ -90,6 +90,12 @@ pub fn resolve(text: &str) -> Resolved {
             {
                 return Resolved::Float(number);
             }
+            if let Some(int) = parse_prefixed_int(&plain) {
+                return match int {
+                    Parsed::Int(value) => Resolved::Int(value),
+                    Parsed::Uint(value) => Resolved::Uint(value),
+                };
+            }
         }
         _ => {}
     }
@@ -140,6 +146,50 @@ fn parse_int_base0(text: &str) -> Option<Parsed> {
     })
 }
 
+/// The `0b`/`-0b`/`0o`/`-0o` branches `resolve.go` tries after the float: the
+/// prefix is cut off and the rest goes through `strconv.ParseInt(rest, radix,
+/// 64)`, which accepts its own sign (`0b+1` and `0o-12` are ints) and then
+/// `strconv.ParseUint(rest, radix, 64)`, which does not. Underscores are gone.
+/// The prefix check is case sensitive: `0B+1` stays a string.
+fn parse_prefixed_int(plain: &str) -> Option<Parsed> {
+    for (prefix, radix) in [("0b", 2), ("0o", 8)] {
+        if let Some(rest) = plain.strip_prefix(prefix) {
+            return parse_radix_signed(rest, radix);
+        }
+    }
+    for (prefix, radix) in [("-0b", 2), ("-0o", 8)] {
+        if let Some(rest) = plain.strip_prefix(prefix) {
+            // `ParseInt("-"+rest, radix, 64)` only: a second sign is a syntax error.
+            return parse_radix_signed(&format!("-{rest}"), radix)
+                .filter(|parsed| matches!(parsed, Parsed::Int(_)));
+        }
+    }
+    None
+}
+
+/// `ParseInt(text, radix, 64)`, then `ParseUint(text, radix, 64)`.
+fn parse_radix_signed(text: &str, radix: u32) -> Option<Parsed> {
+    let (negative, positive, digits) = match text.as_bytes().first()? {
+        b'-' => (true, false, &text[1..]),
+        b'+' => (false, true, &text[1..]),
+        _ => (false, false, text),
+    };
+    if digits.is_empty() || !digits.chars().all(|c| c.is_digit(radix)) {
+        return None;
+    }
+    let magnitude = u64::from_str_radix(digits, radix).ok()?;
+    if negative {
+        return (magnitude <= i64::MAX as u64 + 1)
+            .then(|| Parsed::Int((magnitude as i64).wrapping_neg()));
+    }
+    match i64::try_from(magnitude) {
+        Ok(value) => Some(Parsed::Int(value)),
+        // ParseUint rejects the `+`.
+        Err(_) if positive => None,
+        Err(_) => Some(Parsed::Uint(magnitude)),
+    }
+}
+
 /// `yamlStyleFloat`: `^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$`.
 fn yaml_style_float(text: &str) -> bool {
     let bytes = text.as_bytes();
@@ -186,12 +236,50 @@ fn yaml_style_float(text: &str) -> bool {
 fn go_parse_float(text: &str) -> Option<f64> {
     if !text
         .chars()
-        .all(|c| c.is_ascii_digit() || matches!(c, '+' | '-' | '.' | 'e' | 'E'))
+        .all(|c| c.is_ascii_digit() || matches!(c, '+' | '-' | '.' | 'e' | 'E' | '_'))
     {
         return None;
     }
+    // A leading-dot float skips the underscore removal of the int/float path
+    // and goes to ParseFloat as is, which takes `_` between digits.
+    let digits;
+    let text = if text.contains('_') {
+        if !underscore_ok(text) {
+            return None;
+        }
+        digits = text.replace('_', "");
+        digits.as_str()
+    } else {
+        text
+    };
     let number: f64 = text.parse().ok()?;
     number.is_finite().then_some(number)
+}
+
+/// `strconv.underscoreOK` for a decimal literal: every `_` sits between two
+/// digits.
+fn underscore_ok(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut index = usize::from(matches!(bytes.first(), Some(b'-' | b'+')));
+    let mut saw = b'^';
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte.is_ascii_digit() {
+            saw = b'0';
+        } else if byte == b'_' {
+            if saw != b'0' {
+                return false;
+            }
+            saw = b'_';
+        } else {
+            if saw == b'_' {
+                return false;
+            }
+            saw = b'!';
+        }
+        index += 1;
+    }
+    saw != b'_'
 }
 
 /// `parseTimestamp`: a date, optionally followed by `T`/`t`/space and a time,
@@ -545,6 +633,23 @@ mod tests {
         ("-0777", "!!int"),
         ("0_7", "!!int"),
         ("0b_1", "!!int"),
+        // Probed with the oracle's `sessionTimeout` decode error: the 0b/0o
+        // prefix is cut off and ParseInt takes the sign behind it.
+        ("0b+1", "!!int"),
+        ("0b-1", "!!int"),
+        ("0o-12", "!!int"),
+        ("0o+12", "!!int"),
+        ("0B+1", "!!str"),
+        ("0O-12", "!!str"),
+        ("0b--1", "!!str"),
+        ("0b+", "!!str"),
+        (".1_0", "!!float"),
+        (".5_6", "!!float"),
+        (".5e1_0", "!!float"),
+        ("._5", "!!str"),
+        (".5_", "!!str"),
+        (".5__6", "!!str"),
+        (".5_e3", "!!str"),
         ("0x_1f", "!!int"),
         ("-a", "!!str"),
         ("a#b", "!!str"),
