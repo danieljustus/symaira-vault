@@ -181,7 +181,7 @@ const EXTRA_POSITIONAL_EXCLUSIONS: usize = 7;
 const EXTRA_POSITIONALS_UNINITIALIZED: usize = 138;
 const EXTRA_POSITIONALS_INITIALIZED: usize = 82;
 const RUN_FILE_USE_ARGV_PER_STATE: usize = 82;
-const KNOWN_DIVERGENT_UNINITIALIZED: usize = 12;
+const KNOWN_DIVERGENT_UNINITIALIZED: usize = 9;
 const KNOWN_DIVERGENT_INITIALIZED: usize = 4;
 /// Scenarios of the host-dependent commands (`mcp|serve install|status`, three
 /// variants uninitialized and two initialized each), skipped off darwin.
@@ -238,11 +238,6 @@ const KNOWN_BODY_DIVERGENCES: &[(&str, &str, &str)] = &[
         "migrate_kdf",
         "uninitialized",
         "missing identity.age is worded `file not found`, once; Go prints the `open <path>` error twice",
-    ),
-    (
-        "migrate_v4",
-        "uninitialized",
-        "missing config.yaml is worded `read config: ...`, once; Go prints the `open <path>` error twice",
     ),
     (
         "dynamic_generate",

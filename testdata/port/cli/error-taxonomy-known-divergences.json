@@ -103,36 +103,6 @@
     {
       "expected_rust": {
         "exit_code": 1,
-        "stderr": "Error: load config: read config: No such file or directory (os error 2)\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_migrate_v4_dd1",
-      "reason": "missing config.yaml is worded `read config: ...`, once; Go prints the `open <path>` error twice",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "Error: load config: read config: No such file or directory (os error 2)\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_migrate_v4_x1",
-      "reason": "missing config.yaml is worded `read config: ...`, once; Go prints the `open <path>` error twice",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "Error: load config: read config: No such file or directory (os error 2)\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_migrate_v4_x2",
-      "reason": "missing config.yaml is worded `read config: ...`, once; Go prints the `open <path>` error twice",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
         "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
         "stdout": ""
       },

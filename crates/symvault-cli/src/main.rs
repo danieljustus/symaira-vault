@@ -4089,6 +4089,21 @@ fn finish_vault_result_exit_1(result: Result<(), String>) -> ExitCode {
     }
 }
 
+/// A command whose failures Go returns from `RunE` unchanged: cobra and
+/// `ExecuteRoot` each print `Error: <message>`, the exit status is 1.
+fn finish_vault_result_doubled(result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            if let Some(code) = error.strip_prefix(REPORTED_PREFIX) {
+                return ExitCode::from(code.parse().unwrap_or(1));
+            }
+            print_error_like_go(&error);
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn finish_vault_result(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -4487,8 +4502,8 @@ fn run_migrate_v4(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         let config_path = vault.join("config.yaml");
-        let mut config =
-            Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+        let mut config = Config::load(&config_path)
+            .map_err(|error| config::go_load_config_error(&config_path, &error))?;
 
         // Tier assignment mirrors the oracle: profiles that already carry a
         // non-empty tier are left alone, which makes the migration idempotent.
@@ -4577,7 +4592,7 @@ fn run_migrate_v4(
         );
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled(result)
 }
 
 fn run_migrate_pseudonymize(
