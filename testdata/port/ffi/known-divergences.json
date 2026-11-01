@@ -1,0 +1,206 @@
+{
+  "schema_version": 2,
+  "comment": "Recorded Go behavior the Rust bridge deliberately does not reproduce yet. Every entry pins the exact (path-normalized, $ROOT) error text Rust returns instead: the Rust and Swift replays fail when a case starts matching Go (remove the entry), when it succeeds where Rust must refuse, and when Rust's text is anything other than expected_rust, so an entry cannot outlive its cause or hide a different failure.",
+  "cases": [
+    {
+      "id": "OpenVaultWithPassphrase/config-type-mismatch",
+      "category": "config-diagnostic-wording",
+      "owner": "symvault-core config loader (CFG rows)",
+      "approval": "CFG rows; not an FFI decision",
+      "reason": "A non-mapping YAML document is worded 'parse config: top-level YAML document must be a mapping' instead of yaml.v3's 'yaml: unmarshal errors: ... cannot unmarshal !!int `5` into config.VaultConfig'.",
+      "expected_rust": "load config: parse config: top-level YAML document must be a mapping"
+    },
+    {
+      "id": "ListEntriesJSON/entries-dir-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "list entries: vault path is a symlink: $ROOT/vault/entries"
+    },
+    {
+      "id": "ListEntriesJSON/entries-subdir-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "list entries: vault path is a symlink: $ROOT/vault/entries/work"
+    },
+    {
+      "id": "ListEntriesJSON/entries-subdir-is-symlink-manifest-present",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "list entries: vault path is a symlink: $ROOT/vault/entries/work"
+    },
+    {
+      "id": "ListEntriesJSON/entries-subdir-is-symlink-prefix",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "list entries: vault path is a symlink: $ROOT/vault/entries/work"
+    },
+    {
+      "id": "ListEntriesJSON/entry-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "list entries: vault path is a symlink: $ROOT/vault/entries/top.age"
+    },
+    {
+      "id": "ListEntriesJSON/manifest-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "list entries: vault path is a symlink: $ROOT/vault/manifest.age"
+    },
+    {
+      "id": "OpenVaultWithPassphrase/config-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "vault path is a symlink: $ROOT/vault/config.yaml"
+    },
+    {
+      "id": "OpenVaultWithPassphrase/entries-dir-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "vault path is a symlink: $ROOT/vault/entries"
+    },
+    {
+      "id": "OpenVaultWithPassphrase/identity-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "vault path is a symlink: $ROOT/vault/identity.age"
+    },
+    {
+      "id": "OpenVaultWithPassphrase/identity-is-symlink-outside-root",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "vault path is a symlink: $ROOT/vault/identity.age"
+    },
+    {
+      "id": "OpenVaultWithPassphrase/manifest-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "vault path is a symlink: $ROOT/vault/manifest.age"
+    },
+    {
+      "id": "ReadEntryJSON/entries-dir-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "open vault: vault path is a symlink: $ROOT/vault/entries"
+    },
+    {
+      "id": "ReadEntryJSON/entries-subdir-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "open vault: vault path is a symlink: $ROOT/vault/entries/work"
+    },
+    {
+      "id": "ReadEntryJSON/entry-is-dangling-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "open vault: vault path is a symlink: $ROOT/vault/entries/top.age"
+    },
+    {
+      "id": "ReadEntryJSON/entry-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "open vault: vault path is a symlink: $ROOT/vault/entries/top.age"
+    },
+    {
+      "id": "ReadEntryJSON/entry-is-symlink-outside-root",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "open vault: vault path is a symlink: $ROOT/vault/entries/top.age"
+    },
+    {
+      "id": "ReadEntryJSON/identity-is-symlink-entry-read",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "open vault: vault path is a symlink: $ROOT/vault/identity.age"
+    },
+    {
+      "id": "ReadEntryJSON/manifest-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go follows the symlink and succeeds; Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "open vault: vault path is a symlink: $ROOT/vault/manifest.age"
+    },
+    {
+      "id": "VerifyManifestIntegrity/entries-subdir-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "verify manifest: vault path is a symlink: $ROOT/vault/entries/notes"
+    },
+    {
+      "id": "VerifyManifestIntegrity/entry-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "verify manifest: vault path is a symlink: $ROOT/vault/entries/top.age"
+    },
+    {
+      "id": "VerifyManifestIntegrity/manifest-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "verify manifest: vault path is a symlink: $ROOT/vault/manifest.age"
+    },
+    {
+      "id": "WriteEntryJSON/entries-dir-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "vault path is a symlink: $ROOT/vault/entries"
+    },
+    {
+      "id": "WriteEntryJSON/entries-subdir-is-symlink",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "vault path is a symlink: $ROOT/vault/entries/work"
+    },
+    {
+      "id": "WriteEntryJSON/entry-is-symlink-overwrite",
+      "category": "symlink-hardening",
+      "owner": "symvault-store rooted traversal (STORE rows)",
+      "approval": "approved by the owner 2026-11-01 (ADR 0031, divergence D-SYMLINK)",
+      "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
+      "expected_rust": "vault path is a symlink: $ROOT/vault/entries/top.age"
+    }
+  ]
+}

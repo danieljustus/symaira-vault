@@ -1,5 +1,92 @@
 # Rust migration handover — 2026-09-09
 
+## FFI-001 Swift bridge, 2026-11-01
+
+`crates/symvault-ffi` replaces the gomobile `pkg/mobilebind` bridge: 13 Go-identical functions (`src/api.rs`) behind a
+narrow C ABI (`src/abi.rs`, header `swift/Sources/CSymvaultFFI/include/symvault_ffi.h`), built only on
+`symvault-crypto`/`symvault-store`/`symvault-core` (plus `age`, already pinned, for Go's exact decrypt diagnostics).
+Decision and comparison: ADR 0031 (hand-written C ABI; UniFFI is MPL-2.0 and not on the `deny.toml` allowlist). No new
+dependency; `Cargo.lock` only gains the `symvault-ffi` package. New root profile `ffi` (`inherits = "release"`,
+`panic = "unwind"`) so `catch_unwind` can contain a bug.
+
+Evidence (branch `local/ffi-001`, base `22c51834`):
+- `scripts/rust-port/cmd/mobilebindgen` records `testdata/port/ffi/mobilebind.json` (462 cases, 548 steps) from the real
+  Go functions; `--check` re-runs Go against the stored seed and fails on any byte (also green on Linux with go1.26.6);
+  `--drive` answers JSON lines with raw Go results for the interop tests. Randomized outputs are pinned by shape plus an
+  inverse-function round trip; the vault tree, ciphertexts and identities Go produced once are stored as `seed`.
+- Rust: `cargo test -p symvault-ffi --locked` — fixture replay (548/548 steps through the C ABI), interop with live Go in both
+  directions, ABI tests. Swift: `swift test` in `crates/symvault-ffi/swift` replays the same 548 steps through `SymvaultFFI`
+  against `libsymvault_ffi.a` (the harness had to create names with raw POSIX calls: Foundation URLs decompose `é`, and
+  Foundation's JSON reader drops a leading U+FEFF).
+- `make ffi-differential` = Go `--check` + Rust tests (with the live Go driver) + (macOS) release-grade `ffi` build + Swift
+  test; exit 0 on macOS and in the Linux gate image (Swift part prints `SKIP`), hence part of `port-contract`. `make
+  ffi-fixtures-generate` re-records (new random seed, deliberate), `make ffi-fixtures-check` is the Go check alone.
+- Negative control: one changed byte in an expected error text fails `--check` and the replay.
+
+Differences from Go left open (all asserted with the exact Rust text, none silent): rust-age's random `*-grease` stanza
+lengthens X25519 ciphertexts by 8–200 bytes; non-mapping `config.yaml` wording (`known-divergences.json`, CFG owner);
+`symvault-store` `prepare_entry` keeps `Entry.path` (bridge clears it); **D-SYMLINK** (24 cases, approved by the owner 2026-11-01):
+Rust refuses a symlink anywhere inside the vault tree where Go follows it (ADR 0031).
+
+Review fixes, 2026-11-01 (independent review of `a2feae44`: REQUEST_CHANGES, F1-F8), on `local/ffi-001` after `4a04546c`:
+- Fixture now 553 cases / 674 steps. New Go-recorded cases: JSON nesting depth 33/129/5000/9999/10000/10001 (objects and
+  arrays, under `data`), store value limits (string > 1 MiB, > 1024 array items, > 1024 fields, nesting > 32), missing
+  `config.yaml` for every vault function, Open's config rewrite, stored and written `-0`, symlink mutations (identity,
+  config, manifest, entry, `entries` and subdirectories; dangling and outside-root targets).
+- Red before: at `4a04546c` the deep cases abort the replay and the 256 KiB-stack test with `stack overflow` (SIGABRT);
+  the missing-config cases mismatch.
+- Green after: `make ffi-differential` exit 0 on macOS (Rust 14 lib + 8 ABI + 1 C ABI + 3 replay/interop + 2, Swift 2
+  tests) and in the Linux gate image (Swift part SKIP); `make ffi-ios-simulator-test`; workspace clippy `-D warnings`,
+  fmt, gofmt/go vet on `mobilebindgen`, `cargo test -p symvault-store`.
+- `tests/c_abi.rs` builds the staticlib itself: `cargo test` never writes `libsymvault_ffi.a`, so an archive left from an
+  earlier `cargo build` could be stale (first Linux run failed for exactly that reason).
+- Delta review of `4a04546c..9166d365`: REQUEST_CHANGES. Blocking: the legacy-mode config rewrite went through
+  `Config::save_to`, which wrote a fixed `config.yaml.tmp` following symlinks (a planted link overwrote a file
+  outside the vault); fixed in `symvault-core` for every caller (unique `create_new` temporary, as Go's
+  `fsutil.AtomicWriteFile`) and the rewrite skips a symlinked `config.yaml`. Medium: `keep_negative_zero` turned
+  `1e-0` into invalid `1e-0.0` for every store reader; now only a leading `-0`, copy zeroized. Low: entry data
+  scrubbed on every return path (drop guard), `c_abi` skips under llvm-cov. Both fixes red before (victim
+  overwritten; `1e-0.0`), green after.
+- Pending: re-review of those fixes.
+
+iOS slices, 2026-11-01 (branch `local/ffi-001`, after `a2feae44`):
+- `make ffi-xcframework` (`scripts/rust-port/build-ffi-xcframework.sh`, exit 0): `ffi` profile for `aarch64-apple-darwin`,
+  `aarch64-apple-ios`, `aarch64-apple-ios-sim` -> `$CARGO_TARGET_DIR/xcframework/SymvaultFFI.xcframework` with 3 slices
+  (`Info.plist` `AvailableLibraries`: `ios-arm64`, `ios-arm64-simulator`, `macos-arm64`; header + `CSymvaultFFI` module map in
+  each). Sizes (bytes): 48,027,088 / 48,022,888 / 48,252,800, total 144,302,776; linked and dead-stripped with all 15
+  exports kept about 2.23 MB per slice (ADR 0031 has the table; the old "8.97 MB" figure did not reproduce and is withdrawn).
+  `xcodebuild` is called plain there because `dev-external` appends `-derivedDataPath`, which `-create-xcframework` rejects.
+- `Package.swift`: default unchanged (`make ffi-differential` still exit 0, 548 steps on macOS); with
+  `SYMVAULT_FFI_XCFRAMEWORK=<xcframework>` a `binaryTarget` replaces the C shim (macOS `swift test` in that mode: 548 steps).
+- `make ffi-ios-simulator-test` (exit 0): 548 steps / 462 cases replayed inside an iOS 18.6 Simulator (arm64) against the
+  `ios-arm64-simulator` slice, 21.5 s. Route: `xcodebuild build-for-testing -destination generic/platform=iOS Simulator
+  ARCHS=arm64`, `simctl boot`, `simctl spawn <udid> xctest SymvaultFFITests.xctest`, using the real simctl binary
+  (`SIMCTL=/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/bin/simctl`). The script created and
+  afterwards removed one device of its own (`symvault-ffi001-iPhone16`); no other device or service was touched.
+
+Environment wall (CoreSimulator, this host, 2026-11-01), evidence:
+- `/usr/bin/xcrun simctl list runtimes` (Xcode's `/Applications/Xcode.app/Contents/Developer/usr/bin/simctl`, a bash wrapper)
+  produced no output for 1184 s (started 05:49, killed by me at 06:09; also a foreign session's identical probe, pid 23517,
+  was still hung at 20 min and was left alone). `ps`: wrapper `bash simctl` -> child `xcodebuild -runFirstLaunch`; `sample`
+  of the child: main thread in `mach_msg`, another in `xpc_connection_send_message_with_reply_sync`, i.e. waiting on an XPC
+  reply that never came. Cause from the wrapper source: it runs `-runFirstLaunch` when
+  `/Library/Developer/PrivateFrameworks/CoreSimulator.framework/.../Info.plist` `CFBundleVersion` (here `1174.9.2`) is older
+  than `EXPECTED_VERSION="1174.21"`.
+- The real simctl binary under that framework answers immediately (`list runtimes` 0 s): only runtime `iOS 18.6 (22G86)`
+  and `watchOS 27.0`; no iOS device existed before (created one).
+- `xcodebuild test -destination 'platform=iOS Simulator,id=<udid>'` fails at once: "CoreSimulator is out of date. Current
+  version (1174.9.2) is older than build version (1174.21.0) ... Simulator device support disabled", then `scheme
+  "SymvaultFFI-Package"` not found. So `xcodebuild test` against a simulator destination is blocked until the CoreSimulator
+  component is updated (smallest human action: let `xcodebuild -runFirstLaunch` / the Xcode components installer finish with
+  administrator rights, or install the matching CoreSimulator package). The simctl-spawn route above does not need it.
+
+Not done: switching `client/` (`MobileVaultCore.swift`, `Package.swift`, `project.yml`), `release.yml` and
+`scripts/build-vaultcore.sh` to the Rust framework; FFI-002 real-device RSS; a test run on a physical iPhone (needs hardware and
+signing; the `ios-arm64` slice is built but never executed); `x86_64-apple-ios` (Intel simulator) slice (Apple-silicon only by
+design, `ARCHS=arm64`); XCFramework signing/checksum for distribution. Next action: point `client/` at the XCFramework
+(`SYMVAULT_FFI_XCFRAMEWORK` mode of `crates/symvault-ffi/swift/Package.swift` or a `binaryTarget` with checksum in the app
+package).
+
 ## CLI-006 positive output matrix, 2026-10-31 (review fixes 2026-11-01)
 
 `outputmodegen` (oracle `bf7f687b`, darwin) records text, `--json`, `--output yaml`, `--output json` and

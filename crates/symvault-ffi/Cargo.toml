@@ -1,0 +1,31 @@
+[package]
+name = "symvault-ffi"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Narrow C ABI that replaces the gomobile pkg/mobilebind bridge (FFI-001)"
+
+[lib]
+# staticlib feeds the XCFramework; rlib lets Rust tests call the same code.
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+symvault-core.workspace = true
+symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
+symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
+symvault-store = { path = "../symvault-store", version = "=0.0.0" }
+# Diagnostics only: the Go bridge surfaces age's exact error texts, and the
+# shared crypto crate deliberately collapses them into failure classes. This is
+# the same exact pin symvault-crypto uses.
+age = { version = "=0.12.1", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+zeroize = { version = "=1.9.1", features = ["alloc"] }
+
+[dev-dependencies]
+base64 = "=0.23.1"
+sha2 = "=0.11.1"
+tempfile = "=3.27.0"

@@ -435,7 +435,19 @@ impl Store {
 
     /// Opens an existing vault and completes any pending re-encryption journal.
     pub fn open(root: impl AsRef<Path>, identity: &Identity) -> Result<Self, StoreError> {
-        let store = Self::open_with_root_acquisition(root, |_: &Path| {})?;
+        let store = Self::open_with_root_acquisition(root, |_: &Path| {}, false)?;
+        reencrypt_journal::recover_if_present(&store, identity)?;
+        Ok(store)
+    }
+
+    /// Opens a vault the way Go's package-level `List`, `WriteEntry` and
+    /// `VerifyManifestIntegrity` use it: they never read `identity.age`, and a
+    /// missing `config.yaml` means default settings (`loadVaultConfig` maps
+    /// `os.IsNotExist` to `Default()`). Every other failure, including a
+    /// config that exists but cannot be read or parsed, is reported as by
+    /// [`Store::open`].
+    pub fn open_lenient(root: impl AsRef<Path>, identity: &Identity) -> Result<Self, StoreError> {
+        let store = Self::open_with_root_acquisition(root, |_: &Path| {}, true)?;
         reencrypt_journal::recover_if_present(&store, identity)?;
         Ok(store)
     }
@@ -450,9 +462,21 @@ impl Store {
         Ok(store)
     }
 
+    /// [`Store::open_lenient`] followed by the legacy migration Go runs during
+    /// `Vault.Open`, which never examines `identity.age` either.
+    pub fn open_lenient_with_legacy_migration(
+        root: impl AsRef<Path>,
+        identity: &Identity,
+    ) -> Result<Self, StoreError> {
+        let store = Self::open_lenient(root, identity)?;
+        store.migrate_legacy()?;
+        Ok(store)
+    }
+
     fn open_with_root_acquisition(
         root: impl AsRef<Path>,
         acquire_hook: impl FnOnce(&Path),
+        lenient: bool,
     ) -> Result<Self, StoreError> {
         let requested_root = root.as_ref();
         #[cfg(unix)]
@@ -489,7 +513,7 @@ impl Store {
             rooted::regular_exists_at(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
         #[cfg(not(unix))]
         let config_exists = ensure_regular_file(&config_path, false)?;
-        if !config_exists {
+        if !config_exists && !lenient {
             return Err(StoreError::MissingFile(config_path));
         }
 
@@ -498,15 +522,19 @@ impl Store {
             rooted::regular_exists_at(&root_cap, Path::new(IDENTITY_FILE), &identity_path)?;
         #[cfg(not(unix))]
         let identity_exists = ensure_regular_file(&identity_path, false)?;
-        if !identity_exists {
+        if !identity_exists && !lenient {
             return Err(StoreError::MissingFile(identity_path));
         }
 
-        #[cfg(unix)]
-        let config_bytes = rooted::read(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
-        #[cfg(not(unix))]
-        let config_bytes = read_regular(&config_path)?;
-        let config = parse_config(&config_bytes)?;
+        let config = if config_exists {
+            #[cfg(unix)]
+            let config_bytes = rooted::read(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
+            #[cfg(not(unix))]
+            let config_bytes = read_regular(&config_path)?;
+            parse_config(&config_bytes)?
+        } else {
+            VaultConfig::default()
+        };
 
         #[cfg(unix)]
         let recipients = rooted::regular_exists_at(
@@ -517,8 +545,8 @@ impl Store {
         #[cfg(not(unix))]
         let recipients = regular_exists(&root.join(RECIPIENTS_FILE))?;
         let presence = Presence {
-            config: true,
-            identity: true,
+            config: config_exists,
+            identity: identity_exists,
             recipients,
         };
         #[cfg(unix)]
@@ -1082,18 +1110,22 @@ impl Store {
         };
         let result = entry_budget::validate_with_batch(&plaintext, &candidate.logical, batch)
             .and_then(|()| {
-                serde_json::from_slice::<serde_json::Value>(&plaintext)
-                    .map_err(|error| StoreError::Entry {
+                serde_json::from_slice::<serde_json::Value>(
+                    keep_negative_zero(&plaintext)
+                        .as_deref()
+                        .map_or(&plaintext[..], |rewritten| &rewritten[..]),
+                )
+                .map_err(|error| StoreError::Entry {
+                    path: candidate.logical.clone(),
+                    detail: error.to_string(),
+                })
+                .and_then(|mut value| {
+                    normalize_entry_data_key(&mut value);
+                    serde_json::from_value(value).map_err(|error| StoreError::Entry {
                         path: candidate.logical.clone(),
                         detail: error.to_string(),
                     })
-                    .and_then(|mut value| {
-                        normalize_entry_data_key(&mut value);
-                        serde_json::from_value(value).map_err(|error| StoreError::Entry {
-                            path: candidate.logical.clone(),
-                            detail: error.to_string(),
-                        })
-                    })
+                })
             });
         plaintext.zeroize();
         if result
@@ -1170,6 +1202,50 @@ fn normalize_entry_data_key(value: &mut serde_json::Value) {
     {
         fields.insert("data".into(), data);
     }
+}
+
+/// `serde_json` with `arbitrary_precision` reads the integer literal `-0` as
+/// `0`, but Go decodes every number of an entry into a `float64` and so keeps
+/// negative zero (and writes it back as `-0`). Rewrites each such literal
+/// outside strings to `-0.0`, which `serde_json` keeps. Only a `-` that starts
+/// a number counts: in `1e-0` it belongs to the exponent. Returns `None` when
+/// nothing changes; the rewritten copy holds plaintext and is zeroized.
+fn keep_negative_zero(bytes: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+    let mut rewritten: Option<Zeroizing<Vec<u8>>> = None;
+    let mut copied = 0;
+    let mut index = 0;
+    let mut in_string = false;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if in_string {
+            match byte {
+                b'\\' => index += 1,
+                b'"' => in_string = false,
+                _ => {}
+            }
+        } else if byte == b'"' {
+            in_string = true;
+        } else if byte == b'-'
+            && !matches!(
+                index.checked_sub(1).map(|before| bytes[before]),
+                Some(b'e' | b'E')
+            )
+            && bytes.get(index + 1) == Some(&b'0')
+            && !matches!(bytes.get(index + 2), Some(b'.' | b'e' | b'E' | b'0'..=b'9'))
+        {
+            let out = rewritten
+                .get_or_insert_with(|| Zeroizing::new(Vec::with_capacity(bytes.len() + 8)));
+            out.extend_from_slice(&bytes[copied..index + 2]);
+            out.extend_from_slice(b".0");
+            copied = index + 2;
+            index += 1;
+        }
+        index += 1;
+    }
+    if let Some(out) = rewritten.as_mut() {
+        out.extend_from_slice(&bytes[copied..]);
+    }
+    rewritten
 }
 
 fn validate_entry_values(entry: &Entry) -> Result<(), StoreError> {

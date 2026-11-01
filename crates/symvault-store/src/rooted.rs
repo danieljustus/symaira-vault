@@ -70,6 +70,17 @@ pub(super) fn directory(
                 })?
             }
             Err(source) => {
+                // `O_NOFOLLOW | O_DIRECTORY` on a symlink fails with ELOOP or
+                // ENOTDIR depending on the platform; say what it is.
+                if matches!(source, rustix::io::Errno::LOOP | rustix::io::Errno::NOTDIR)
+                    && rustix::fs::statat(&dir, name, rustix::fs::AtFlags::SYMLINK_NOFOLLOW)
+                        .is_ok_and(|stat| {
+                            rustix::fs::FileType::from_raw_mode(stat.st_mode)
+                                == rustix::fs::FileType::Symlink
+                        })
+                {
+                    return Err(StoreError::Symlink(display.to_path_buf()));
+                }
                 return Err(StoreError::Read {
                     path: display.to_path_buf(),
                     source: source.into(),
@@ -106,10 +117,16 @@ pub(super) fn walk_from_with_limits(
     let directory = directory(root, relative, display, false)?;
     let mut entries = Vec::new();
     let mut path_bytes = 0;
+    // `display` names `relative` itself, while `walk_directory` joins entry
+    // paths (which already start with `relative`) onto the vault root.
+    let mut root_display = display.to_path_buf();
+    for _ in relative.components() {
+        root_display.pop();
+    }
     walk_directory(
         &directory,
         relative,
-        display,
+        &root_display,
         &mut entries,
         &mut path_bytes,
         relative.components().count(),

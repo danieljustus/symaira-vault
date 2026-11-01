@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-generate ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
 
 # Variables
 BINARY_NAME := symvault
@@ -753,7 +753,7 @@ port-contract: cfg-overrides-fixtures-check mcp-oauth-contract store004-isolatio
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9 --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check ffi-differential
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:
@@ -820,6 +820,62 @@ audit-differential: audit-fixtures-check
 	$(CARGO) run -p symvault-store --example audit-emit --locked -- target/audit/rust-output.jsonl >/dev/null
 	@test -s target/audit/rust-output.jsonl
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
+
+# FFI-001: the Rust replacement for the gomobile pkg/mobilebind bridge.
+#
+#   ffi-fixtures-generate  re-record testdata/port/ffi/mobilebind.json from the
+#                          real Go functions (explicit; never part of a check)
+#   ffi-fixtures-check     re-run Go and fail on any byte of drift
+#   ffi-differential       Go --check, then the Rust tests (fixture replay,
+#                          Go<->Rust interoperability against the live Go
+#                          driver, C ABI), then on macOS the Swift package test
+#                          against the release-grade staticlib. Off macOS the
+#                          Swift part prints a visible SKIP.
+SWIFT ?= swift
+FFI_TARGET_ABS := $(abspath $(CARGO_TARGET_DIR))
+FFI_DRIVER := $(FFI_TARGET_ABS)/ffi-driver/mobilebindgen
+ffi-fixtures-generate ffi-fixtures-check ffi-differential: export SYMVAULT_TEST_KEYRING := memory
+
+# FFI_GENERATE_FLAGS=--keep-seed regenerates from the seed already stored in the
+# fixture: existing cases stay byte-identical and only new or changed cases and
+# the provenance header move (without it a fresh random seed rewrites every
+# ciphertext).
+FFI_GENERATE_FLAGS ?=
+ffi-fixtures-generate:
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mobilebindgen \
+		$(FFI_GENERATE_FLAGS) --output testdata/port/ffi/mobilebind.json
+
+ffi-fixtures-check:
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mobilebindgen \
+		--check --output testdata/port/ffi/mobilebind.json
+
+ffi-differential: ffi-fixtures-check
+	@mkdir -p $(dir $(FFI_DRIVER))
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -o $(FFI_DRIVER) ./scripts/rust-port/cmd/mobilebindgen
+	SYMVAULT_FFI_GO_DRIVER=$(FFI_DRIVER) $(CARGO) test -p symvault-ffi --locked
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		set -eu; \
+		$(CARGO) build -p symvault-ffi --profile ffi --locked; \
+		cd crates/symvault-ffi/swift && \
+		SYMVAULT_FFI_LIB_DIR=$(FFI_TARGET_ABS)/ffi $(SWIFT) test --scratch-path $(FFI_TARGET_ABS)/ffi-swift; \
+	else \
+		echo "SKIP ffi-differential: Swift package test needs macOS (host: $$(uname -s)); Go check and Rust tests passed"; \
+	fi
+
+# FFI-001 iOS: SymvaultFFI.xcframework (macOS arm64, iOS device arm64, iOS
+# Simulator arm64; `ffi` profile) under $(CARGO_TARGET_DIR)/xcframework, never in
+# the tracked tree. Prints per-slice and total sizes (recorded in ADR 0031).
+# Needs `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`.
+ffi-xcframework:
+	CARGO="$(CARGO)" CARGO_TARGET_DIR="$(FFI_TARGET_ABS)" \
+		scripts/rust-port/build-ffi-xcframework.sh
+
+# FFI-001 iOS: replay the recorded fixture through the Swift package on an iOS
+# Simulator (xcodebuild test) against the XCFramework's simulator slice. Needs a
+# working CoreSimulator and an installed iOS runtime; see the script header for
+# SIMCTL / IOS_SIM_UDID. Not part of `port-contract` (needs a simulator).
+ffi-ios-simulator-test: ffi-xcframework
+	CARGO_TARGET_DIR="$(FFI_TARGET_ABS)" scripts/rust-port/ffi-ios-simulator-test.sh
 
 # Split from `rust-gates` so CI can run the interpreter-heavy Miri pass in its
 # own parallel job: Miri accounts for roughly two thirds of the aggregate gate

@@ -1284,7 +1284,7 @@ fn write_new_entry_and_write_entry_at_reject_symlinked_entry_parent() {
         .write_new_entry("safe/second", &Entry::default(), &identity)
         .unwrap_err();
     assert!(
-        matches!(new_entry_error, StoreError::Read { .. }),
+        matches!(new_entry_error, StoreError::Symlink(_)),
         "write_new_entry followed a symlinked parent: {new_entry_error:?}"
     );
 
@@ -1299,7 +1299,7 @@ fn write_new_entry_and_write_entry_at_reject_symlinked_entry_parent() {
         )
         .unwrap_err();
     assert!(
-        matches!(write_at_error, StoreError::Read { .. }),
+        matches!(write_at_error, StoreError::Symlink(_)),
         "write_entry_at followed a symlinked parent: {write_at_error:?}"
     );
 
@@ -1560,21 +1560,25 @@ fn root_acquisition_rejects_replaced_root_before_parsing_invalid_config() {
     fs::write(root.join("identity.age"), b"presence fixture").unwrap();
     let canonical_root = root.canonicalize().unwrap();
     let hook_ran = Arc::new(AtomicBool::new(false));
-    let error = Store::open_with_root_acquisition(&root, {
-        let root = root.clone();
-        let canonical_root = canonical_root.clone();
-        let moved = moved.clone();
-        let replacement = replacement.clone();
-        let hook_ran = hook_ran.clone();
-        move |canonical| {
-            assert_eq!(canonical, canonical_root);
-            fs::rename(&root, &moved).unwrap();
-            fs::rename(&replacement, &root).unwrap();
-            fs::write(root.join("config.yaml"), b"vault: invalid\n").unwrap();
-            fs::write(root.join("identity.age"), b"outsider identity").unwrap();
-            hook_ran.store(true, Ordering::SeqCst);
-        }
-    })
+    let error = Store::open_with_root_acquisition(
+        &root,
+        {
+            let root = root.clone();
+            let canonical_root = canonical_root.clone();
+            let moved = moved.clone();
+            let replacement = replacement.clone();
+            let hook_ran = hook_ran.clone();
+            move |canonical| {
+                assert_eq!(canonical, canonical_root);
+                fs::rename(&root, &moved).unwrap();
+                fs::rename(&replacement, &root).unwrap();
+                fs::write(root.join("config.yaml"), b"vault: invalid\n").unwrap();
+                fs::write(root.join("identity.age"), b"outsider identity").unwrap();
+                hook_ran.store(true, Ordering::SeqCst);
+            }
+        },
+        false,
+    )
     .unwrap_err();
     assert!(hook_ran.load(Ordering::SeqCst));
     assert!(matches!(error, StoreError::RootChanged(path) if path == root));
@@ -2857,4 +2861,24 @@ fn recovery_resource_failures_preserve_journal_and_originals() {
     );
     assert_eq!(fs::read(&backup).unwrap(), original);
     assert!(journal.is_file());
+}
+
+#[test]
+fn keep_negative_zero_rewrites_only_a_leading_minus_zero() {
+    let rewrite = |text: &str| {
+        super::keep_negative_zero(text.as_bytes())
+            .map(|out| String::from_utf8(out.to_vec()).unwrap())
+    };
+    // Exponents keep their sign: `1e-0` is valid JSON and must stay so.
+    assert_eq!(rewrite(r#"{"a":1e-0,"b":[1E-0,2]}"#), None);
+    assert_eq!(
+        rewrite(r#"{"a":-0,"b":[-0,1e-0],"c":"-0"}"#).as_deref(),
+        Some(r#"{"a":-0.0,"b":[-0.0,1e-0],"c":"-0"}"#)
+    );
+    assert_eq!(rewrite("-0"), Some("-0.0".to_owned()));
+    for text in [r#"{"a":1e-0}"#, r#"[1E-0,-0]"#] {
+        let bytes = super::keep_negative_zero(text.as_bytes())
+            .map_or_else(|| text.as_bytes().to_vec(), |out| out.to_vec());
+        serde_json::from_slice::<serde_json::Value>(&bytes).expect("still valid JSON");
+    }
 }
