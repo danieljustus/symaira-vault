@@ -783,7 +783,20 @@ fn build_handler(
             .with_grant_signing_key(signing_key)
             .with_command_executor(command_executor)
             .with_clipboard_auto_clear_duration(clipboard_auto_clear_duration);
-    let mut runtime = runtime.with_clipboard(clipboard);
+    let config_path = root.join("config.yaml");
+    let mut runtime = runtime
+        .with_clipboard(clipboard)
+        .with_payment_enforcer(symvault_mcp::payment::load_enforcer(
+            &config_path,
+            agent_name,
+            &root.to_string_lossy(),
+        ))
+        .with_perplexity_config(symvault_mcp::perplexity::load_perplexity_config(
+            &config_path,
+        ));
+    if let Some(autotype) = autotype_backend() {
+        runtime = runtime.with_autotype(autotype);
+    }
     if let Some(queue) = approval_queue {
         runtime = runtime.with_approval_queue(queue);
     }
@@ -824,6 +837,17 @@ pub fn build_handler_for_contract_test(
     )
 }
 
+fn autotype_backend() -> Option<Arc<dyn symvault_core::platform::Autotype>> {
+    #[cfg(target_os = "macos")]
+    {
+        Some(Arc::new(symvault_platform::MacOsPlatform))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        None
+    }
+}
+
 fn clipboard_backend() -> Arc<dyn Clipboard> {
     #[cfg(target_os = "macos")]
     {
@@ -845,6 +869,13 @@ fn runtime_config(
     // Keep direct calls subject to the same actionable capability check as
     // Go; tools/list separately hides the tool when the profile lacks access.
     available_tools.push("execute_api_request".into());
+    // Go registers these without an availability predicate or capability
+    // gate; tier, allowed_tools and approval remain per-call checks.
+    available_tools.extend(
+        ["prepare_payment", "perplexity_search", "perplexity_ask"]
+            .into_iter()
+            .map(str::to_owned),
+    );
     if profile.can_run_commands {
         // This CLI always installs McpCommandExecutor in build_handler. Keep
         // the secret-aware command tool opt-in to the profile capability and

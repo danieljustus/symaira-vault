@@ -489,6 +489,9 @@ pub struct StoreReadOnlyRuntime {
     clipboard_clear_cancel: Mutex<Option<mpsc::Sender<()>>>,
     clipboard_auto_clear_duration: Duration,
     api_transport_options: broker::ApiTransportOptions,
+    payment: Option<crate::payment::Enforcer>,
+    autotype: Option<Arc<dyn symvault_core::platform::Autotype>>,
+    perplexity: Option<crate::perplexity::PerplexityRuntimeConfig>,
 }
 
 impl StoreReadOnlyRuntime {
@@ -562,6 +565,9 @@ impl StoreReadOnlyRuntime {
             clipboard_clear_cancel: Mutex::new(None),
             clipboard_auto_clear_duration: Duration::from_secs(30),
             api_transport_options: broker::ApiTransportOptions::default(),
+            payment: None,
+            autotype: None,
+            perplexity: None,
         })
     }
 
@@ -632,6 +638,9 @@ impl StoreReadOnlyRuntime {
             clipboard_clear_cancel: Mutex::new(None),
             clipboard_auto_clear_duration: Duration::from_secs(30),
             api_transport_options: broker::ApiTransportOptions::default(),
+            payment: None,
+            autotype: None,
+            perplexity: None,
         })
     }
 
@@ -648,6 +657,34 @@ impl StoreReadOnlyRuntime {
     #[must_use]
     pub fn with_api_transport_options(mut self, options: broker::ApiTransportOptions) -> Self {
         self.api_transport_options = options;
+        self
+    }
+
+    /// Attaches the `prepare_payment` policy enforcer (`server.New` attaches
+    /// one when the agent references a known `paymentPolicy`).
+    #[must_use]
+    pub fn with_payment_enforcer(mut self, enforcer: Option<crate::payment::Enforcer>) -> Self {
+        self.payment = enforcer;
+        self
+    }
+
+    /// Installs the application-owned autotype backend used by
+    /// `prepare_payment`. Without one the tool reports Go's
+    /// "autotype not available on this platform" and types nothing.
+    #[must_use]
+    pub fn with_autotype(mut self, autotype: Arc<dyn symvault_core::platform::Autotype>) -> Self {
+        self.autotype = Some(autotype);
+        self
+    }
+
+    /// Supplies `mcp.perplexity` (API key, base URL, rate limit). Tests may
+    /// also set `allow_private`, which Go's config loader never does.
+    #[must_use]
+    pub fn with_perplexity_config(
+        mut self,
+        config: Option<crate::perplexity::PerplexityRuntimeConfig>,
+    ) -> Self {
+        self.perplexity = config;
         self
     }
 
@@ -2720,6 +2757,12 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.execute_with_secret(arguments)
         } else if name == "execute_api_request" {
             self.execute_api_request(arguments, context)
+        } else if name == "prepare_payment" {
+            self.prepare_payment(arguments)
+        } else if name == "perplexity_search" {
+            self.perplexity_search(arguments, context)
+        } else if name == "perplexity_ask" {
+            self.perplexity_ask(arguments, context)
         } else if name == "copy_to_clipboard" {
             self.copy_to_clipboard(arguments)
         } else if name == "run_command" {
@@ -2847,6 +2890,435 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             _ => {}
         }
         result
+    }
+}
+
+/// `prepare_payment` and the Perplexity tools, ported from
+/// `tools_prepare_payment.go` and `tools_perplexity.go`.
+impl StoreReadOnlyRuntime {
+    /// `requireApproval` for `Intent{Action: "prepare_payment"}`. Critical
+    /// risk is never remembered, so no approval cache is consulted or filled.
+    /// The error text is what Go wraps as `payment denied: <err>`.
+    fn require_payment_approval(&self, path: &str, summary: &str) -> Result<(), String> {
+        let mode = if self.approval_mode.is_empty() {
+            if self.require_approval {
+                "prompt"
+            } else {
+                "none"
+            }
+        } else {
+            self.approval_mode.as_str()
+        };
+        match mode {
+            "none" | "auto" => return Ok(()),
+            "deny" => {
+                self.append_audit("approval.prepare_payment.denied", path, false);
+                return Err("prepare_payment denied: approval mode is 'deny'".into());
+            }
+            "prompt" => {}
+            // Go lets an unknown mode through; RuntimeConfig is public and
+            // unvalidated here, and this tool moves money, so fail closed.
+            _ => {
+                self.append_audit("approval.prepare_payment.denied", path, false);
+                return Err(format!(
+                    "prepare_payment denied: unknown approval mode {mode:?}"
+                ));
+            }
+        }
+        if !self.approval.is_tty_present() {
+            self.append_audit("approval.prepare_payment.denied", path, false);
+            return Err(
+                "prepare_payment requires approval but no TTY or GUI dialog available".into(),
+            );
+        }
+        self.append_audit("approval.prepare_payment.requested", path, true);
+        let working_dir = std::env::current_dir()
+            .ok()
+            .map(|dir| dir.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let approval = self.approval.request(&ApprovalRequest {
+            operation: "prepare_payment".into(),
+            // Agent-supplied merchant/description text is terminal text,
+            // never escape sequences.
+            details: sanitize_approval_summary(summary),
+            timeout: if self.approval_timeout.is_zero() {
+                Duration::from_secs(30)
+            } else {
+                self.approval_timeout
+            },
+            agent_name: self.agent_name.clone(),
+            working_dir,
+            risk_level: RiskLevel::Critical,
+            secrets_accessed: self
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            can_remember: false,
+            ..ApprovalRequest::default()
+        });
+        if let Some(error) = &approval.error {
+            return Err(format!("prepare_payment approval failed: {error}"));
+        }
+        if !approval.approved {
+            self.append_audit("approval.prepare_payment.denied", path, false);
+            return Err("prepare_payment denied: user did not approve".into());
+        }
+        self.approval_key_counter
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        self.append_audit("approval.prepare_payment.granted", path, true);
+        Ok(())
+    }
+
+    fn prepare_payment(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        use crate::call::required_string;
+        let path = match required_string(arguments, "entry_path") {
+            Ok(path) => path,
+            Err(result) => {
+                self.append_audit("payment.requested", "<invalid>", false);
+                return Ok(result);
+            }
+        };
+        let required = |name: &str| match required_string(arguments, name) {
+            Ok(value) => Ok(value),
+            Err(result) => {
+                self.append_audit("payment.requested", path, false);
+                Err(result)
+            }
+        };
+        let merchant = match required("merchant") {
+            Ok(value) => value,
+            Err(result) => return Ok(result),
+        };
+        let amount = match required("amount") {
+            Ok(value) => value,
+            Err(result) => return Ok(result),
+        };
+        let currency = match required("currency") {
+            Ok(value) => value,
+            Err(result) => return Ok(result),
+        };
+        let description = arguments
+            .get("description")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+
+        if !self.inner.scope_allows(path) {
+            self.append_audit("payment.denied", path, false);
+            return Err(format!(
+                "access denied: path {} outside allowed scope",
+                symvault_core::go_quote(path)
+            ));
+        }
+
+        if let Err(error) = crate::payment::validate_entry_path(path) {
+            self.append_audit("payment.requested", path, false);
+            return Err(error);
+        }
+        let entry = match self.inner.store().get(path) {
+            Ok(Some(entry)) => entry,
+            Ok(None) => {
+                self.append_audit("payment.requested", path, false);
+                return Ok(ToolCallResult::error("Entry \"\" not found"));
+            }
+            Err(error) => {
+                self.append_audit("payment.requested", path, false);
+                return Err(error);
+            }
+        };
+        if entry.secret_type != "payment" {
+            self.append_audit("payment.denied", path, false);
+            return Ok(ToolCallResult::error(format!(
+                "entry {path} is not a payment entry (type: {})",
+                entry.secret_type
+            )));
+        }
+
+        let mut summary = format!("Allow payment of {currency} {amount} to {merchant}?");
+        if !description.is_empty() {
+            summary.push_str(&format!("\nDescription: {description}"));
+        }
+
+        let request = crate::payment::PaymentRequest {
+            entry_path: path,
+            merchant,
+            amount,
+            currency,
+        };
+        if let Some(enforcer) = &self.payment
+            && let Err(error) = enforcer.check(&request)
+        {
+            self.append_audit("payment.policy_denied", path, false);
+            return Ok(ToolCallResult::error(error));
+        }
+
+        if let Err(error) = self.require_payment_approval(path, &summary) {
+            self.append_audit("payment.denied", path, false);
+            return Err(format!("payment denied: {error}"));
+        }
+        self.append_audit("payment.approved", path, true);
+
+        if let Some(enforcer) = &self.payment
+            && let Err(error) = enforcer.record_approved(&request)
+        {
+            eprintln!("WARN failed to record payment total err={error:?}");
+        }
+
+        let bank_account = entry
+            .fields
+            .get("subtype")
+            .is_some_and(|subtype| subtype.as_str() == Some("bank_account"));
+        let fields: &[&str] = if bank_account {
+            &["iban"]
+        } else {
+            &["card_number", "expiry_month", "expiry_year", "cvc"]
+        };
+        for field in fields {
+            let Some(value) = entry.fields.get(*field) else {
+                self.append_audit("payment.denied", path, false);
+                return Ok(ToolCallResult::error(format!(
+                    "payment field {} not found in entry {path}",
+                    symvault_core::go_quote(field)
+                )));
+            };
+            let Some(text) = value.as_str() else {
+                self.append_audit("payment.denied", path, false);
+                return Ok(ToolCallResult::error(format!(
+                    "payment field {} is not a string",
+                    symvault_core::go_quote(field)
+                )));
+            };
+            let typed = match &self.autotype {
+                Some(autotype) => autotype.type_text(text).map_err(|error| error.to_string()),
+                None => Err("autotype not available on this platform".to_owned()),
+            };
+            if let Err(error) = typed {
+                self.append_audit("payment.denied", path, false);
+                return Ok(ToolCallResult::error(format!(
+                    "autotype failed on field {}: {error}",
+                    symvault_core::go_quote(field)
+                )));
+            }
+        }
+
+        self.append_audit("payment.typed", path, true);
+        Ok(ToolCallResult::text("{\"success\": true}"))
+    }
+
+    /// `resolvePerplexityAPIKey`: config first, then the `perplexity` entry.
+    fn resolve_perplexity_api_key(&self) -> Result<String, String> {
+        if let Some(config) = &self.perplexity
+            && !config.api_key.is_empty()
+        {
+            return Ok(config.api_key.clone());
+        }
+        let missing = || {
+            format!(
+                "perplexity API key not found: try adding a vault entry {} with a credential field, or set mcp.perplexity.api_key in config",
+                symvault_core::go_quote(crate::perplexity::API_KEY_ENTRY)
+            )
+        };
+        let Ok(Some(entry)) = self.inner.store().get(crate::perplexity::API_KEY_ENTRY) else {
+            return Err(missing());
+        };
+        for key in ["credential", "token", "password", "api_key"] {
+            if let Some(Value::String(value)) = entry.fields.get(key)
+                && !value.is_empty()
+            {
+                return Ok(value.clone());
+            }
+        }
+        Err(format!(
+            "perplexity vault entry {} exists but no credential field found (expected: credential, token, password, or api_key)",
+            symvault_core::go_quote(crate::perplexity::API_KEY_ENTRY)
+        ))
+    }
+
+    fn perplexity_chat(
+        &self,
+        api_key: &str,
+        messages: &[(&str, &str)],
+        context: &crate::RequestContext,
+    ) -> Result<crate::perplexity::ChatResponse, String> {
+        let config = self.perplexity.as_ref();
+        let base_url = config
+            .map(|config| config.base_url.as_str())
+            .filter(|base_url| !base_url.is_empty())
+            .unwrap_or(crate::perplexity::DEFAULT_BASE_URL);
+        let allow_private = config.is_some_and(|config| config.allow_private);
+        let rate_limit = config
+            .map(|config| config.rate_limit_per_min)
+            .filter(|limit| *limit > 0)
+            .unwrap_or(crate::perplexity::DEFAULT_RATE_LIMIT);
+        crate::perplexity::call_chat(
+            api_key,
+            base_url,
+            messages,
+            allow_private,
+            rate_limit,
+            &self.api_transport_options,
+            context,
+        )
+    }
+
+    fn perplexity_search(
+        &self,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
+        context.check()?;
+        let query = match crate::call::required_string(arguments, "query") {
+            Ok(query) => query,
+            Err(result) => {
+                self.append_audit("perplexity_search", "<invalid>", false);
+                return Ok(result);
+            }
+        };
+        let api_key = match self.resolve_perplexity_api_key() {
+            Ok(key) => key,
+            Err(error) => {
+                self.append_audit("perplexity_search", "<api-key-error>", false);
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let messages = [
+            ("system", crate::perplexity::SEARCH_SYSTEM_PROMPT),
+            ("user", query),
+        ];
+        let response = match self.perplexity_chat(&api_key, &messages, context) {
+            Ok(response) => response,
+            Err(error) => {
+                self.append_audit(
+                    "perplexity_search",
+                    &format!("query={}, error={error}", symvault_core::go_quote(query)),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!(
+                    "Perplexity search failed: {error}"
+                )));
+            }
+        };
+        let Some(answer) = response.first_answer.as_deref() else {
+            self.append_audit(
+                "perplexity_search",
+                &format!(
+                    "query={}, error=empty-response",
+                    symvault_core::go_quote(query)
+                ),
+                false,
+            );
+            return Ok(ToolCallResult::error(
+                "Perplexity returned an empty response",
+            ));
+        };
+        self.append_audit(
+            "perplexity_search",
+            &format!(
+                "query={}, model={}, citations={}",
+                symvault_core::go_quote(query),
+                response.model,
+                response.citations.len()
+            ),
+            true,
+        );
+        symvault_gojson::to_string(&crate::perplexity::SearchResult {
+            query,
+            answer,
+            model: &response.model,
+            citations: &response.citations,
+        })
+        .map(ToolCallResult::text)
+        .map_err(|error| error.to_string())
+    }
+
+    fn perplexity_ask(
+        &self,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
+        context.check()?;
+        let question = match crate::call::required_string(arguments, "question") {
+            Ok(question) => question,
+            Err(result) => {
+                self.append_audit("perplexity_ask", "<invalid>", false);
+                return Ok(result);
+            }
+        };
+        let api_key = match self.resolve_perplexity_api_key() {
+            Ok(key) => key,
+            Err(error) => {
+                self.append_audit("perplexity_ask", "<api-key-error>", false);
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let context_entries = arguments
+            .get("context")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let (system_prompt, context_parts, user_message) = if context_entries.is_empty() {
+            (
+                crate::perplexity::ASK_SYSTEM_PROMPT,
+                Vec::new(),
+                question.to_owned(),
+            )
+        } else {
+            (
+                crate::perplexity::ASK_CONTEXT_SYSTEM_PROMPT,
+                context_entries
+                    .split('\n')
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>(),
+                format!("Context from vault entries:\n{context_entries}\n\nQuestion: {question}"),
+            )
+        };
+        let messages = [("system", system_prompt), ("user", user_message.as_str())];
+        let response = match self.perplexity_chat(&api_key, &messages, context) {
+            Ok(response) => response,
+            Err(error) => {
+                self.append_audit(
+                    "perplexity_ask",
+                    &format!(
+                        "question={}, error={error}",
+                        symvault_core::go_quote(question)
+                    ),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!(
+                    "Perplexity ask failed: {error}"
+                )));
+            }
+        };
+        let Some(answer) = response.first_answer.as_deref() else {
+            self.append_audit(
+                "perplexity_ask",
+                &format!(
+                    "question={}, error=empty-response",
+                    symvault_core::go_quote(question)
+                ),
+                false,
+            );
+            return Ok(ToolCallResult::error(
+                "Perplexity returned an empty response",
+            ));
+        };
+        self.append_audit(
+            "perplexity_ask",
+            &format!(
+                "question={}, model={}, citations={}, context={}",
+                symvault_core::go_quote(question),
+                response.model,
+                response.citations.len(),
+                !context_entries.is_empty()
+            ),
+            true,
+        );
+        symvault_gojson::to_string(&crate::perplexity::AskResult {
+            question,
+            answer,
+            model: &response.model,
+            citations: &response.citations,
+            context: &context_parts,
+        })
+        .map(ToolCallResult::text)
+        .map_err(|error| error.to_string())
     }
 }
 
