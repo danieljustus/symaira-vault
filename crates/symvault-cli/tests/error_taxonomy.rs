@@ -296,62 +296,17 @@ fn native_cli_matches_go_output_format_gate() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
-/// Commands whose "vault not initialized" failure is still not Go's. Each entry
-/// is the full argument vector of a recorded case; `open_not_initialized_cases_
-/// are_still_open` fails when one starts to match so the list cannot go stale.
-///
-/// - `device approval-pair`, `device revoke x`: single-line / different wording.
-/// - `file use x x`, `run x`: clap requires the `--` separator before the
-///   command, Go takes positional arguments (a CLI-002 parser difference).
-const OPEN_NOT_INITIALIZED: &[&[&str]] = &[
-    &["device", "approval-pair"],
-    &["device", "revoke", "x"],
-    &["file", "use", "x", "x"],
-    &["run", "x"],
-];
-
-fn is_open(observation: &Observation) -> bool {
-    OPEN_NOT_INITIALIZED.iter().any(|open| {
-        observation
-            .args
-            .iter()
-            .map(String::as_str)
-            .eq(open.iter().copied())
-    })
-}
-
 #[test]
 fn native_cli_matches_go_not_initialized_failures() {
     let fixture = fixture();
     let mut failures = Vec::new();
     let mut replayed = 0;
-    for observation in fixture.not_initialized.iter().filter(|o| !is_open(o)) {
+    for observation in &fixture.not_initialized {
         compare("not initialized", observation, &mut failures);
         replayed += 1;
     }
-    assert_eq!(replayed, NOT_INITIALIZED_CASES - OPEN_NOT_INITIALIZED.len());
+    assert_eq!(replayed, NOT_INITIALIZED_CASES);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
-}
-
-#[test]
-fn open_not_initialized_cases_are_still_open() {
-    let fixture = fixture();
-    let open: Vec<&Observation> = fixture
-        .not_initialized
-        .iter()
-        .filter(|observation| is_open(observation))
-        .collect();
-    assert_eq!(open.len(), OPEN_NOT_INITIALIZED.len());
-    for observation in open {
-        let mut failures = Vec::new();
-        compare("open", observation, &mut failures);
-        assert_eq!(
-            failures.len(),
-            1,
-            "{:?} now matches Go; remove it from OPEN_NOT_INITIALIZED",
-            observation.args
-        );
-    }
 }
 
 /// Negative control: an expectation that differs by one byte must be reported.

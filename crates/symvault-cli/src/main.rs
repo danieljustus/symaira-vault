@@ -193,7 +193,7 @@ enum Command {
         broker_strict: bool,
         #[arg(long)]
         broker_passthrough: Vec<String>,
-        #[arg(last = true, required = true)]
+        #[arg(required = true, num_args = 1..)]
         command: Vec<String>,
     },
     /// Run the egress credential broker (loopback MITM proxy).
@@ -1029,7 +1029,7 @@ enum FileCommand {
         as_name: Option<String>,
         #[arg(short, long)]
         timeout: Option<String>,
-        #[arg(last = true, required = true)]
+        #[arg(required = true, num_args = 1..)]
         command: Vec<String>,
     },
 }
@@ -2606,7 +2606,8 @@ fn run_cli() -> ExitCode {
                     if args.len() != 1 {
                         Err(format!("accepts 1 arg(s), received {}", args.len()))
                     } else {
-                        device::revoke(vault, &args[0], yes, cli.quiet)
+                        require_initialized(vault)
+                            .and_then(|()| device::revoke(vault, &args[0], yes, cli.quiet))
                     }
                 }
                 DeviceCommand::ApprovalList { .. } => device_approval::list(vault, cli.quiet),
@@ -2624,6 +2625,10 @@ fn run_cli() -> ExitCode {
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
+                Err(error) if is_not_initialized(&error) => {
+                    write_not_initialized(&error);
+                    ExitCode::from(3)
+                }
                 Err(error) if doubled_errors => {
                     print_error_like_go(&error);
                     ExitCode::from(1)

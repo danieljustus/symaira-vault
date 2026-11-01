@@ -1,5 +1,14 @@
 # Rust migration handover — 2026-09-09
 
+## CLI-005 partial: not-initialized cases, 2026-11-01
+
+The four previously open recorded cases now match the Go oracle: all 29 are
+replayed end-to-end. The before run had four mismatches; the after run has none.
+Non-root `Args == nil` extra-positional handling remains open: an inventory of
+the assembled Go tree was inspected, but no new Go-recorded full-binary corpus
+or general fix has been produced. Other `run`/`file use` argument permutations
+remain unproven. This is not completion of CLI-005.
+
 ## FFI-001 Swift bridge, 2026-11-01
 
 `crates/symvault-ffi` replaces the gomobile `pkg/mobilebind` bridge: 13 Go-identical functions (`src/api.rs`) behind a
