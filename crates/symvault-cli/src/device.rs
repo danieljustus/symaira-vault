@@ -194,6 +194,14 @@ fn unlock_vault_with_mode(
             return Err(missing_identity());
         };
         if let Ok(identity) = decrypt_identity(data, &SecretBytes::new(&cached)) {
+            // `OpenWithPassphrase` loads config.yaml after the identity; the
+            // store would treat a missing file as the default configuration.
+            if !config_present {
+                return Err(format!(
+                    "open vault: load config: {}",
+                    go_missing_file_error(vault, "config.yaml")
+                ));
+            }
             open_unlocked_vault(vault, &identity)
                 .map_err(|error| format!("open vault: {error}"))?;
             save_unlocked_session(runtime, vault_string, &config, &cached, &identity)?;

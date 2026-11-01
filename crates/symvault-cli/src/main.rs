@@ -3245,7 +3245,8 @@ fn run_auth_set(
                         fs::read(&config_path).map_err(|error| format!("read config: {error}"))?;
                     let identity_bytes = fs::read(vault.join("identity.age"))
                         .map_err(|error| format!("read identity: {error}"))?;
-                    let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
+                    let _ = &config_bytes;
+                    let passphrase = passphrase_for_biometric_setup(&vault, &runtime)?;
                     decrypt_identity(&identity_bytes, &SecretBytes::new(passphrase.as_bytes()))
                         .map_err(|error| format!("open vault: {error}"))?;
                     session_commands::save_touch_id_passphrase(
@@ -5421,6 +5422,30 @@ fn run_unlock(
         Ok::<(), String>(())
     })();
     finish_session_result(result, true, 3)
+}
+
+/// Go `passphraseForBiometricSetup` (cmd/auth/auth.go): a cached session
+/// passphrase, else a bare `ReadHiddenInput("Passphrase: ")`. It is not
+/// `UnlockVault`: no passphrase policy, no Touch ID and a failed read is a plain
+/// error (exit 1), not `ExitLocked`. Its `SYMVAULT_PASSPHRASE` branch is dead in
+/// the shipped binary because `main` moves the variable out of the environment
+/// (`SniffAndClearEnvPassphrase`) before any command runs.
+#[cfg(target_os = "macos")]
+fn passphrase_for_biometric_setup(
+    vault: &Path,
+    runtime: &RuntimeSession,
+) -> Result<Zeroizing<String>, String> {
+    let vault_string = vault
+        .to_str()
+        .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+    if let Ok(bytes) = runtime.manager.load_passphrase(vault_string)
+        && !bytes.is_empty()
+    {
+        return String::from_utf8(bytes)
+            .map(Zeroizing::new)
+            .map_err(|_| "cached session passphrase is not valid UTF-8".to_owned());
+    }
+    session_input::read_passphrase("Passphrase: ")
 }
 
 fn unlock_passphrase(
