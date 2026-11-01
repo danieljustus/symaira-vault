@@ -935,11 +935,28 @@ impl Config {
         if let Some(parent) = path.parent() {
             create_private_dir_all(parent)?;
         }
-        let tmp = path.with_extension("yaml.tmp");
-        write_private(&tmp, &bytes)?;
-        fs::rename(tmp, path)?;
-        Ok(())
+        atomic_write_private(path, &bytes)
     }
+}
+
+/// Go's `fsutil.AtomicWriteFile`: a unique temporary file next to the target,
+/// created exclusively (so a planted file or symlink at that name is never
+/// opened or followed), fsynced, then renamed over the target. Renaming
+/// replaces a symlinked target itself rather than writing through it.
+fn atomic_write_private(path: &Path, bytes: &[u8]) -> Result<(), ConfigError> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let name = path
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    let mut random = [0u8; 8];
+    getrandom::fill(&mut random).map_err(|error| std::io::Error::other(error.to_string()))?;
+    let suffix: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+    let temporary = parent.join(format!(".{name}.tmp-{}-{suffix}", std::process::id()));
+    let result = write_private(&temporary, bytes).and_then(|()| Ok(fs::rename(&temporary, path)?));
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
 }
 
 /// Creates a directory tree the way the Go writer does: owner-only.
@@ -971,7 +988,8 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), ConfigError> {
     use std::io::Write;
 
     let mut options = fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
+    // `create_new` (O_CREAT|O_EXCL) refuses an existing name, symlinks included.
+    options.write(true).create_new(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
@@ -2380,6 +2398,57 @@ fn write_clipboard(out: &mut String, v: &ClipboardConfig) -> Result<(), ConfigEr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A file or symlink planted at a temporary-looking name next to the
+    /// config must never be opened or followed (the old fixed `config.yaml.tmp`
+    /// let a symlink there redirect the write outside the directory).
+    #[cfg(unix)]
+    #[test]
+    fn save_to_never_writes_through_a_planted_temporary_name() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let root = env::temp_dir().join(format!(
+            "symvault-core-save-{}-{unique}",
+            std::process::id()
+        ));
+        let dir = root.join("vault");
+        fs::create_dir_all(&dir).unwrap();
+        let victim = root.join("victim.txt");
+        fs::write(&victim, b"outside data").unwrap();
+        std::os::unix::fs::symlink(&victim, dir.join("config.yaml.tmp")).unwrap();
+        let target = dir.join("config.yaml");
+
+        Config::default().save_to(&target).unwrap();
+        Config::default().save_to(&target).unwrap();
+
+        assert_eq!(fs::read(&victim).unwrap(), b"outside data");
+        assert!(fs::symlink_metadata(&target).unwrap().file_type().is_file());
+        assert_eq!(
+            fs::read(&target).unwrap(),
+            Config::default().to_yaml_bytes().unwrap()
+        );
+        let mut names: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(
+            names,
+            ["config.yaml", "config.yaml.tmp"],
+            "no temporary file left"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        let _ = fs::remove_dir_all(root);
+    }
     #[test]
     fn defaults_match_go_contract() {
         let c = Config::default();

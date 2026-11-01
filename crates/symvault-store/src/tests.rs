@@ -2862,3 +2862,23 @@ fn recovery_resource_failures_preserve_journal_and_originals() {
     assert_eq!(fs::read(&backup).unwrap(), original);
     assert!(journal.is_file());
 }
+
+#[test]
+fn keep_negative_zero_rewrites_only_a_leading_minus_zero() {
+    let rewrite = |text: &str| {
+        super::keep_negative_zero(text.as_bytes())
+            .map(|out| String::from_utf8(out.to_vec()).unwrap())
+    };
+    // Exponents keep their sign: `1e-0` is valid JSON and must stay so.
+    assert_eq!(rewrite(r#"{"a":1e-0,"b":[1E-0,2]}"#), None);
+    assert_eq!(
+        rewrite(r#"{"a":-0,"b":[-0,1e-0],"c":"-0"}"#).as_deref(),
+        Some(r#"{"a":-0.0,"b":[-0.0,1e-0],"c":"-0"}"#)
+    );
+    assert_eq!(rewrite("-0"), Some("-0.0".to_owned()));
+    for text in [r#"{"a":1e-0}"#, r#"[1E-0,-0]"#] {
+        let bytes = super::keep_negative_zero(text.as_bytes())
+            .map_or_else(|| text.as_bytes().to_vec(), |out| out.to_vec());
+        serde_json::from_slice::<serde_json::Value>(&bytes).expect("still valid JSON");
+    }
+}

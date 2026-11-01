@@ -1110,18 +1110,22 @@ impl Store {
         };
         let result = entry_budget::validate_with_batch(&plaintext, &candidate.logical, batch)
             .and_then(|()| {
-                serde_json::from_slice::<serde_json::Value>(&keep_negative_zero(&plaintext))
-                    .map_err(|error| StoreError::Entry {
+                serde_json::from_slice::<serde_json::Value>(
+                    keep_negative_zero(&plaintext)
+                        .as_deref()
+                        .map_or(&plaintext[..], |rewritten| &rewritten[..]),
+                )
+                .map_err(|error| StoreError::Entry {
+                    path: candidate.logical.clone(),
+                    detail: error.to_string(),
+                })
+                .and_then(|mut value| {
+                    normalize_entry_data_key(&mut value);
+                    serde_json::from_value(value).map_err(|error| StoreError::Entry {
                         path: candidate.logical.clone(),
                         detail: error.to_string(),
                     })
-                    .and_then(|mut value| {
-                        normalize_entry_data_key(&mut value);
-                        serde_json::from_value(value).map_err(|error| StoreError::Entry {
-                            path: candidate.logical.clone(),
-                            detail: error.to_string(),
-                        })
-                    })
+                })
             });
         plaintext.zeroize();
         if result
@@ -1203,9 +1207,11 @@ fn normalize_entry_data_key(value: &mut serde_json::Value) {
 /// `serde_json` with `arbitrary_precision` reads the integer literal `-0` as
 /// `0`, but Go decodes every number of an entry into a `float64` and so keeps
 /// negative zero (and writes it back as `-0`). Rewrites each such literal
-/// outside strings to `-0.0`, which `serde_json` keeps.
-fn keep_negative_zero(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
-    let mut rewritten: Option<Vec<u8>> = None;
+/// outside strings to `-0.0`, which `serde_json` keeps. Only a `-` that starts
+/// a number counts: in `1e-0` it belongs to the exponent. Returns `None` when
+/// nothing changes; the rewritten copy holds plaintext and is zeroized.
+fn keep_negative_zero(bytes: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+    let mut rewritten: Option<Zeroizing<Vec<u8>>> = None;
     let mut copied = 0;
     let mut index = 0;
     let mut in_string = false;
@@ -1220,10 +1226,15 @@ fn keep_negative_zero(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
         } else if byte == b'"' {
             in_string = true;
         } else if byte == b'-'
+            && !matches!(
+                index.checked_sub(1).map(|before| bytes[before]),
+                Some(b'e' | b'E')
+            )
             && bytes.get(index + 1) == Some(&b'0')
             && !matches!(bytes.get(index + 2), Some(b'.' | b'e' | b'E' | b'0'..=b'9'))
         {
-            let out = rewritten.get_or_insert_with(|| Vec::with_capacity(bytes.len() + 8));
+            let out = rewritten
+                .get_or_insert_with(|| Zeroizing::new(Vec::with_capacity(bytes.len() + 8)));
             out.extend_from_slice(&bytes[copied..index + 2]);
             out.extend_from_slice(b".0");
             copied = index + 2;
@@ -1231,13 +1242,10 @@ fn keep_negative_zero(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
         }
         index += 1;
     }
-    match rewritten {
-        Some(mut out) => {
-            out.extend_from_slice(&bytes[copied..]);
-            std::borrow::Cow::Owned(out)
-        }
-        None => std::borrow::Cow::Borrowed(bytes),
+    if let Some(out) = rewritten.as_mut() {
+        out.extend_from_slice(&bytes[copied..]);
     }
+    rewritten
 }
 
 fn validate_entry_values(entry: &Entry) -> Result<(), StoreError> {
