@@ -118,7 +118,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "d93026ab01fe183e8c939de5daf2da4dbc5d845ca52a251a7e7e11f7600a4fb8"
+    "generator_digest": "c6197b086c1c8432cb62b3706aefb3af85e8572a7a2133e3aa6cbd75b7dff244"
   },
   "usage": [
     {
@@ -18754,6 +18754,849 @@
         "exit_code": 1,
         "stdout": "",
         "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 1s\nError: command timed out after 1s\n"
+      }
+    }
+  ],
+  "unlock_states": [
+    {
+      "name": "unlock_locked_device_pair",
+      "description": "[device pair] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "device",
+          "pair"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_device_pair_x",
+      "description": "[device pair x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "device",
+          "pair",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_list",
+      "description": "[list] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "list"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_find",
+      "description": "[find x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "find",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_add",
+      "description": "[add x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "add",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_delete",
+      "description": "[delete x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "delete",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_edit",
+      "description": "[edit x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "edit",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_verify",
+      "description": "[verify] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "verify"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_unlock",
+      "description": "[unlock] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "unlock"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_migrate_pseudonymize",
+      "description": "[migrate pseudonymize] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_migrate_pseudonymize_yes",
+      "description": "[migrate pseudonymize --yes] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize",
+          "--yes"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_recipients_add",
+      "description": "[recipients add x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "recipients",
+          "add",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_recipients_remove",
+      "description": "[recipients remove x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "recipients",
+          "remove",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_run",
+      "description": "[run -- x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "run",
+          "--",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_file_use",
+      "description": "[file use seed/cert x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_import_review_list",
+      "description": "[import review list] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "import",
+          "review",
+          "list"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_import_review_promote",
+      "description": "[import review promote x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "import",
+          "review",
+          "promote",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_intake_x",
+      "description": "[intake x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "intake",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_device_pair",
+      "description": "[device pair] in the identity_only vault shape",
+      "state": "identity_only",
+      "observation": {
+        "args": [
+          "device",
+          "pair"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load config: open __ROOT__/xdg-data/symaira-vault/config.yaml: no such file or directory\nError: open vault: load config: open __ROOT__/xdg-data/symaira-vault/config.yaml: no such file or directory\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_device_pair_x",
+      "description": "[device pair x] in the identity_only vault shape",
+      "state": "identity_only",
+      "observation": {
+        "args": [
+          "device",
+          "pair",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load config: open __ROOT__/xdg-data/symaira-vault/config.yaml: no such file or directory\nError: open vault: load config: open __ROOT__/xdg-data/symaira-vault/config.yaml: no such file or directory\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_list",
+      "description": "[list] in the identity_only vault shape",
+      "state": "identity_only",
+      "observation": {
+        "args": [
+          "list"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_verify",
+      "description": "[verify] in the identity_only vault shape",
+      "state": "identity_only",
+      "observation": {
+        "args": [
+          "verify"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_unlock",
+      "description": "[unlock] in the identity_only vault shape",
+      "state": "identity_only",
+      "observation": {
+        "args": [
+          "unlock"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_migrate_pseudonymize",
+      "description": "[migrate pseudonymize] in the identity_only vault shape",
+      "state": "identity_only",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_migrate_pseudonymize_yes",
+      "description": "[migrate pseudonymize --yes] in the identity_only vault shape",
+      "state": "identity_only",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize",
+          "--yes"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_device_pair",
+      "description": "[device pair] in the config_only vault shape",
+      "state": "config_only",
+      "observation": {
+        "args": [
+          "device",
+          "pair"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: read identity file: open __ROOT__/xdg-data/symaira-vault/identity.age: no such file or directory\nError: open vault: read identity file: open __ROOT__/xdg-data/symaira-vault/identity.age: no such file or directory\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_device_pair_x",
+      "description": "[device pair x] in the config_only vault shape",
+      "state": "config_only",
+      "observation": {
+        "args": [
+          "device",
+          "pair",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: read identity file: open __ROOT__/xdg-data/symaira-vault/identity.age: no such file or directory\nError: open vault: read identity file: open __ROOT__/xdg-data/symaira-vault/identity.age: no such file or directory\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_list",
+      "description": "[list] in the config_only vault shape",
+      "state": "config_only",
+      "observation": {
+        "args": [
+          "list"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_verify",
+      "description": "[verify] in the config_only vault shape",
+      "state": "config_only",
+      "observation": {
+        "args": [
+          "verify"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_unlock",
+      "description": "[unlock] in the config_only vault shape",
+      "state": "config_only",
+      "observation": {
+        "args": [
+          "unlock"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_migrate_pseudonymize",
+      "description": "[migrate pseudonymize] in the config_only vault shape",
+      "state": "config_only",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_migrate_pseudonymize_yes",
+      "description": "[migrate pseudonymize --yes] in the config_only vault shape",
+      "state": "config_only",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize",
+          "--yes"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_locked_device_pair",
+      "description": "[device pair] in the identity_only_locked vault shape",
+      "state": "identity_only_locked",
+      "observation": {
+        "args": [
+          "device",
+          "pair"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_locked_device_pair_x",
+      "description": "[device pair x] in the identity_only_locked vault shape",
+      "state": "identity_only_locked",
+      "observation": {
+        "args": [
+          "device",
+          "pair",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_locked_list",
+      "description": "[list] in the identity_only_locked vault shape",
+      "state": "identity_only_locked",
+      "observation": {
+        "args": [
+          "list"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_locked_verify",
+      "description": "[verify] in the identity_only_locked vault shape",
+      "state": "identity_only_locked",
+      "observation": {
+        "args": [
+          "verify"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_locked_unlock",
+      "description": "[unlock] in the identity_only_locked vault shape",
+      "state": "identity_only_locked",
+      "observation": {
+        "args": [
+          "unlock"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_locked_migrate_pseudonymize",
+      "description": "[migrate pseudonymize] in the identity_only_locked vault shape",
+      "state": "identity_only_locked",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_identity_only_locked_migrate_pseudonymize_yes",
+      "description": "[migrate pseudonymize --yes] in the identity_only_locked vault shape",
+      "state": "identity_only_locked",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize",
+          "--yes"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_locked_device_pair",
+      "description": "[device pair] in the config_only_locked vault shape",
+      "state": "config_only_locked",
+      "observation": {
+        "args": [
+          "device",
+          "pair"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_locked_device_pair_x",
+      "description": "[device pair x] in the config_only_locked vault shape",
+      "state": "config_only_locked",
+      "observation": {
+        "args": [
+          "device",
+          "pair",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_locked_list",
+      "description": "[list] in the config_only_locked vault shape",
+      "state": "config_only_locked",
+      "observation": {
+        "args": [
+          "list"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_locked_verify",
+      "description": "[verify] in the config_only_locked vault shape",
+      "state": "config_only_locked",
+      "observation": {
+        "args": [
+          "verify"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_locked_unlock",
+      "description": "[unlock] in the config_only_locked vault shape",
+      "state": "config_only_locked",
+      "observation": {
+        "args": [
+          "unlock"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_locked_migrate_pseudonymize",
+      "description": "[migrate pseudonymize] in the config_only_locked vault shape",
+      "state": "config_only_locked",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_locked_migrate_pseudonymize_yes",
+      "description": "[migrate pseudonymize --yes] in the config_only_locked vault shape",
+      "state": "config_only_locked",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize",
+          "--yes"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_env_disabled_device_pair",
+      "description": "[device pair] in the config_only_env_disabled vault shape",
+      "state": "config_only_env_disabled",
+      "observation": {
+        "args": [
+          "device",
+          "pair"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_env_disabled_device_pair_x",
+      "description": "[device pair x] in the config_only_env_disabled vault shape",
+      "state": "config_only_env_disabled",
+      "observation": {
+        "args": [
+          "device",
+          "pair",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_env_disabled_list",
+      "description": "[list] in the config_only_env_disabled vault shape",
+      "state": "config_only_env_disabled",
+      "observation": {
+        "args": [
+          "list"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_env_disabled_verify",
+      "description": "[verify] in the config_only_env_disabled vault shape",
+      "state": "config_only_env_disabled",
+      "observation": {
+        "args": [
+          "verify"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_env_disabled_unlock",
+      "description": "[unlock] in the config_only_env_disabled vault shape",
+      "state": "config_only_env_disabled",
+      "observation": {
+        "args": [
+          "unlock"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_env_disabled_migrate_pseudonymize",
+      "description": "[migrate pseudonymize] in the config_only_env_disabled vault shape",
+      "state": "config_only_env_disabled",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_config_only_env_disabled_migrate_pseudonymize_yes",
+      "description": "[migrate pseudonymize --yes] in the config_only_env_disabled vault shape",
+      "state": "config_only_env_disabled",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize",
+          "--yes"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "unlock_env_disabled_device_pair",
+      "description": "[device pair] in the env_disabled vault shape",
+      "state": "env_disabled",
+      "observation": {
+        "args": [
+          "device",
+          "pair"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_env_disabled_device_pair_x",
+      "description": "[device pair x] in the env_disabled vault shape",
+      "state": "env_disabled",
+      "observation": {
+        "args": [
+          "device",
+          "pair",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_env_disabled_list",
+      "description": "[list] in the env_disabled vault shape",
+      "state": "env_disabled",
+      "observation": {
+        "args": [
+          "list"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_env_disabled_verify",
+      "description": "[verify] in the env_disabled vault shape",
+      "state": "env_disabled",
+      "observation": {
+        "args": [
+          "verify"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_env_disabled_unlock",
+      "description": "[unlock] in the env_disabled vault shape",
+      "state": "env_disabled",
+      "observation": {
+        "args": [
+          "unlock"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_env_disabled_migrate_pseudonymize",
+      "description": "[migrate pseudonymize] in the env_disabled vault shape",
+      "state": "env_disabled",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_env_disabled_migrate_pseudonymize_yes",
+      "description": "[migrate pseudonymize --yes] in the env_disabled vault shape",
+      "state": "env_disabled",
+      "observation": {
+        "args": [
+          "migrate",
+          "pseudonymize",
+          "--yes"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
       }
     }
   ]
