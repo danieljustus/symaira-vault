@@ -12,13 +12,15 @@
 #
 # Fallback (SYMVAULT_VAULTCORE=gomobile): the previous gomobile bind of
 # pkg/mobilebind into Vaultcore.xcframework (needs golang.org/x/mobile from
-# go.mod and full Xcode). Only the framework is produced: the client at this
-# commit imports SymvaultFFI, not Vaultcore. To ship the gomobile core, build
-# from the parent of the commit "client: use the Rust SymvaultFFI core" (see
-# `git log -- client/Package.swift`).
+# go.mod and full Xcode). NOT usable by the client at this commit, which
+# imports SymvaultFFI, not Vaultcore; it only keeps the Go bridge buildable.
+# To ship the gomobile core, build from the parent of the commit "client: use
+# the Rust SymvaultFFI core" (see `git log -- client/Package.swift`).
 #
-# Both write below client/.build/mobilecore; an existing framework of the
-# selected kind is reused, so delete it to force a rebuild.
+# Both write below client/.build/mobilecore. The Rust framework is rebuilt on
+# every run (cargo is incremental, so an unchanged core costs seconds), so a
+# changed core can never be shipped stale; the gomobile one is reused if
+# present (delete it to force a rebuild).
 #
 # Environment:
 #   SYMVAULT_VAULTCORE   rust (default) | gomobile
@@ -41,10 +43,6 @@ mode="${SYMVAULT_VAULTCORE:-rust}"
 case "$mode" in
   rust)
     FRAMEWORK="$OUT_DIR/SymvaultFFI.xcframework"
-    if [[ -d "$FRAMEWORK" ]]; then
-      echo "SymvaultFFI.xcframework already present at $FRAMEWORK"
-      exit 0
-    fi
 
     if command -v rustup >/dev/null 2>&1; then
       rustup target add aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim ||
@@ -58,12 +56,17 @@ case "$mode" in
     built="${SYMVAULT_XCFRAMEWORK_OUT:-$target_dir/xcframework}/SymvaultFFI.xcframework"
     [[ -d "$built" ]] || { echo "build-vaultcore: missing $built" >&2; exit 1; }
     mkdir -p "$OUT_DIR"
-    rm -rf "$FRAMEWORK.tmp"
+    rm -rf "$FRAMEWORK.tmp" "$FRAMEWORK.old"
     cp -R "$built" "$FRAMEWORK.tmp"
+    # `mv tmp existing-dir` would move tmp *into* the old framework; swap the
+    # old one aside first so the replacement is a rename.
+    if [[ -e "$FRAMEWORK" ]]; then mv "$FRAMEWORK" "$FRAMEWORK.old"; fi
     mv "$FRAMEWORK.tmp" "$FRAMEWORK"
+    rm -rf "$FRAMEWORK.old"
     echo "Built $FRAMEWORK"
     ;;
   gomobile)
+    echo "build-vaultcore: gomobile builds Vaultcore.xcframework, which this client does not link (it uses SymvaultFFI)" >&2
     FRAMEWORK="$OUT_DIR/Vaultcore.xcframework"
     if [[ -d "$FRAMEWORK" ]]; then
       echo "Vaultcore.xcframework already present at $FRAMEWORK"

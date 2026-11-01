@@ -51,7 +51,9 @@ beim Upload ablehnen.
 Das erledigt:
 
 1. `SymvaultFFI.xcframework` (Rust-Kern, `crates/symvault-ffi`) unter
-   `client/.build/mobilecore` erzeugen, falls es fehlt. Braucht die gepinnte
+   `client/.build/mobilecore` bei jedem Lauf neu bauen (Cargo baut inkrementell,
+   ein unveränderter Kern kostet Sekunden; so landet nie ein veralteter Kern im
+   Upload). Braucht die gepinnte
    Rust-Toolchain mit den Targets `aarch64-apple-ios` und
    `aarch64-apple-ios-sim`.
 2. Das Xcode-Projekt mit XcodeGen generieren.

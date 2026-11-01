@@ -37,7 +37,8 @@ final class MobileVaultCoreTests: XCTestCase {
 
         try SymvaultFFI.writeEntryJSON(
             vaultDir: vault.path, entryPath: "site/example",
-            entryJSON: #"{"data":{"user":"alice","pin":42,"on":true}}"#, identity: identity)
+            entryJSON: #"{"data":{"user":"alice","pin":42,"on":true,"account":1234567890123,"rate":1.25}}"#,
+            identity: identity)
 
         XCTAssertEqual(try core.listEntries(identity: identity), ["site/example"])
         XCTAssertEqual(try core.listEntries(prefix: "other", identity: identity), [])
@@ -47,6 +48,9 @@ final class MobileVaultCoreTests: XCTestCase {
         XCTAssertEqual(entry.fields["user"], "alice")
         XCTAssertEqual(entry.fields["pin"], "42")
         XCTAssertEqual(entry.fields["on"], "true")
+        // More than six significant digits must not collapse to "1.23457e+12".
+        XCTAssertEqual(entry.fields["account"], "1234567890123")
+        XCTAssertEqual(entry.fields["rate"], "1.25")
         XCTAssertTrue(try core.verifyManifest(identity: identity))
     }
 

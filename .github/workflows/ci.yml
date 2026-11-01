@@ -598,7 +598,6 @@ jobs:
           set -euo pipefail
           rustup toolchain install 1.98.0 --profile minimal \
             --target aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
-          rustup default 1.98.0
           rustc --version
 
       - name: Build Vaultcore framework (Rust SymvaultFFI XCFramework)
@@ -700,7 +699,10 @@ jobs:
                   "$path" == assets/branding/* ||
                   "$path" == scripts/build-vaultcore.sh ||
                   "$path" == scripts/rust-port/build-ffi-xcframework.sh ||
-                  "$path" == crates/symvault-ffi/* ||
+                  "$path" == crates/* ||
+                  "$path" == Cargo.toml ||
+                  "$path" == Cargo.lock ||
+                  "$path" == rust-toolchain.toml ||
                   "$path" == scripts/verify-vault-icon.sh ||
                   "$path" == .github/workflows/ci.yml ||
                   "$path" == .github/workflows/release.yml ||

@@ -20,7 +20,9 @@ The package manifest requires `client/.build/mobilecore/SymvaultFFI.xcframework`
 macOS packages. Generate it from the repository root with
 `bash scripts/build-vaultcore.sh` before package resolution or builds; this
 requires the pinned Rust toolchain with the `aarch64-apple-ios` and
-`aarch64-apple-ios-sim` targets and full Xcode with the iOS SDK. The Swift
+`aarch64-apple-ios-sim` targets and full Xcode with the iOS SDK. The framework
+has arm64 slices only, so building needs an Apple silicon Mac (Intel Macs and
+the x86_64 simulator are not supported). The Swift
 wrapper (`Sources/SymvaultFFI`) is a symlink to
 `crates/symvault-ffi/swift/Sources/SymvaultFFI`.
 
