@@ -32,6 +32,15 @@ share ...`; Rust prompts), `set` (Go asks for the username first), `file get|add
 `configuration is invalid`, interactive editor offer; Rust: `load config: ...`, exit 1).
 These predate this branch and are not claimed.
 
+Evidence (local gate at `c936dd00`, clean tree, `MAKE_PREFIX=dev-external`, receipts in
+`builds/symaira-vault/local-gate-cli005c/receipts.jsonl`): `macos` exit 0 (1583 tests, 0
+failed), `linux` exit 0 (1571 tests; `error-taxonomy-cli-differential` prints `PASS error
+taxonomy fixture (... 60 unlock-state scenarios ...)`). Targeted runs before the receipts:
+`go test ./scripts/rust-port/cmd/errtaxgen/` ok, `errtaxgen --check` PASS, `cargo clippy -p
+symvault-cli --all-targets --locked -- -D warnings` clean, `cargo fmt --all --check` clean,
+`cargo nextest run -p symvault-cli` 648 passed. Local-only evidence; `PASS (local)` is not
+claimed for the CLI-005 row, which stays TODO.
+
 ## CLI-005c: 18 of the 28 pinned body divergences closed, 2026-11-01
 
 Branch `local/cli-005c` (base `ee263740`), one commit per class, each removing its
