@@ -332,6 +332,8 @@ enum Command {
         quiet: bool,
         #[command(subcommand)]
         subcommand: Option<GenerateCommand>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Check vault health and configuration
     Doctor {
@@ -356,6 +358,8 @@ enum Command {
         /// Skip slow checks
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quick")]
         quick: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Run a read-only Git history operation.
     Git {
@@ -404,6 +408,8 @@ enum Command {
         rebuild: bool,
         #[arg(long = "rebuild-only", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "rebuild_only")]
         rebuild_only: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Synchronize encrypted vault files with the Git remote.
     Sync {
@@ -436,6 +442,8 @@ enum Command {
         since: String,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "failed")]
         failed: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Export vault entries to CSV or JSON.
     Export {
@@ -572,7 +580,10 @@ enum Command {
         command: ConfigCommand,
     },
     /// Lock the vault by clearing its cached session.
-    Lock,
+    Lock {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Unlock the vault or check whether a cached session is active.
     Unlock {
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "check")]
@@ -580,6 +591,8 @@ enum Command {
         /// Session duration override (for example, 30m or 1h).
         #[arg(long, value_name = "DURATION")]
         ttl: Option<String>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Check for Symaira Vault updates or show installation-method info.
     Update {
@@ -648,11 +661,20 @@ enum McpAction {
         flags: McpFlags,
     },
     /// Install MCP server as a background service.
-    Install,
+    Install {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Show MCP server service status.
-    Status,
+    Status {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Remove the MCP server background service.
-    Uninstall,
+    Uninstall {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Deprecated: use `symvault agent token <action> <name>`.
     ///
     /// Deliberately a catch-all instead of clap subcommands: the oracle's
@@ -663,6 +685,20 @@ enum McpAction {
         #[arg(value_name = "ARGS", num_args = 0..)]
         args: Vec<String>,
     },
+}
+
+/// Positionals that cobra accepts and ignores.
+///
+/// A cobra command whose `Args` validator is nil accepts any number of
+/// positional words and its handler never reads them, so `symvault lock x`
+/// locks the vault. clap rejects an unexpected positional unless the command
+/// declares one; this hidden catch-all keeps `--help` and usage text unchanged.
+/// Only commands the error-taxonomy corpus lists under `nil_args` flatten it;
+/// a command with a validator (`ExactArgs`, `NoArgs`, ...) must not.
+#[derive(Debug, Args, Default)]
+struct IgnoredPositionals {
+    #[arg(hide = true, value_name = "ARG", num_args = 0..)]
+    _extra: Vec<OsString>,
 }
 
 /// One argument boundary for canonical and deprecated MCP launch commands.
@@ -698,10 +734,19 @@ fn parse_mcp_bool(value: &str) -> Result<bool, String> {
 
 #[derive(Debug, Subcommand)]
 enum PolicyCommand {
-    Validate { file: PathBuf },
-    Apply { file: PathBuf },
-    Remove { name: String },
-    List,
+    Validate {
+        file: PathBuf,
+    },
+    Apply {
+        file: PathBuf,
+    },
+    Remove {
+        name: String,
+    },
+    List {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -718,13 +763,18 @@ enum ShareCommand {
         to: String,
         #[arg(long, default_value = "")]
         path: String,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
 }
 
 #[derive(Debug, Subcommand)]
 enum ApprovalCommand {
     /// List pending approval requests.
-    List,
+    List {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Approve or deny a pending request.
     Decide {
         request_id: String,
@@ -748,7 +798,10 @@ enum AgentCommand {
         #[arg(value_name = "NAME", num_args = 0..)]
         _args: Vec<String>,
     },
-    List,
+    List {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     Doctor {
         name: String,
     },
@@ -768,6 +821,8 @@ enum AgentCommand {
     Whoami {
         #[arg(short = 'o', long)]
         output: Option<String>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     Profile {
         #[command(subcommand)]
@@ -929,7 +984,10 @@ enum AgentProfileCommand {
 #[derive(Debug, Subcommand)]
 enum AuditCommand {
     /// Rotate the audit log HMAC key.
-    RotateKey,
+    RotateKey {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Export local audit evidence.
     Export {
         #[arg(long, default_value = "")]
@@ -948,6 +1006,8 @@ enum AuditCommand {
         verify_hmac: bool,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "redact_paths")]
         redact_paths: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
 }
 
@@ -962,7 +1022,10 @@ enum RemoteCommand {
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "push")]
         push: bool,
     },
-    Status,
+    Status {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -975,7 +1038,10 @@ enum ProfileCommand {
 #[derive(Debug, Subcommand)]
 enum RecipientsCommand {
     /// List recipients configured for the vault.
-    List,
+    List {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Add a recipient public key.
     Add {
         recipient: String,
@@ -1069,7 +1135,10 @@ enum ConfigCommand {
 #[derive(Debug, Subcommand)]
 enum AuthCommand {
     /// Show authentication method and session-cache status.
-    Status,
+    Status {
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
     /// Set the vault unlock authentication method.
     Set {
         #[arg(value_name = "passphrase|touchid")]
@@ -1090,6 +1159,8 @@ enum AuthCommand {
         reencrypt: bool,
         #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
 }
 
@@ -1151,6 +1222,8 @@ enum DeviceCommand {
         /// LAN address the phone should connect to (auto-detected when omitted).
         #[arg(long)]
         host: Option<String>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Revoke an approval device's ability to approve/deny requests.
     ApprovalRevoke {
@@ -1171,6 +1244,8 @@ enum MigrateCommand {
     Pseudonymize {
         #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Re-encrypt a legacy scrypt identity using Argon2id.
     Kdf {
@@ -1179,6 +1254,8 @@ enum MigrateCommand {
         /// Allow one exclusive historical-budget read for local policy migration.
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "allow_legacy_kdf")]
         allow_legacy_kdf: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Migrate agent profiles and config to the v4.0 tier format.
     V4 {
@@ -1186,11 +1263,15 @@ enum MigrateCommand {
         yes: bool,
         #[arg(long = "dry-run", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Upgrade a cached session from the legacy plaintext format.
     Session {
         #[arg(long = "dry-run", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
 }
 
@@ -1469,6 +1550,7 @@ fn run_cli() -> ExitCode {
             reveal,
             quiet,
             subcommand: None,
+            ..
         }) => run_generate(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1494,6 +1576,7 @@ fn run_cli() -> ExitCode {
             fix,
             fix_dry_run,
             quick,
+            ..
         }) => run_doctor(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1548,6 +1631,7 @@ fn run_cli() -> ExitCode {
         Some(Command::Verify {
             rebuild,
             rebuild_only,
+            ..
         }) => run_verify(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1603,7 +1687,7 @@ fn run_cli() -> ExitCode {
         }
 
         Some(Command::Remote {
-            command: RemoteCommand::Status,
+            command: RemoteCommand::Status { .. },
         }) => run_remote_status(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1761,6 +1845,7 @@ fn run_cli() -> ExitCode {
                     from,
                     to,
                     path,
+                    ..
                 },
         }) => {
             let result = (|| {
@@ -1798,7 +1883,7 @@ fn run_cli() -> ExitCode {
                     cli.output.as_deref().unwrap_or("text")
                 };
                 match command {
-                    ApprovalCommand::List => {
+                    ApprovalCommand::List { .. } => {
                         approval_commands::list(&root, format, cli.json, cli.quiet)
                     }
                     ApprovalCommand::Decide {
@@ -1838,7 +1923,7 @@ fn run_cli() -> ExitCode {
                         let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                         policy_commands::remove(&root, &name, &mut output)
                     }
-                    PolicyCommand::List => {
+                    PolicyCommand::List { .. } => {
                         let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                         policy_commands::list(&root, &mut output)
                     }
@@ -1852,7 +1937,7 @@ fn run_cli() -> ExitCode {
             finish_vault_result(result)
         }
         Some(Command::Agent {
-            command: AgentCommand::Whoami { output },
+            command: AgentCommand::Whoami { output, .. },
         }) => {
             let result = (|| {
                 let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
@@ -1872,7 +1957,7 @@ fn run_cli() -> ExitCode {
             finish_vault_result(result)
         }
         Some(Command::Agent {
-            command: AgentCommand::List,
+            command: AgentCommand::List { .. },
         }) => {
             let result = (|| {
                 let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
@@ -2240,7 +2325,7 @@ fn run_cli() -> ExitCode {
             command: AgentCommand::Setup { .. },
         }) => deprecated_stubs::agent_setup(),
         Some(Command::Audit {
-            command: Some(AuditCommand::RotateKey),
+            command: Some(AuditCommand::RotateKey { .. }),
             ..
         }) => run_audit_rotate_key(cli.vault.as_deref(), cli._profile.as_deref()),
         Some(Command::Audit {
@@ -2254,6 +2339,7 @@ fn run_cli() -> ExitCode {
                     format,
                     verify_hmac,
                     redact_paths,
+                    ..
                 }),
             ..
         }) => run_audit_export(
@@ -2277,6 +2363,7 @@ fn run_cli() -> ExitCode {
             agent,
             since,
             failed,
+            ..
         }) => run_audit(
             &agent,
             tail,
@@ -2427,8 +2514,10 @@ fn run_cli() -> ExitCode {
         Some(Command::Version(_)) => {
             write_version(cli.output.as_deref().unwrap_or("text"), cli.json)
         }
-        Some(Command::Lock) => run_lock(cli.vault.as_deref(), cli._profile.as_deref(), cli.quiet),
-        Some(Command::Unlock { check, ttl }) => run_unlock(
+        Some(Command::Lock { .. }) => {
+            run_lock(cli.vault.as_deref(), cli._profile.as_deref(), cli.quiet)
+        }
+        Some(Command::Unlock { check, ttl, .. }) => run_unlock(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             check,
@@ -2436,7 +2525,7 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Auth { command }) => match command {
-            AuthCommand::Status => run_auth_status(
+            AuthCommand::Status { .. } => run_auth_status(
                 cli.vault.as_deref(),
                 cli._profile.as_deref(),
                 cli.output.as_deref().unwrap_or("text"),
@@ -2449,7 +2538,7 @@ fn run_cli() -> ExitCode {
                 &method,
                 cli.quiet,
             ),
-            AuthCommand::RotatePassphrase { reencrypt, yes } => run_auth_rotate_passphrase(
+            AuthCommand::RotatePassphrase { reencrypt, yes, .. } => run_auth_rotate_passphrase(
                 cli.vault.as_deref(),
                 cli._profile.as_deref(),
                 reencrypt,
@@ -2488,7 +2577,7 @@ fn run_cli() -> ExitCode {
             finish_vault_result(result)
         }
         Some(Command::Migrate {
-            command: MigrateCommand::Pseudonymize { yes },
+            command: MigrateCommand::Pseudonymize { yes, .. },
         }) => run_migrate_pseudonymize(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -2500,6 +2589,7 @@ fn run_cli() -> ExitCode {
                 MigrateCommand::Kdf {
                     yes,
                     allow_legacy_kdf,
+                    ..
                 },
         }) => run_migrate_kdf(
             cli.vault.as_deref(),
@@ -2508,7 +2598,7 @@ fn run_cli() -> ExitCode {
             allow_legacy_kdf,
         ),
         Some(Command::Migrate {
-            command: MigrateCommand::V4 { yes, dry_run },
+            command: MigrateCommand::V4 { yes, dry_run, .. },
         }) => run_migrate_v4(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -2517,7 +2607,7 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Migrate {
-            command: MigrateCommand::Session { dry_run },
+            command: MigrateCommand::Session { dry_run, .. },
         }) => run_migrate_session(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -2611,7 +2701,7 @@ fn run_cli() -> ExitCode {
                     }
                 }
                 DeviceCommand::ApprovalList { .. } => device_approval::list(vault, cli.quiet),
-                DeviceCommand::ApprovalPair { host } => (|| {
+                DeviceCommand::ApprovalPair { host, .. } => (|| {
                     require_initialized(vault)?;
                     approval_commands::pair(vault, host.as_deref(), cli.quiet)
                 })(),
@@ -3450,7 +3540,17 @@ fn run_file(
                         timeout,
                         command,
                     },
-                )?;
+                );
+                let result = match result {
+                    Err(error) if error.starts_with("cannot read entry: entry not found: ") => {
+                        return Err(reported(
+                            2,
+                            &format!("{error}: entry not found"),
+                            Some("Try: symvault find <search-term>"),
+                        ));
+                    }
+                    other => other?,
+                };
                 if !result.timed_out {
                     print!("{}", result.stdout);
                     eprint!("{}", result.stderr);
@@ -4037,7 +4137,7 @@ fn run_recipients(
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         match command {
-            RecipientsCommand::List => {
+            RecipientsCommand::List { .. } => {
                 let recipients = recipients_commands::list(&vault)?;
                 recipients_commands::write_list(
                     &mut io::stdout().lock(),
@@ -4757,13 +4857,13 @@ fn run_mcp_action(
     quiet: bool,
 ) -> ExitCode {
     let flags = match action {
-        Some(McpAction::Install) => {
+        Some(McpAction::Install { .. }) => {
             return run_mcp_service(explicit_vault, profile, quiet, McpService::Install);
         }
-        Some(McpAction::Status) => {
+        Some(McpAction::Status { .. }) => {
             return run_mcp_service(explicit_vault, profile, quiet, McpService::Status);
         }
-        Some(McpAction::Uninstall) => {
+        Some(McpAction::Uninstall { .. }) => {
             return run_mcp_service(explicit_vault, profile, quiet, McpService::Uninstall);
         }
         Some(McpAction::Token { args }) => return deprecated_stubs::serve_token(&args),
@@ -5351,9 +5451,9 @@ fn run_auth_status(
         }
         Ok::<(), String>(())
     })();
-    if let Err(error) = &result
-        && !is_not_initialized(error)
-    {
+    // Go prints a plain (non-CLIError) failure twice, "vault not initialized"
+    // included: cobra reports it, then ExecuteRoot does.
+    if let Err(error) = &result {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
     finish_session_result(result, false, 1)
@@ -5723,6 +5823,95 @@ fn write_unknown_version_flag() -> ExitCode {
         return ExitCode::from(1);
     }
     ExitCode::from(1)
+}
+
+/// CLI-005: cobra accepts and ignores extra positionals on every command whose
+/// `Args` validator is nil. The error-taxonomy corpus lists those commands
+/// (`nil_args`, derived from the compiled Go command tree); clap must not reject
+/// a positional on any of them. This covers the commands the byte-for-byte replay
+/// leaves out (host- or timing-dependent output, long-running servers).
+#[cfg(test)]
+mod nil_args_positional_tests {
+    use super::*;
+    use clap::error::ErrorKind;
+
+    /// Nil-Args commands that are not native subcommands yet; the clap parse
+    /// is expected to reject their name. The replay lists them as known
+    /// body divergences.
+    const NOT_NATIVE: &[&str] = &["symvault dynamic generate", "symvault setup"];
+
+    fn nil_args_paths() -> Vec<(String, bool)> {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/port/cli/error-taxonomy.json"
+        ))
+        .expect("read error-taxonomy fixture");
+        let fixture: serde_json::Value = serde_json::from_str(&raw).expect("parse fixture");
+        fixture["nil_args"]
+            .as_array()
+            .expect("nil_args")
+            .iter()
+            .map(|entry| {
+                (
+                    entry["path"].as_str().expect("path").to_owned(),
+                    entry["runnable"].as_bool().expect("runnable"),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn clap_accepts_extra_positionals_on_every_runnable_nil_args_command() {
+        let mut checked = 0;
+        for (path, runnable) in nil_args_paths() {
+            if !runnable || NOT_NATIVE.contains(&path.as_str()) {
+                continue;
+            }
+            for extra in [&["x"][..], &["x", "y"][..], &["--", "x"][..]] {
+                let args: Vec<&str> = path.split(' ').chain(extra.iter().copied()).collect();
+                if let Err(error) = Cli::try_parse_from(&args) {
+                    assert!(
+                        !matches!(
+                            error.kind(),
+                            ErrorKind::UnknownArgument | ErrorKind::InvalidSubcommand
+                        ),
+                        "{args:?}: clap rejects the positionals: {error}"
+                    );
+                }
+                checked += 1;
+            }
+        }
+        // 48 runnable nil-Args commands, two of them not native yet.
+        assert_eq!(checked, 46 * 3);
+    }
+
+    #[test]
+    fn not_native_nil_args_commands_are_still_listed() {
+        let paths = nil_args_paths();
+        for name in NOT_NATIVE {
+            assert!(paths.iter().any(|(path, _)| path == name), "{name}");
+        }
+    }
+
+    /// Negative control: commands with a validator keep rejecting extras at the
+    /// clap layer (`get` is validated by the cobra emulation instead).
+    #[test]
+    fn clap_still_rejects_extra_positionals_where_cobra_has_a_validator() {
+        for args in [
+            &["symvault", "backup", "a", "b"][..],
+            &["symvault", "delete", "a", "b"][..],
+            &["symvault", "config", "get", "a", "b"][..],
+        ] {
+            let error = Cli::try_parse_from(args).expect_err("validator keeps rejecting");
+            assert!(
+                matches!(
+                    error.kind(),
+                    ErrorKind::UnknownArgument | ErrorKind::InvalidSubcommand
+                ),
+                "{args:?}: {error}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

@@ -14,6 +14,14 @@
 //! `argv_shapes` adds the shapes an arity sweep cannot reach (flag *types*, such as
 //! `device join --pairing-file <path> <token>`) and the group help pages; each row
 //! may bring disposable files that are written into the working directory first.
+//!
+//! `nil_args` lists every cobra command of the pinned tree whose `Args` validator
+//! is nil, so cobra accepts any positionals. `extra_positionals` records what Go
+//! does when such a command gets extra positionals, in an empty sandbox and in the
+//! frozen initialized vault (`vault_seed`, rewritten into the sandbox before each
+//! run); `run_file_use_argv` does the same for the argv permutations of `run` and
+//! `file use`. The only rewrites applied (to both sides) are the named `normalize`
+//! entries of a case; they replace a random password or key fragment.
 
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
@@ -65,6 +73,39 @@ struct ShapeCase {
 }
 
 #[derive(Debug, Deserialize)]
+struct NilArgsEntry {
+    path: String,
+    runnable: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct SeedFile {
+    path: String,
+    kind: String,
+    mode: u32,
+    #[serde(default)]
+    data: String,
+    #[serde(default)]
+    base64: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ScenarioCase {
+    name: String,
+    state: String,
+    #[serde(default)]
+    normalize: Vec<String>,
+    observation: Observation,
+}
+
+#[derive(Debug, Deserialize)]
+struct Exclusion {
+    path: String,
+    states: Vec<String>,
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct Oracle {
     commit: String,
     commit_sha: String,
@@ -82,6 +123,11 @@ struct Fixture {
     gate: Vec<GateRow>,
     not_initialized: Vec<Observation>,
     argv_shapes: Vec<ShapeCase>,
+    nil_args: Vec<NilArgsEntry>,
+    vault_seed: Vec<SeedFile>,
+    extra_positionals: Vec<ScenarioCase>,
+    extra_positional_exclusions: Vec<Exclusion>,
+    run_file_use_argv: Vec<ScenarioCase>,
 }
 
 const USAGE_CASES: usize = 105;
@@ -90,6 +136,91 @@ const ARITY_ROWS: usize = 116;
 const REJECTED_ARITY_PROBES: usize = 236;
 const GATE_REFUSALS: usize = 223;
 const NOT_INITIALIZED_CASES: usize = 29;
+const NIL_ARGS_COMMANDS: usize = 64;
+const NIL_ARGS_RUNNABLE: usize = 48;
+const EXTRA_POSITIONAL_EXCLUSIONS: usize = 7;
+const EXTRA_POSITIONALS_UNINITIALIZED: usize = 138;
+const EXTRA_POSITIONALS_INITIALIZED: usize = 82;
+const RUN_FILE_USE_ARGV_PER_STATE: usize = 32;
+const KNOWN_DIVERGENT_UNINITIALIZED: usize = 18;
+const KNOWN_DIVERGENT_INITIALIZED: usize = 10;
+
+/// Extra-positional scenarios whose command body still differs from Go for a
+/// reason that has nothing to do with the positionals: the same command without
+/// them differs in the same way. Each entry names the scenario slug, the state it
+/// applies to and the divergence. The replay does not compare these scenarios
+/// byte for byte; it asserts that the native output still differs (so a fix
+/// forces the entry out of this list) and that the divergence is not a clap
+/// rejection of the positionals, which is the defect this corpus guards.
+const KNOWN_BODY_DIVERGENCES: &[(&str, &str, &str)] = &[
+    (
+        "agent_list",
+        "uninitialized",
+        "missing config.yaml is worded `read config: No such file or directory (os error 2)`; Go prints `open <path>: no such file or directory`, twice",
+    ),
+    (
+        "device_pair",
+        "uninitialized",
+        "Go asks for the passphrase before it checks the vault (exit 4); the native command reports `vault is not initialized` (exit 1)",
+    ),
+    (
+        "migrate_kdf",
+        "uninitialized",
+        "missing identity.age is worded `file not found`, once; Go prints the `open <path>` error twice",
+    ),
+    (
+        "migrate_v4",
+        "uninitialized",
+        "missing config.yaml is worded `read config: ...`, once; Go prints the `open <path>` error twice",
+    ),
+    (
+        "dynamic_generate",
+        "uninitialized",
+        "`dynamic` is not a native subcommand yet (only its help page is frozen)",
+    ),
+    (
+        "dynamic_generate",
+        "initialized",
+        "`dynamic` is not a native subcommand yet (only its help page is frozen)",
+    ),
+    (
+        "setup",
+        "uninitialized",
+        "`setup` is not a native subcommand yet (only its help page is frozen)",
+    ),
+    (
+        "setup",
+        "initialized",
+        "`setup` is not a native subcommand yet (only its help page is frozen)",
+    ),
+    (
+        "auth_rotate-passphrase",
+        "initialized",
+        "the prompt-read failure says `read passphrase: EOF`; Go keeps the prompt label (`read Current passphrase: EOF`)",
+    ),
+    (
+        "migrate_pseudonymize",
+        "initialized",
+        "Go prints the SYMVAULT_PASSPHRASE warning before the prompt and the failure twice; the native command prints neither the warning nor the second line",
+    ),
+    (
+        "unlock",
+        "initialized",
+        "with no OS keyring Go prints the memory-only session error twice and a Touch ID hint; the native command prints it once without the hint",
+    ),
+];
+
+fn known_divergence(name: &str, state: &str) -> Option<&'static str> {
+    KNOWN_BODY_DIVERGENCES
+        .iter()
+        .find(|(slug, known_state, _)| {
+            *known_state == state
+                && name
+                    .strip_prefix(&format!("extra_{state}_{slug}_"))
+                    .is_some_and(|variant| matches!(variant, "x1" | "x2" | "dd1"))
+        })
+        .map(|(_, _, reason)| *reason)
+}
 
 fn fixture() -> Fixture {
     let raw = fs::read_to_string(concat!(
@@ -123,9 +254,22 @@ fn windows_errno_to_go_unix(text: String) -> String {
 }
 
 fn run_with_files(args: &[String], files: &BTreeMap<String, String>) -> (i32, String, String) {
+    run_scenario(args, files, &[], false)
+}
+
+/// Runs the binary in a fresh sandbox. `seed` is the frozen vault tree (text carries
+/// the sandbox root as `__ROOT__`); `initialized` adds the passphrase environment
+/// the recorded initialized runs had.
+fn run_scenario(
+    args: &[String],
+    files: &BTreeMap<String, String>,
+    seed: &[SeedFile],
+    initialized: bool,
+) -> (i32, String, String) {
     let root = test_temp_root::TempRoot::existing("symvault-error-taxonomy-");
     let home = root.join("home");
     fs::create_dir_all(&home).expect("create isolated home");
+    write_seed(&root, seed);
     for (name, content) in files {
         fs::write(root.join(name), content).expect("write disposable file");
     }
@@ -134,6 +278,12 @@ fn run_with_files(args: &[String], files: &BTreeMap<String, String>) -> (i32, St
         if name.to_string_lossy().starts_with("SYMVAULT_") {
             command.env_remove(name);
         }
+    }
+    if initialized {
+        command
+            .env("TZ", "UTC")
+            .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1");
     }
     let output = command
         .current_dir(&*root)
@@ -164,6 +314,77 @@ fn run_with_files(args: &[String], files: &BTreeMap<String, String>) -> (i32, St
     )
 }
 
+/// Recreates the frozen vault tree, parents before their contents.
+fn write_seed(root: &std::path::Path, seed: &[SeedFile]) {
+    use base64::Engine as _;
+    let root_text = root.to_string_lossy().into_owned();
+    for entry in seed {
+        let path = root.join(&entry.path);
+        match entry.kind.as_str() {
+            "dir" => fs::create_dir_all(&path).expect("create seed directory"),
+            "file" => {
+                let raw = if entry.base64.is_empty() {
+                    entry.data.replace("__ROOT__", &root_text).into_bytes()
+                } else {
+                    base64::engine::general_purpose::STANDARD
+                        .decode(&entry.base64)
+                        .expect("decode seed file")
+                };
+                fs::create_dir_all(path.parent().expect("seed parent")).expect("seed parent");
+                fs::write(&path, raw).expect("write seed file");
+            }
+            other => panic!("seed entry {} has unknown kind {other}", entry.path),
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            fs::set_permissions(&path, fs::Permissions::from_mode(entry.mode))
+                .expect("set seed mode");
+        }
+        #[cfg(not(unix))]
+        let _ = entry.mode;
+    }
+}
+
+/// The recorded rewrites, applied to the native output exactly as the generator
+/// applied them to the oracle's.
+fn apply_normalizers(names: &[String], stdout: &mut String, stderr: &mut String) {
+    for name in names {
+        match name.as_str() {
+            "password20" => {
+                let body = stdout.strip_suffix('\n').unwrap_or("");
+                if body.len() == 20 && body.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+                    *stdout = "__PASSWORD__\n".to_string();
+                }
+            }
+            "key_bytes" => *stderr = replace_key_bytes(stderr),
+            other => panic!("unknown normalizer {other}"),
+        }
+    }
+}
+
+/// `New key: <8 lowercase hex digits> (first 4 bytes)` -> `New key: __KEY__ (first 4 bytes)`.
+fn replace_key_bytes(text: &str) -> String {
+    const PREFIX: &str = "New key: ";
+    const SUFFIX: &str = " (first 4 bytes)";
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find(PREFIX) {
+        let (head, tail) = rest.split_at(at + PREFIX.len());
+        out.push_str(head);
+        let hex = tail.get(..8).unwrap_or("");
+        let is_hex = hex.len() == 8 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+        if is_hex && tail[8..].starts_with(SUFFIX) {
+            out.push_str("__KEY__");
+            rest = &tail[8..];
+        } else {
+            rest = tail;
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 fn compare(label: &str, observation: &Observation, failures: &mut Vec<String>) {
     compare_with_files(label, observation, &BTreeMap::new(), failures);
 }
@@ -175,6 +396,15 @@ fn compare_with_files(
     failures: &mut Vec<String>,
 ) {
     let (code, stdout, stderr) = run_with_files(&observation.args, files);
+    record_difference(label, observation, (code, stdout, stderr), failures);
+}
+
+fn record_difference(
+    label: &str,
+    observation: &Observation,
+    (code, stdout, stderr): (i32, String, String),
+    failures: &mut Vec<String>,
+) {
     if code != observation.exit_code || stdout != observation.stdout || stderr != observation.stderr
     {
         failures.push(format!(
@@ -182,6 +412,58 @@ fn compare_with_files(
             observation.args, observation.exit_code, observation.stdout, observation.stderr
         ));
     }
+}
+
+/// Replays the scenarios recorded for `state`; returns how many ran.
+fn replay_scenarios(
+    cases: &[ScenarioCase],
+    state: &str,
+    seed: &[SeedFile],
+    failures: &mut Vec<String>,
+) -> usize {
+    let mut replayed = 0;
+    for case in cases.iter().filter(|case| case.state == state) {
+        let initialized = state == "initialized";
+        let (code, mut stdout, mut stderr) = run_scenario(
+            &case.observation.args,
+            &BTreeMap::new(),
+            if initialized { seed } else { &[] },
+            initialized,
+        );
+        apply_normalizers(&case.normalize, &mut stdout, &mut stderr);
+        if let Some(reason) = known_divergence(&case.name, state) {
+            let matches = code == case.observation.exit_code
+                && stdout == case.observation.stdout
+                && stderr == case.observation.stderr;
+            if matches {
+                failures.push(format!(
+                    "{} now matches Go; remove it from KNOWN_BODY_DIVERGENCES ({reason})",
+                    case.name
+                ));
+            }
+            // The positionals must reach the command: a clap rejection of them
+            // is the defect this corpus guards, never a known divergence.
+            if stderr.contains("unexpected argument")
+                || stderr.contains("unrecognized subcommand 'x'")
+                || stderr.contains("unrecognized subcommand '--'")
+            {
+                failures.push(format!(
+                    "{} {:?}: clap rejected the positionals: {stderr:?}",
+                    case.name, case.observation.args
+                ));
+            }
+            replayed += 1;
+            continue;
+        }
+        record_difference(
+            &case.name,
+            &case.observation,
+            (code, stdout, stderr),
+            failures,
+        );
+        replayed += 1;
+    }
+    replayed
 }
 
 #[test]
@@ -209,6 +491,113 @@ fn fixture_provenance_and_counts() {
     assert_eq!(rejected, REJECTED_ARITY_PROBES);
     let refusals: usize = fixture.gate.iter().map(|row| row.refusals.len()).sum();
     assert_eq!(refusals, GATE_REFUSALS);
+    assert_eq!(fixture.nil_args.len(), NIL_ARGS_COMMANDS);
+    assert_eq!(
+        fixture
+            .nil_args
+            .iter()
+            .filter(|entry| entry.runnable)
+            .count(),
+        NIL_ARGS_RUNNABLE
+    );
+    assert_eq!(
+        fixture.extra_positional_exclusions.len(),
+        EXTRA_POSITIONAL_EXCLUSIONS
+    );
+    let in_state = |cases: &[ScenarioCase], state: &str| {
+        cases.iter().filter(|case| case.state == state).count()
+    };
+    assert_eq!(
+        in_state(&fixture.extra_positionals, "uninitialized"),
+        EXTRA_POSITIONALS_UNINITIALIZED
+    );
+    assert_eq!(
+        in_state(&fixture.extra_positionals, "initialized"),
+        EXTRA_POSITIONALS_INITIALIZED
+    );
+    for state in ["uninitialized", "initialized"] {
+        assert_eq!(
+            in_state(&fixture.run_file_use_argv, state),
+            RUN_FILE_USE_ARGV_PER_STATE
+        );
+    }
+    assert!(!fixture.vault_seed.is_empty());
+}
+
+/// Every runnable nil-Args command has its three uninitialized and two
+/// initialized scenarios unless an exclusion names the reason, and no scenario
+/// exists for a command outside the inventory.
+#[test]
+fn known_body_divergences_name_recorded_scenarios() {
+    let fixture = fixture();
+    for state in ["uninitialized", "initialized"] {
+        let known = fixture
+            .extra_positionals
+            .iter()
+            .filter(|case| case.state == state && known_divergence(&case.name, state).is_some())
+            .count();
+        let expected = if state == "uninitialized" {
+            KNOWN_DIVERGENT_UNINITIALIZED
+        } else {
+            KNOWN_DIVERGENT_INITIALIZED
+        };
+        assert_eq!(known, expected, "{state}");
+    }
+    for (slug, state, reason) in KNOWN_BODY_DIVERGENCES {
+        assert!(!reason.is_empty());
+        assert!(
+            fixture
+                .extra_positionals
+                .iter()
+                .any(|case| case.state == *state
+                    && case.name == format!("extra_{state}_{slug}_x1")),
+            "{slug}/{state} names no recorded scenario"
+        );
+    }
+}
+
+#[test]
+fn every_runnable_nil_args_command_is_covered_or_excluded() {
+    let fixture = fixture();
+    let names: std::collections::BTreeSet<&str> = fixture
+        .extra_positionals
+        .iter()
+        .map(|case| case.name.as_str())
+        .collect();
+    let mut expected = std::collections::BTreeSet::new();
+    for entry in fixture.nil_args.iter().filter(|entry| entry.runnable) {
+        let slug = entry
+            .path
+            .strip_prefix("symvault ")
+            .expect("path starts with the binary name")
+            .replace(' ', "_");
+        let excluded = fixture
+            .extra_positional_exclusions
+            .iter()
+            .find(|item| item.path == entry.path);
+        for (state, variants) in [
+            ("uninitialized", &["x1", "x2", "dd1"][..]),
+            ("initialized", &["x1", "x2"][..]),
+        ] {
+            if excluded.is_some_and(|item| item.states.iter().any(|s| s == state)) {
+                continue;
+            }
+            for variant in variants {
+                expected.insert(format!("extra_{state}_{slug}_{variant}"));
+            }
+        }
+    }
+    let recorded: std::collections::BTreeSet<String> =
+        names.iter().map(|name| (*name).to_string()).collect();
+    assert_eq!(recorded, expected);
+    for item in &fixture.extra_positional_exclusions {
+        assert!(!item.reason.is_empty(), "{} has no reason", item.path);
+        assert!(
+            fixture.nil_args.iter().any(|entry| entry.path == item.path),
+            "exclusion {} is not a nil-Args command",
+            item.path
+        );
+    }
 }
 
 #[test]
@@ -307,6 +696,90 @@ fn native_cli_matches_go_not_initialized_failures() {
     }
     assert_eq!(replayed, NOT_INITIALIZED_CASES);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Nil-Args commands accept every positional in cobra, so a call with extra
+/// positionals reaches the command body: the empty-sandbox outcome (usually the
+/// "vault not initialized" failure, or the command's own output) must match.
+#[test]
+fn native_cli_matches_go_extra_positionals_uninitialized() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    let replayed = replay_scenarios(
+        &fixture.extra_positionals,
+        "uninitialized",
+        &fixture.vault_seed,
+        &mut failures,
+    );
+    assert_eq!(replayed, EXTRA_POSITIONALS_UNINITIALIZED);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The same positionals in the frozen initialized vault. The seed carries Unix
+/// permission bits and the recording ran on Unix.
+#[cfg(unix)]
+#[test]
+fn native_cli_matches_go_extra_positionals_initialized() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    let replayed = replay_scenarios(
+        &fixture.extra_positionals,
+        "initialized",
+        &fixture.vault_seed,
+        &mut failures,
+    );
+    assert_eq!(replayed, EXTRA_POSITIONALS_INITIALIZED);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// `run` and `file use` forward a trailing command line: flags, bare words and
+/// `--` in every position must be handled as Go's cobra does.
+#[test]
+fn native_cli_matches_go_run_file_use_argv_uninitialized() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    let replayed = replay_scenarios(
+        &fixture.run_file_use_argv,
+        "uninitialized",
+        &fixture.vault_seed,
+        &mut failures,
+    );
+    assert_eq!(replayed, RUN_FILE_USE_ARGV_PER_STATE);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[cfg(unix)]
+#[test]
+fn native_cli_matches_go_run_file_use_argv_initialized() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    let replayed = replay_scenarios(
+        &fixture.run_file_use_argv,
+        "initialized",
+        &fixture.vault_seed,
+        &mut failures,
+    );
+    assert_eq!(replayed, RUN_FILE_USE_ARGV_PER_STATE);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn key_bytes_normalizer_rewrites_only_the_drawn_key() {
+    let mut stdout = String::new();
+    let mut stderr =
+        "New key: b9e4f8cc (first 4 bytes)\nNew key: nothex!! (first 4 bytes)\n".to_string();
+    apply_normalizers(&["key_bytes".to_string()], &mut stdout, &mut stderr);
+    assert_eq!(
+        stderr,
+        "New key: __KEY__ (first 4 bytes)\nNew key: nothex!! (first 4 bytes)\n"
+    );
+    let mut password = "abcdefghij0123456789\n".to_string();
+    let mut none = String::new();
+    apply_normalizers(&["password20".to_string()], &mut password, &mut none);
+    assert_eq!(password, "__PASSWORD__\n");
+    let mut short = "abc\n".to_string();
+    apply_normalizers(&["password20".to_string()], &mut short, &mut none);
+    assert_eq!(short, "abc\n");
 }
 
 /// Negative control: an expectation that differs by one byte must be reported.

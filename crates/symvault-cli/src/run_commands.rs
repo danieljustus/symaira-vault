@@ -418,7 +418,14 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         Err(error) => {
             return Err(cleanup_after_command_error(
                 &mut materialized_files,
-                format!("failed to run command: {error}"),
+                format!(
+                    "failed to run command: {}",
+                    go_exec_error(
+                        &options.command[0],
+                        options.working_directory.is_none_or(Path::exists),
+                        &error
+                    )
+                ),
             ));
         }
     };
@@ -934,6 +941,23 @@ fn format_fraction(whole: u128, fraction: u128, unit: u128) -> String {
         digits.pop();
     }
     format!("{whole}.{digits}")
+}
+
+/// Renders a spawn failure the way Go's `os/exec` does: a name without a path
+/// separator that is not on `PATH` is `exec.ErrNotFound`, a missing path is the
+/// `fork/exec` error. A missing working directory keeps the system text.
+fn go_exec_error(program: &str, working_directory_exists: bool, error: &std::io::Error) -> String {
+    if error.kind() != std::io::ErrorKind::NotFound || !working_directory_exists {
+        return error.to_string();
+    }
+    if program.contains(std::path::is_separator) {
+        return format!("fork/exec {program}: no such file or directory");
+    }
+    let path_variable = if cfg!(windows) { "%PATH%" } else { "$PATH" };
+    format!(
+        "exec: {}: executable file not found in {path_variable}",
+        symvault_core::go_quote(program)
+    )
 }
 
 #[cfg(test)]
@@ -1521,5 +1545,23 @@ mod tests {
             format_timeout(Duration::from_secs(3_661) + Duration::from_nanos(2)),
             "1h1m1.000000002s"
         );
+    }
+
+    #[test]
+    fn spawn_failures_read_like_go_os_exec() {
+        let missing = std::io::Error::from(std::io::ErrorKind::NotFound);
+        let path_variable = if cfg!(windows) { "%PATH%" } else { "$PATH" };
+        assert_eq!(
+            go_exec_error("x", true, &missing),
+            format!("exec: \"x\": executable file not found in {path_variable}")
+        );
+        assert_eq!(
+            go_exec_error("./x", true, &missing),
+            "fork/exec ./x: no such file or directory"
+        );
+        // A missing working directory is not a missing program.
+        assert_eq!(go_exec_error("x", false, &missing), missing.to_string());
+        let denied = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        assert_eq!(go_exec_error("x", true, &denied), denied.to_string());
     }
 }

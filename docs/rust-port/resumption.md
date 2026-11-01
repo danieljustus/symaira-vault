@@ -1,13 +1,46 @@
 # Rust migration handover — 2026-09-09
 
-## CLI-005 partial: not-initialized cases, 2026-11-01
+## CLI-005 partial: nil-`Args` extra positionals, 2026-11-01
 
-The four previously open recorded cases now match the Go oracle: all 29 are
-replayed end-to-end. The before run had four mismatches; the after run has none.
-Non-root `Args == nil` extra-positional handling remains open: an inventory of
-the assembled Go tree was inspected, but no new Go-recorded full-binary corpus
-or general fix has been produced. Other `run`/`file use` argument permutations
-remain unproven. This is not completion of CLI-005.
+Branch `local/cli-005`. Every cobra command whose `Args` validator is nil accepts
+and ignores extra positionals; clap rejected them. Now fixed and pinned.
+
+- **Inventory.** `errtaxgen` (`inventory.go`) walks `cmd.NewRootCmd()` plus
+  cobra's default `help` command: 64 commands with `Args == nil`, 48 runnable
+  (the sources are digest-bound, so the compiled tree is the pinned oracle's).
+- **Corpus.** `testdata/port/cli/error-taxonomy.json` gains `nil_args`,
+  `vault_seed` (a Go-initialized vault, recorded once and reused by `--check`;
+  `--new-seed` re-records it), `extra_positionals` (138 empty-sandbox + 82
+  initialized-vault scenarios; `x`, `x y`, `-- x`), `extra_positional_exclusions`
+  (7 commands, each with a reason) and `run_file_use_argv` (32 + 32 `run`/`file use`
+  permutations). Every scenario ran twice against the Go binary and had to be
+  deterministic; the only rewrites are `password20` (`generate`) and `key_bytes`
+  (`audit rotate-key`). The pre-existing sections are unchanged.
+- **Before:** 152 of the 284 scenarios failed in the native binary: 133 because
+  clap rejected the positionals (27 command paths), 2 because `help x y` quoted its
+  words differently, 17 because `run`/`file use` reported a missing program or entry
+  differently. **After:** 256 match Go byte for byte, 28 are pinned as known body
+  divergences (below), none is a clap rejection.
+- **Fix.** `IgnoredPositionals` (hidden `num_args = 0..`) is flattened into exactly
+  the nil-Args commands; commands with validators are untouched
+  (`clap_still_rejects_extra_positionals_where_cobra_has_a_validator`). Also:
+  `help` words are quoted like Go's `%#q`, a missing program in `run`/`file use`
+  reads `exec: "x": executable file not found in $PATH`, `file use` reports a
+  missing entry like Go (exit 2, doubled line, `Try:` hint), `auth status` prints its
+  plain failure twice.
+- **Open (28 scenarios, `KNOWN_BODY_DIVERGENCES` in `error_taxonomy.rs`):**
+  `dynamic generate` and `setup` are not native subcommands; `agent list`,
+  `migrate v4`, `migrate kdf` on a missing vault word the OS error differently and
+  print it once; `device pair` checks the vault before asking for the passphrase;
+  `auth rotate-passphrase` loses the prompt label in `read ... EOF`; `migrate
+  pseudonymize` lacks the passphrase warning and the second line; `unlock` without
+  an OS keyring lacks the second line and the Touch ID hint. All differ without the
+  extra positionals too; fix each against its own Go-recorded cases. Host- or
+  timing-dependent `doctor` and `startup-profile` and the long-running `broker`,
+  `mcp`, `serve` and random-token `device pair`/`migrate v4` are not replayed in
+  the initialized vault (clap acceptance only, via `nil_args_positional_tests`).
+- This is not completion of CLI-005: the broader exit/error taxonomy outside the
+  recorded corpus is unproven.
 
 ## FFI-001 Swift bridge, 2026-11-01
 
