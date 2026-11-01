@@ -158,7 +158,10 @@ type fixture struct {
 	// HostDependentCommands are the nil-Args commands whose scenarios are only
 	// byte-comparable on the platforms named (their scenarios carry the same list).
 	HostDependentCommands []hostDependence `json:"host_dependent_commands"`
-	RunFileUseArgv        []scenarioCase   `json:"run_file_use_argv"`
+	// ServiceManagerCommands are the only commands whose scenarios may call
+	// launchctl or systemctl.
+	ServiceManagerCommands []string       `json:"service_manager_commands"`
+	RunFileUseArgv         []scenarioCase `json:"run_file_use_argv"`
 }
 
 type treeFile struct {
@@ -766,6 +769,7 @@ func main() {
 		ExtraPositionals:          extras.extraPositionals,
 		ExtraPositionalExclusions: extras.exclusions,
 		HostDependentCommands:     extras.hostDependent,
+		ServiceManagerCommands:    extras.serviceManager,
 		RunFileUseArgv:            extras.runFileUse,
 	}
 	content, err := marshalJSON(fresh)
@@ -795,7 +799,7 @@ func main() {
 			if !bytes.Equal(existing, again) {
 				fatal("fixture is stale; regenerate deliberately")
 			}
-			note = fmt.Sprintf("; recorded on %s, so %d host-dependent scenario observations and %d host-tool call lists are taken from that recording and verified only there", projected.GeneratedOn, taken.observations, taken.calls)
+			note = fmt.Sprintf("; recorded on %s, so the service-file line of %d host-dependent scenario observations and %d service-manager call lists are taken from that recording and verified only there; every other byte, including the arguments, exit codes and stderr of those scenarios, matched this host's oracle run", projected.GeneratedOn, taken.observations, taken.calls)
 		}
 		fmt.Printf("PASS error taxonomy fixture (%s%s)\n", summary, note)
 		return

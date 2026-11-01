@@ -135,13 +135,13 @@ func newMainEnv(t *testing.T) mainEnv {
 
 	origCommit, origValidate, origLocate := pinnedOracleCommit, validateOracle, locateRoot
 	origInventory, origSeed := nilArgsInventory, seedBuilder
-	origExclusions, origNormalizers, origHostDependence := scenarioExclusions, scenarioNormalizers, scenarioHostDependence
+	origExclusions, origNormalizers, origHostDependence, origServiceManager := scenarioExclusions, scenarioNormalizers, scenarioHostDependence, serviceManagerCommands
 	t.Cleanup(func() {
 		pinnedOracleCommit, validateOracle, locateRoot = origCommit, origValidate, origLocate
 		nilArgsInventory, seedBuilder = origInventory, origSeed
-		scenarioExclusions, scenarioNormalizers, scenarioHostDependence = origExclusions, origNormalizers, origHostDependence
+		scenarioExclusions, scenarioNormalizers, scenarioHostDependence, serviceManagerCommands = origExclusions, origNormalizers, origHostDependence, origServiceManager
 	})
-	scenarioExclusions, scenarioNormalizers, scenarioHostDependence = nil, nil, nil
+	scenarioExclusions, scenarioNormalizers, scenarioHostDependence, serviceManagerCommands = nil, nil, nil, nil
 	pinnedOracleCommit = commit
 	validateOracle = func(string) error { return nil }
 	locateRoot = func() (string, error) { return root, nil }

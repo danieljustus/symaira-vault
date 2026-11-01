@@ -23,8 +23,10 @@ import (
 // shadow the real tools. Each one appends its argv to a log inside the sandbox
 // and exits 0 without output. The log is read after the run:
 //
-//   - the service managers (serviceManagerTools) are expected: their calls are
-//     recorded with the scenario and compared on the recording platform;
+//   - the service managers (serviceManagerTools) are expected, and only from the
+//     scenarios of serviceManagerCommands: their calls are recorded with the
+//     scenario and compared on the recording platform; a service-manager call
+//     from any other scenario fails the recording;
 //   - any call of another stand-in (refusedHostTools: keychain, clipboard,
 //     notification, autotype helpers) fails the generator, so no scenario can
 //     reach them unnoticed.
@@ -144,14 +146,28 @@ func guardHostCalls(args []string, calls []string) error {
 	return nil
 }
 
-// foreignParts counts what projectOnForeignHost took from the recording.
+// foreignParts counts what projectOnForeignHost took from the recording: stdout
+// service-file lines and service-manager call lists.
 type foreignParts struct{ observations, calls int }
 
+// serviceFileLinePrefix starts the one stdout line of `mcp|serve install|status`
+// that names the platform's service file (`  Service file: <path>`).
+const serviceFileLinePrefix = "  Service file: "
+
 // projectOnForeignHost is the --check view of a corpus that another platform
-// recorded. A scenario of a host-dependent command (its Platforms exclude this
-// host) prints the recording platform's service paths, and every service-manager
-// call list is the recording platform's (launchctl there, systemctl here). Those
-// parts of fresh are replaced by the recorded ones, by scenario name, and
+// recorded. Two things of a recording are platform-bound, and only these are
+// taken from it, by scenario name:
+//
+//   - the `  Service file: <path>` line of the stdout of a scenario of a
+//     host-dependent command (its Platforms exclude this host): launchd's plist
+//     path there, a systemd unit here. Everything else of that observation (the
+//     args, the exit code, stderr and every other stdout line) is this host's
+//     fresh run and must still match the recording;
+//   - the service-manager call list of a scenario of a service-manager command
+//     (launchctl there, systemctl here). No other scenario may have calls: the
+//     generator refuses them while recording, and a fresh call list outside the
+//     service-manager commands is never replaced here, so it stays stale.
+//
 // GeneratedOn is the recording's; every other byte of fresh must match the
 // recorded fixture, so the comparison still re-verifies the rest of the corpus
 // against this host's oracle. A recording made on this host is not projected.
@@ -176,11 +192,12 @@ func projectOnForeignHost(recordedRaw []byte, fresh fixture, goos string) (fixtu
 			if !ok {
 				continue
 			}
-			if !runsOn(item.Platforms, goos) {
-				out[i].Observation = rec.Observation
-				taken.observations++
+			if !runsOn(item.Platforms, goos) && item.serviceManager {
+				var lines int
+				out[i].Observation.Stdout, lines = takeServiceFileLines(item.Observation.Stdout, rec.Observation.Stdout)
+				taken.observations += lines
 			}
-			if len(rec.HostToolCalls) > 0 || len(item.HostToolCalls) > 0 {
+			if item.serviceManager && (len(rec.HostToolCalls) > 0 || len(item.HostToolCalls) > 0) {
 				out[i].HostToolCalls = rec.HostToolCalls
 				taken.calls++
 			}
@@ -191,6 +208,23 @@ func projectOnForeignHost(recordedRaw []byte, fresh fixture, goos string) (fixtu
 	fresh.ExtraPositionals = project(fresh.ExtraPositionals, recorded.ExtraPositionals)
 	fresh.RunFileUseArgv = project(fresh.RunFileUseArgv, recorded.RunFileUseArgv)
 	return fresh, taken, nil
+}
+
+// takeServiceFileLines replaces each service-file line of the fresh stdout with
+// the recorded line at the same position, when the recording has a service-file
+// line there. A differing line count, a moved line or any other changed line
+// keeps the fresh bytes, so the comparison with the recording fails. It returns
+// the number of lines taken.
+func takeServiceFileLines(fresh, recorded string) (string, int) {
+	freshLines, recordedLines := strings.Split(fresh, "\n"), strings.Split(recorded, "\n")
+	taken := 0
+	for i, line := range freshLines {
+		if i < len(recordedLines) && strings.HasPrefix(line, serviceFileLinePrefix) && strings.HasPrefix(recordedLines[i], serviceFileLinePrefix) {
+			freshLines[i] = recordedLines[i]
+			taken++
+		}
+	}
+	return strings.Join(freshLines, "\n"), taken
 }
 
 // runsOn reports whether a scenario tagged with platforms can be compared on goos.

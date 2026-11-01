@@ -68,6 +68,10 @@ type scenarioCase struct {
 	// platform it was recorded on.
 	Platforms   []string    `json:"platforms,omitempty"`
 	Observation observation `json:"observation"`
+	// serviceManager marks a scenario of a service-manager command
+	// (serviceManagerCommands); it is not recorded, the --check projection reads
+	// it from the fresh run.
+	serviceManager bool
 	// HostToolCalls are the service-manager calls the run made to the sandbox
 	// stand-ins (`launchctl unload <plist>`), recorded on the fixture's
 	// generated_on platform; a replay compares them only there.
@@ -79,6 +83,9 @@ type scenarioInput struct {
 	args                     []string
 	normalize                []string
 	platforms                []string
+	// serviceManager allows the run to call launchctl/systemctl; any other
+	// scenario that does fails the recording.
+	serviceManager bool
 }
 
 type extraSections struct {
@@ -87,6 +94,7 @@ type extraSections struct {
 	extraPositionals []scenarioCase
 	exclusions       []exclusion
 	hostDependent    []hostDependence
+	serviceManager   []string
 	runFileUse       []scenarioCase
 }
 
@@ -137,6 +145,16 @@ var scenarioHostDependence = []hostDependence{
 	{"symvault mcp status", darwinOnly, "prints the launchd plist path; Linux reports the systemd unit"},
 	{"symvault serve install", darwinOnly, "deprecated alias of mcp install: prints the launchd plist path; Linux installs a systemd user unit"},
 	{"symvault serve status", darwinOnly, "deprecated alias of mcp status: prints the launchd plist path; Linux reports the systemd unit"},
+}
+
+// serviceManagerCommands are the only commands allowed to call launchctl or
+// systemctl: they register, remove or query the user service. `uninstall` and
+// `status` print the same text on both platforms (or are host-dependent), but
+// their service-manager calls are the recording platform's. Every other
+// scenario of the corpus must make zero host-tool calls on every platform.
+var serviceManagerCommands = []string{
+	"symvault mcp install", "symvault mcp status", "symvault mcp uninstall",
+	"symvault serve install", "symvault serve status", "symvault serve uninstall",
 }
 
 func (e exclusion) excludes(state string) bool {
@@ -338,10 +356,20 @@ func extraPositionalInputs(inventory []nilArgsEntry) ([]scenarioInput, error) {
 		}
 		excluded[item.Path] = item
 	}
+	serviceManager := map[string]bool{}
+	for _, path := range serviceManagerCommands {
+		if !paths[path] {
+			return nil, fmt.Errorf("serviceManagerCommands names %q, which is not a nil-Args command", path)
+		}
+		serviceManager[path] = true
+	}
 	dependent := map[string]hostDependence{}
 	for _, item := range scenarioHostDependence {
 		if !paths[item.Path] {
 			return nil, fmt.Errorf("scenarioHostDependence names %q, which is not a nil-Args command", item.Path)
+		}
+		if !serviceManager[item.Path] {
+			return nil, fmt.Errorf("scenarioHostDependence names %q, which is not in serviceManagerCommands", item.Path)
 		}
 		dependent[item.Path] = item
 	}
@@ -378,6 +406,8 @@ func extraPositionalInputs(inventory []nilArgsEntry) ([]scenarioInput, error) {
 					args:        concat(base, variant.extra),
 					normalize:   scenarioNormalizers[entry.Path],
 					platforms:   dependent[entry.Path].Platforms,
+
+					serviceManager: serviceManager[entry.Path],
 				})
 			}
 		}
@@ -548,11 +578,15 @@ func recordScenarios(goBinary string, seed []seedFile, inputs []scenarioInput) (
 			problems = append(problems, fmt.Sprintf("scenario %s is not deterministic: %s", in.name, firstDifference(recorded[0], recorded[1])))
 			continue
 		}
+		if !in.serviceManager && len(calls[0]) > 0 {
+			problems = append(problems, fmt.Sprintf("scenario %s is not a service-manager command but called host tools: %q", in.name, calls[0]))
+			continue
+		}
 		if strings.Join(calls[0], "\n") != strings.Join(calls[1], "\n") {
 			problems = append(problems, fmt.Sprintf("scenario %s makes different host-tool calls per run: %q vs %q", in.name, calls[0], calls[1]))
 			continue
 		}
-		out = append(out, scenarioCase{Name: in.name, Description: in.description, State: in.state, Normalize: in.normalize, Platforms: in.platforms, Observation: recorded[0], HostToolCalls: calls[0]})
+		out = append(out, scenarioCase{Name: in.name, Description: in.description, State: in.state, Normalize: in.normalize, Platforms: in.platforms, Observation: recorded[0], HostToolCalls: calls[0], serviceManager: in.serviceManager})
 	}
 	if len(problems) > 0 {
 		return nil, fmt.Errorf("%d scenario(s) cannot be recorded:\n%s", len(problems), strings.Join(problems, "\n"))
@@ -592,7 +626,7 @@ func buildExtraSections(goBinary, output string, newSeed bool) (extraSections, e
 		return extraSections{}, err
 	}
 	sort.SliceStable(inventory, func(i, j int) bool { return inventory[i].Path < inventory[j].Path })
-	return extraSections{nilArgs: inventory, seed: seed, extraPositionals: extra, exclusions: scenarioExclusions, hostDependent: scenarioHostDependence, runFileUse: forwarded}, nil
+	return extraSections{nilArgs: inventory, seed: seed, extraPositionals: extra, exclusions: scenarioExclusions, hostDependent: scenarioHostDependence, serviceManager: serviceManagerCommands, runFileUse: forwarded}, nil
 }
 
 // firstDifference names the first line that differs between two observations.

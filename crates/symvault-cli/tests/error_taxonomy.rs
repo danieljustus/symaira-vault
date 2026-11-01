@@ -165,6 +165,7 @@ struct Fixture {
     extra_positionals: Vec<ScenarioCase>,
     extra_positional_exclusions: Vec<Exclusion>,
     host_dependent_commands: Vec<HostDependence>,
+    service_manager_commands: Vec<String>,
     run_file_use_argv: Vec<ScenarioCase>,
 }
 
@@ -191,6 +192,17 @@ const HOST_DEPENDENT_COMMANDS: [&str; 4] = [
     "symvault mcp status",
     "symvault serve install",
     "symvault serve status",
+];
+
+/// The only commands whose scenarios may call `launchctl` or `systemctl`; every
+/// other scenario must make zero host-tool calls on every platform.
+const SERVICE_MANAGER_COMMANDS: [&str; 6] = [
+    "symvault mcp install",
+    "symvault mcp status",
+    "symvault mcp uninstall",
+    "symvault serve install",
+    "symvault serve status",
+    "symvault serve uninstall",
 ];
 
 /// The name the fixture uses for this host (Go's `GOOS`).
@@ -687,6 +699,39 @@ fn run_case(case: &ScenarioCase, seed: &[SeedFile]) -> (i32, String, String) {
     (run.code, run.stdout, run.stderr)
 }
 
+/// Whether `case` is a scenario of a service-manager command (the scenario name
+/// is `extra_<state>_<command words joined by _>_<variant>`).
+fn is_service_manager_case(case: &ScenarioCase) -> bool {
+    SERVICE_MANAGER_COMMANDS.iter().any(|path| {
+        let slug = path.trim_start_matches("symvault ").replace(' ', "_");
+        case.name
+            .starts_with(&format!("extra_{}_{slug}_", case.state))
+    })
+}
+
+/// What is wrong with the host-tool calls of one run, if anything. A scenario of a
+/// service-manager command is compared with the recorded calls where they were
+/// recorded (`recorded_here`); every other scenario must have made no call on any
+/// platform, so a new unrelated `systemctl`/`launchctl` call cannot slip through
+/// on the platform that has no recording.
+fn host_call_failure(case: &ScenarioCase, calls: &[String], recorded_here: bool) -> Option<String> {
+    if is_service_manager_case(case) {
+        (recorded_here && calls != case.host_tool_calls).then(|| {
+            format!(
+                "{} host-tool calls\n  go:   {:?}\n  rust: {:?}",
+                case.name, case.host_tool_calls, calls
+            )
+        })
+    } else {
+        (!calls.is_empty() || !case.host_tool_calls.is_empty()).then(|| {
+            format!(
+                "{} is not a service-manager command but made host-tool calls\n  recorded: {:?}\n  rust:     {:?}",
+                case.name, case.host_tool_calls, calls
+            )
+        })
+    }
+}
+
 /// Whether `case` can be compared on this host.
 fn runs_on_this_host(case: &ScenarioCase) -> bool {
     case.platforms.is_empty() || case.platforms.iter().any(|platform| platform == host_os())
@@ -721,12 +766,7 @@ fn replay_scenarios(
             continue;
         }
         let run = run_case_full(case, seed);
-        if compare_calls && run.calls != case.host_tool_calls {
-            failures.push(format!(
-                "{} host-tool calls\n  go:   {:?}\n  rust: {:?}",
-                case.name, case.host_tool_calls, run.calls
-            ));
-        }
+        failures.extend(host_call_failure(case, &run.calls, compare_calls));
         let actual = (run.code, run.stdout, run.stderr);
         if known_divergence(&case.name, state).is_some() {
             match pinned.get(&case.name) {
@@ -1170,6 +1210,19 @@ fn host_dependent_scenarios_are_tagged_and_counted() {
             item.path
         );
     }
+    assert_eq!(fixture.service_manager_commands, SERVICE_MANAGER_COMMANDS);
+    for path in HOST_DEPENDENT_COMMANDS {
+        assert!(
+            SERVICE_MANAGER_COMMANDS.contains(&path),
+            "{path} is host dependent but not a service-manager command"
+        );
+    }
+    for path in &fixture.service_manager_commands {
+        assert!(
+            fixture.nil_args.iter().any(|entry| &entry.path == path),
+            "{path} is not a nil-Args command"
+        );
+    }
     let slug = |path: &str| path.trim_start_matches("symvault ").replace(' ', "_");
     for state in ["uninitialized", "initialized"] {
         let tagged = fixture
@@ -1227,15 +1280,17 @@ fn host_dependent_scenarios_are_tagged_and_counted() {
         .iter()
         .chain(&fixture.run_file_use_argv)
     {
-        let service = [
-            "mcp_install",
-            "mcp_uninstall",
-            "serve_install",
-            "serve_uninstall",
-        ]
-        .iter()
-        .any(|command| case.name.contains(&format!("_{command}_")));
+        // Calls come from install and uninstall only (`status` makes none on
+        // darwin); no other scenario made one.
+        let service = is_service_manager_case(case)
+            && (case.name.contains("_install_") || case.name.contains("_uninstall_"));
         assert_eq!(!case.host_tool_calls.is_empty(), service, "{}", case.name);
+        assert_eq!(
+            host_call_failure(case, &case.host_tool_calls, true),
+            None,
+            "{}",
+            case.name
+        );
         assert!(
             refused_calls(&case.host_tool_calls, tools).is_empty(),
             "{} recorded a refused tool",
@@ -1247,6 +1302,105 @@ fn host_dependent_scenarios_are_tagged_and_counted() {
             assert!(case.host_tool_calls[1].starts_with("launchctl load "));
         }
     }
+}
+
+fn scenario(name: &str, args: &[&str], calls: &[&str]) -> ScenarioCase {
+    ScenarioCase {
+        name: name.to_string(),
+        state: "uninitialized".to_string(),
+        normalize: Vec::new(),
+        platforms: Vec::new(),
+        observation: Observation {
+            args: args.iter().map(|arg| arg.to_string()).collect(),
+            exit_code: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+        },
+        host_tool_calls: calls.iter().map(|call| call.to_string()).collect(),
+    }
+}
+
+/// Negative control for the host-call rule: a service-manager scenario is compared
+/// only where it was recorded, every other scenario must make no call anywhere.
+#[test]
+fn host_call_rule_flags_unrelated_and_changed_calls() {
+    let calls =
+        |items: &[&str]| -> Vec<String> { items.iter().map(|item| item.to_string()).collect() };
+    let install = scenario(
+        "extra_uninitialized_mcp_install_x1",
+        &["mcp", "install", "x"],
+        &["launchctl load p"],
+    );
+    assert!(is_service_manager_case(&install));
+    // Recording platform: the calls must repeat exactly.
+    assert_eq!(
+        host_call_failure(&install, &calls(&["launchctl load p"]), true),
+        None
+    );
+    assert!(host_call_failure(&install, &calls(&["launchctl load q"]), true).is_some());
+    assert!(host_call_failure(&install, &[], true).is_some());
+    // Another platform: the service manager differs and is not compared.
+    assert_eq!(
+        host_call_failure(&install, &calls(&["systemctl --user start x"]), false),
+        None
+    );
+
+    let unrelated = scenario("extra_uninitialized_lock_x1", &["lock", "x"], &[]);
+    assert!(!is_service_manager_case(&unrelated));
+    assert_eq!(host_call_failure(&unrelated, &[], true), None);
+    assert_eq!(host_call_failure(&unrelated, &[], false), None);
+    for recorded_here in [true, false] {
+        let failure = host_call_failure(
+            &unrelated,
+            &calls(&["systemctl --user daemon-reload"]),
+            recorded_here,
+        );
+        assert!(
+            failure
+                .as_deref()
+                .is_some_and(|text| text.contains("not a service-manager command")),
+            "{recorded_here}: {failure:?}"
+        );
+    }
+    // A run/file-use scenario (no `extra_` prefix) is never a service-manager one.
+    let run_case = scenario("run_uninitialized_echo", &["run", "x"], &[]);
+    assert!(!is_service_manager_case(&run_case));
+    assert!(host_call_failure(&run_case, &calls(&["launchctl list"]), false).is_some());
+    // A recorded call list on a scenario that is not a service-manager command is stale.
+    let stale = scenario(
+        "extra_uninitialized_lock_x2",
+        &["lock", "x", "y"],
+        &["launchctl list"],
+    );
+    assert!(host_call_failure(&stale, &[], false).is_some());
+}
+
+/// End to end through the replay: an unrelated scenario that really reaches the
+/// service manager (`mcp install`, whatever the platform's tool is) is reported.
+#[cfg(unix)]
+#[test]
+fn replay_reports_service_manager_calls_of_unrelated_scenarios() {
+    let fixture = fixture();
+    let unrelated = scenario(
+        "extra_uninitialized_unrelated",
+        &["mcp", "install", "x"],
+        &[],
+    );
+    let mut failures = Vec::new();
+    let replay = replay_scenarios(&fixture, &[unrelated], "uninitialized", &mut failures);
+    assert_eq!(
+        replay,
+        Replay {
+            replayed: 1,
+            skipped: 0
+        }
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("not a service-manager command")),
+        "{failures:?}"
+    );
 }
 
 /// Every host tool resolves to its stand-in on the sandbox `PATH`, never to the

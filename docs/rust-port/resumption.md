@@ -30,11 +30,21 @@ Fix (both implementations resolve the tools through `PATH`, so a stand-in direct
   skip count (12 / 8 off darwin, 0 on darwin).
 - Linux `--check`: the first full Linux gate (`556009aa`) passed the 1567 nextest tests and then stopped in
   `port-contract`, where `errtaxgen --check` builds the oracle on Linux and found the darwin-recorded
-  `install|status` output and `launchctl` call lists stale. On a host other than `generated_on`, `--check` now takes
-  exactly those parts (the 20 tagged scenario observations, every scenario's `host_tool_calls`, `generated_on`) from
-  the recording and byte-compares the rest against the fresh oracle run; the `PASS` line states the counts
-  (`projectOnForeignHost`, negative controls in `hosttools_test.go`). Checked in the gate container: the Linux-built
-  Go oracle reproduces every other recorded byte.
+  `install|status` output and `launchctl` call lists stale. On a host other than `generated_on`, `--check` takes
+  exactly two platform-bound parts from the recording and byte-compares the rest against the fresh oracle run; the
+  `PASS` line states the counts (`projectOnForeignHost`, negative controls in `hosttools_test.go`). Review of
+  `d4a164df` found the first version too wide (it replaced the whole observation of a tagged scenario and the call
+  list of any scenario with calls on either side, so a corrupted recorded `mcp install` argument or a new unrelated
+  `systemctl` call would have passed Linux `--check`). Now:
+  - only the `  Service file: <path>` stdout line of a tagged scenario is taken from the recording; its args, exit code,
+    stderr and every other stdout line come from the fresh run and must match the recording (a changed argument, exit
+    status, stderr, other stdout line, line count or line position stays stale);
+  - only scenarios of the six `service_manager_commands` (`mcp|serve install|status|uninstall`, a new fixture field
+    bound to the Rust test) take their call list from the recording; every other scenario must make zero host-tool
+    calls on every platform: `recordScenarios` fails otherwise (`scenario … is not a service-manager command but
+    called host tools`), the projection never replaces a fresh call list outside those commands, and the Rust replay
+    (`host_call_failure`) fails such a call on macOS and Linux, with negative controls in both languages.
+  Checked in the gate container: the Linux-built Go oracle reproduces every other recorded byte.
 - `auth status`: `Touch ID available` is a hardware probe, not CLI behavior; the named normalizer `touch_id_available`
   rewrites that line to `__BOOL__` on both sides (5 scenarios).
 - Replay (`error_taxonomy.rs`): same stand-ins (installed from the fixture's `host_tools`), same `PATH`, guard on every

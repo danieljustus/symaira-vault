@@ -118,7 +118,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "e0baa9ac4db6bda896ea25979d47fca5f251bdbc70e33e009ee5ad3a62208586"
+    "generator_digest": "d93026ab01fe183e8c939de5daf2da4dbc5d845ca52a251a7e7e11f7600a4fb8"
   },
   "usage": [
     {
@@ -15488,6 +15488,14 @@
       ],
       "reason": "deprecated alias of mcp status: prints the launchd plist path; Linux reports the systemd unit"
     }
+  ],
+  "service_manager_commands": [
+    "symvault mcp install",
+    "symvault mcp status",
+    "symvault mcp uninstall",
+    "symvault serve install",
+    "symvault serve status",
+    "symvault serve uninstall"
   ],
   "run_file_use_argv": [
     {

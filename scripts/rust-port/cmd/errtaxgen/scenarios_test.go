@@ -40,11 +40,11 @@ func TestApplyNormalizers(t *testing.T) {
 // withBookkeeping swaps the exclusion and normalizer tables for one test.
 func withBookkeeping(t *testing.T, exclusions []exclusion, normalizers map[string][]string) {
 	t.Helper()
-	origExclusions, origNormalizers, origHostDependence := scenarioExclusions, scenarioNormalizers, scenarioHostDependence
+	origExclusions, origNormalizers, origHostDependence, origServiceManager := scenarioExclusions, scenarioNormalizers, scenarioHostDependence, serviceManagerCommands
 	t.Cleanup(func() {
-		scenarioExclusions, scenarioNormalizers, scenarioHostDependence = origExclusions, origNormalizers, origHostDependence
+		scenarioExclusions, scenarioNormalizers, scenarioHostDependence, serviceManagerCommands = origExclusions, origNormalizers, origHostDependence, origServiceManager
 	})
-	scenarioExclusions, scenarioNormalizers, scenarioHostDependence = exclusions, normalizers, nil
+	scenarioExclusions, scenarioNormalizers, scenarioHostDependence, serviceManagerCommands = exclusions, normalizers, nil, nil
 }
 
 func TestExtraPositionalInputsMatrix(t *testing.T) {
