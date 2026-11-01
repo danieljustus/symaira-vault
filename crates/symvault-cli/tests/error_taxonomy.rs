@@ -196,8 +196,8 @@ const UNLOCK_STATES: [(&str, usize); 7] = [
 ];
 /// Appended to the seeded `config.yaml` of the `*env_disabled` states.
 const ENV_DISABLED_CONFIG_SUFFIX: &str = "security:\n    disable_env_passphrase: true\n";
-const KNOWN_DIVERGENT_UNINITIALIZED: usize = 3;
-const KNOWN_DIVERGENT_INITIALIZED: usize = 2;
+const KNOWN_DIVERGENT_UNINITIALIZED: usize = 0;
+const KNOWN_DIVERGENT_INITIALIZED: usize = 0;
 /// Scenarios of the host-dependent commands (`mcp|serve install|status`, three
 /// variants uninitialized and two initialized each), skipped off darwin.
 const DARWIN_ONLY_UNINITIALIZED: usize = 12;
@@ -248,18 +248,7 @@ fn expected_skips(darwin_only: usize) -> usize {
 /// Go (so a fix forces the entry out) or when an entry has no pinned observation.
 /// A different exit code, lost output or a parser regression therefore cannot hide
 /// behind an entry.
-const KNOWN_BODY_DIVERGENCES: &[(&str, &str, &str)] = &[
-    (
-        "setup",
-        "uninitialized",
-        "`setup` is not a native subcommand yet (only its help page is frozen)",
-    ),
-    (
-        "setup",
-        "initialized",
-        "`setup` is not a native subcommand yet (only its help page is frozen)",
-    ),
-];
+const KNOWN_BODY_DIVERGENCES: &[(&str, &str, &str)] = &[];
 
 fn known_divergence(name: &str, state: &str) -> Option<&'static str> {
     KNOWN_BODY_DIVERGENCES
@@ -1678,18 +1667,35 @@ fn mutated_expectation_is_detected() {
 /// must each be reported, while the real native output passes.
 #[test]
 fn known_divergence_pin_detects_unrelated_changes() {
+    // No scenario is a known divergence any more, so the mechanism is exercised on a
+    // synthetic one: a real scenario whose Go observation is declared to differ from
+    // what the native binary prints (it is pinned to the real native output).
     let fixture = fixture();
-    let pinned = pinned_divergences();
-    let name = "extra_uninitialized_setup_x1";
+    let name = "extra_uninitialized_lock_x1";
     let case = fixture
         .extra_positionals
         .iter()
         .find(|case| case.name == name)
         .expect("recorded scenario");
-    let entry = pinned.get(name).expect("pinned scenario");
     let actual = run_case(case, &fixture.vault_seed);
+    let entry = PinnedDivergence {
+        name: name.to_owned(),
+        state: "uninitialized".to_owned(),
+        reason: "synthetic".to_owned(),
+        expected_rust: NativeObservation {
+            exit_code: actual.0,
+            stdout: actual.1.clone(),
+            stderr: actual.2.clone(),
+        },
+    };
+    let go = Observation {
+        args: case.observation.args.clone(),
+        exit_code: case.observation.exit_code,
+        stdout: case.observation.stdout.clone(),
+        stderr: format!("{}Error: only Go prints this\n", case.observation.stderr),
+    };
     let check = |actual: &(i32, String, String)| {
-        check_known_divergence(name, &case.observation, &entry.expected_rust, actual)
+        check_known_divergence(name, &go, &entry.expected_rust, actual)
     };
     assert_eq!(
         check(&actual),
@@ -1725,9 +1731,9 @@ fn known_divergence_pin_detects_unrelated_changes() {
     mutations.push((
         "now equal to Go",
         (
-            case.observation.exit_code,
-            case.observation.stdout.clone(),
-            case.observation.stderr.clone(),
+            go.exit_code,
+            go.stdout.clone(),
+            go.stderr.clone(),
         ),
     ));
     for (label, mutated) in mutations {
@@ -1738,7 +1744,7 @@ fn known_divergence_pin_detects_unrelated_changes() {
     let mut mutated_pin = entry.expected_rust.clone();
     mutated_pin.exit_code += 1;
     assert!(
-        !check_known_divergence(name, &case.observation, &mutated_pin, &actual).is_empty(),
+        !check_known_divergence(name, &go, &mutated_pin, &actual).is_empty(),
         "a mutated pinned exit code was not detected"
     );
 }

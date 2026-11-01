@@ -6061,11 +6061,6 @@ mod nil_args_positional_tests {
     use super::*;
     use clap::error::ErrorKind;
 
-    /// Nil-Args commands that are not native subcommands yet; the clap parse
-    /// is expected to reject their name. The replay lists them as known
-    /// body divergences.
-    const NOT_NATIVE: &[&str] = &["symvault setup"];
-
     fn nil_args_paths() -> Vec<(String, bool)> {
         let raw = std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -6090,7 +6085,7 @@ mod nil_args_positional_tests {
     fn clap_accepts_extra_positionals_on_every_runnable_nil_args_command() {
         let mut checked = 0;
         for (path, runnable) in nil_args_paths() {
-            if !runnable || NOT_NATIVE.contains(&path.as_str()) {
+            if !runnable {
                 continue;
             }
             for extra in [&["x"][..], &["x", "y"][..], &["--", "x"][..]] {
@@ -6107,16 +6102,8 @@ mod nil_args_positional_tests {
                 checked += 1;
             }
         }
-        // 48 runnable nil-Args commands, minus the ones not native yet.
-        assert_eq!(checked, (48 - NOT_NATIVE.len()) * 3);
-    }
-
-    #[test]
-    fn not_native_nil_args_commands_are_still_listed() {
-        let paths = nil_args_paths();
-        for name in NOT_NATIVE {
-            assert!(paths.iter().any(|(path, _)| path == name), "{name}");
-        }
+        // All 48 runnable nil-Args commands are native subcommands now.
+        assert_eq!(checked, 48 * 3);
     }
 
     /// pflag keeps the last value of a repeated string/duration flag.

@@ -1,56 +1,5 @@
 {
-  "cases": [
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
-        "stdout": ""
-      },
-      "name": "extra_initialized_setup_x1",
-      "reason": "`setup` is not a native subcommand yet (only its help page is frozen)",
-      "state": "initialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
-        "stdout": ""
-      },
-      "name": "extra_initialized_setup_x2",
-      "reason": "`setup` is not a native subcommand yet (only its help page is frozen)",
-      "state": "initialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_setup_dd1",
-      "reason": "`setup` is not a native subcommand yet (only its help page is frozen)",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_setup_x1",
-      "reason": "`setup` is not a native subcommand yet (only its help page is frozen)",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_setup_x2",
-      "reason": "`setup` is not a native subcommand yet (only its help page is frozen)",
-      "state": "uninitialized"
-    }
-  ],
+  "cases": [],
   "comment": "What the native CLI prints for the scenarios of error-taxonomy.json whose command body still differs from Go (see KNOWN_BODY_DIVERGENCES in crates/symvault-cli/tests/error_taxonomy.rs). Every entry pins the exact (sandbox-root-normalized) exit code, stdout and stderr: the replay fails when the native output changes in any way and when it starts matching Go, so an entry can neither outlive its cause nor hide another regression. Recorded from the native binary, never hand-edited: run the ignored test record_known_divergences.",
   "schema_version": 1
 }
