@@ -41,9 +41,12 @@ follow-up below raises this to 63 usage cases and adds 23 argv shapes),
 Measured before the change (28 hand-picked probes of the pinned Go binary against
 the native one): 21 differed, typically clap wording and exit 1 for what Go
 prints as a doubled `Error:` line, exit 9 for the format gate and exit 3 plus a
-hint for an uninitialized vault. Not fixed and recorded: `delete` prompts before
-the vault check; `run`/`file use` need `--` natively; `device approval-pair` and
-`device revoke` word the failure differently; Go's `auth set|status|
+hint for an uninitialized vault. Not fixed and recorded then: `delete` prompts
+before the vault check (since fixed by CLI-006: `delete x` is Go-exact and no
+longer in `OPEN_NOT_INITIALIZED`); `run`/`file use` need `--` natively; `device
+approval-pair` and `device revoke` word the failure differently (these four are
+the cases `open_not_initialized_cases_are_still_open` still pins: 25 of the 29
+not-initialized cases replay, four stay open); Go's `auth set|status|
 rotate-passphrase` keep exit 1 for the same text (kept, covered by
 `auth_commands.rs`).
 
@@ -140,7 +143,8 @@ Go prints these errors once (`SilenceErrors`). Evidence: 10 Go-recorded
 `bool_flag_update_*` cases (105 usage cases, oracle `0cc78062` unchanged).
 Before the fix the native CLI rejected `update check --force=false` with
 `unknown command "--force=false"`, printed `update info --json=` doubled and
-reported `update check extra --force=maybe` as an unknown command. Also uncovered: the `delete` prompt-before-vault-check gap (`delete -y=false x` prompts), and
+reported `update check extra --force=maybe` as an unknown command. Also uncovered then: the `delete` prompt-before-vault-check gap (`delete -y=false x`
+prompted; closed by CLI-006, `delete` is no longer open), and
 clap still rejecting `--flag false`-style extra positionals that cobra's
 `legacyArgs` accepts (listed above).
 

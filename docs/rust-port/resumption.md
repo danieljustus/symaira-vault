@@ -1,14 +1,15 @@
 # Rust migration handover — 2026-09-09
 
-## CLI-006 positive output matrix, 2026-10-31
+## CLI-006 positive output matrix, 2026-10-31 (review fixes 2026-11-01)
 
 `outputmodegen` (oracle `bf7f687b`, darwin) records text, `--json`, `--output yaml`, `--output json` and
-`--quiet` for the 47 gate rows that do not refuse both formats: 379 cases, 47 paths, 6 frozen seeds, in
+`--quiet` for the 47 gate rows that do not refuse both formats: 470 cases, 47 paths, 6 frozen seeds, in
 `testdata/port/cli/output-modes.json`; `crates/symvault-cli/tests/output_modes.rs` replays them byte for byte
-(stdout, stderr, exit, file-tree effect). Targets: `make output-modes-cli-differential` (re-verifies against a
-rebuilt oracle, then replays) and `make output-modes-regenerate`.
+(stdout, stderr, exit, file-tree effect incl. permission bits). Targets: `make output-modes-cli-differential`
+(re-verifies against a rebuilt oracle, then replays) and `make output-modes-regenerate` (keeps the frozen seeds).
 
-Rust fixes the matrix forced: `get --print` writes the `expose_plaintext` audit entry; `auth set` refuses
+Rust fixes the matrix forced: `get --print` writes the `expose_plaintext` audit entry with an empty agent (Go's
+`emitExposureAudit`; the replay compares decoded audit fields, not presence); `auth set` refuses
 `--json`/`--output` (gate rows with `valid_args: 0` are probe artefacts); `update apply|check|info` accept
 `--quiet`/`--output`, apply's report goes to stderr; `template generate` `--output` is the file flag and
 `required flag(s) "type"` follows cobra; `generate manpages` accepts `--quiet`, uses the XDG default config path
@@ -17,21 +18,50 @@ migration warning not silenced by `--quiet`; `agent install --json`; intake JSON
 errors; config `git:` writes `commit_template` first; device errors are doubled; yaml renderer shared via
 `symvault-gojson::yaml`.
 
-Verified (HEAD at commit time): `outputmodegen --check` PASS against the rebuilt-pin oracle; replay 379 cases
+Review fixes (REQUEST_CHANGES, each pinned against the real Go binary):
+- **Linux CI.** `check_output_modes_cli.sh` skips the Go `--check` with a visible `SKIP` on a non-darwin host
+  (the corpus is darwin-recorded: `oracle.goos`); the Rust replay prints its own `SKIP`. Verified in the local
+  gate image on Linux (`make output-modes-cli-differential` exit 0, both notices on stderr). The corpus therefore
+  does not gate Linux/Windows: the evidence is the darwin run.
+- **`config set` typed decode.** The panic on `&value[..7]` is gone (Go cuts at seven bytes; the text keeps the
+  invalid tail as U+FFFD), and a scalar of the wrong YAML type for a typed field (`sessionTimeout 12` is
+  `!!int` into a `Duration`) fails like Go with exit 6 instead of being written. The cases are recorded from
+  the Go binary.
+- **Normalization honesty.** One numbered list of 14 rules (`root`, `bin`, `dated-id`, `tmp-suffix`,
+  `touch-id`, `gen-pw`, `pair-token`, `now-ts`, `man-date`, `opaque`, `encrypted-store`, `audit-fields`,
+  `archive-members`, `managed-fields`) in the generator header, the fixture notes and the test header;
+  `normalization_rules_are_listed_once_and_consistently` fails on any disagreement and the other tests carry a
+  negative control per rule. `agent skill export` is no longer opaque: the archive is compared as decompressed
+  members (the probe showed Go writes them in map order and the `managed_hash`/`managed_installed_at` lines are
+  install-time values). Tree entries record the permission bits (both harnesses run the binary under umask 022).
+  Touch ID stays `<BOOL>`, but on darwin `touch_id_availability_matches_go_in_the_same_sandbox` compares the live
+  Go and Rust values (needs `SYMVAULT_OUTPUT_MODES_GO_BINARY`, set by the script; visible `SKIP` without it).
+- **Config read errors.** `config get|set|list` on a missing, unreadable or directory config file print Go's
+  `cannot load config: [cannot read config file: ]open|read <path>: <cause>` doubled with the doctor hint (exit 6)
+  instead of Rust's `No such file or directory (os error 2)`; six Go-recorded cases (red before: all six).
+  Mode recording also found `agent profile export` creating its file with 0600 (Go `os.Create`: 0644); fixed.
+- **yaml.v3 scalars.** `symvault-gojson::yaml` now ports the yaml.v3 scalar analysis/style selection and the
+  double-quoted escape rules (leading newline `|4-`, astral `\UXXXXXXXX`, U+2028 single-quoted folded, BEL `\a`,
+  U+FEFF/U+0085 escapes, plain `<<`) and is pinned by a Go-recorded scalar corpus
+  (`make yaml-scalar-differential`).
+
+Verified (HEAD at commit time): `outputmodegen --check` PASS against the rebuilt-pin oracle; replay 470 cases
 (>= 3 per path, all 47 paths) green; negative control (one byte of `version.text` changed) fails both `--check`
-and the replay; red-before: 125 of 379 cases fail against the base `fbc2a4b1` binary. `error_taxonomy` and
-`cli_device_approval` expectations moved with the fixes (`delete x`, `device approval-revoke` now Go-exact);
-`empty_flow_mapping_root` became a regular `config-yaml-syntax.json` case (94 cases, 32 open divergences, 441 comparisons;
-fixture regenerated provenance-neutral: source digest unchanged, only that case added).
+and the replay. `error_taxonomy` and `cli_device_approval` expectations moved with the fixes (`delete x`,
+`device approval-revoke` now Go-exact); `empty_flow_mapping_root` became a regular `config-yaml-syntax.json` case
+(94 cases, 32 open divergences, 441 comparisons). Like all 16 `accepted` cases it records `validate`,
+`validate --json` and `doctor` only; `config get` on a `{}` document is not recorded anywhere (open, low).
 
 Declared open: update apply/check/info beyond the dev-build branch, `intake watch` beyond `--once`, live
-`approval`/`device approval-pair|accept|join`/`remote init` flows, `--color`/`--theme`; `doctor` is pinned with
-`--no-network`; Touch ID availability is normalised (rule 7: it depends on the Mac's sensor). The worker first saw Go true and Rust
-false here; that was a Rust bug, not a sandbox effect: every JXA adapter in `symvault-platform/src/macos.rs`
-reported through `console.log`, which osascript writes to stderr, so `run_jxa` read an empty stdout. Touch ID
-probe and unlock, the secure prompt and the approval dialog all failed silently. Fixed by ending each script
-in its result expression (and asking Go's biometric-only policy 1, not 2); `jxa_reports_through_the_last_expression_on_stdout`
-and `jxa_scripts_never_report_through_console_log` pin it, and `auth status` now matches Go (true/true) on this host. The corpus is darwin-only (`oracle.goos`); other hosts skip it visibly.
+`approval`/`device approval-pair|accept|join` flows, `remote init` (the pinned Go oracle panics with a nil
+pointer dereference in `enableAutoPush` when the vault has no sync config, so that branch is not pinned),
+`--color`/`--theme`; `doctor` is pinned with `--no-network`. Not compared: the volatile audit fields (`ts`,
+`kid`, `hmac`, the `argv_hash` digest; shape only) and read errors of the config file other than the three recorded ones. The corpus is darwin-only
+(`oracle.goos`); other hosts skip it visibly. Touch ID: the worker first saw Go true and Rust false here; that
+was a Rust bug, not a sandbox effect: every JXA adapter in `symvault-platform/src/macos.rs` reported through
+`console.log`, which osascript writes to stderr, so `run_jxa` read an empty stdout. Fixed by ending each script in
+its result expression (and asking Go's biometric-only policy 1, not 2);
+`jxa_reports_through_the_last_expression_on_stdout` and `jxa_scripts_never_report_through_console_log` pin it.
 
 ## IO-001 invalid-byte representation, 2026-10-31
 
