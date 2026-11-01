@@ -98,6 +98,9 @@ targets:
     dependencies:
       - package: SymvaultClient
         product: SymvaultFeature
+      # MobileVaultCore.swift imports the Rust core wrapper directly.
+      - package: SymvaultClient
+        product: SymvaultFFI
       - sdk: LocalAuthentication.framework
       - sdk: Security.framework
       - sdk: VisionKit.framework
@@ -127,6 +130,9 @@ targets:
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Symaira Vault uses Face ID to unlock your device identity and to confirm approval decisions."
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Symaira Vault connects to your Mac on the local network to pair as an approval device and to check for pending approval requests."
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # SymvaultFFI.xcframework (Rust core, ADR 0031) has no Intel simulator
+        # slice; a generic iOS Simulator build must not try x86_64.
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
         ENABLE_HARDENED_RUNTIME: NO
     info:
       path: SymvaultIOS-Info.plist

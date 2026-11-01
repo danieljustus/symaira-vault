@@ -1,11 +1,11 @@
-#if os(iOS)
 import Foundation
-import Vaultcore
+import SymvaultFFI
 
-/// iOS vault core. Talks to the embedded `Vaultcore` XCFramework (a gomobile
-/// bind of `pkg/mobilebind`) instead of shelling out to the `symvault` binary,
-/// because iOS cannot spawn subprocesses. All payloads cross the FFI boundary
-/// as JSON strings per ADR 0006 D2.
+/// iOS vault core. Talks to the Rust `symvault-ffi` core (`SymvaultFFI`, a
+/// narrow C ABI over the same 13 operations the former gomobile
+/// `pkg/mobilebind` exposed; ADR 0031) instead of shelling out to the
+/// `symvault` binary, because iOS cannot spawn subprocesses. All payloads cross
+/// the FFI boundary as JSON strings per ADR 0006 D2.
 public enum MobileVaultCoreError: Error, LocalizedError, Sendable {
     case frameworkError(String)
     case invalidResponse
@@ -32,84 +32,86 @@ public struct MobileVaultCore: Sendable {
         self.vaultDirectory = vaultDirectory
     }
 
-    private func run(_ body: (NSErrorPointer) throws -> Void) throws {
-        var err: NSError?
-        try body(&err)
-        if let err {
-            throw MobileVaultCoreError.frameworkError(err.localizedDescription)
+    /// Runs one core call and reports every failure as `.frameworkError` with
+    /// the core's text, the surface callers saw from the gomobile `NSError`
+    /// (`localizedDescription` was the Go error text; the Rust core returns the
+    /// same text, `SymvaultFFIError.go`). Contained panics and unusable
+    /// arguments are reported the same way.
+    private func core<T>(_ body: () throws -> T) throws -> T {
+        do {
+            return try body()
+        } catch let error as SymvaultFFIError {
+            throw MobileVaultCoreError.frameworkError(error.description)
         }
     }
 
     public func generateIdentity() throws -> String {
-        var err: NSError?
-        let s = MobilebindGenerateIdentity(&err)
-        if let err { throw MobileVaultCoreError.frameworkError(err.localizedDescription) }
-        return s as String
+        try core { try SymvaultFFI.generateIdentity() }
     }
 
     public func publicKey(for identity: String) throws -> String {
-        var err: NSError?
-        let s = MobilebindIdentityPublicKey(identity, &err)
-        if let err { throw MobileVaultCoreError.frameworkError(err.localizedDescription) }
-        return s as String
+        try core { try SymvaultFFI.identityPublicKey(identity: identity) }
     }
 
+    /// The Go function could not fail and the signature is non-throwing; a
+    /// boundary failure (not reachable for valid UTF-8 input) yields an empty
+    /// fingerprint rather than a crash.
     public func fingerprint(of pubkey: String) -> String {
-        MobilebindPublicKeyFingerprint(pubkey) as String
+        (try? SymvaultFFI.publicKeyFingerprint(pubkey: pubkey)) ?? ""
     }
 
     public func initVault(passphrase: String) throws {
-        var err: NSError?
-        let ok = MobilebindInitVault(vaultDirectory.path, passphrase, &err)
-        if let err { throw MobileVaultCoreError.frameworkError(err.localizedDescription) }
-        if !ok { throw MobileVaultCoreError.invalidResponse }
+        try core { try SymvaultFFI.initVault(vaultDir: vaultDirectory.path, passphrase: passphrase) }
     }
 
     /// Unlocks the vault and returns the decrypted master identity string.
     public func open(passphrase: String) throws -> String {
-        var err: NSError?
-        let id = MobilebindOpenVaultWithPassphrase(vaultDirectory.path, passphrase, &err)
-        if let err { throw MobileVaultCoreError.frameworkError(err.localizedDescription) }
-        return id as String
+        try core {
+            try SymvaultFFI.openVaultWithPassphrase(
+                vaultDir: vaultDirectory.path, passphrase: passphrase)
+        }
     }
 
     public func readEntry(path: String, identity: String) throws -> MobileVaultEntry {
-        var err: NSError?
-        let json = MobilebindReadEntryJSON(vaultDirectory.path, path, identity, &err)
-        if let err { throw MobileVaultCoreError.frameworkError(err.localizedDescription) }
-        guard let data = (json as String).data(using: .utf8) else {
+        let json = try core {
+            try SymvaultFFI.readEntryJSON(
+                vaultDir: vaultDirectory.path, entryPath: path, identity: identity)
+        }
+        guard let data = json.data(using: .utf8) else {
             throw MobileVaultCoreError.invalidResponse
         }
         let decoded = try JSONDecoder().decode(BridgedEntry.self, from: data)
+        // The core's entry JSON carries no `path` (the bridge clears it), so
+        // the requested path is the entry's identity.
+        let entryPath = decoded.path ?? path
         return MobileVaultEntry(
-            id: decoded.path,
-            path: decoded.path,
-            fields: decoded.data.compactMapValues { "\($0)" },
+            id: entryPath,
+            path: entryPath,
+            fields: decoded.data.mapValues { $0.value },
             metadata: decoded.metadata ?? [:]
         )
     }
 
     public func listEntries(prefix: String = "", identity: String) throws -> [String] {
-        var err: NSError?
-        let json = MobilebindListEntriesJSON(vaultDirectory.path, prefix, identity, &err)
-        if let err { throw MobileVaultCoreError.frameworkError(err.localizedDescription) }
-        guard let data = (json as String).data(using: .utf8) else {
+        let json = try core {
+            try SymvaultFFI.listEntriesJSON(
+                vaultDir: vaultDirectory.path, prefix: prefix, identity: identity)
+        }
+        guard let data = json.data(using: .utf8) else {
             throw MobileVaultCoreError.invalidResponse
         }
         return try JSONDecoder().decode([String].self, from: data)
     }
 
     public func verifyManifest(identity: String) throws -> Bool {
-        var err: NSError?
-        var valid: ObjCBool = false
-        let ok = MobilebindVerifyManifestIntegrity(vaultDirectory.path, identity, &valid, &err)
-        if let err { throw MobileVaultCoreError.frameworkError(err.localizedDescription) }
-        if !ok { throw MobileVaultCoreError.invalidResponse }
-        return valid.boolValue
+        try core {
+            try SymvaultFFI.verifyManifestIntegrity(
+                vaultDir: vaultDirectory.path, identity: identity)
+        }
     }
 
     private struct BridgedEntry: Decodable {
-        let path: String
+        let path: String?
         let data: [String: AnyJSON]
         let metadata: [String: String]?
     }
@@ -136,4 +138,3 @@ public struct MobileVaultCore: Sendable {
         }
     }
 }
-#endif

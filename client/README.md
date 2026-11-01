@@ -15,10 +15,19 @@ xcodegen generate
 xcodebuild -project Symvault.xcodeproj -scheme Symvault -scmProvider system build
 ```
 
-The package manifest requires `client/.build/mobilecore/Vaultcore.xcframework`
-even when resolving the macOS packages. Generate it from the repository root
-with `bash scripts/build-vaultcore.sh` before package resolution or builds; this
-requires full Xcode with the iOS SDK.
+The package manifest requires `client/.build/mobilecore/SymvaultFFI.xcframework`
+(the Rust vault core, `crates/symvault-ffi`; ADR 0031) even when resolving the
+macOS packages. Generate it from the repository root with
+`bash scripts/build-vaultcore.sh` before package resolution or builds; this
+requires the pinned Rust toolchain with the `aarch64-apple-ios` and
+`aarch64-apple-ios-sim` targets and full Xcode with the iOS SDK. The Swift
+wrapper (`Sources/SymvaultFFI`) is a symlink to
+`crates/symvault-ffi/swift/Sources/SymvaultFFI`.
+
+The former gomobile core (`Vaultcore.xcframework`) is only built with
+`SYMVAULT_VAULTCORE=gomobile bash scripts/build-vaultcore.sh`; the Swift code
+at this revision uses `SymvaultFFI`, so shipping gomobile means building from
+the commit before the client switched.
 
 For the reusable packages and unit tests (from `client/`, after that step):
 
