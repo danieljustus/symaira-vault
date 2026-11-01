@@ -154,3 +154,88 @@ func TestHostDependenceIsBookkept(t *testing.T) {
 		t.Fatalf("err = %v, want a stale host-dependence error", err)
 	}
 }
+
+func foreignFixtures() (recorded, fresh fixture) {
+	recorded = fixture{
+		SchemaVersion: 1,
+		GeneratedOn:   "darwin",
+		Usage:         []usageCase{{Name: "u", Observation: observation{Stderr: "same\n"}}},
+		ExtraPositionals: []scenarioCase{
+			{Name: "install", State: stateUninitialized, Platforms: darwinOnly, Observation: observation{Stdout: "Service file: LaunchAgents\n"}, HostToolCalls: []string{"launchctl load p"}},
+			{Name: "uninstall", State: stateUninitialized, Observation: observation{Stdout: "Service uninstalled successfully.\n"}, HostToolCalls: []string{"launchctl unload p"}},
+			{Name: "lock", State: stateUninitialized, Observation: observation{ExitCode: 3, Stderr: "not initialized\n"}},
+		},
+		RunFileUseArgv: []scenarioCase{{Name: "run", State: stateInitialized, Observation: observation{Stdout: "x\n"}}},
+	}
+	fresh = fixture{
+		SchemaVersion: 1,
+		GeneratedOn:   "linux",
+		Usage:         []usageCase{{Name: "u", Observation: observation{Stderr: "same\n"}}},
+		ExtraPositionals: []scenarioCase{
+			{Name: "install", State: stateUninitialized, Platforms: darwinOnly, Observation: observation{Stdout: "Service file: systemd\n"}, HostToolCalls: []string{"systemctl --user start x"}},
+			{Name: "uninstall", State: stateUninitialized, Observation: observation{Stdout: "Service uninstalled successfully.\n"}, HostToolCalls: []string{"systemctl --user stop x"}},
+			{Name: "lock", State: stateUninitialized, Observation: observation{ExitCode: 3, Stderr: "not initialized\n"}},
+		},
+		RunFileUseArgv: []scenarioCase{{Name: "run", State: stateInitialized, Observation: observation{Stdout: "x\n"}}},
+	}
+	return recorded, fresh
+}
+
+func TestProjectOnForeignHostTakesOnlyThePlatformBoundParts(t *testing.T) {
+	recorded, fresh := foreignFixtures()
+	raw, err := marshalJSON(recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projected, taken, err := projectOnForeignHost(raw, fresh, "linux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := marshalJSON(projected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(raw) {
+		t.Fatalf("projection differs from the recording:\n%s\nvs\n%s", got, raw)
+	}
+	if taken.observations != 1 || taken.calls != 2 {
+		t.Fatalf("taken = %+v, want 1 observation and 2 call lists", taken)
+	}
+
+	// Negative controls: any difference outside the platform-bound parts is stale.
+	for name, mutate := range map[string]func(f *fixture){
+		"untagged scenario output": func(f *fixture) { f.ExtraPositionals[2].Observation.Stderr = "different\n" },
+		"untagged uninstall text":  func(f *fixture) { f.ExtraPositionals[1].Observation.Stdout = "different\n" },
+		"usage case":               func(f *fixture) { f.Usage[0].Observation.Stderr = "different\n" },
+		"run/file-use scenario":    func(f *fixture) { f.RunFileUseArgv[0].Observation.Stdout = "different\n" },
+		"scenario platforms":       func(f *fixture) { f.ExtraPositionals[0].Platforms = nil },
+	} {
+		_, fresh := foreignFixtures()
+		mutate(&fresh)
+		projected, _, err := projectOnForeignHost(raw, fresh, "linux")
+		if err != nil {
+			t.Fatal(err)
+		}
+		again, err := marshalJSON(projected)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(again) == string(raw) {
+			t.Errorf("a changed %s was projected away", name)
+		}
+	}
+
+	// A recording made on this host, or an unreadable one, is never projected.
+	if _, _, err := projectOnForeignHost(raw, fresh, "darwin"); err == nil {
+		t.Error("a recording of this host was projected")
+	}
+	if _, _, err := projectOnForeignHost([]byte("not json"), fresh, "linux"); err == nil {
+		t.Error("an unreadable recording was projected")
+	}
+}
+
+func TestRunsOn(t *testing.T) {
+	if !runsOn(nil, "linux") || !runsOn(darwinOnly, "darwin") || runsOn(darwinOnly, "linux") {
+		t.Fatal("runsOn disagrees with the platform tags")
+	}
+}

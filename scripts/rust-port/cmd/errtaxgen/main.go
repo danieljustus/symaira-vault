@@ -750,7 +750,7 @@ func main() {
 	if err != nil {
 		fatal("build extra-positional scenarios: %v", err)
 	}
-	content, err := marshalJSON(fixture{
+	fresh := fixture{
 		SchemaVersion:  1,
 		GeneratedOn:    runtime.GOOS,
 		HostTools:      standInTools(),
@@ -767,7 +767,8 @@ func main() {
 		ExtraPositionalExclusions: extras.exclusions,
 		HostDependentCommands:     extras.hostDependent,
 		RunFileUseArgv:            extras.runFileUse,
-	})
+	}
+	content, err := marshalJSON(fresh)
 	if err != nil {
 		fatal("marshal fixture: %v", err)
 	}
@@ -778,10 +779,25 @@ func main() {
 		if err != nil {
 			fatal("read fixture: %v", err)
 		}
+		note := ""
 		if !bytes.Equal(existing, content) {
-			fatal("fixture is stale; regenerate deliberately")
+			// The corpus is recorded on one platform. On another host only the
+			// parts that platform cannot observe are taken from the recording;
+			// everything else must still match this host's fresh oracle run.
+			projected, taken, err := projectOnForeignHost(existing, fresh, runtime.GOOS)
+			if err != nil {
+				fatal("fixture is stale; regenerate deliberately (%v)", err)
+			}
+			again, err := marshalJSON(projected)
+			if err != nil {
+				fatal("marshal fixture: %v", err)
+			}
+			if !bytes.Equal(existing, again) {
+				fatal("fixture is stale; regenerate deliberately")
+			}
+			note = fmt.Sprintf("; recorded on %s, so %d host-dependent scenario observations and %d host-tool call lists are taken from that recording and verified only there", projected.GeneratedOn, taken.observations, taken.calls)
 		}
-		fmt.Printf("PASS error taxonomy fixture (%s)\n", summary)
+		fmt.Printf("PASS error taxonomy fixture (%s%s)\n", summary, note)
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(*output), 0o750); err != nil {

@@ -28,6 +28,13 @@ Fix (both implementations resolve the tools through `PATH`, so a stand-in direct
   `platforms: ["darwin"]` (12 uninitialized, 8 initialized). `mcp|serve uninstall` print the same text on both platforms
   and stay untagged. The replay skips tagged scenarios on other hosts with `SKIP n ...` on stderr and asserts the exact
   skip count (12 / 8 off darwin, 0 on darwin).
+- Linux `--check`: the first full Linux gate (`556009aa`) passed the 1567 nextest tests and then stopped in
+  `port-contract`, where `errtaxgen --check` builds the oracle on Linux and found the darwin-recorded
+  `install|status` output and `launchctl` call lists stale. On a host other than `generated_on`, `--check` now takes
+  exactly those parts (the 20 tagged scenario observations, every scenario's `host_tool_calls`, `generated_on`) from
+  the recording and byte-compares the rest against the fresh oracle run; the `PASS` line states the counts
+  (`projectOnForeignHost`, negative controls in `hosttools_test.go`). Checked in the gate container: the Linux-built
+  Go oracle reproduces every other recorded byte.
 - `auth status`: `Touch ID available` is a hardware probe, not CLI behavior; the named normalizer `touch_id_available`
   rewrites that line to `__BOOL__` on both sides (5 scenarios).
 - Replay (`error_taxonomy.rs`): same stand-ins (installed from the fixture's `host_tools`), same `PATH`, guard on every

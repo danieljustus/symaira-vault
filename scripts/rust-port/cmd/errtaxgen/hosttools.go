@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -140,4 +142,66 @@ func guardHostCalls(args []string, calls []string) error {
 		return fmt.Errorf("%v reached host tools that no scenario may use: %q", args, refused)
 	}
 	return nil
+}
+
+// foreignParts counts what projectOnForeignHost took from the recording.
+type foreignParts struct{ observations, calls int }
+
+// projectOnForeignHost is the --check view of a corpus that another platform
+// recorded. A scenario of a host-dependent command (its Platforms exclude this
+// host) prints the recording platform's service paths, and every service-manager
+// call list is the recording platform's (launchctl there, systemctl here). Those
+// parts of fresh are replaced by the recorded ones, by scenario name, and
+// GeneratedOn is the recording's; every other byte of fresh must match the
+// recorded fixture, so the comparison still re-verifies the rest of the corpus
+// against this host's oracle. A recording made on this host is not projected.
+func projectOnForeignHost(recordedRaw []byte, fresh fixture, goos string) (fixture, foreignParts, error) {
+	var recorded fixture
+	if err := json.Unmarshal(recordedRaw, &recorded); err != nil {
+		return fixture{}, foreignParts{}, fmt.Errorf("parse recorded fixture: %w", err)
+	}
+	if recorded.GeneratedOn == "" || recorded.GeneratedOn == goos {
+		return fixture{}, foreignParts{}, errors.New("recorded on this host or on an unknown one")
+	}
+	var taken foreignParts
+	project := func(fresh, recorded []scenarioCase) []scenarioCase {
+		byName := make(map[string]scenarioCase, len(recorded))
+		for _, item := range recorded {
+			byName[item.Name] = item
+		}
+		out := make([]scenarioCase, len(fresh))
+		for i, item := range fresh {
+			out[i] = item
+			rec, ok := byName[item.Name]
+			if !ok {
+				continue
+			}
+			if !runsOn(item.Platforms, goos) {
+				out[i].Observation = rec.Observation
+				taken.observations++
+			}
+			if len(rec.HostToolCalls) > 0 || len(item.HostToolCalls) > 0 {
+				out[i].HostToolCalls = rec.HostToolCalls
+				taken.calls++
+			}
+		}
+		return out
+	}
+	fresh.GeneratedOn = recorded.GeneratedOn
+	fresh.ExtraPositionals = project(fresh.ExtraPositionals, recorded.ExtraPositionals)
+	fresh.RunFileUseArgv = project(fresh.RunFileUseArgv, recorded.RunFileUseArgv)
+	return fresh, taken, nil
+}
+
+// runsOn reports whether a scenario tagged with platforms can be compared on goos.
+func runsOn(platforms []string, goos string) bool {
+	if len(platforms) == 0 {
+		return true
+	}
+	for _, platform := range platforms {
+		if platform == goos {
+			return true
+		}
+	}
+	return false
 }
