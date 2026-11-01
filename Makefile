@@ -585,6 +585,7 @@ config-profile-differential: config-profile-fixtures-check
 config-session-differential: rust-007-differential config-profile-differential cfg-sections-fixtures-check
 
 config-cli-differential:
+	python3 -B scripts/rust-port/test_gen_config_schema.py
 	python3 scripts/rust-port/gen_config_schema.py --check
 	./scripts/rust-port/check_config_cli.sh
 
