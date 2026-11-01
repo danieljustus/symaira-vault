@@ -26,9 +26,11 @@ use super::{
 
 /// Platform hooks the model cannot own: the Touch ID probe and the keychain
 /// write, both of which live in the binary's session layer.
+pub(crate) type SaveTouchId = Box<dyn Fn(&Path, &[u8]) -> Result<(), String>>;
+
 pub(crate) struct Environment {
     pub touch_id_available: bool,
-    pub save_touch_id: Box<dyn Fn(&Path, &[u8]) -> Result<(), String>>,
+    pub save_touch_id: SaveTouchId,
 }
 
 impl Environment {
@@ -376,8 +378,10 @@ mod tests {
 
     #[test]
     fn preflight_rejects_short_or_foreign_recipients() {
-        let mut state = WizardState::default();
-        state.recipients = vec!["age1short".into()];
+        let mut state = WizardState {
+            recipients: vec!["age1short".into()],
+            ..WizardState::default()
+        };
         assert_eq!(
             pre_flight_check(&state).unwrap_err(),
             "invalid recipient key: age1short"

@@ -206,20 +206,20 @@ impl WelcomeStep {
     fn view(&self) -> String {
         if self.resume_found {
             let age = format_age(self.resume_age);
+            let found = format!(
+                "A partially completed setup was found ({} ago, step: {}).",
+                theme::dim(&age),
+                theme::focused(&self.resume_step)
+            );
+            let prompt = format!(
+                "Resume from {}?  {}  {}",
+                theme::focused(&self.resume_step),
+                theme::focused("[y]es"),
+                theme::dim("[N]o — start fresh (deletes saved progress)")
+            );
             let mut body = format!(
-                "{}\n\n{}\n\n{}",
-                theme::title("Resume Previous Setup"),
-                format!(
-                    "A partially completed setup was found ({} ago, step: {}).",
-                    theme::dim(&age),
-                    theme::focused(&self.resume_step)
-                ),
-                format!(
-                    "Resume from {}?  {}  {}",
-                    theme::focused(&self.resume_step),
-                    theme::focused("[y]es"),
-                    theme::dim("[N]o — start fresh (deletes saved progress)")
-                ),
+                "{}\n\n{found}\n\n{prompt}",
+                theme::title("Resume Previous Setup")
             );
             if self
                 .resume_state
@@ -232,25 +232,24 @@ impl WelcomeStep {
             return body;
         }
         if self.existing {
+            let exists = format!("A vault already exists at {}.", theme::dim(&self.vault_dir));
+            let note = format!(
+                "This wizard will let you update your sync, MCP agents, and other settings.\n{}",
+                theme::warn("Vault passphrase and identity will not be changed.")
+            );
             format!(
-                "{}\n\n{}\n\n{}",
-                theme::title("Re-configuring Symaira Vault"),
-                format!("A vault already exists at {}.", theme::dim(&self.vault_dir)),
-                format!(
-                    "This wizard will let you update your sync, MCP agents, and other settings.\n{}",
-                    theme::warn("Vault passphrase and identity will not be changed.")
-                ),
+                "{}\n\n{exists}\n\n{note}",
+                theme::title("Re-configuring Symaira Vault")
             )
         } else {
+            let press = format!(
+                "Press {} to start  {}",
+                theme::focused("Enter"),
+                theme::dim("Esc to quit")
+            );
             format!(
-                "{}\n\n{}\n\n{}",
-                theme::title("Welcome to Symaira Vault"),
-                "This wizard will guide you through setting up your password vault.",
-                format!(
-                    "Press {} to start  {}",
-                    theme::focused("Enter"),
-                    theme::dim("Esc to quit")
-                ),
+                "{}\n\nThis wizard will guide you through setting up your password vault.\n\n{press}",
+                theme::title("Welcome to Symaira Vault")
             )
         }
     }
