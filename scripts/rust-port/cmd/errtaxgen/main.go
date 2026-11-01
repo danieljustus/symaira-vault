@@ -631,6 +631,35 @@ func sourceFiles(root string) ([]string, error) {
 	return files, nil
 }
 
+// generatorDir holds this command; every non-test Go file in it decides what the
+// fixture records (inventory, exclusions, normalizers, seed handling, scenario
+// permutations), so every one of them is bound into generator_digest.
+const generatorDir = "scripts/rust-port/cmd/errtaxgen"
+
+// generatorSources lists the production Go files of the generator, sorted, as
+// slash-separated paths relative to root. main.go must be among them.
+func generatorSources(root string) ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(generatorDir)))
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	hasMain := false
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		hasMain = hasMain || name == "main.go"
+		files = append(files, generatorDir+"/"+name)
+	}
+	if !hasMain {
+		return nil, fmt.Errorf("%s/main.go is missing", generatorDir)
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
 func main() {
 	output := flag.String("output", defaultOutput, "fixture path")
 	check := flag.Bool("check", false, "fail if the fixture differs")
@@ -665,7 +694,11 @@ func main() {
 	if err != nil {
 		fatal("verify oracle: %v", err)
 	}
-	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/errtaxgen/main.go"})
+	generators, err := generatorSources(root)
+	if err != nil {
+		fatal("list generator sources: %v", err)
+	}
+	generatorDigest, err := provenance.Digest(root, generators)
 	if err != nil {
 		fatal("hash generator: %v", err)
 	}

@@ -3507,7 +3507,8 @@ fn run_file(
                         field: field.unwrap_or_default(),
                         output,
                     },
-                )?;
+                )
+                .map_err(report_file_error)?;
                 if !quiet {
                     println!(
                         "Exported {}#{} to {} ({} bytes)",
@@ -3549,14 +3550,18 @@ fn run_file(
                             Some("Try: symvault find <search-term>"),
                         ));
                     }
-                    other => other?,
+                    other => other.map_err(report_file_error)?,
                 };
                 if !result.timed_out {
                     print!("{}", result.stdout);
                     eprint!("{}", result.stderr);
                 }
                 if result.exit_code != 0 {
-                    return Err(format!("command exited with code {}", result.exit_code));
+                    return Err(reported(
+                        1,
+                        &format!("command exited with code {}", result.exit_code),
+                        None,
+                    ));
                 }
             }
         }
@@ -5567,6 +5572,28 @@ fn reported(code: u8, message: &str, hint: Option<&str>) -> String {
         let _ = writeln!(io::stderr(), "{hint}");
     }
     format!("{REPORTED_PREFIX}{code}")
+}
+
+/// Go's `file` commands fail with CLIErrors, each printed twice (cobra, then
+/// `ExecuteRoot`) with its own exit class: a missing attachment field is
+/// `not found` (2, with the `find` hint), and an entry without exactly one
+/// recorded attachment needs `--field` (invalid input, 9). A child that outlives
+/// `--timeout` is a plain error (1), printed the same way.
+fn report_file_error(error: String) -> String {
+    if error.starts_with("command timed out after ") {
+        return reported(1, &error, None);
+    }
+    if error.starts_with("entry has no recorded attachment fields")
+        || error.starts_with("entry has multiple attachment fields (")
+    {
+        return reported(9, &error, None);
+    }
+    if (error.starts_with("field ") || error.starts_with("chunk field "))
+        && error.ends_with(" not found in entry")
+    {
+        return reported(2, &error, Some("Try: symvault find <search-term>"));
+    }
+    error
 }
 
 fn print_error_bytes_like_go(message: &[u8]) {

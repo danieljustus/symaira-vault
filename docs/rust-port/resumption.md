@@ -12,15 +12,25 @@ and ignores extra positionals; clap rejected them. Now fixed and pinned.
   `vault_seed` (a Go-initialized vault, recorded once and reused by `--check`;
   `--new-seed` re-records it), `extra_positionals` (138 empty-sandbox + 82
   initialized-vault scenarios; `x`, `x y`, `-- x`), `extra_positional_exclusions`
-  (7 commands, each with a reason) and `run_file_use_argv` (32 + 32 `run`/`file use`
-  permutations). Every scenario ran twice against the Go binary and had to be
+  (7 commands, each with a reason) and `run_file_use_argv` (82 + 82 `run`/`file use`
+  permutations; the vault seed holds a real attachment entry `seed/cert` and a text
+  field `seed/api.token`, the child is `/bin/sh -c 'printf "%s\n" "$@"'`, so flag-like
+  child words `-la --timeout 5 --json --` and symvault flags before and after the
+  positionals are compared for real). Every scenario ran twice against the Go binary and had to be
   deterministic; the only rewrites are `password20` (`generate`) and `key_bytes`
   (`audit rotate-key`). The pre-existing sections are unchanged.
-- **Before:** 152 of the 284 scenarios failed in the native binary: 133 because
+- **Before (first 284 scenarios):** 152 of them failed in the native binary: 133 because
   clap rejected the positionals (27 command paths), 2 because `help x y` quoted its
   words differently, 17 because `run`/`file use` reported a missing program or entry
-  differently. **After:** 256 match Go byte for byte, 28 are pinned as known body
-  divergences (below), none is a clap rejection.
+  differently. **After:** 356 of the 384 scenarios match Go byte for byte (all 164
+  `run`/`file use` ones), 28 are pinned as known body divergences (below), none is a
+  clap rejection. Review round 2 (seeded `run`/`file use` corpus) found and fixed four
+  more native divergences: `--timeout 5` (no unit) was accepted past the flag parser
+  (now pflag's `invalid argument ... flag: time: missing unit in duration`), a bare
+  `--timeout 0` was rejected (`parse_go_duration` accepts it like Go), `file use`
+  mapped an absent attachment field / an entry without attachment to exit 1 instead
+  of 2 (with the `Try:` hint) / 9, and printed a child's non-zero exit and a timeout
+  once instead of twice.
 - **Fix.** `IgnoredPositionals` (hidden `num_args = 0..`) is flattened into exactly
   the nil-Args commands; commands with validators are untouched
   (`clap_still_rejects_extra_positionals_where_cobra_has_a_validator`). Also:
@@ -39,6 +49,15 @@ and ignores extra positionals; clap rejected them. Now fixed and pinned.
   timing-dependent `doctor` and `startup-profile` and the long-running `broker`,
   `mcp`, `serve` and random-token `device pair`/`migrate v4` are not replayed in
   the initialized vault (clap acceptance only, via `nil_args_positional_tests`).
+- **Pins.** The 28 divergent scenarios are no longer replayed under a substring
+  check: `testdata/port/cli/error-taxonomy-known-divergences.json` holds the exact
+  native exit/stdout/stderr per scenario (regenerate with the ignored test
+  `record_known_divergences`, review the diff), the replay fails on any change or on a
+  match with Go, and `known_divergence_pin_detects_unrelated_changes` is the negative
+  control. `generator_digest` now hashes every non-test Go file of `errtaxgen`
+  (`main.go`, `inventory.go`, `scenarios.go`), and
+  `TestGeneratorDigestBindsEveryProductionSource` proves that changing any of them
+  makes `--check` report the fixture stale.
 - This is not completion of CLI-005: the broader exit/error taxonomy outside the
   recorded corpus is unproven.
 

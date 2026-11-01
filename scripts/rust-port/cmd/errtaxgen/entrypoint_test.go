@@ -114,7 +114,10 @@ func newMainEnv(t *testing.T) mainEnv {
 		"cmd/root.go":               "package cmd\n",
 		"cmd/sub/leaf.go":           "package sub\n",
 		"cmd/sub/leaf_test.go":      "package sub\n",
-		"scripts/rust-port/cmd/errtaxgen/main.go": "package main\n",
+		"scripts/rust-port/cmd/errtaxgen/main.go":      "package main\n",
+		"scripts/rust-port/cmd/errtaxgen/inventory.go": "package main\n",
+		"scripts/rust-port/cmd/errtaxgen/scenarios.go": "package main\n",
+		"scripts/rust-port/cmd/errtaxgen/main_test.go": "package main\n",
 	}
 	for name, content := range files {
 		path := filepath.Join(root, filepath.FromSlash(name))
@@ -324,7 +327,7 @@ func TestMainFailureModes(t *testing.T) {
 		locateRoot = func() (string, error) { return clone, nil }
 		defer func() { locateRoot = orig }()
 		res := runMain(t, "--check", "--go-binary", env.oracle, "--output", out)
-		if !res.exited || !strings.Contains(res.stderr, "FAIL hash generator: ") {
+		if !res.exited || !strings.Contains(res.stderr, "FAIL list generator sources: ") {
 			t.Fatalf("res = %+v", res)
 		}
 	})
@@ -359,4 +362,61 @@ func TestMainFailureModes(t *testing.T) {
 			t.Fatalf("res = %+v", res)
 		}
 	})
+}
+
+// Every production file of the generator decides what the fixture records, so
+// changing any of them must invalidate the fixture's provenance: -check then
+// reports it stale instead of passing against a generator that has moved on.
+func TestGeneratorDigestBindsEveryProductionSource(t *testing.T) {
+	env := newMainEnv(t)
+	output := filepath.Join(t.TempDir(), "error-taxonomy.json")
+	if wrote := runMain(t, env.writeArgs(output)...); wrote.exited {
+		t.Fatalf("write failed: %+v", wrote)
+	}
+	digestOf := func() string {
+		raw, err := os.ReadFile(output) // #nosec G304 -- test temp path
+		if err != nil {
+			t.Fatal(err)
+		}
+		var parsed fixture
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			t.Fatal(err)
+		}
+		return parsed.Oracle.GeneratorDigest
+	}
+	recorded := digestOf()
+	generator := func(name string) string {
+		return filepath.Join(env.root, "scripts", "rust-port", "cmd", "errtaxgen", name)
+	}
+	for _, name := range []string{"main.go", "inventory.go", "scenarios.go"} {
+		path := generator(name)
+		original, err := os.ReadFile(path) // #nosec G304 -- test temp path
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, append(append([]byte{}, original...), []byte("// changed\n")...), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		res := runMain(t, "--check", "--go-binary", env.oracle, "--output", output)
+		if !res.exited || res.code != 1 || !strings.Contains(res.stderr, "FAIL fixture is stale; regenerate deliberately") {
+			t.Errorf("changing %s left the fixture current: %+v", name, res)
+		}
+		if err := os.WriteFile(path, original, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if res := runMain(t, "--check", "--go-binary", env.oracle, "--output", output); res.exited {
+			t.Fatalf("restoring %s did not restore the digest: %+v", name, res)
+		}
+	}
+	// A test file is not a production source.
+	testFile := generator("main_test.go")
+	if err := os.WriteFile(testFile, []byte("package main\n// changed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if res := runMain(t, "--check", "--go-binary", env.oracle, "--output", output); res.exited {
+		t.Fatalf("a test file changed the digest: %+v", res)
+	}
+	if digestOf() != recorded {
+		t.Fatal("recorded digest moved")
+	}
 }

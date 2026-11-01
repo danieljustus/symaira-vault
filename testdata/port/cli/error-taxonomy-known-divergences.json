@@ -1,0 +1,286 @@
+{
+  "cases": [
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: cannot read current passphrase: read passphrase: EOF\nError: cannot read current passphrase: read passphrase: EOF\n",
+        "stdout": ""
+      },
+      "name": "extra_initialized_auth_rotate-passphrase_x1",
+      "reason": "the prompt-read failure says `read passphrase: EOF`; Go keeps the prompt label (`read Current passphrase: EOF`)",
+      "state": "initialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: cannot read current passphrase: read passphrase: EOF\nError: cannot read current passphrase: read passphrase: EOF\n",
+        "stdout": ""
+      },
+      "name": "extra_initialized_auth_rotate-passphrase_x2",
+      "reason": "the prompt-read failure says `read passphrase: EOF`; Go keeps the prompt label (`read Current passphrase: EOF`)",
+      "state": "initialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
+        "stdout": ""
+      },
+      "name": "extra_initialized_dynamic_generate_x1",
+      "reason": "`dynamic` is not a native subcommand yet (only its help page is frozen)",
+      "state": "initialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
+        "stdout": ""
+      },
+      "name": "extra_initialized_dynamic_generate_x2",
+      "reason": "`dynamic` is not a native subcommand yet (only its help page is frozen)",
+      "state": "initialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Migrate all entries to pseudonymized paths. Make a backup first (y/N): Error: read confirmation: EOF\n",
+        "stdout": ""
+      },
+      "name": "extra_initialized_migrate_pseudonymize_x1",
+      "reason": "Go prints the SYMVAULT_PASSPHRASE warning before the prompt and the failure twice; the native command prints neither the warning nor the second line",
+      "state": "initialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Migrate all entries to pseudonymized paths. Make a backup first (y/N): Error: read confirmation: EOF\n",
+        "stdout": ""
+      },
+      "name": "extra_initialized_migrate_pseudonymize_x2",
+      "reason": "Go prints the SYMVAULT_PASSPHRASE warning before the prompt and the failure twice; the native command prints neither the warning nor the second line",
+      "state": "initialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
+        "stdout": ""
+      },
+      "name": "extra_initialized_setup_x1",
+      "reason": "`setup` is not a native subcommand yet (only its help page is frozen)",
+      "state": "initialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
+        "stdout": ""
+      },
+      "name": "extra_initialized_setup_x2",
+      "reason": "`setup` is not a native subcommand yet (only its help page is frozen)",
+      "state": "initialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 4,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\n",
+        "stdout": ""
+      },
+      "name": "extra_initialized_unlock_x1",
+      "reason": "with no OS keyring Go prints the memory-only session error twice and a Touch ID hint; the native command prints it once without the hint",
+      "state": "initialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 4,
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\n",
+        "stdout": ""
+      },
+      "name": "extra_initialized_unlock_x2",
+      "reason": "with no OS keyring Go prints the memory-only session error twice and a Touch ID hint; the native command prints it once without the hint",
+      "state": "initialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: load config: read config: No such file or directory (os error 2)\nError: load config: read config: No such file or directory (os error 2)\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_agent_list_dd1",
+      "reason": "missing config.yaml is worded `read config: No such file or directory (os error 2)`; Go prints `open <path>: no such file or directory`, twice",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: load config: read config: No such file or directory (os error 2)\nError: load config: read config: No such file or directory (os error 2)\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_agent_list_x1",
+      "reason": "missing config.yaml is worded `read config: No such file or directory (os error 2)`; Go prints `open <path>: no such file or directory`, twice",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: load config: read config: No such file or directory (os error 2)\nError: load config: read config: No such file or directory (os error 2)\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_agent_list_x2",
+      "reason": "missing config.yaml is worded `read config: No such file or directory (os error 2)`; Go prints `open <path>: no such file or directory`, twice",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: vault is not initialized (run 'symvault init' first)\nError: vault is not initialized (run 'symvault init' first)\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_device_pair_dd1",
+      "reason": "Go asks for the passphrase before it checks the vault (exit 4); the native command reports `vault is not initialized` (exit 1)",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: vault is not initialized (run 'symvault init' first)\nError: vault is not initialized (run 'symvault init' first)\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_device_pair_x1",
+      "reason": "Go asks for the passphrase before it checks the vault (exit 4); the native command reports `vault is not initialized` (exit 1)",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: vault is not initialized (run 'symvault init' first)\nError: vault is not initialized (run 'symvault init' first)\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_device_pair_x2",
+      "reason": "Go asks for the passphrase before it checks the vault (exit 4); the native command reports `vault is not initialized` (exit 1)",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_dynamic_generate_dd1",
+      "reason": "`dynamic` is not a native subcommand yet (only its help page is frozen)",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_dynamic_generate_x1",
+      "reason": "`dynamic` is not a native subcommand yet (only its help page is frozen)",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_dynamic_generate_x2",
+      "reason": "`dynamic` is not a native subcommand yet (only its help page is frozen)",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: read vault identity (__ROOT__/xdg-data/symaira-vault/identity.age): file not found\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_migrate_kdf_dd1",
+      "reason": "missing identity.age is worded `file not found`, once; Go prints the `open <path>` error twice",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: read vault identity (__ROOT__/xdg-data/symaira-vault/identity.age): file not found\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_migrate_kdf_x1",
+      "reason": "missing identity.age is worded `file not found`, once; Go prints the `open <path>` error twice",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: read vault identity (__ROOT__/xdg-data/symaira-vault/identity.age): file not found\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_migrate_kdf_x2",
+      "reason": "missing identity.age is worded `file not found`, once; Go prints the `open <path>` error twice",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: load config: read config: No such file or directory (os error 2)\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_migrate_v4_dd1",
+      "reason": "missing config.yaml is worded `read config: ...`, once; Go prints the `open <path>` error twice",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: load config: read config: No such file or directory (os error 2)\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_migrate_v4_x1",
+      "reason": "missing config.yaml is worded `read config: ...`, once; Go prints the `open <path>` error twice",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "Error: load config: read config: No such file or directory (os error 2)\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_migrate_v4_x2",
+      "reason": "missing config.yaml is worded `read config: ...`, once; Go prints the `open <path>` error twice",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_setup_dd1",
+      "reason": "`setup` is not a native subcommand yet (only its help page is frozen)",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_setup_x1",
+      "reason": "`setup` is not a native subcommand yet (only its help page is frozen)",
+      "state": "uninitialized"
+    },
+    {
+      "expected_rust": {
+        "exit_code": 1,
+        "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
+        "stdout": ""
+      },
+      "name": "extra_uninitialized_setup_x2",
+      "reason": "`setup` is not a native subcommand yet (only its help page is frozen)",
+      "state": "uninitialized"
+    }
+  ],
+  "comment": "What the native CLI prints for the scenarios of error-taxonomy.json whose command body still differs from Go (see KNOWN_BODY_DIVERGENCES in crates/symvault-cli/tests/error_taxonomy.rs). Every entry pins the exact (sandbox-root-normalized) exit code, stdout and stderr: the replay fails when the native output changes in any way and when it starts matching Go, so an entry can neither outlive its cause nor hide another regression. Recorded from the native binary, never hand-edited: run the ignored test record_known_divergences.",
+  "schema_version": 1
+}

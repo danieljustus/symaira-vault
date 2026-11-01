@@ -141,17 +141,20 @@ const NIL_ARGS_RUNNABLE: usize = 48;
 const EXTRA_POSITIONAL_EXCLUSIONS: usize = 7;
 const EXTRA_POSITIONALS_UNINITIALIZED: usize = 138;
 const EXTRA_POSITIONALS_INITIALIZED: usize = 82;
-const RUN_FILE_USE_ARGV_PER_STATE: usize = 32;
+const RUN_FILE_USE_ARGV_PER_STATE: usize = 82;
 const KNOWN_DIVERGENT_UNINITIALIZED: usize = 18;
 const KNOWN_DIVERGENT_INITIALIZED: usize = 10;
 
-/// Extra-positional scenarios whose command body still differs from Go for a
-/// reason that has nothing to do with the positionals: the same command without
-/// them differs in the same way. Each entry names the scenario slug, the state it
-/// applies to and the divergence. The replay does not compare these scenarios
-/// byte for byte; it asserts that the native output still differs (so a fix
-/// forces the entry out of this list) and that the divergence is not a clap
-/// rejection of the positionals, which is the defect this corpus guards.
+/// Scenarios whose command body still differs from Go for a reason that has
+/// nothing to do with the positionals: the same command without them differs in
+/// the same way. Each entry names the scenario slug, the state it applies to and
+/// the divergence. The replay does not compare these scenarios with Go; it pins
+/// what the native binary prints instead (`error-taxonomy-known-divergences.json`:
+/// exit code, stdout and stderr per scenario, recorded by `record_known_divergences`)
+/// and fails when the native output moves in any way, when it starts to match
+/// Go (so a fix forces the entry out) or when an entry has no pinned observation.
+/// A different exit code, lost output or a parser regression therefore cannot hide
+/// behind an entry.
 const KNOWN_BODY_DIVERGENCES: &[(&str, &str, &str)] = &[
     (
         "agent_list",
@@ -220,6 +223,72 @@ fn known_divergence(name: &str, state: &str) -> Option<&'static str> {
                     .is_some_and(|variant| matches!(variant, "x1" | "x2" | "dd1"))
         })
         .map(|(_, _, reason)| *reason)
+}
+
+const KNOWN_DIVERGENCES_FILE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../testdata/port/cli/error-taxonomy-known-divergences.json"
+);
+
+/// What the native binary prints for a known-divergent scenario.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+struct NativeObservation {
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PinnedDivergence {
+    name: String,
+    state: String,
+    reason: String,
+    expected_rust: NativeObservation,
+}
+
+#[derive(Debug, Deserialize)]
+struct PinnedFile {
+    schema_version: u32,
+    cases: Vec<PinnedDivergence>,
+}
+
+fn pinned_divergences() -> BTreeMap<String, PinnedDivergence> {
+    let raw = fs::read_to_string(KNOWN_DIVERGENCES_FILE).expect("read known-divergences file");
+    let file: PinnedFile = serde_json::from_str(&raw).expect("parse known-divergences file");
+    assert_eq!(file.schema_version, 1);
+    let mut by_name = BTreeMap::new();
+    for case in file.cases {
+        let name = case.name.clone();
+        assert!(by_name.insert(name.clone(), case).is_none(), "{name} twice");
+    }
+    by_name
+}
+
+/// The problems of one known-divergent scenario: none while the native output is
+/// exactly its pinned observation and still differs from Go.
+fn check_known_divergence(
+    name: &str,
+    go: &Observation,
+    pinned: &NativeObservation,
+    actual: &(i32, String, String),
+) -> Vec<String> {
+    let (code, stdout, stderr) = actual;
+    let mut problems = Vec::new();
+    if *code == go.exit_code && *stdout == go.stdout && *stderr == go.stderr {
+        problems.push(format!(
+            "{name} now matches Go; remove it from KNOWN_BODY_DIVERGENCES and the pinned file"
+        ));
+    }
+    // The pinned text was recorded on Unix; elsewhere the OS error wording differs,
+    // so only the exit code is exact there.
+    let same_text = !cfg!(unix) || (*stdout == pinned.stdout && *stderr == pinned.stderr);
+    if *code != pinned.exit_code || !same_text {
+        problems.push(format!(
+            "{name} no longer prints its pinned native observation\n  pinned: {} {:?} {:?}\n  actual: {code} {stdout:?} {stderr:?}",
+            pinned.exit_code, pinned.stdout, pinned.stderr
+        ));
+    }
+    problems
 }
 
 fn fixture() -> Fixture {
@@ -414,53 +483,44 @@ fn record_difference(
     }
 }
 
-/// Replays the scenarios recorded for `state`; returns how many ran.
+/// Runs one recorded scenario in a fresh sandbox, with its normalizers applied.
+fn run_case(case: &ScenarioCase, seed: &[SeedFile]) -> (i32, String, String) {
+    let initialized = case.state == "initialized";
+    let (code, mut stdout, mut stderr) = run_scenario(
+        &case.observation.args,
+        &BTreeMap::new(),
+        if initialized { seed } else { &[] },
+        initialized,
+    );
+    apply_normalizers(&case.normalize, &mut stdout, &mut stderr);
+    (code, stdout, stderr)
+}
+
+/// Replays the scenarios recorded for `state`; returns how many ran. Known
+/// divergences are compared with their pinned native observation instead of Go's.
 fn replay_scenarios(
     cases: &[ScenarioCase],
     state: &str,
     seed: &[SeedFile],
     failures: &mut Vec<String>,
 ) -> usize {
+    let pinned = pinned_divergences();
     let mut replayed = 0;
     for case in cases.iter().filter(|case| case.state == state) {
-        let initialized = state == "initialized";
-        let (code, mut stdout, mut stderr) = run_scenario(
-            &case.observation.args,
-            &BTreeMap::new(),
-            if initialized { seed } else { &[] },
-            initialized,
-        );
-        apply_normalizers(&case.normalize, &mut stdout, &mut stderr);
-        if let Some(reason) = known_divergence(&case.name, state) {
-            let matches = code == case.observation.exit_code
-                && stdout == case.observation.stdout
-                && stderr == case.observation.stderr;
-            if matches {
-                failures.push(format!(
-                    "{} now matches Go; remove it from KNOWN_BODY_DIVERGENCES ({reason})",
-                    case.name
-                ));
+        let actual = run_case(case, seed);
+        if known_divergence(&case.name, state).is_some() {
+            match pinned.get(&case.name) {
+                Some(entry) => failures.extend(check_known_divergence(
+                    &case.name,
+                    &case.observation,
+                    &entry.expected_rust,
+                    &actual,
+                )),
+                None => failures.push(format!("{} has no pinned native observation", case.name)),
             }
-            // The positionals must reach the command: a clap rejection of them
-            // is the defect this corpus guards, never a known divergence.
-            if stderr.contains("unexpected argument")
-                || stderr.contains("unrecognized subcommand 'x'")
-                || stderr.contains("unrecognized subcommand '--'")
-            {
-                failures.push(format!(
-                    "{} {:?}: clap rejected the positionals: {stderr:?}",
-                    case.name, case.observation.args
-                ));
-            }
-            replayed += 1;
-            continue;
+        } else {
+            record_difference(&case.name, &case.observation, actual, failures);
         }
-        record_difference(
-            &case.name,
-            &case.observation,
-            (code, stdout, stderr),
-            failures,
-        );
         replayed += 1;
     }
     replayed
@@ -524,9 +584,8 @@ fn fixture_provenance_and_counts() {
     assert!(!fixture.vault_seed.is_empty());
 }
 
-/// Every runnable nil-Args command has its three uninitialized and two
-/// initialized scenarios unless an exclusion names the reason, and no scenario
-/// exists for a command outside the inventory.
+/// The known divergences name recorded scenarios, and the pinned file holds an
+/// observation for exactly those scenarios, with the reason of its table entry.
 #[test]
 fn known_body_divergences_name_recorded_scenarios() {
     let fixture = fixture();
@@ -554,6 +613,86 @@ fn known_body_divergences_name_recorded_scenarios() {
             "{slug}/{state} names no recorded scenario"
         );
     }
+    let recorded: std::collections::BTreeSet<&str> = fixture
+        .extra_positionals
+        .iter()
+        .chain(&fixture.run_file_use_argv)
+        .filter(|case| known_divergence(&case.name, &case.state).is_some())
+        .map(|case| case.name.as_str())
+        .collect();
+    let pinned = pinned_divergences();
+    assert_eq!(
+        pinned
+            .keys()
+            .map(String::as_str)
+            .collect::<std::collections::BTreeSet<_>>(),
+        recorded,
+        "the pinned file and the known divergences name different scenarios"
+    );
+    assert_eq!(
+        pinned.len(),
+        KNOWN_DIVERGENT_UNINITIALIZED + KNOWN_DIVERGENT_INITIALIZED
+    );
+    for entry in pinned.values() {
+        assert_eq!(
+            Some(entry.reason.as_str()),
+            known_divergence(&entry.name, &entry.state),
+            "{} carries another reason than its table entry",
+            entry.name
+        );
+    }
+}
+
+/// The positionals must reach the command: a clap rejection of them is the defect
+/// this corpus guards, never something a pinned observation may record.
+#[test]
+fn pinned_divergences_are_not_clap_rejections() {
+    for entry in pinned_divergences().values() {
+        let stderr = &entry.expected_rust.stderr;
+        assert!(
+            !stderr.contains("unexpected argument")
+                && !stderr.contains("unrecognized subcommand 'x'")
+                && !stderr.contains("unrecognized subcommand '--'"),
+            "{} pins a parser rejection: {stderr:?}",
+            entry.name
+        );
+    }
+}
+
+/// Regenerates `error-taxonomy-known-divergences.json` from the native binary:
+/// `cargo test -p symvault-cli --test error_taxonomy -- --ignored record_known_divergences`.
+/// Review the diff before committing; an entry may only record a body difference.
+#[cfg(unix)]
+#[test]
+#[ignore = "rewrites testdata/port/cli/error-taxonomy-known-divergences.json"]
+fn record_known_divergences() {
+    let fixture = fixture();
+    let mut cases = Vec::new();
+    for case in fixture
+        .extra_positionals
+        .iter()
+        .chain(&fixture.run_file_use_argv)
+    {
+        let Some(reason) = known_divergence(&case.name, &case.state) else {
+            continue;
+        };
+        let (exit_code, stdout, stderr) = run_case(case, &fixture.vault_seed);
+        cases.push(serde_json::json!({
+            "name": case.name,
+            "state": case.state,
+            "reason": reason,
+            "expected_rust": {"exit_code": exit_code, "stdout": stdout, "stderr": stderr},
+        }));
+    }
+    cases.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    let file = serde_json::json!({
+        "schema_version": 1,
+        "comment": "What the native CLI prints for the scenarios of error-taxonomy.json whose command body still differs from Go (see KNOWN_BODY_DIVERGENCES in crates/symvault-cli/tests/error_taxonomy.rs). Every entry pins the exact (sandbox-root-normalized) exit code, stdout and stderr: the replay fails when the native output changes in any way and when it starts matching Go, so an entry can neither outlive its cause nor hide another regression. Recorded from the native binary, never hand-edited: run the ignored test record_known_divergences.",
+        "cases": cases,
+    });
+    let mut text = serde_json::to_string_pretty(&file).expect("serialize");
+    text.push('\n');
+    fs::write(KNOWN_DIVERGENCES_FILE, text).expect("write known-divergences file");
 }
 
 #[test]
@@ -797,4 +936,74 @@ fn mutated_expectation_is_detected() {
     let mut failures = Vec::new();
     compare("mutated", &observation, &mut failures);
     assert_eq!(failures.len(), 1);
+}
+
+/// Negative controls for the known-divergence pin: a changed exit code, lost or
+/// unrelated output, a parser-style failure and a native output that now equals Go
+/// must each be reported, while the real native output passes.
+#[test]
+fn known_divergence_pin_detects_unrelated_changes() {
+    let fixture = fixture();
+    let pinned = pinned_divergences();
+    let name = "extra_uninitialized_setup_x1";
+    let case = fixture
+        .extra_positionals
+        .iter()
+        .find(|case| case.name == name)
+        .expect("recorded scenario");
+    let entry = pinned.get(name).expect("pinned scenario");
+    let actual = run_case(case, &fixture.vault_seed);
+    let check = |actual: &(i32, String, String)| {
+        check_known_divergence(name, &case.observation, &entry.expected_rust, actual)
+    };
+    assert_eq!(
+        check(&actual),
+        Vec::<String>::new(),
+        "the real output passes"
+    );
+
+    let (code, stdout, stderr) = actual.clone();
+    let mut mutations = vec![
+        ("exit code", (code + 1, stdout.clone(), stderr.clone())),
+        ("lost stderr", (code, stdout.clone(), String::new())),
+        (
+            "added stdout",
+            (code, format!("{stdout}unrelated\n"), stderr.clone()),
+        ),
+        (
+            "parser regression",
+            (
+                2,
+                String::new(),
+                "error: unexpected argument 'x' found\n".to_owned(),
+            ),
+        ),
+        (
+            "unrelated stderr",
+            (
+                code,
+                stdout.clone(),
+                format!("{stderr}Error: other failure\n"),
+            ),
+        ),
+    ];
+    mutations.push((
+        "now equal to Go",
+        (
+            case.observation.exit_code,
+            case.observation.stdout.clone(),
+            case.observation.stderr.clone(),
+        ),
+    ));
+    for (label, mutated) in mutations {
+        assert!(!check(&mutated).is_empty(), "{label} was not detected");
+    }
+
+    // A pinned file that was edited the same way is caught by the real output.
+    let mut mutated_pin = entry.expected_rust.clone();
+    mutated_pin.exit_code += 1;
+    assert!(
+        !check_known_divergence(name, &case.observation, &mutated_pin, &actual).is_empty(),
+        "a mutated pinned exit code was not detected"
+    );
 }

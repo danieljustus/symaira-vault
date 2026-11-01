@@ -98,7 +98,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "e0d58c513d1f90b2913402868d6b23a85c7ef7c2f761b9775f911f1c348b2e54"
+    "generator_digest": "a3213108ec20aa3b3a8970b0108ea8b18441c4417356f4aea8b7785a820121df"
   },
   "usage": [
     {
@@ -11564,9 +11564,158 @@
       "data": "[core]\n\tbare = false\n"
     },
     {
+      "path": "xdg-data/symaira-vault/.git/index",
+      "kind": "file",
+      "mode": 420,
+      "base64": "RElSQwAAAAIAAAAEaudf0CKtSGFq51/QHeK+GgEAABwYtNeJAACBpAAAAfUAAAAUAAAA/IcPLVYXulxI6Xp1MS60UlDz7c77AAouZ2l0aWdub3JlAAAAAAAAAABq51/QKeOuK2rnX9Apo7muAQAAHBi016QAAIGkAAAB9QAAABQAAAHIqAoFEmskI0jLo0JngjMZA0/2HusAFGVudHJpZXMvc2VlZC9hcGkuYWdlAAAAAAAAaudf0CLt16dq51/QIrb2vwEAABwYtNePAACBpAAAAfUAAAAUAAACMWyR79vzxLCamc/hovscsdUz0tNoABVlbnRyaWVzL3NlZWQvY2VydC5hZ2UAAAAAAGrnX9Ap6hb2audf0CnEFHABAAAcGLTXpQAAgaQAAAH1AAAAFAAAAlVcnK+uoKQor8Do5xSDQmwkT7+3ewAMbWFuaWZlc3QuYWdlAAAAAAAAWxq4DFgB2DCa3zAAXozgUik6xS0="
+    },
+    {
       "path": "xdg-data/symaira-vault/.git/objects",
       "kind": "dir",
       "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/00",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/00/32a81243427cb709c0ac82a7787f3aaface7a6",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJwqKUpNVTA2ZDAxMDAwUChOTU1hYH0tYLa+lIl31iQO+UPL/efLe32sBwQAAP//4Z4M1g=="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/03",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/03/82ee41dbd1ab476cd93268ea4cc908a0839ba2",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJyczcEKwjAMgGHPe4rcBW3XlmUg4juI3rM04mCho8vEvb2Ib+Dtv/x8XFRHA4+4syoCHHqMMbLw0LIPmDKLx5BTN7QkacghPXxCbGi1Z6lw3ZTGSnCndTI4LZu+vnWRN+k8yYGLnsF3fUgR2+hg75xzzU81+fdvbnMmE1hE8pGl2icAAP//gns+8g=="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/05",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/05/eb1036af75020d9a92081fc2a74f9f1f4af17f",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJwqKUpNVTA2YzA0MDAzMVFITi0q0UtMT2XImfj+9ucjG2bNPP9w0W+ZjVeNL13OAAQAAP//aTcUIg=="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/5c",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/5c/9cafaea0a428afc0e8e71483426c244fbfb77b",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJwAXgKh/WJsb2IgNTk3AGFnZS1lbmNyeXB0aW9uLm9yZy92MQotPiBYMjU1MTkga2c3eGxYS3J2VENwdzNrRldsQnpDNUEyaUZpYU8xUTg3NkxlVTF2RHRFbwo5ZTcvejNsaEtPanVpTUtzVzZORGNNVUxuRkRDSXE5NmY2L24vSFRXZ2FZCi0tLSBlTkJlM09MVFJ5Yy9QVDdLMnk0a004b2VueEJBNDZCeDcvVXA2c3RaeCtFCnVcnD+iPYhDI7+e3/+6Xf1l3ixuCbhMAAZVvNv2usDiY8NYL4RdvhEqPzrcbKhxagrq4AwaJru0V2K/MHJj4wIvrU00iZlEleStZ06bBV5qBnq/ArZHw4cVf1RVwKMbsJj2NlQGy5mssczu0l6ppyMBTPM9uGzGYCoKW2+PJCCoLlE9TtGL0YHFHmJIaS0OMmEJC7GqWLaaY0F7FD4GbTh/Wpi6Hu3AX3d34fyrxiHAmIbJqh5HXwoOj8VwdwrEssHGWooig/mRPYKcksCym5ZqkG5Vbml4dRauIqdo8WbOZ+IwKIdw/GDP5BqF1uwFdk4RAye12e1IdmPKfnv+G/+s0H1tVY56OigLytyQymktqqTGHaeAXuTw3PxvxLqGp99J6YP7xNRA0F7uS3P6Tyt1Vy9ZH61c3BMynBA73HYlVAhauff41eTh5cMRqAMKbPxUqGaEh4yU+ezv/KIJhgdkJu3rvXnyoBdFXGzIZuFWS3Dg7MXXBqv7auFepGDmnFTYs8xuD+GmGhpQIlDhetaqHe9cpZqVesV28qrTOJXuNdJftAXZL7SE0nshSgEAAP//Qm0PdA=="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/6c",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/6c/91efdbf3c4b09a99cfe1a2fb1cb1d533d2d368",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJwAOgLF/WJsb2IgNTYxAGFnZS1lbmNyeXB0aW9uLm9yZy92MQotPiBYMjU1MTkgYU9XK2NPMEFZUjJSS2lHalhYWVkyVERDOFNRTjdiM0FobTFPYi9LWEtBSQo3OFphb3FEeXQxckxtTDlNemJOZTJwSThGbzREa2MvNk9BYzdOYUpOWk9FCi0tLSBFb3pYZllHa01CMWErVVZ5QW9sVjNzcHNhczhwOWVBdlh4c0Ztc3pSdnJzCkjRQXFRRfHxOM8vDFyHkCOiV6H0O5AlnJG/i3imUunUs5J6YlGjX61YiDwXQar49b2S3zwyvI1R365fCLoR+W1u66jazfbBxmRFjoLuZVlj6x4/7v9eLavSxrOcX6xbCI/T3U75hI0dq7ZhI7T4bzu/8IViXTYfvw/P7n40vknQTPEhO9Do+CrbleqKsjWQ5cnTWs43o9J2Stlq5I9gZVKbVjWzg0trSoXS1haXNig06FA/UnCrGpCwJ7B5F1Kvs08/TQQ44zMyY4TPmmZxXMayiZJm67zL19KF5Ux9bw08wPxjvAcpcDg69RVb0jHajCX0fmcsvfd3HrBXYvS7i81AtKaD3iDErnEXpicl9ekBboNVzAF3B/NeySL2WLiFieSLfJIvQyeDRpQdu/JGiaIkT8Ix+62ewCERMgpamCHGMPYj+9yHTIj/Fyk7OGsv2pGwVWOplw2I6ouc9vCMyvrJWKQulGMTO7Yb3WBFXR9fFxZESPt5NwNxtBjWQLWrVXYd40SVByzHXQEAAP//82f+FA=="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/79",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/79/ade377b61b4b6d8e98e1e82fc834cd5158c467",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJwqKUpNVTA2ZDAxMDAwUChOTU1heHsmadvclpiPsbzpna17A67+vf19HSAAAP//FA4RZw=="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/87",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/87/0f2d5617ba5c48e97a75312eb45250f3edcefb",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJxUjrFqw0AMhjvrKQTZDFYg0DdIh0wdXLqWs09J1fhOx0m+4qXPXkhTTJYPDZ8+/nHWEQ/Ph6cdDmsKUgO+h2V2bDf2KJesldE4m7g0xrPMbCCRs4uvFC4MFLnJxL1E6OjKK3RUOMEOT3/Pj+W6ZJfEGKrLOUxukKbSu145b5fRl2kGust90epb8HW4z6Dj8DG4Voa3zyWNRnHcrNPx5V+TyGEP1GzSyHvoyL7LjQrdD/wGAAD//7AMV5k="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/91",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/91/f93f53f44cc2f72ac3d1c1b5617a57281eec3b",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJwA1AEr/mJsb2IgNDU5AGFnZS1lbmNyeXB0aW9uLm9yZy92MQotPiBYMjU1MTkgTzUrNWtBcGdyeDE3TFgrY3EyUGtua0UxazhuYmJ2UlU4aFNiVFg3U3F5QQplcms3TVE5dERvZWdRMlBFS2JpMWgzZkdqczB6ZTNuTGNzbVN0YVFIY3lNCi0tLSA1WGpwb1Bma1hoaUd3djJZN0lja2VPajRTRUdpeDN5ck1CY2lqQUpMRStnCsanIRnHZbVSQC6jRabwfqtEWz1uJ/eyOeK3FTvSLY12fuXcgrSlxDRwHs9EHUkSZyAm0C7v/HyS8jWlfc1vXKv1A7UfGFNIo/7mhIv+OdY+tqIA//OaYWOQQCpK9mQdTYJSZ9PhZRkDScTGOwDNeMZZTa4sh33AfJVWvtQx7bTpKOSW/WXUy3WDqHMGcytjHUsOVNTVbHGGbA3vVx3w279j2waF41lj12tF4BUWFCejw+kfS+BJqr/rqdd35sNnjuQ84AapwfiIn7C0la/lQKHOXXG5PKD8BRoCCZUsXOMzHDEiGQrpjYM0bc5dMkN/mgTeKppkLOde6YdM/9bVTA22ct2U7mnpiBfaaxcPLiiAwnN1MiUVrg437z5/P+eNFCc6VAEAAP//lQrHzQ=="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/93",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/93/66fab3c5b5b444802153f2691cca1251533575",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJwqKUpNVTA0NGIwNDAwMzFR0EvPLMlMz8svSmVo59cNE98V4/GyqtRQb0tQwOe3536bGBgYGCik5pUUZaYWM1SufVy+Tdo7t2/Gwxf6J0zOBkYcSYeak5uYl5mWWlyil5ieyhAzZ/26BUs01h948Vyk2SlHxX//9mpAAAAA//+03jDp"
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/a8",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/a8/0a05126b242348cba34267823319034ff61eeb",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJwA0QEu/mJsb2IgNDU2AGFnZS1lbmNyeXB0aW9uLm9yZy92MQotPiBYMjU1MTkgRm56YlF3ekVxSWc2RlBIdXh6dHlYVFFMWjlIY1gyZGlPM09iL2FJRkRYcwppMTQ0dWEyRnVaclE1b3NJUXBSaXEvSjA3a0tycU1XTmp0aGl5Z2cwaVQ4Ci0tLSBpZzV0TVpOUm1JNVFUS1dPSzh1NTBaWURHdm9GSVoxam94MUZ6eUMxN3Y0CjyJHvG55BUQ/f/QmwKCoc+MEGU4c8VcXZf1WwDZOH1IizE0TFRh6AMfPuffSchf5sDWB1WANxxvsnpKrKve4p0nb2EjXOy6IBgscnmpzAdwdDtUTRTcl+CGYFJciLE/yjPl9XfbkTpVYDJ1BkgDuCl0KlxoNjKLuLC7WFRVNeMpb0Oe0oui+Ejn9itjdSrFLmz6M0D522JEDe8khyTFt+nmfkZOPb0+QBOi2EzbqbmcSybBYoZknOYibjUbBVtR2O/K4OgGrTTvy7Zq0c7vdpMaUQoAi8G+znBoR3ncyX8Cl1K27SWMWiC5l2Q4Ch3Dsv6ae6XbP2YJe/xsbbzr8EcyGBenEQELd7xCyRXi/IwpvnZZgoMKbDIhDSQ/jQdwXwEAAP//XLzA7Q=="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/c3",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/c3/98444cecb2c1385dce183d57b2ae5bd35f1588",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJwqKUpNVTA0NGIwNDAwMzFR0EvPLMlMz8svSmVo59cNE98V4/GyqtRQb0tQwOe3536bGBgYGCik5pUUZaYWMzAYrRBydqrZznlgTdPyinqr9WueL4Oak5uYl5mWWlyil5ieyjDxp33wF59D37UOXzy4NbEqXEPujTUgAAD//2EcL8A="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/d3",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/d3/a254b6624a3473f5c8273c636ee64ee78f031f",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJyczsFKBDEMgGHP8xS5C5o2SacFEd9B9J6mWRzYOkO3K+7bi/gG3v7LD5/tvW8TIsndHO5QKKWTVjKpUpk5YwxCp5hKMNMQJQiRrLIcOvxzAlKO7hxabUErr8laoZiyK5sVzIqZStW46HV+7ANeb123ofCu1/OEp8utf/3Wi39rP87+YHt/hrAWEs6REe4REZc/5fT//svb0XQ6XNzbox7bTwAAAP//XB9LFQ=="
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/ed",
+      "kind": "dir",
+      "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/objects/ed/cc62b69d845cf15d0d678985bd50d5fddbf7ae",
+      "kind": "file",
+      "mode": 292,
+      "base64": "eJwqKUpNVTA3ZDA0MDAzMVFILMjUS0xPZVjBxSqUraLscXqxU3qTsSSz/ze511AlyalFJWA1ORPf3/58ZMOsmecfLvots/Gq8aXLGYAAAAD//+iTHv4="
     },
     {
       "path": "xdg-data/symaira-vault/.git/objects/info",
@@ -11587,6 +11736,12 @@
       "path": "xdg-data/symaira-vault/.git/refs/heads",
       "kind": "dir",
       "mode": 493
+    },
+    {
+      "path": "xdg-data/symaira-vault/.git/refs/heads/master",
+      "kind": "file",
+      "mode": 420,
+      "data": "d3a254b6624a3473f5c8273c636ee64ee78f031f\n"
     },
     {
       "path": "xdg-data/symaira-vault/.git/refs/tags",
@@ -11621,16 +11776,33 @@
       "mode": 448
     },
     {
+      "path": "xdg-data/symaira-vault/entries/seed",
+      "kind": "dir",
+      "mode": 448
+    },
+    {
+      "path": "xdg-data/symaira-vault/entries/seed/api.age",
+      "kind": "file",
+      "mode": 384,
+      "base64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBGbnpiUXd6RXFJZzZGUEh1eHp0eVhUUUxaOUhjWDJkaU8zT2IvYUlGRFhzCmkxNDR1YTJGdVpyUTVvc0lRcFJpcS9KMDdrS3JxTVdOanRoaXlnZzBpVDgKLS0tIGlnNXRNWk5SbUk1UVRLV09LOHU1MFpZREd2b0ZJWjFqb3gxRnp5QzE3djQKPIke8bnkFRD9/9CbAoKhz4wQZThzxVxdl/VbANk4fUiLMTRMVGHoAx8+599JyF/mwNYHVYA3HG+yekqsq97inSdvYSNc7LogGCxyeanMB3B0O1RNFNyX4IZgUlyIsT/KM+X1d9uROlVgMnUGSAO4KXQqXGg2Mou4sLtYVFU14ylvQ57Si6L4SOf2K2N1KsUubPozQPnbYkQN7ySHJMW36eZ+Rk49vT5AE6LYTNupuZxLJsFihmSc5iJuNRsFW1HY78rg6AatNO/LtmrRzu92kxpRCgCLwb7OcGhHedzJfwKXUrbtJYxaILmXZDgKHcOy/pp7pds/Zgl7/GxtvOvwRzIYF6cRAQt3vELJFeL8jCm+dlmCgwpsMiENJD+NB3Bf"
+    },
+    {
+      "path": "xdg-data/symaira-vault/entries/seed/cert.age",
+      "kind": "file",
+      "mode": 384,
+      "base64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBhT1crY08wQVlSMlJLaUdqWFhZWTJUREM4U1FON2IzQWhtMU9iL0tYS0FJCjc4WmFvcUR5dDFyTG1MOU16Yk5lMnBJOEZvNERrYy82T0FjN05hSk5aT0UKLS0tIEVvelhmWUdrTUIxYStVVnlBb2xWM3Nwc2FzOHA5ZUF2WHhzRm1zelJ2cnMKSNFBcVFF8fE4zy8MXIeQI6JXofQ7kCWckb+LeKZS6dSzknpiUaNfrViIPBdBqvj1vZLfPDK8jVHfrl8IuhH5bW7rqNrN9sHGZEWOgu5lWWPrHj/u/14tq9LGs5xfrFsIj9PdTvmEjR2rtmEjtPhvO7/whWJdNh+/D8/ufjS+SdBM8SE70Oj4KtuV6oqyNZDlydNazjej0nZK2Wrkj2BlUptWNbODS2tKhdLWFpc2KDToUD9ScKsakLAnsHkXUq+zTz9NBDjjMzJjhM+aZnFcxrKJkmbrvMvX0oXlTH1vDTzA/GO8BylwODr1FVvSMdqMJfR+Zyy993cesFdi9LuLzUC0poPeIMSucRemJyX16QFug1XMAXcH817JIvZYuIWJ5It8ki9DJ4NGlB278kaJoiRPwjH7rZ7AIREyClqYIcYw9iP73IdMiP8XKTs4ay/akbBVY6mXDYjqi5z28IzK+slYpC6UYxM7thvdYEVdH18XFkRI+3k3A3G0GNZAtatVdh3jRJUHLMdd"
+    },
+    {
       "path": "xdg-data/symaira-vault/identity.age",
       "kind": "file",
       "mode": 384,
-      "base64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDdLL3RMVUJZd2QvVFdVM3hQTENVTFEgdD0zLG09NjU1MzYscD00CmdFdDRlZHNHQ1lETmpBdUZ2by9LbFNpR29aZTRJTkt3T2JiTnE1K29FWVJtQlQ3MlcvOWx5ME92S1dRCi0tLSBkODQ0ZkZGMWFJV04rN2graW5wSDhvSGUxejFtZzdDbVNaTndrUngyaDRJClNsjMfO68vMWzicwGcEz58GmWzsQVwufEbTYgFUtOgDY6oIAF8+amOgEAtF48fZl0K4nOCPHXXcUebv8kPJSylRywSbuTkI134/nejhMnSWZ8Zmfr4spof1AX+ONkJHsNWkZswgW/ismco="
+      "base64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDJ5QmRUb0NCNGRkeVBrMjNKQW5ZN1EgdD0zLG09NjU1MzYscD00ClM4Y3VWRW42c21FT01iUXN3WXhpaDZIRDR5eWJWOHB2MWoyQ3Fqd05vYXlVTkVBUXhiVk0rRi92cCs4Ci0tLSBUbDdQZlg4Rys0ZmJZcVk3Y2c4b2pabjN5LzVEMlV4Q3pQY1BvenZiTWNRCgPyHb1xTgVE2YNq2OFcV3qWv33bf43eQE6rdtNaITxpDNQ/iEmn16vI8axsmBUkbHbcNXw06pdqDuYmVJxBmW6bYTvj8kElB8pR08JTsmT89/RRBV/Hoqy+uzSHyzDQQudz/oFLEr/wG5E="
     },
     {
       "path": "xdg-data/symaira-vault/manifest.age",
       "kind": "file",
       "mode": 384,
-      "base64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBEU0d6aTdINjhHcnVXQlBmM2crMGxEVjRzUDlVb3dvUEl4ZnF1eHBZNnhVCjBVZzd2YzJrWnJMZlYvdU8vcnRoSmpZL2M1TnVjMGhTbE1QeksxZ0FURUUKLS0tIHRvQyszZlBQS2JLNnZFdWFNY2ppMGprMVlNNGt0eGpwYnBMZGgrSEZBblEKIwkILh2e3+lOVJgvowk3xXiAIBkP/FMWbHt0Oilel7qsTNOLVQ04rE2ihfOYrbgjk8CuSllcfbH52T0JXbh4LIj4VxCRucMVCuFcgfe8IrCtLGmfGu7R0ZXYLpRkfktWqMDteVDS++ROWxY8jJUR8D6tn/MGo9smctiOa+12FTYjmHL2VrYMS9V3/p5As0PZGpmJqJcqZaJW"
+      "base64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBrZzd4bFhLcnZUQ3B3M2tGV2xCekM1QTJpRmlhTzFRODc2TGVVMXZEdEVvCjllNy96M2xoS09qdWlNS3NXNk5EY01VTG5GRENJcTk2ZjYvbi9IVFdnYVkKLS0tIGVOQmUzT0xUUnljL1BUN0syeTRrTThvZW54QkE0NkJ4Ny9VcDZzdFp4K0UKdVycP6I9iEMjv57f/7pd/WXeLG4JuEwABlW82/a6wOJjw1gvhF2+ESo/OtxsqHFqCurgDBomu7RXYr8wcmPjAi+tTTSJmUSV5K1nTpsFXmoGer8CtkfDhxV/VFXAoxuwmPY2VAbLmayxzO7SXqmnIwFM8z24bMZgKgpbb48kIKguUT1O0YvRgcUeYkhpLQ4yYQkLsapYtppjQXsUPgZtOH9amLoe7cBfd3fh/KvGIcCYhsmqHkdfCg6PxXB3CsSywcZaiiKD+ZE9gpySwLKblmqQblVuaXh1Fq4ip2jxZs5n4jAoh3D8YM/kGoXW7AV2ThEDJ7XZ7Uh2Y8p+e/4b/6zQfW1Vjno6KAvK3JDKaS2qpMYdp4Be5PDc/G/Euoan30npg/vE1EDQXu5Lc/pPK3VXL1kfrVzcEzKcEDvcdiVUCFq59/jV5OHlwxGoAwps/FSoZoSHjJT57O/8ogmGB2Qm7eu9efKgF0VcbMhm4VZLcODsxdcGq/tq4V6kYOacVNizzG4P4aYaGlAiUOF61qod71ylmpV6xXbyqtM4le410l+0BdkvtITSeyFK"
     }
   ],
   "extra_positionals": [
@@ -14947,7 +15119,7 @@
         ],
         "exit_code": 0,
         "stdout": "",
-        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nManifest verification: 0 entries match, 0 missing, 0 tampered, 0 unknown\n"
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nManifest verification: 2 entries match, 0 missing, 0 tampered, 0 unknown\n"
       }
     },
     {
@@ -14977,7 +15149,7 @@
         ],
         "exit_code": 0,
         "stdout": "",
-        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nManifest verification: 0 entries match, 0 missing, 0 tampered, 0 unknown\n"
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nManifest verification: 2 entries match, 0 missing, 0 tampered, 0 unknown\n"
       }
     },
     {
@@ -15768,6 +15940,1050 @@
       }
     },
     {
+      "name": "run_argv_flag_words_after_dd_uninitialized",
+      "description": "run forwards flag-looking words after -- verbatim (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_argv_flag_words_after_dd_initialized",
+      "description": "run forwards flag-looking words after -- verbatim (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_argv_timeout_before_dd_uninitialized",
+      "description": "run with its own --timeout before --, flag-looking child words after (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "5s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_argv_timeout_before_dd_initialized",
+      "description": "run with its own --timeout before --, flag-looking child words after (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "5s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_argv_timeout_zero_uninitialized",
+      "description": "run --timeout 0 is the unitless zero Go accepts: no timeout (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "0",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_argv_timeout_zero_initialized",
+      "description": "run --timeout 0 is the unitless zero Go accepts: no timeout (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "0",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_argv_timeout_without_unit_uninitialized",
+      "description": "run --timeout 5 without a unit is a flag error, not a child word (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "5",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"5\" for \"-t, --timeout\" flag: time: missing unit in duration \"5\"\nError: invalid argument \"5\" for \"-t, --timeout\" flag: time: missing unit in duration \"5\"\n"
+      }
+    },
+    {
+      "name": "run_argv_timeout_without_unit_initialized",
+      "description": "run --timeout 5 without a unit is a flag error, not a child word (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "5",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"5\" for \"-t, --timeout\" flag: time: missing unit in duration \"5\"\nError: invalid argument \"5\" for \"-t, --timeout\" flag: time: missing unit in duration \"5\"\n"
+      }
+    },
+    {
+      "name": "run_argv_env_before_dd_uninitialized",
+      "description": "run resolves a real --env reference before -- (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--env",
+          "TOKEN=seed/api.token",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_argv_env_before_dd_initialized",
+      "description": "run resolves a real --env reference before -- (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--env",
+          "TOKEN=seed/api.token",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_argv_env_missing_ref_uninitialized",
+      "description": "run with an --env reference to a missing entry (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--env",
+          "TOKEN=seed/absent.token",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_argv_env_missing_ref_initialized",
+      "description": "run with an --env reference to a missing entry (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--env",
+          "TOKEN=seed/absent.token",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: secret ref not found: seed/absent.token\nError: secret ref not found: seed/absent.token\n"
+      }
+    },
+    {
+      "name": "run_argv_passthrough_before_dd_uninitialized",
+      "description": "run with --passthrough before -- (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--passthrough",
+          "PATH",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_argv_passthrough_before_dd_initialized",
+      "description": "run with --passthrough before -- (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--passthrough",
+          "PATH",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_argv_second_dd_uninitialized",
+      "description": "run forwards a second -- verbatim (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "--",
+          "--",
+          "x"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_argv_second_dd_initialized",
+      "description": "run forwards a second -- verbatim (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "--",
+          "--",
+          "x"
+        ],
+        "exit_code": 0,
+        "stdout": "--\n--\nx\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_argv_json_before_dd_uninitialized",
+      "description": "run with the persistent --json flag before -- (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--json",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"json\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "run_argv_json_before_dd_initialized",
+      "description": "run with the persistent --json flag before -- (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--json",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"json\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "run_argv_quiet_before_dd_uninitialized",
+      "description": "run with the persistent --quiet flag before -- (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--quiet",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_argv_quiet_before_dd_initialized",
+      "description": "run with the persistent --quiet flag before -- (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--quiet",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "run_argv_output_before_dd_uninitialized",
+      "description": "run with --output text before -- (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--output",
+          "text",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_argv_output_before_dd_initialized",
+      "description": "run with --output text before -- (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--output",
+          "text",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_argv_output_yaml_before_dd_uninitialized",
+      "description": "run with --output yaml before -- (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--output",
+          "yaml",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"yaml\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"yaml\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "run_argv_output_yaml_before_dd_initialized",
+      "description": "run with --output yaml before -- (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--output",
+          "yaml",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"yaml\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"yaml\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "run_argv_flags_before_and_after_dd_uninitialized",
+      "description": "run with symvault flags before -- and flag-looking child words after (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "5s",
+          "-C",
+          ".",
+          "--env",
+          "TOKEN=seed/api.token",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_argv_flags_before_and_after_dd_initialized",
+      "description": "run with symvault flags before -- and flag-looking child words after (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "5s",
+          "-C",
+          ".",
+          "--env",
+          "TOKEN=seed/api.token",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_bare_words_timeout_after_uninitialized",
+      "description": "run with its own --timeout after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--timeout",
+          "5s",
+          "b"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_bare_words_timeout_after_initialized",
+      "description": "run with its own --timeout after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--timeout",
+          "5s",
+          "b"
+        ],
+        "exit_code": 0,
+        "stdout": "a\nb\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_bare_words_env_after_uninitialized",
+      "description": "run with a real --env after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--env",
+          "TOKEN=seed/api.token",
+          "b"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_bare_words_env_after_initialized",
+      "description": "run with a real --env after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--env",
+          "TOKEN=seed/api.token",
+          "b"
+        ],
+        "exit_code": 0,
+        "stdout": "a\nb\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_bare_words_workdir_after_uninitialized",
+      "description": "run with -C after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "-C",
+          ".",
+          "b"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_bare_words_workdir_after_initialized",
+      "description": "run with -C after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "-C",
+          ".",
+          "b"
+        ],
+        "exit_code": 0,
+        "stdout": "a\nb\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_bare_words_json_after_uninitialized",
+      "description": "run with the persistent --json flag after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--json"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"json\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "run_bare_words_json_after_initialized",
+      "description": "run with the persistent --json flag after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--json"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"json\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault run' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "run_bare_words_quiet_after_uninitialized",
+      "description": "run with --quiet after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--quiet",
+          "b"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_bare_words_quiet_after_initialized",
+      "description": "run with --quiet after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--quiet",
+          "b"
+        ],
+        "exit_code": 0,
+        "stdout": "a\nb\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "run_bare_words_short_flag_like_uninitialized",
+      "description": "run with a -la word after the bare command words is a flag error (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "-la"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown shorthand flag: 'l' in -la\nError: unknown shorthand flag: 'l' in -la\n"
+      }
+    },
+    {
+      "name": "run_bare_words_short_flag_like_initialized",
+      "description": "run with a -la word after the bare command words is a flag error (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "-la"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown shorthand flag: 'l' in -la\nError: unknown shorthand flag: 'l' in -la\n"
+      }
+    },
+    {
+      "name": "run_bare_words_unknown_long_flag_uninitialized",
+      "description": "run with an unknown long flag after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "run_bare_words_unknown_long_flag_initialized",
+      "description": "run with an unknown long flag after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "run_bare_sh_c_uninitialized",
+      "description": "run with the child's own -c before any --: -c is symvault's unknown shorthand (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown shorthand flag: 'c' in -c\nError: unknown shorthand flag: 'c' in -c\n"
+      }
+    },
+    {
+      "name": "run_bare_sh_c_initialized",
+      "description": "run with the child's own -c before any --: -c is symvault's unknown shorthand (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown shorthand flag: 'c' in -c\nError: unknown shorthand flag: 'c' in -c\n"
+      }
+    },
+    {
+      "name": "run_bare_dd_after_words_uninitialized",
+      "description": "run with -- after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--",
+          "--timeout",
+          "5s"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_bare_dd_after_words_initialized",
+      "description": "run with -- after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--",
+          "--timeout",
+          "5s"
+        ],
+        "exit_code": 0,
+        "stdout": "a\n--timeout\n5s\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "run_child_exit_code_uninitialized",
+      "description": "run reports a child's exit code (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 3"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_child_exit_code_initialized",
+      "description": "run reports a child's exit code (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 3"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command exited with code 3\nError: command exited with code 3\n"
+      }
+    },
+    {
+      "name": "run_timeout_expires_uninitialized",
+      "description": "run stops a child that outlives --timeout (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "1s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_timeout_expires_initialized",
+      "description": "run stops a child that outlives --timeout (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "1s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 1s\nError: command timed out after 1s\n"
+      }
+    },
+    {
+      "name": "run_child_stderr_uninitialized",
+      "description": "run forwards a child's stderr (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "run",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$1\" >&2",
+          "argv",
+          "-la"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "run_child_stderr_initialized",
+      "description": "run forwards a child's stderr (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "run",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$1\" >&2",
+          "argv",
+          "-la"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n-la\n"
+      }
+    },
+    {
       "name": "file_use_none_uninitialized",
       "description": "file use without arguments (uninitialized)",
       "state": "uninitialized",
@@ -16177,6 +17393,1164 @@
         "exit_code": 2,
         "stdout": "",
         "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot read entry: entry not found: p: entry not found\nError: cannot read entry: entry not found: p: entry not found\nTry: symvault find <search-term>\n"
+      }
+    },
+    {
+      "name": "file_use_argv_flag_words_after_dd_uninitialized",
+      "description": "file use forwards flag-looking words after -- verbatim (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_flag_words_after_dd_initialized",
+      "description": "file use forwards flag-looking words after -- verbatim (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_timeout_before_path_uninitialized",
+      "description": "file use with its own --timeout before the entry (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--timeout",
+          "5s",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_timeout_before_path_initialized",
+      "description": "file use with its own --timeout before the entry (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--timeout",
+          "5s",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_timeout_between_uninitialized",
+      "description": "file use with its own --timeout between the entry and -- (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--timeout",
+          "5s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_timeout_between_initialized",
+      "description": "file use with its own --timeout between the entry and -- (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--timeout",
+          "5s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_timeout_zero_uninitialized",
+      "description": "file use --timeout 0 is the unitless zero Go accepts: no timeout (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--timeout",
+          "0",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_timeout_zero_initialized",
+      "description": "file use --timeout 0 is the unitless zero Go accepts: no timeout (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--timeout",
+          "0",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_timeout_without_unit_uninitialized",
+      "description": "file use --timeout 5 without a unit is a flag error (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--timeout",
+          "5",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"5\" for \"-t, --timeout\" flag: time: missing unit in duration \"5\"\nError: invalid argument \"5\" for \"-t, --timeout\" flag: time: missing unit in duration \"5\"\n"
+      }
+    },
+    {
+      "name": "file_use_argv_timeout_without_unit_initialized",
+      "description": "file use --timeout 5 without a unit is a flag error (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--timeout",
+          "5",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"5\" for \"-t, --timeout\" flag: time: missing unit in duration \"5\"\nError: invalid argument \"5\" for \"-t, --timeout\" flag: time: missing unit in duration \"5\"\n"
+      }
+    },
+    {
+      "name": "file_use_argv_field_before_path_uninitialized",
+      "description": "file use with --field before the entry (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--field",
+          "cert_p12",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_field_before_path_initialized",
+      "description": "file use with --field before the entry (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--field",
+          "cert_p12",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_field_after_path_uninitialized",
+      "description": "file use with --field after the entry (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--field",
+          "cert_p12",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_field_after_path_initialized",
+      "description": "file use with --field after the entry (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--field",
+          "cert_p12",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_hash_field_uninitialized",
+      "description": "file use with the path#field form (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert#cert_p12",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_hash_field_initialized",
+      "description": "file use with the path#field form (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert#cert_p12",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_bad_field_uninitialized",
+      "description": "file use with a field the entry lacks (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--field",
+          "absent",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_bad_field_initialized",
+      "description": "file use with a field the entry lacks (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--field",
+          "absent",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: field \"absent\" not found in entry\nError: field \"absent\" not found in entry\nTry: symvault find <search-term>\n"
+      }
+    },
+    {
+      "name": "file_use_argv_missing_entry_uninitialized",
+      "description": "file use with an entry that does not exist (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/absent",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_missing_entry_initialized",
+      "description": "file use with an entry that does not exist (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/absent",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot read entry: entry not found: seed/absent: entry not found\nError: cannot read entry: entry not found: seed/absent: entry not found\nTry: symvault find <search-term>\n"
+      }
+    },
+    {
+      "name": "file_use_argv_as_name_uninitialized",
+      "description": "file use with --as before -- (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--as",
+          "CERT",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_as_name_initialized",
+      "description": "file use with --as before -- (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--as",
+          "CERT",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_flags_before_and_after_dd_uninitialized",
+      "description": "file use with symvault flags around the entry and flag-looking child words after -- (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--timeout",
+          "5s",
+          "--as",
+          "CERT",
+          "seed/cert",
+          "--field",
+          "cert_p12",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_flags_before_and_after_dd_initialized",
+      "description": "file use with symvault flags around the entry and flag-looking child words after -- (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--timeout",
+          "5s",
+          "--as",
+          "CERT",
+          "seed/cert",
+          "--field",
+          "cert_p12",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_json_before_path_uninitialized",
+      "description": "file use with the persistent --json flag before the entry (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--json",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"json\" is not supported by 'symvault file use' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault file use' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "file_use_argv_json_before_path_initialized",
+      "description": "file use with the persistent --json flag before the entry (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--json",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"json\" is not supported by 'symvault file use' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault file use' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "file_use_argv_quiet_after_path_uninitialized",
+      "description": "file use with --quiet after the entry (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--quiet",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_quiet_after_path_initialized",
+      "description": "file use with --quiet after the entry (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--quiet",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "file_use_argv_dd_before_path_uninitialized",
+      "description": "file use with the entry and the command all after -- (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--",
+          "seed/cert",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_dd_before_path_initialized",
+      "description": "file use with the entry and the command all after -- (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--",
+          "seed/cert",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "-la",
+          "--timeout",
+          "5",
+          "--json",
+          "--"
+        ],
+        "exit_code": 0,
+        "stdout": "-la\n--timeout\n5\n--json\n--\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_second_dd_uninitialized",
+      "description": "file use forwards a second -- verbatim (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "--",
+          "--",
+          "x"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_second_dd_initialized",
+      "description": "file use forwards a second -- verbatim (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv",
+          "--",
+          "--",
+          "x"
+        ],
+        "exit_code": 0,
+        "stdout": "--\n--\nx\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_bare_words_timeout_after_uninitialized",
+      "description": "file use with its own --timeout after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--timeout",
+          "5s",
+          "b"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_bare_words_timeout_after_initialized",
+      "description": "file use with its own --timeout after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--timeout",
+          "5s",
+          "b"
+        ],
+        "exit_code": 0,
+        "stdout": "a\nb\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_bare_words_field_after_uninitialized",
+      "description": "file use with --field after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--field",
+          "cert_p12",
+          "b"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_bare_words_field_after_initialized",
+      "description": "file use with --field after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--field",
+          "cert_p12",
+          "b"
+        ],
+        "exit_code": 0,
+        "stdout": "a\nb\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "file_use_bare_words_json_after_uninitialized",
+      "description": "file use with the persistent --json flag after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--json"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"json\" is not supported by 'symvault file use' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault file use' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "file_use_bare_words_json_after_initialized",
+      "description": "file use with the persistent --json flag after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--json"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"json\" is not supported by 'symvault file use' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault file use' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "file_use_bare_words_short_flag_like_uninitialized",
+      "description": "file use with a -la word after the bare command words is a flag error (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "-la"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown shorthand flag: 'l' in -la\nError: unknown shorthand flag: 'l' in -la\n"
+      }
+    },
+    {
+      "name": "file_use_bare_words_short_flag_like_initialized",
+      "description": "file use with a -la word after the bare command words is a flag error (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "-la"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown shorthand flag: 'l' in -la\nError: unknown shorthand flag: 'l' in -la\n"
+      }
+    },
+    {
+      "name": "file_use_bare_words_unknown_long_flag_uninitialized",
+      "description": "file use with an unknown long flag after the bare command words (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "file_use_bare_words_unknown_long_flag_initialized",
+      "description": "file use with an unknown long flag after the bare command words (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/usr/bin/printf",
+          "%s\n",
+          "a",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "file_use_bare_sh_c_uninitialized",
+      "description": "file use with the child's own -c before any --: -c is symvault's unknown shorthand (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown shorthand flag: 'c' in -c\nError: unknown shorthand flag: 'c' in -c\n"
+      }
+    },
+    {
+      "name": "file_use_bare_sh_c_initialized",
+      "description": "file use with the child's own -c before any --: -c is symvault's unknown shorthand (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown shorthand flag: 'c' in -c\nError: unknown shorthand flag: 'c' in -c\n"
+      }
+    },
+    {
+      "name": "file_use_child_exit_code_uninitialized",
+      "description": "file use reports a child's exit code (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 3"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_child_exit_code_initialized",
+      "description": "file use reports a child's exit code (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 3"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command exited with code 3\nError: command exited with code 3\n"
+      }
+    },
+    {
+      "name": "file_use_argv_entry_without_attachment_uninitialized",
+      "description": "file use on an entry that records no attachment (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/api",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_argv_entry_without_attachment_initialized",
+      "description": "file use on an entry that records no attachment (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/api",
+          "--",
+          "/bin/sh",
+          "-c",
+          "printf \"%s\\n\" \"$@\"",
+          "argv"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry has no recorded attachment fields; specify --field\nError: entry has no recorded attachment fields; specify --field\n"
+      }
+    },
+    {
+      "name": "file_use_timeout_expires_uninitialized",
+      "description": "file use stops a child that outlives --timeout (uninitialized)",
+      "state": "uninitialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--timeout",
+          "1s",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "file_use_timeout_expires_initialized",
+      "description": "file use stops a child that outlives --timeout (initialized)",
+      "state": "initialized",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "--timeout",
+          "1s",
+          "seed/cert",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 1s\nError: command timed out after 1s\n"
       }
     }
   ]

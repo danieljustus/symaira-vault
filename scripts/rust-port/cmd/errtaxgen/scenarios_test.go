@@ -130,6 +130,65 @@ func TestRunFileUseInputs(t *testing.T) {
 	}
 }
 
+// The initialized state must really run a child that reports its argv, for both
+// commands, with flag-looking words after `--` and symvault flags on both sides
+// of the positionals; a corpus whose child never runs proves nothing about
+// argv forwarding.
+func TestRunFileUseInputsRunAnArgvReportingChild(t *testing.T) {
+	index := func(args []string, want string) int {
+		for i, arg := range args {
+			if arg == want {
+				return i
+			}
+		}
+		return -1
+	}
+	has := map[string]bool{}
+	for _, in := range runFileUseInputs() {
+		if in.state != stateInitialized {
+			continue
+		}
+		command := in.args[0]
+		if command == "file" {
+			command = "file use"
+		}
+		dd := index(in.args, "--")
+		sh := index(in.args, "/bin/sh")
+		if sh >= 0 && dd >= 0 && dd < sh {
+			tail := strings.Join(in.args[sh:], " ")
+			if strings.Contains(tail, " -la --timeout 5 --json --") {
+				has[command+" flag-like child words after --"] = true
+			}
+			skip := 1
+			if command == "file use" {
+				skip = 2
+			}
+			for _, word := range in.args[skip:dd] {
+				if strings.HasPrefix(word, "-") {
+					has[command+" symvault flag before --"] = true
+				}
+			}
+		}
+		if p := index(in.args, "/usr/bin/printf"); p >= 0 && dd < 0 && p+2 < len(in.args) {
+			for _, word := range in.args[p+2:] {
+				if strings.HasPrefix(word, "-") {
+					has[command+" symvault flag after the positionals"] = true
+				}
+			}
+		}
+		if command == "run" && index(in.args, "TOKEN="+seedTokenRef) >= 0 || command == "file use" && index(in.args, seedFileEntry) >= 0 {
+			has[command+" seeded reference"] = true
+		}
+	}
+	for _, command := range []string{"run", "file use"} {
+		for _, what := range []string{" flag-like child words after --", " symvault flag before --", " symvault flag after the positionals", " seeded reference"} {
+			if !has[command+what] {
+				t.Errorf("no initialized scenario covers %s%s", command, what)
+			}
+		}
+	}
+}
+
 func TestSeedRoundTrip(t *testing.T) {
 	src, err := newSandbox()
 	if err != nil {

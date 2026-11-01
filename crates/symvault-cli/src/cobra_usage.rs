@@ -21,8 +21,9 @@
 //! unit test `flag_types_match_the_command_tree` compares every flag both trees
 //! share against the Go type recorded in `command-tree.json`.
 //!
-//! Known limits: only booleans and the integer flags in `INT_FLAGS` get Go's
-//! `invalid argument` wording (other int/int64/duration flags are not parsed); a
+//! Known limits: only booleans, the integer flags in `INT_FLAGS` and the duration
+//! flags in `DURATION_FLAGS` get Go's `invalid argument` wording (other
+//! int/int64/duration flags are not parsed); a
 //! flag that exists only in Go is not reported as unknown by Rust's tree; and the
 //! suggestion order of `SUGGESTION_ORDER` is the strict partial order measured
 //! from the oracle, not Go's registration order.
@@ -62,6 +63,12 @@ const JOIN_PAIRING_FILE_MESSAGE: &str =
 
 /// Integer-valued flags, by command path and long name.
 const INT_FLAGS: &[(&str, &str)] = &[("generate", "length")];
+
+/// Flags Go declares as `time.Duration` whose value pflag parses with
+/// `time.ParseDuration` before the command runs (so a malformed value is a usage
+/// error even in an uninitialized vault). The commands here are the ones that
+/// forward a child command line (`run`, `file use`).
+const DURATION_FLAGS: &[(&str, &str)] = &[("run", "timeout"), ("file use", "timeout")];
 
 /// Flags cobra's `MarkFlagRequired` makes mandatory, by command path. Cobra
 /// reports the unset ones after the argument validator and the root
@@ -941,6 +948,13 @@ fn invalid_argument(value: &str, arg: &Arg, parser: &str, reason: &str) -> Strin
     )
 }
 
+fn invalid_duration_argument(value: &str, arg: &Arg, reason: &str) -> String {
+    format!(
+        "invalid argument {value:?} for {label:?} flag: {reason}",
+        label = flag_label(arg)
+    )
+}
+
 struct Parsed {
     positionals: Vec<String>,
     /// Long names of the flags that appeared on the command line (pflag
@@ -1028,6 +1042,11 @@ fn parse_flags(
                 {
                     return Err(invalid_argument(&value, arg, "ParseInt", error.text()));
                 }
+                if DURATION_FLAGS.contains(&(path, name))
+                    && let Err(reason) = symvault_core::config::parse_go_duration(&value)
+                {
+                    return Err(invalid_duration_argument(&value, arg, &reason));
+                }
                 note(arg, Some(&value), &mut parsed);
             } else {
                 if let Some(value) = inline
@@ -1098,6 +1117,11 @@ fn parse_flags(
                     && let Err(error) = go_parse_int(&value)
                 {
                     return Err(invalid_argument(&value, arg, "ParseInt", error.text()));
+                }
+                if DURATION_FLAGS.contains(&(path, long))
+                    && let Err(reason) = symvault_core::config::parse_go_duration(&value)
+                {
+                    return Err(invalid_duration_argument(&value, arg, &reason));
                 }
                 note(arg, Some(&value), &mut parsed);
                 break;
@@ -1923,6 +1947,78 @@ mod tests {
             }
         }
         assert!(parsed > 300, "only {parsed} argument vectors parsed");
+    }
+
+    #[test]
+    fn duration_flag_table_names_duration_flags() {
+        let tree = tree();
+        for (path, name) in DURATION_FLAGS {
+            let entry = tree["commands"]
+                .as_array()
+                .expect("commands")
+                .iter()
+                .find(|entry| go_path(entry) == *path)
+                .unwrap_or_else(|| panic!("{path} is not in the command tree"));
+            let flag = entry["local_flags"]
+                .as_array()
+                .expect("flags")
+                .iter()
+                .find(|flag| flag["name"] == *name)
+                .unwrap_or_else(|| panic!("{path} has no --{name}"));
+            assert_eq!(flag["type"], "duration", "{path} --{name}");
+        }
+    }
+
+    /// Error texts recorded from the pinned Go binary (`symvault run --timeout
+    /// <value>`, which prints `time.ParseDuration`'s error after pflag's `invalid
+    /// argument ... flag:` prefix) and values it accepted (a vault error, not a
+    /// flag error, follows).
+    #[test]
+    fn go_duration_errors_match_the_recorded_oracle_texts() {
+        for (value, expected) in [
+            ("5", Some("time: missing unit in duration \"5\"")),
+            ("", Some("time: invalid duration \"\"")),
+            ("x", Some("time: invalid duration \"x\"")),
+            ("5x", Some("time: unknown unit \"x\" in duration \"5x\"")),
+            ("1h30", Some("time: missing unit in duration \"1h30\"")),
+            (
+                "1é",
+                Some("time: unknown unit \"\\xc3\\xa9\" in duration \"1\\xc3\\xa9\""),
+            ),
+            (
+                "9223372036854775807s",
+                Some("time: invalid duration \"9223372036854775807s\""),
+            ),
+            ("0.0.1s", Some("time: missing unit in duration \"0.0.1s\"")),
+            (
+                "9223372036854775808ns",
+                Some("time: invalid duration \"9223372036854775808ns\""),
+            ),
+            (
+                "-9223372036854775809ns",
+                Some("time: invalid duration \"-9223372036854775809ns\""),
+            ),
+            ("9223372036854775807ns", None),
+            ("2μs", None),
+            ("0.5h", None),
+            ("0", None),
+            ("-0", None),
+            ("+0", None),
+            ("+5s", None),
+            ("1.5s", None),
+            (".5s", None),
+            ("1h30m", None),
+            ("2µs", None),
+            ("-9223372036854775808ns", None),
+        ] {
+            assert_eq!(
+                symvault_core::config::parse_go_duration(value)
+                    .err()
+                    .as_deref(),
+                expected,
+                "{value:?}"
+            );
+        }
     }
 
     #[test]

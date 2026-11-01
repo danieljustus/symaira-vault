@@ -216,9 +216,26 @@ func (s *sandbox) collectSeed() ([]seedFile, error) {
 	return out, err
 }
 
-// buildVaultSeed initializes a vault with the oracle and settles it with one
-// read: a fresh vault's first open rewrites config.yaml and creates .lock and
-// manifest.age, which is vault-open behavior shared by every command.
+const (
+	// seedAttachment is the synthetic file `file add` stores in the frozen vault.
+	seedAttachmentName    = "attachment.bin"
+	seedAttachmentContent = "synthetic attachment content, not a secret"
+	// seedFileEntry/seedFileField name the attachment `file use` materializes.
+	seedFileEntry = "seed/cert"
+	seedFileField = "cert_p12"
+	// seedTokenRef is a real text field `run --env` resolves; the value is a
+	// disposable placeholder and no scenario prints the child's environment.
+	seedTokenEntry = "seed/api"
+	seedTokenPath  = seedTokenEntry + ".token"
+	seedTokenValue = "synthetic-api-token-0001"
+	seedTokenRef   = seedTokenPath
+)
+
+// buildVaultSeed initializes a vault with the oracle, settles it with one read
+// (a fresh vault's first open rewrites config.yaml and creates .lock and
+// manifest.age, which is vault-open behavior shared by every command) and
+// stores two synthetic entries: a file attachment (`file use` target) and a
+// text field (`run --env` target).
 func buildVaultSeed(goBinary string) ([]seedFile, error) {
 	box, err := newSandbox()
 	if err != nil {
@@ -226,7 +243,16 @@ func buildVaultSeed(goBinary string) ([]seedFile, error) {
 	}
 	defer func() { _ = os.RemoveAll(box.root) }()
 	box.env = append(box.env, initializedEnv()...)
-	for _, args := range [][]string{{"init"}, {"list"}} {
+	if err := os.WriteFile(filepath.Join(box.root, seedAttachmentName), []byte(seedAttachmentContent), 0o600); err != nil {
+		return nil, err
+	}
+	steps := [][]string{
+		{"init"},
+		{"list"},
+		{"file", "add", seedFileEntry, "--field", seedFileField, "--from", seedAttachmentName},
+		{"set", seedTokenPath, "--value", seedTokenValue, "--force"},
+	}
+	for _, args := range steps {
 		res, err := runInSandbox(goBinary, box, args)
 		if err != nil {
 			return nil, err
@@ -308,15 +334,35 @@ func extraPositionalInputs(inventory []nilArgsEntry) ([]scenarioInput, error) {
 	return out, nil
 }
 
+// argvChild is a child that reports its own argv, one word per line, and
+// nothing else: it never prints the environment or the materialized file path.
+// Both programs are at the same absolute path on macOS and Linux.
+var argvChild = []string{"/bin/sh", "-c", `printf "%s\n" "$@"`, "argv"}
+
+// printfChild reports its operands without any flag-looking word of its own, so
+// it can follow the symvault positionals without `--`.
+var printfChild = []string{"/usr/bin/printf", "%s\n"}
+
+// childFlags are words that look like symvault flags (and like `ls -la`) but
+// belong to the child when they stand after `--`.
+var childFlags = []string{"-la", "--timeout", "5", "--json", "--"}
+
 // runFileUseInputs permutes the argv of the commands that forward a trailing
 // command line. `run` demands at least one positional and `file use` two; both
 // take the command after `--`, and the permutations pin where a flag may stand
-// among the forwarded words and what an extra `--` does.
+// among the forwarded words and what an extra `--` does. The initialized state
+// holds a real attachment entry (seedFileEntry) and a text field
+// (seedTokenRef), so the argv-reporting child really runs and prints the words
+// it was given.
 func runFileUseInputs() []scenarioInput {
 	type permutation struct {
 		name, description string
 		args              []string
 	}
+	run := func(parts ...[]string) []string { return concat(append([][]string{{"run"}}, parts...)...) }
+	use := func(parts ...[]string) []string { return concat(append([][]string{{"file", "use"}}, parts...)...) }
+	dd := []string{"--"}
+	entry := []string{seedFileEntry}
 	perms := []permutation{
 		{"run_none", "run without a command", []string{"run"}},
 		{"run_one_word", "run with a bare word", []string{"run", "x"}},
@@ -338,6 +384,31 @@ func runFileUseInputs() []scenarioInput {
 		{"run_short_working_dir_echo", "run with the -C shorthand before the command", []string{"run", "-C", ".", "echo", "hi"}},
 		{"run_timeout_echo", "run with a duration flag before the command", []string{"run", "--timeout", "5s", "--", "echo", "hi"}},
 		{"run_short_env_dd", "run with the -e shorthand before --", []string{"run", "-e", "A=b", "--", "x"}},
+		{"run_argv_flag_words_after_dd", "run forwards flag-looking words after -- verbatim", run(dd, argvChild, childFlags)},
+		{"run_argv_timeout_before_dd", "run with its own --timeout before --, flag-looking child words after", run([]string{"--timeout", "5s"}, dd, argvChild, childFlags)},
+		{"run_argv_timeout_zero", "run --timeout 0 is the unitless zero Go accepts: no timeout", run([]string{"--timeout", "0"}, dd, argvChild, childFlags)},
+		{"run_argv_timeout_without_unit", "run --timeout 5 without a unit is a flag error, not a child word", run([]string{"--timeout", "5"}, dd, argvChild)},
+		{"run_argv_env_before_dd", "run resolves a real --env reference before --", run([]string{"--env", "TOKEN=" + seedTokenRef}, dd, argvChild, childFlags)},
+		{"run_argv_env_missing_ref", "run with an --env reference to a missing entry", run([]string{"--env", "TOKEN=seed/absent.token"}, dd, argvChild)},
+		{"run_argv_passthrough_before_dd", "run with --passthrough before --", run([]string{"--passthrough", "PATH"}, dd, argvChild, childFlags)},
+		{"run_argv_second_dd", "run forwards a second -- verbatim", run(dd, argvChild, dd, dd, []string{"x"})},
+		{"run_argv_json_before_dd", "run with the persistent --json flag before --", run([]string{"--json"}, dd, argvChild, childFlags)},
+		{"run_argv_quiet_before_dd", "run with the persistent --quiet flag before --", run([]string{"--quiet"}, dd, argvChild, childFlags)},
+		{"run_argv_output_before_dd", "run with --output text before --", run([]string{"--output", "text"}, dd, argvChild, childFlags)},
+		{"run_argv_output_yaml_before_dd", "run with --output yaml before --", run([]string{"--output", "yaml"}, dd, argvChild)},
+		{"run_argv_flags_before_and_after_dd", "run with symvault flags before -- and flag-looking child words after", run([]string{"--timeout", "5s", "-C", ".", "--env", "TOKEN=" + seedTokenRef}, dd, argvChild, childFlags)},
+		{"run_bare_words_timeout_after", "run with its own --timeout after the bare command words", run(printfChild, []string{"a", "--timeout", "5s", "b"})},
+		{"run_bare_words_env_after", "run with a real --env after the bare command words", run(printfChild, []string{"a", "--env", "TOKEN=" + seedTokenRef, "b"})},
+		{"run_bare_words_workdir_after", "run with -C after the bare command words", run(printfChild, []string{"a", "-C", ".", "b"})},
+		{"run_bare_words_json_after", "run with the persistent --json flag after the bare command words", run(printfChild, []string{"a", "--json"})},
+		{"run_bare_words_quiet_after", "run with --quiet after the bare command words", run(printfChild, []string{"a", "--quiet", "b"})},
+		{"run_bare_words_short_flag_like", "run with a -la word after the bare command words is a flag error", run(printfChild, []string{"a", "-la"})},
+		{"run_bare_words_unknown_long_flag", "run with an unknown long flag after the bare command words", run(printfChild, []string{"a", "--bogus"})},
+		{"run_bare_sh_c", "run with the child's own -c before any --: -c is symvault's unknown shorthand", run([]string{"/bin/sh", "-c", "exit 0"})},
+		{"run_bare_dd_after_words", "run with -- after the bare command words", run(printfChild, []string{"a"}, dd, []string{"--timeout", "5s"})},
+		{"run_child_exit_code", "run reports a child's exit code", run(dd, []string{"/bin/sh", "-c", "exit 3"})},
+		{"run_timeout_expires", "run stops a child that outlives --timeout", run([]string{"--timeout", "1s"}, dd, []string{"/bin/sh", "-c", "exec sleep 5"})},
+		{"run_child_stderr", "run forwards a child's stderr", run(dd, []string{"/bin/sh", "-c", `printf "%s\n" "$1" >&2`, "argv", "-la"})},
 		{"file_use_none", "file use without arguments", []string{"file", "use"}},
 		{"file_use_path_only", "file use with only the entry path", []string{"file", "use", "p"}},
 		{"file_use_path_word", "file use with the path and a bare word", []string{"file", "use", "p", "x"}},
@@ -350,6 +421,31 @@ func runFileUseInputs() []scenarioInput {
 		{"file_use_field_before_path", "file use with --field before the path", []string{"file", "use", "--field", "f", "p", "x"}},
 		{"file_use_word_then_field", "file use with --field after the words", []string{"file", "use", "p", "x", "--field", "f"}},
 		{"file_use_dd_field_like", "file use with a flag-looking word after --", []string{"file", "use", "p", "--", "--field", "f"}},
+		{"file_use_argv_flag_words_after_dd", "file use forwards flag-looking words after -- verbatim", use(entry, dd, argvChild, childFlags)},
+		{"file_use_argv_timeout_before_path", "file use with its own --timeout before the entry", use([]string{"--timeout", "5s"}, entry, dd, argvChild, childFlags)},
+		{"file_use_argv_timeout_between", "file use with its own --timeout between the entry and --", use(entry, []string{"--timeout", "5s"}, dd, argvChild, childFlags)},
+		{"file_use_argv_timeout_zero", "file use --timeout 0 is the unitless zero Go accepts: no timeout", use(entry, []string{"--timeout", "0"}, dd, argvChild, childFlags)},
+		{"file_use_argv_timeout_without_unit", "file use --timeout 5 without a unit is a flag error", use(entry, []string{"--timeout", "5"}, dd, argvChild)},
+		{"file_use_argv_field_before_path", "file use with --field before the entry", use([]string{"--field", seedFileField}, entry, dd, argvChild, childFlags)},
+		{"file_use_argv_field_after_path", "file use with --field after the entry", use(entry, []string{"--field", seedFileField}, dd, argvChild, childFlags)},
+		{"file_use_argv_hash_field", "file use with the path#field form", use([]string{seedFileEntry + "#" + seedFileField}, dd, argvChild, childFlags)},
+		{"file_use_argv_bad_field", "file use with a field the entry lacks", use(entry, []string{"--field", "absent"}, dd, argvChild)},
+		{"file_use_argv_missing_entry", "file use with an entry that does not exist", use([]string{"seed/absent"}, dd, argvChild)},
+		{"file_use_argv_as_name", "file use with --as before --", use(entry, []string{"--as", "CERT"}, dd, argvChild, childFlags)},
+		{"file_use_argv_flags_before_and_after_dd", "file use with symvault flags around the entry and flag-looking child words after --", use([]string{"--timeout", "5s", "--as", "CERT"}, entry, []string{"--field", seedFileField}, dd, argvChild, childFlags)},
+		{"file_use_argv_json_before_path", "file use with the persistent --json flag before the entry", use([]string{"--json"}, entry, dd, argvChild)},
+		{"file_use_argv_quiet_after_path", "file use with --quiet after the entry", use(entry, []string{"--quiet"}, dd, argvChild, childFlags)},
+		{"file_use_argv_dd_before_path", "file use with the entry and the command all after --", use(dd, entry, argvChild, childFlags)},
+		{"file_use_argv_second_dd", "file use forwards a second -- verbatim", use(entry, dd, argvChild, dd, dd, []string{"x"})},
+		{"file_use_bare_words_timeout_after", "file use with its own --timeout after the bare command words", use(entry, printfChild, []string{"a", "--timeout", "5s", "b"})},
+		{"file_use_bare_words_field_after", "file use with --field after the bare command words", use(entry, printfChild, []string{"a", "--field", seedFileField, "b"})},
+		{"file_use_bare_words_json_after", "file use with the persistent --json flag after the bare command words", use(entry, printfChild, []string{"a", "--json"})},
+		{"file_use_bare_words_short_flag_like", "file use with a -la word after the bare command words is a flag error", use(entry, printfChild, []string{"a", "-la"})},
+		{"file_use_bare_words_unknown_long_flag", "file use with an unknown long flag after the bare command words", use(entry, printfChild, []string{"a", "--bogus"})},
+		{"file_use_bare_sh_c", "file use with the child's own -c before any --: -c is symvault's unknown shorthand", use(entry, []string{"/bin/sh", "-c", "exit 0"})},
+		{"file_use_child_exit_code", "file use reports a child's exit code", use(entry, dd, []string{"/bin/sh", "-c", "exit 3"})},
+		{"file_use_argv_entry_without_attachment", "file use on an entry that records no attachment", use([]string{seedTokenEntry}, dd, argvChild)},
+		{"file_use_timeout_expires", "file use stops a child that outlives --timeout", use([]string{"--timeout", "1s"}, entry, dd, []string{"/bin/sh", "-c", "exec sleep 5"})},
 	}
 	var out []scenarioInput
 	for _, perm := range perms {

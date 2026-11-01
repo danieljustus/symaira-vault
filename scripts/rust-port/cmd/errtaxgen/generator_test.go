@@ -627,3 +627,36 @@ func TestValidateGoBinaryChecksToolchainAndVCSStamps(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestGeneratorSources(t *testing.T) {
+	write := func(root string, names ...string) {
+		t.Helper()
+		dir := filepath.Join(root, filepath.FromSlash(generatorDir))
+		if err := os.MkdirAll(filepath.Join(dir, "nested"), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range names {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte("package main\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	root := t.TempDir()
+	write(root, "scenarios.go", "main.go", "inventory.go", "main_test.go", "notes.md", "nested/ignored.go")
+	got, err := generatorSources(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{generatorDir + "/inventory.go", generatorDir + "/main.go", generatorDir + "/scenarios.go"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("generatorSources = %v, want %v", got, want)
+	}
+	noMain := t.TempDir()
+	write(noMain, "scenarios.go")
+	if _, err := generatorSources(noMain); err == nil || !strings.Contains(err.Error(), "main.go is missing") {
+		t.Fatalf("a generator without main.go was accepted: %v", err)
+	}
+	if _, err := generatorSources(filepath.Join(root, "absent")); err == nil {
+		t.Fatal("a missing generator directory was accepted")
+	}
+}
