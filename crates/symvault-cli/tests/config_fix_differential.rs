@@ -326,6 +326,12 @@ fn scenarios() -> Vec<Scenario> {
             NoEditor,
         ),
         sc(
+            "multi_partial_keeps_blank_vault_dir",
+            "vaultDir: '  '\naudit:\n  maxSizeMb: 0\nclipboard:\n  auto_clear_duration: -2\n",
+            &["n", "y", "n", "n"],
+            Script(EDITOR_FIX),
+        ),
+        sc(
             "argon_remains_after_autofix_decline",
             "vault:\n  argon2id_time: 1\nclipboard:\n  auto_clear_duration: -2\nvaultDir: /tmp/x\n",
             &["y", "n"],

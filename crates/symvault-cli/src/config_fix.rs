@@ -652,7 +652,18 @@ fn render(loaded: &Loaded) -> Result<Vec<u8>, String> {
         .config
         .to_yaml_bytes()
         .map_err(|error| error.to_string())?;
-    let yaml = String::from_utf8(yaml).map_err(|error| error.to_string())?;
+    let mut yaml = String::from_utf8(yaml).map_err(|error| error.to_string())?;
+    // The core writer double-quotes a whitespace-only string; yaml.v3 (Go)
+    // single-quotes it. Only `vaultDir` can reach this state: a blank value
+    // is exactly what the `vaultDir` auto-fix is offered for.
+    let vault_dir = &loaded.config.vault_dir;
+    if !vault_dir.is_empty() && vault_dir.chars().all(|c| c == ' ') {
+        yaml = yaml.replacen(
+            &format!("\nvaultDir: \"{vault_dir}\"\n"),
+            &format!("\nvaultDir: '{vault_dir}'\n"),
+            1,
+        );
+    }
     let mut sections = String::new();
     if let Some(audit) = &loaded.extras.audit {
         sections.push_str("audit:\n");
