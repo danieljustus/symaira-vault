@@ -195,11 +195,13 @@ fn walk(whole: &str) -> Result<(), Failure> {
         let zone_minute = zone_hour.and_then(|_| getnum(minute_digits, true).map(|(n, _)| n));
         // The range tests use > rather than >=: offsets of 24 hours and 60
         // minutes are written by some people.
-        if zone_hour.is_some_and(|hours| hours > 24) {
-            return Err(range("time zone offset hour"));
-        }
+        // Go assigns rangeErrString for the hour, then overwrites it for the
+        // minute, so the minute wins when both are out of range.
         if zone_minute.is_some_and(|minutes| minutes > 60) {
             return Err(range("time zone offset minute"));
+        }
+        if zone_hour.is_some_and(|hours| hours > 24) {
+            return Err(range("time zone offset hour"));
         }
         if zone_hour.is_none() || zone_minute.is_none() || !matches!(sign, b'+' | b'-') {
             return Err(fail("Z07:00", hold));
@@ -300,6 +302,11 @@ mod tests {
             (
                 "2026-10-31T10:00:00+24:61",
                 range("2026-10-31T10:00:00+24:61", "time zone offset minute"),
+            ),
+            (
+                // Both out of range: Go reports the minute (go1.26.6 output).
+                "2026-10-31T10:00:00+25:63",
+                range("2026-10-31T10:00:00+25:63", "time zone offset minute"),
             ),
             (
                 "2026-02-30T00:00:00Z",

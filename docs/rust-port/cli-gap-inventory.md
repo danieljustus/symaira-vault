@@ -205,12 +205,17 @@ Still open (probed, not fixed; see the CFG-003 and CLI-005 rows of the contract 
 | `Config::load`: `sessionTimeout: null` | `must be greater than 0, got 0s (default: 15m, …)` | `parse config: sessionTimeout must be a string` |
 | `Config::load`: custom or non-specific tags on scalars | accepted | serde_yaml_ng enum error |
 | `Config::load`: recursive alias under an unread key | accepted | `recursion limit exceeded` |
+| `Config::load`: duplicate keys in an unread mapping (`m: {a: 1, a: 2}`, `"<<"` plus `'<<'`) | accepted | `duplicate entry` |
+| `Config::load`: explicit tags on unread values (`d0: !!float ~`) | accepted | `expected a float` |
+| `Config::load`: alias bomb under an unread key | accepted | `repetition limit exceeded` after about 0.7 s (safe refusal) |
+| nesting depth | up to 10000 levels | refused beyond 256 (`yaml_edit`); 100k `[` take about 100 s to refuse |
 | `profiles:\n  x: null` | nil pointer panic, exit 2 | parse error, exit 6 |
 | `config set x 1e3` / `0b11` / `010` / `y` / `2026-10-31` | writes `1000` / `3` / `8` / `"y"` / `2026-10-31T00:00:00Z` | `1000.0` / `"0b11"` / `10` / `y` / `2026-10-31` |
 | `config set x '<<'` | writes `!!merge <<` | writes `"<<"` |
-| re-encode of the rest of the file | CRLF becomes LF; anchor comments move behind the collection (changing reported lines); explicit keys, `\u00e9` escapes, verbatim and `!` tags, `!!int &a 12` order, tagged block sequence indent are normalised | kept as written |
+| re-encode of the rest of the file | CRLF becomes LF; flow sequences get `, ` spacing (`[x,x]` becomes `[x, x]`); timestamp scalars in flow mappings are quoted (so a later error says `!!str`, not `!!timestamp`); anchor comments move behind the collection (changing reported lines); explicit keys, `\u00e9` escapes, verbatim and `!` tags, `!!int &a 12` order, tagged block sequence indent are normalised | kept as written |
 | root that is not a mapping | `root node is a scalar, not a mapping` (or `a sequence`) | `document has no root to descend into` |
 | typed decode, anchors | the preceding definition of a redefined anchor; the anchor's line even behind a comment | the last definition; the collection's line |
+| typed decode, `!!binary` into `time.Time` | raw decoded bytes in the `parsing time` text | lossy UTF-8 (U+FFFD) for a non-UTF-8 payload |
 
 ## Historical measurement, 2026-09-27
 

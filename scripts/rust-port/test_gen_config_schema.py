@@ -110,6 +110,20 @@ class GenConfigSchemaMutations(unittest.TestCase):
     def test_embedded_exported_type_is_an_error(self):
         self.assert_loud("\tAuditConfig\n", "embedded exported field")
 
+    def test_duplicate_yaml_key_is_an_error(self):
+        self.assert_loud('\tDup string `yaml:"port"`\n', "duplicate yaml key 'port'")
+
+    def test_unmarshaler_on_a_reached_type_is_an_error(self):
+        for method in ("UnmarshalYAML(value *yaml.Node) error", "UnmarshalText(text []byte) error"):
+            with self.subTest(method=method):
+                self.setUp()
+                path = self.scratch / "internal/config/schema.go"
+                path.write_text(path.read_text() + f"\nfunc (c *MCPConfig) {method} {{ return nil }}\n")
+                for args in ((), ("--check",)):
+                    result = self.run_generator(*args)
+                    self.assertNotEqual(result.returncode, 0, f"{args}: {result.stdout}")
+                    self.assertIn("MCPConfig.Unmarshal", result.stderr)
+
     def test_anonymous_struct_field_is_an_error(self):
         self.mutate("schema.go", ANCHOR, ANCHOR + '\tNested struct {\n\t\tInner string `yaml:"inner"`\n\t}\n')
         result = self.run_generator()

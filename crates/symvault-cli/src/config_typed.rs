@@ -68,7 +68,7 @@ pub(crate) fn unmarshal_errors(source: &str) -> Option<Vec<u8>> {
         YamlNode::Scalar(document.as_scalar()?)
     };
     let mut decoder = Decoder::new(source, document.build_anchor_registry());
-    let root = decoder.build(&root);
+    let root = decoder.build(&root, false);
     if let Err(fatal) = decoder.unmarshal(root, "Config") {
         return Some(fatal);
     }
@@ -187,6 +187,12 @@ enum Key {
 struct Decoder<'a> {
     source: &'a str,
     newlines: Vec<usize>,
+    /// Offset of the first `#` on each line (`usize::MAX` if none), so the
+    /// comment check in `line` costs O(log n) instead of a rescan.
+    first_hash: Vec<usize>,
+    /// `token_start[i]`: where the whitespace-free run ending at `i` begins,
+    /// so `line` finds a token in O(1) on long flow lines.
+    token_start: Vec<usize>,
     registry: AnchorRegistry,
     nodes: Vec<Node>,
     by_range: HashMap<(usize, usize), usize>,
@@ -267,6 +273,34 @@ fn is_white(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\n' | b'\r')
 }
 
+/// Entry `i` (for `i` in `0..=len`) is the start of the whitespace-free run
+/// that ends at `i`; it equals `i` right after whitespace or at the start.
+fn token_starts(source: &str) -> Vec<usize> {
+    let bytes = source.as_bytes();
+    let mut starts = Vec::with_capacity(bytes.len() + 1);
+    starts.push(0);
+    for (index, byte) in bytes.iter().enumerate() {
+        let previous = starts[index];
+        starts.push(if is_white(*byte) { index + 1 } else { previous });
+    }
+    starts
+}
+
+fn first_hash_per_line(source: &str) -> Vec<usize> {
+    let mut lines = vec![usize::MAX];
+    for (index, byte) in source.bytes().enumerate() {
+        match byte {
+            b'\n' => lines.push(usize::MAX),
+            b'#' => {
+                let last = lines.last_mut().expect("one entry per line");
+                *last = (*last).min(index);
+            }
+            _ => {}
+        }
+    }
+    lines
+}
+
 /// An explicit tag other than the non-specific `!` replaces the default.
 fn explicit(tag: Option<String>) -> Option<String> {
     tag.filter(|tag| !tag.is_empty() && tag != "!")
@@ -281,6 +315,8 @@ impl<'a> Decoder<'a> {
                 .enumerate()
                 .filter_map(|(index, byte)| (byte == b'\n').then_some(index))
                 .collect(),
+            first_hash: first_hash_per_line(source),
+            token_start: token_starts(source),
             registry,
             nodes: Vec::new(),
             by_range: HashMap::new(),
@@ -296,7 +332,10 @@ impl<'a> Decoder<'a> {
     /// yaml.v3's `Node.Line` (1-based): the event starts at the first of the
     /// node's anchor and tag, which `yaml_edit`'s ranges leave out when the
     /// anchor sits on an earlier line.
-    fn line(&self, start: usize) -> usize {
+    ///
+    /// A key of a block mapping never takes an anchor or tag from an earlier
+    /// line: there it belongs to the mapping itself (`a: &d` then the keys).
+    fn line(&self, start: usize, block_key: bool) -> usize {
         let bytes = self.source.as_bytes();
         let mut at = start.min(bytes.len());
         loop {
@@ -304,21 +343,16 @@ impl<'a> Decoder<'a> {
             while end > 0 && is_white(bytes[end - 1]) {
                 end -= 1;
             }
-            let mut begin = end;
-            while begin > 0 && !is_white(bytes[begin - 1]) {
-                begin -= 1;
-            }
+            let begin = self.token_start[end];
             let token = &bytes[begin..end];
-            let line_start = bytes[..begin]
-                .iter()
-                .rposition(|byte| *byte == b'\n')
-                .map_or(0, |position| position + 1);
-            let in_comment = bytes[line_start..begin].contains(&b'#');
-            if token.len() > 1 && matches!(token[0], b'&' | b'!') && !in_comment {
-                at = begin;
-            } else {
+            if !(token.len() > 1 && matches!(token[0], b'&' | b'!')) {
                 break;
             }
+            let line = self.newlines.partition_point(|position| *position < begin);
+            if self.first_hash[line] < begin || (block_key && bytes[end..at].contains(&b'\n')) {
+                break;
+            }
+            at = begin;
         }
         1 + self.newlines.partition_point(|position| *position < at)
     }
@@ -328,10 +362,10 @@ impl<'a> Decoder<'a> {
         self.nodes.len() - 1
     }
 
-    fn build(&mut self, node: &YamlNode) -> usize {
+    fn build(&mut self, node: &YamlNode, block_key: bool) -> usize {
         let range = node.byte_range();
         let (start, end) = (range.start as usize, range.end as usize);
-        let line = self.line(start);
+        let line = self.line(start, block_key);
         let id = match node {
             YamlNode::Scalar(scalar) => self.build_scalar(scalar, None, line),
             YamlNode::Alias(alias) => self.push(Node {
@@ -402,9 +436,11 @@ impl<'a> Decoder<'a> {
         line: usize,
     ) -> usize {
         let mut children = Vec::new();
+        let range = mapping.byte_range();
+        let block = self.source.as_bytes().get(range.start as usize) != Some(&b'{');
         for (key, value) in mapping.iter() {
-            children.push(self.build(&key));
-            children.push(self.build(&value));
+            children.push(self.build(&key, block));
+            children.push(self.build(&value, false));
         }
         self.push(Node {
             kind: Kind::Mapping,
@@ -424,7 +460,7 @@ impl<'a> Decoder<'a> {
     ) -> usize {
         let mut children = Vec::new();
         for item in sequence.values() {
-            children.push(self.build(&item));
+            children.push(self.build(&item, false));
         }
         self.push(Node {
             kind: Kind::Sequence,
@@ -975,6 +1011,43 @@ mod tests {
     }
 
     const HEAD: &str = "yaml: unmarshal errors:";
+
+    #[test]
+    fn a_block_key_does_not_take_the_parent_mappings_anchor_or_tag_line() {
+        // Recorded with the pinned Go CLI (`config set vaultDir /y`).
+        for source in [
+            "agents:\n  a: &d\n    approvalTimeout: 5m\n    approvalTimeout: 6m\n",
+            "agents:\n  a: !!map\n    approvalTimeout: 5m\n    approvalTimeout: 6m\n",
+            "agents:\n  a:\n    &k approvalTimeout: 5m\n    approvalTimeout: 6m\n",
+        ] {
+            assert_eq!(
+                errors(source),
+                format!(
+                    "{HEAD}\n  line 4: mapping key \"approvalTimeout\" already defined at line 3"
+                ),
+                "{source}"
+            );
+        }
+        assert_eq!(
+            errors("agents: {a: &d {approvalTimeout: 5m, approvalTimeout: 6m}}\n"),
+            format!("{HEAD}\n  line 1: mapping key \"approvalTimeout\" already defined at line 1")
+        );
+    }
+
+    #[test]
+    fn token_starts_match_a_backward_scan() {
+        let source = "a: &x\n  b: [x,&y z,!!str w]  # c\n\t!t v";
+        let bytes = source.as_bytes();
+        let starts = token_starts(source);
+        assert_eq!(starts.len(), bytes.len() + 1);
+        for (end, start) in starts.iter().enumerate() {
+            let mut begin = end;
+            while begin > 0 && !is_white(bytes[begin - 1]) {
+                begin -= 1;
+            }
+            assert_eq!(*start, begin, "{end}");
+        }
+    }
 
     #[test]
     fn an_alias_decodes_its_anchored_node_and_reports_the_anchor_line() {

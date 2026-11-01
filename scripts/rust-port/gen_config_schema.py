@@ -50,6 +50,9 @@ class SchemaError(Exception):
     pass
 
 
+UNMARSHALER = re.compile(r"^func \(\s*\w*\s*\*?(\w+)\s*\)\s*(UnmarshalYAML|UnmarshalText)\(", re.M)
+
+
 def source_files():
     files = sorted(p for p in CONFIG_DIR.glob("*.go") if not p.name.endswith("_test.go"))
     if not files:
@@ -129,6 +132,9 @@ def parse_struct(name, path, body, bodies):
         key = field_key(f"{where}.{listed[0]}", listed[0], tag)
         if key is None:
             continue
+        if any(key == seen for seen, _ in fields):
+            # yaml.v3 refuses such a struct at decode time.
+            raise SchemaError(f"{where}: duplicate yaml key '{key}'")
         check_type(f"{where}.{listed[0]}", go_type, bodies)
         fields.append((key, go_type))
     return fields
@@ -150,6 +156,16 @@ def structs():
             for word in TYPE_WORD.findall(go_type):
                 if word in bodies and word not in found:
                     pending.append(word)
+    reached = set(found)
+    for fields in found.values():
+        for _, go_type in fields:
+            reached.update(TYPE_WORD.findall(go_type))
+    for path in source_files():
+        for receiver, method in UNMARSHALER.findall(path.read_text()):
+            if receiver in reached:
+                # A custom decoder changes what yaml.v3 accepts; the table
+                # cannot model it.
+                raise SchemaError(f"{path.relative_to(ROOT)}: {receiver}.{method} is not supported")
     return found
 
 
