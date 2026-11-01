@@ -14,6 +14,7 @@ mod agent_whoami_commands;
 mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
+mod authguard;
 mod backup_commands;
 mod broker_commands;
 mod cli_artifacts;
@@ -4935,6 +4936,7 @@ fn run_mcp(
             .keyring
             .as_deref()
             .ok_or_else(|| "MCP audit keyring unavailable".to_owned())?;
+        mcp_commands::install_auth_guard(authguard::mcp_seams(runtime.keyring.clone()));
         mcp_commands::run(
             &vault,
             agent,

@@ -1,4 +1,7 @@
 use crate::approval::ApprovalQueue;
+use crate::authguard::{
+    AuthMethodBackend, Challenger, OperationType, UnavailableAuthMethodBackend,
+};
 use crate::broker::{self, ApiSubstitution, ApiTemplate, ApiTemplateDefinition};
 use crate::call::{
     CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore,
@@ -462,6 +465,17 @@ fn merge_json_objects(
     }
 }
 
+impl AuthStatusSnapshot {
+    fn of(config: &ReadOnlyRuntimeConfig) -> Self {
+        Self {
+            cache_backend: config.cache_backend.clone(),
+            cache_persistent: config.cache_persistent,
+            cache_message: config.cache_message.clone(),
+            touch_id_available: config.touch_id_available,
+        }
+    }
+}
+
 /// A concrete `tools/call` runtime over the encrypted Rust store.
 pub struct StoreReadOnlyRuntime {
     inner: ReadOnlyRuntime<StoreReadOnlyAdapter>,
@@ -489,6 +503,41 @@ pub struct StoreReadOnlyRuntime {
     clipboard_clear_cancel: Mutex<Option<mpsc::Sender<()>>>,
     clipboard_auto_clear_duration: Duration,
     api_transport_options: broker::ApiTransportOptions,
+    /// Go `Server.biometricChallenger`; unavailable until the application
+    /// injects a platform authenticator (`with_touch_id`).
+    challenger: Challenger,
+    auth_backend: Arc<dyn AuthMethodBackend>,
+    /// Go `Server.canManageConfig()` for this agent's profile.
+    can_manage_config: bool,
+    /// The vault directory spelling Go keys sessions and the Touch ID item by.
+    vault_dir: String,
+    /// Go mutates the in-memory config on `set_auth_method`, so
+    /// `get_auth_status` reflects the new method for the rest of the session.
+    auth_method_override: Mutex<Option<String>>,
+    auth_status_snapshot: AuthStatusSnapshot,
+}
+
+/// Go `config.NormalizeAuthMethod` with Go's error text (the quoted argument
+/// is the caller's original spelling, not the lower-cased one).
+fn normalize_auth_method(method: &str) -> Result<&'static str, String> {
+    match symvault_core::go_to_lower(method.trim()).as_str() {
+        "" | "passphrase" => Ok("passphrase"),
+        "touchid" | "touch-id" | "touch_id" | "biometric" | "biometrics" => Ok("touchid"),
+        _ => Err(format!(
+            "invalid authMethod {} (valid: passphrase, touchid)",
+            symvault_core::go_quote(method)
+        )),
+    }
+}
+
+/// The `get_auth_status` inputs captured at construction so the status can be
+/// re-rendered after `set_auth_method` without reaching into the inner runtime.
+#[derive(Clone)]
+struct AuthStatusSnapshot {
+    cache_backend: String,
+    cache_persistent: bool,
+    cache_message: String,
+    touch_id_available: bool,
 }
 
 impl StoreReadOnlyRuntime {
@@ -536,6 +585,8 @@ impl StoreReadOnlyRuntime {
         config
             .available_tools
             .retain(|name| !unavailable_tools.iter().any(|blocked| blocked == name));
+        let vault_dir = config.vault_dir.clone();
+        let auth_status_snapshot = AuthStatusSnapshot::of(&config);
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             share_store: Mutex::new(share_store),
@@ -562,6 +613,12 @@ impl StoreReadOnlyRuntime {
             clipboard_clear_cancel: Mutex::new(None),
             clipboard_auto_clear_duration: Duration::from_secs(30),
             api_transport_options: broker::ApiTransportOptions::default(),
+            challenger: Challenger::unavailable(),
+            auth_backend: Arc::new(UnavailableAuthMethodBackend),
+            can_manage_config: false,
+            vault_dir,
+            auth_method_override: Mutex::new(None),
+            auth_status_snapshot,
         })
     }
 
@@ -606,6 +663,8 @@ impl StoreReadOnlyRuntime {
         config
             .available_tools
             .retain(|name| !unavailable_tools.iter().any(|blocked| blocked == name));
+        let vault_dir = config.vault_dir.clone();
+        let auth_status_snapshot = AuthStatusSnapshot::of(&config);
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             share_store: Mutex::new(share_store),
@@ -632,7 +691,37 @@ impl StoreReadOnlyRuntime {
             clipboard_clear_cancel: Mutex::new(None),
             clipboard_auto_clear_duration: Duration::from_secs(30),
             api_transport_options: broker::ApiTransportOptions::default(),
+            challenger: Challenger::unavailable(),
+            auth_backend: Arc::new(UnavailableAuthMethodBackend),
+            can_manage_config: false,
+            vault_dir,
+            auth_method_override: Mutex::new(None),
+            auth_status_snapshot,
         })
+    }
+
+    /// Installs the biometric authenticator behind Go's `authguard.Challenger`
+    /// (`require_biometry` policies and `set_auth_method`). The default is
+    /// unavailable, so constructing a runtime never raises a Touch ID prompt.
+    #[must_use]
+    pub fn with_touch_id(mut self, touch_id: Arc<dyn symvault_core::platform::TouchId>) -> Self {
+        self.challenger = Challenger::new(touch_id);
+        self
+    }
+
+    /// Installs the session/keychain seam used by `set_auth_method`.
+    #[must_use]
+    pub fn with_auth_method_backend(mut self, backend: Arc<dyn AuthMethodBackend>) -> Self {
+        self.auth_backend = backend;
+        self
+    }
+
+    /// Go `Server.canManageConfig()`: whether this agent's profile may call
+    /// `set_auth_method`.
+    #[must_use]
+    pub fn with_can_manage_config(mut self, allowed: bool) -> Self {
+        self.can_manage_config = allowed;
+        self
     }
 
     /// Replaces the controlling-terminal approval seam. Production callers keep
@@ -2409,6 +2498,9 @@ impl StoreReadOnlyRuntime {
         if result.matched && result.action == Action::Allow {
             return Ok(());
         }
+        if result.matched && result.action == Action::RequireBiometry {
+            return self.policy_biometry_challenge(name, path);
+        }
         self.append_audit("policy_denied", path, false);
         Err(ToolCallResult::error(format!(
             "policy denied tool {name:?}{}",
@@ -2418,6 +2510,153 @@ impl StoreReadOnlyRuntime {
                 format!(" by rule {:?}", result.rule_name)
             }
         )))
+    }
+
+    /// Go `validateToolAccess` + `challengeBiometric` for a `require_biometry`
+    /// policy rule: audit `policy_biometry`, then challenge. Audit actions and
+    /// error texts are Go's (`policy_biometry_unavailable` /
+    /// `policy_biometry_failed` / `policy_biometry_passed`; the first two are
+    /// recorded against the tool name, the last against the entry path).
+    ///
+    /// Deliberate stricter divergence: Go's `validateToolAccess` returns `nil`
+    /// (the tool proceeds!) when `challengeBiometric` fails or when
+    /// `checkPolicy` returns any non-biometry error; the Rust runtime has
+    /// always denied instead (see `authorize_policy`). A failed or unavailable
+    /// challenge therefore denies the call with Go's challenge error text as
+    /// the tool error, and only a successful challenge allows it.
+    fn policy_biometry_challenge(&self, name: &str, path: &str) -> Result<(), ToolCallResult> {
+        let agent = symvault_core::go_quote(&self.agent_name);
+        let tool = symvault_core::go_quote(name);
+        self.append_audit("policy_biometry", path, false);
+        if !self.challenger.available() {
+            self.append_audit("policy_biometry_unavailable", name, false);
+            return Err(ToolCallResult::error(format!(
+                "policy requires biometric verification for tool {tool}, but biometric authentication is not available on this platform. Agent {agent} cannot execute this tool"
+            )));
+        }
+        let reason = format!("Symaira Vault agent {agent} is requesting tool {tool}");
+        if let Err(error) = self
+            .challenger
+            .challenge(&OperationType::tool(name), &reason)
+        {
+            self.append_audit("policy_biometry_failed", name, false);
+            return Err(ToolCallResult::error(format!(
+                "biometric verification failed for tool {tool}: {error}"
+            )));
+        }
+        self.append_audit("policy_biometry_passed", path, true);
+        Ok(())
+    }
+
+    /// Go `handleSetAuthMethod` (`internal/mcp/server/tools_auth.go`).
+    ///
+    /// Parity notes: the in-memory Go config is replaced by a fresh load of
+    /// `config.yaml` (Go would write back its startup snapshot); when no
+    /// biometric challenger is available the change proceeds unchallenged, as
+    /// in Go (the touchid branch already requires an available store).
+    fn set_auth_method(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        if !self.can_manage_config {
+            self.append_audit("auth_config_denied", "<config>", false);
+            return Err(format!(
+                "agent {} cannot manage Symaira Vault configuration",
+                symvault_core::go_quote(&self.agent_name)
+            ));
+        }
+        let method_arg = match crate::call::required_string(arguments, "method") {
+            Ok(value) => value,
+            Err(result) => return Ok(result),
+        };
+        let method = match normalize_auth_method(method_arg) {
+            Ok(method) => method,
+            Err(message) => return Ok(ToolCallResult::error(message)),
+        };
+
+        if method == "touchid" {
+            if !self.auth_backend.biometric_available() {
+                return Ok(ToolCallResult::error(
+                    "Touch ID is not available in this Symaira Vault build or on this Mac",
+                ));
+            }
+            let Some(passphrase) = self
+                .auth_backend
+                .load_session_passphrase(&self.vault_dir)
+                .filter(|passphrase| !passphrase.is_empty())
+            else {
+                return Ok(ToolCallResult::error(
+                    "Touch ID setup requires an active Symaira Vault session; run symvault unlock first",
+                ));
+            };
+            self.auth_backend
+                .save_biometric_passphrase(Path::new(&self.vault_dir), &passphrase)
+                .map_err(|error| format!("save Touch ID unlock item: {error}"))?;
+        }
+
+        if self.challenger.available() {
+            let reason = format!("Change Symaira Vault auth method to {method}");
+            if let Err(error) = self
+                .challenger
+                .challenge(&OperationType::AUTH_METHOD_SET, &reason)
+            {
+                self.append_audit("auth_method_biometric_failed", "<config>", false);
+                return Ok(ToolCallResult::error(format!(
+                    "biometric verification required: {error}"
+                )));
+            }
+        }
+
+        if method != "touchid" {
+            self.auth_backend
+                .clear_biometric_passphrase(Path::new(&self.vault_dir))
+                .map_err(|error| format!("clear Touch ID unlock item: {error}"))?;
+        }
+
+        let config_path = self.share_root.join("config.yaml");
+        let mut config = symvault_core::config::Config::load(&config_path)
+            .map_err(|error| format!("load config: {error}"))?;
+        if let Err(error) = config.set_auth_method(method) {
+            return Ok(ToolCallResult::error(error.to_string()));
+        }
+        config
+            .save_to(&config_path)
+            .map_err(|error| format!("save config: {error}"))?;
+        if let Ok(mut current) = self.auth_method_override.lock() {
+            *current = Some(method.to_owned());
+        }
+        self.append_audit("auth_config", "<config>", true);
+        Ok(ToolCallResult::text(format!("Auth method set to {method}")))
+    }
+
+    /// `get_auth_status` after an in-session `set_auth_method`: Go reads the
+    /// (mutated) in-memory config, so the new method shows immediately.
+    fn auth_status_after_change(&self) -> Option<Result<ToolCallResult, String>> {
+        let method = self.auth_method_override.lock().ok()?.clone()?;
+        #[derive(serde::Serialize)]
+        struct Cache<'a> {
+            backend: &'a str,
+            persistent: bool,
+            message: &'a str,
+        }
+        #[derive(serde::Serialize)]
+        struct Status<'a> {
+            cache: Cache<'a>,
+            method: &'a str,
+            #[serde(rename = "touchIDAvailable")]
+            touch_id_available: bool,
+        }
+        let snapshot = &self.auth_status_snapshot;
+        Some(
+            serde_json::to_string(&Status {
+                cache: Cache {
+                    backend: &snapshot.cache_backend,
+                    persistent: snapshot.cache_persistent,
+                    message: &snapshot.cache_message,
+                },
+                method: &method,
+                touch_id_available: snapshot.touch_id_available,
+            })
+            .map(ToolCallResult::text)
+            .map_err(|error| error.to_string()),
+        )
     }
 
     fn audit_self(&self, arguments: &Value) -> Result<ToolCallResult, String> {
@@ -2706,6 +2945,12 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.secure_input_tool(name, arguments)
         } else if name == "symaira_audit_self" {
             self.audit_self(arguments)
+        } else if name == "set_auth_method" {
+            self.set_auth_method(arguments)
+        } else if name == "get_auth_status"
+            && let Some(status) = self.auth_status_after_change()
+        {
+            status
         } else if name == "list_shares" {
             self.list_shares(arguments)
         } else if name == "request_share" {
@@ -3161,6 +3406,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "fetch",
         "sanitize_output",
         "get_auth_status",
+        "set_auth_method",
         "symaira_audit_self",
         "health",
         "symaira_whoami",
