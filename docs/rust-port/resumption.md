@@ -264,6 +264,17 @@ pointed into another worktree. `ec61f76e` names the volume after the worktree pa
 cold build). Gate `ec61f76e`: macos exit 0, linux exit 0 (receipts in `builds/symaira-vault/local-gate/receipts.jsonl`);
 no `symvault` LaunchAgent loaded afterwards. CLI-005 stays open: 28 pinned body divergences remain.
 
+Open at session end (2026-11-01, not merged): branch `local/cli-005c` (worktree `local-cli005c`, `d7c01a1c`) closes 18 of
+the 28 body divergences (374/384 scenarios match; `dynamic generate` and `setup` stay pinned until ported); gate
+`ad3d35a4` macos and linux exit 0. Review REQUEST_CHANGES: (1) `crates/symvault-cli/src/device.rs:96-109` reports a
+missing identity for any partial vault (identity without config, config without identity) and skips the config's auth
+policy; Go loads the config and opens the real identity (`internal/cli/unlock.go:45-77`); (2) `migrate pseudonymize`
+unlock failures go through `finish_vault_result` (exit 1, single line) instead of Go's `ExitLocked` (exit 4, locked
+hint; `internal/cli/unlock.go:209-212`); a probe also shows `verify x` without a session exits 1 where Go exits 4.
+Both need Go-recorded partial-vault and passphrase-EOF cases, then re-review, merge and gate. Gate disk: each
+per-worktree `symvault-gate-target-*` Docker volume holds about 45 GB; volumes of removed worktrees are not cleaned up
+yet (planned: let `local-gate.sh` remove orphans).
+
 ## CLI-006 positive output matrix, 2026-10-31 (review fixes 2026-11-01)
 
 `outputmodegen` (oracle `bf7f687b`, darwin) records text, `--json`, `--output yaml`, `--output json` and
