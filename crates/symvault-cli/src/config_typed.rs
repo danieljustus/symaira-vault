@@ -253,7 +253,7 @@ fn decode(context: &Context<'_>, node: &YamlNode, go_type: &str, errors: &mut Ve
         "int" | "int64" => match scalar.resolved {
             Resolved::Int(_) => true,
             // A float is truncated unless it exceeds int64 (NaN compares false).
-            Resolved::Float(number) => number <= 9.223_372_036_854_775_807e18,
+            Resolved::Float(number) => number <= 9.223_372_036_854_776e18,
             _ => false,
         },
         "time.Duration" => {

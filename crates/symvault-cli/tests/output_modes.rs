@@ -45,21 +45,21 @@
 //! 9. `man-date`: a case declaring it has the date field of a roff `.TH` header
 //!    (`Nov 2026`) replaced by `<MAN-DATE>`.
 //! 10. `opaque`: tree paths below a case-declared prefix are recorded by presence
-//!    only (invitation file of `device pair`, token store of `doctor`).
+//!     only (invitation file of `device pair`, token store of `doctor`).
 //! 11. `encrypted-store`: the vault's encrypted store (entries, manifest,
-//!    identity, lock, search index, .git) is not part of the tree diff; `post`
-//!    commands pin the resulting vault.
+//!     identity, lock, search index, .git) is not part of the tree diff; `post`
+//!     commands pin the resulting vault.
 //! 12. `audit-fields`: an audit log (`audit-*.log`) is compared as the decoded
-//!    stable fields of every line (agent, action, path, field, ok, `argv_hash`
-//!    length, signed), never as bytes.
+//!     stable fields of every line (agent, action, path, field, ok, `argv_hash`
+//!     length, signed), never as bytes.
 //! 13. `archive-members`: files below a case-declared `archives` prefix are
-//!    compared as decompressed `.tar.gz` members (name, type, mode, sha256 of the
-//!    normalized content), sorted by name because Go writes them in map order;
-//!    header times, owners and gzip bytes are not compared.
+//!     compared as decompressed `.tar.gz` members (name, type, mode, sha256 of the
+//!     normalized content), sorted by name because Go writes them in map order;
+//!     header times, owners and gzip bytes are not compared.
 //! 14. `managed-fields`: inside an archive member, a line `managed_hash:
-//!    sha256:<64 hex>` has its digits replaced by `<HASH>` (the digest of a body
-//!    that embeds the install clock) and a line `managed_installed_at:
-//!    "<RFC 3339 UTC>"` its stamp by `<NOW>`; both are install-time values.
+//!     sha256:<64 hex>` has its digits replaced by `<HASH>` (the digest of a body
+//!     that embeds the install clock) and a line `managed_installed_at:
+//!     "<RFC 3339 UTC>"` its stamp by `<NOW>`; both are install-time values.
 //!
 //! Every tree entry also records the permission bits of files and directories
 //! (`mode`, compared as is); a file the case made unreadable (mode 000) has no
