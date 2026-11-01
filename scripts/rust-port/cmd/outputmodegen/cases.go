@@ -103,7 +103,7 @@ func allCaseSpecs() []caseSpec {
 	// --- generation ----------------------------------------------------------
 	add(caseSpec{id: "generate", path: "generate", desc: "generated password", seed: "empty", argv: flags("generate"), rules: []string{"gen-pw:20"}})
 	add(caseSpec{id: "generate-length", path: "generate", desc: "generated password of length 12", seed: "empty", argv: flags("generate", "--length", "12"), rules: []string{"gen-pw:12"}})
-	add(caseSpec{id: "generate-manpages", path: "generate manpages", desc: "generate manpages into a directory", seed: "empty", argv: flags("generate", "manpages", "$ROOT/work/man")})
+	add(caseSpec{id: "generate-manpages", path: "generate manpages", desc: "generate manpages into a directory", seed: "empty", argv: flags("generate", "manpages", "$ROOT/work/man"), rules: []string{"man-date"}})
 	add(caseSpec{id: "version", path: "version", desc: "version", seed: "empty", argv: flags("version")})
 
 	// --- writes --------------------------------------------------------------

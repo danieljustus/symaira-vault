@@ -110,7 +110,7 @@
       "scripts/rust-port/cmd/outputmodegen/cases.go",
       "scripts/rust-port/cmd/outputmodegen/main.go"
     ],
-    "generator_digest": "cf5fb7a6b3f516d4178b74fb08c549acf43f41760cfa3a3508c14232364d62cc",
+    "generator_digest": "20cd7070c7b8a0a82c47384296cc3d206614464548132967586d9041c99a96ef",
     "gate_digest": "c2536c1ffaf681feaa8fa8824f7e302e9633b2c2711c9ecd98531283064e51f1",
     "goos": "darwin"
   },
@@ -3656,6 +3656,9 @@
       "mode": "text",
       "desc": "generate manpages into a directory",
       "seed": "empty",
+      "rules": [
+        "man-date"
+      ],
       "argv": [
         "generate",
         "manpages",
@@ -3674,715 +3677,715 @@
           "path": "work/man/symvault-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b1b4376e42356df34761007d021e643ffceb124d88134cc597b2b08240d2c74d"
+          "sha256": "f9435a6c1a8ecdda22ae88ad4306c1ca8b1cb3a907baecd8627549826ef32437"
         },
         {
           "path": "work/man/symvault-agent-audit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e1a95a8f8d5af546bfa08f0a7290636530c1fd21c5009f4a9f70c492791cb08f"
+          "sha256": "323c13a20f2c831c539980cc0b4e6edfae09122bac265ad20bacaa2d800a5bdc"
         },
         {
           "path": "work/man/symvault-agent-doctor.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a1981f756901a5b6de8a3131ab54466ae9cbbe82e2060c936c306a586813bc00"
+          "sha256": "7263572afc80cc95c83ef9ba9f1e0fe4b5dab6783d26af67866112f7ba0a5230"
         },
         {
           "path": "work/man/symvault-agent-install.1",
           "change": "added",
           "kind": "file",
-          "sha256": "be01debbea23184513882b4bc231a13856412eb2d7b547e52dec52cebc16f7d4"
+          "sha256": "b9b7a57567ad7f53834bb4303d330c7cc40248dc4ed0150893abd5a3a29d3167"
         },
         {
           "path": "work/man/symvault-agent-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f2de69aa25c02cd5386a559a53ac78579a6e9f650da7053e26670ae17848c4d8"
+          "sha256": "521c40d34dc2fef1cb35a7c1e4b4a9560cc881d37d3103a3d7660b54eddd19cf"
         },
         {
           "path": "work/man/symvault-agent-profile-edit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "eff9d1a014b50eb9ae54dc5c49f369c0d90c4952c541546403694812761d8499"
+          "sha256": "1c254e11ca0b5eb3bcaf09932f202ac2299c6d397e71bfe297e84ddaa477cc09"
         },
         {
           "path": "work/man/symvault-agent-profile-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "deed1074976c2c7de6a17a3081f3cb12e6624286db5fae49c2723e4fdcc24c33"
+          "sha256": "5a4d09cff33cf822528a7077f6587da5d24032ddf828b5df2de1221bd9fdf3a0"
         },
         {
           "path": "work/man/symvault-agent-profile-show.1",
           "change": "added",
           "kind": "file",
-          "sha256": "0e125f24fc7f0435f4ffb08edb01d1a9bcf0f80953997901138b8285cf163dc0"
+          "sha256": "8546437cf2241b57bd9c98bc63fd824d1e9fc11bacb5dd6476e15c675caa3904"
         },
         {
           "path": "work/man/symvault-agent-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e19301027061f5e54ec1439931833f10e142a4c90180928b6f0e962ae412fa0a"
+          "sha256": "8ca0c002ab66302c60ea11d3963d6a379a9654c9ed298382b14dd79f1f9445da"
         },
         {
           "path": "work/man/symvault-agent-skill-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3866e0fe1e67e966ebc16eb1b868f4d4636c0e7a34a2dc5a1f11ab2115100b96"
+          "sha256": "e42a061c27dc894c8fe7676fbe26f3c8fbb95179e79c09eb57b706fede0a7b84"
         },
         {
           "path": "work/man/symvault-agent-skill-refresh.1",
           "change": "added",
           "kind": "file",
-          "sha256": "73ecfd400fa2c1ce3ae9f5d58bbe517de021995f9f56cbb6337875ba16c9db2b"
+          "sha256": "89408ca876feec65cd0537e4784112a336dc085154b8e1322bb6a3fe091ad265"
         },
         {
           "path": "work/man/symvault-agent-skill.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a4c2ee72ac278097862ca00481eec98a5d259eaeffda49e8b376d7d036897868"
+          "sha256": "cd14bedc046a3573bb14877efdbbb776ef92715fa1c43f9471ddeb8861d2c0dc"
         },
         {
           "path": "work/man/symvault-agent-token-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b5e7724d79955213a0b1abddb550b88913670a6620e831cefd149ed09c18ad8a"
+          "sha256": "570409ea5e51cb2aef004e7e1d863b728bfc635605773e7de0128c648ff3707a"
         },
         {
           "path": "work/man/symvault-agent-token-new.1",
           "change": "added",
           "kind": "file",
-          "sha256": "595d3a4f92a34d7ec12b3c69818a2b3e1ac33464e9d4a071a9b27171a83f33bc"
+          "sha256": "79662e63f3968a8b7c4223674bc2a76147bc29ec2f4751400941e576089628ed"
         },
         {
           "path": "work/man/symvault-agent-token-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "389d17d93e308fc4cb731e5bc10b6b9997a54a708b55b6d2f56fae5651fcc2b5"
+          "sha256": "c4f04e92d703627be6c23a2370ecc58f7a927bed40d330b85e91279b1a80760a"
         },
         {
           "path": "work/man/symvault-agent-token-rotate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5ca4aa4edf9d749bed55724dc55f14d8a0f5bfde3006a21de530936e8ab8beaa"
+          "sha256": "9a8a0ca8832e39ed97a37eaa68727392fc8cc5faba98858e82c9c98e416dd2e6"
         },
         {
           "path": "work/man/symvault-agent-token.1",
           "change": "added",
           "kind": "file",
-          "sha256": "71f987cffe6488dc5c731756fea16d6f2a4847eb43b0bfa6d2234fe08dc35c5e"
+          "sha256": "867c05a3167617e93fef5d7970a1e4f2f2abd7afd19ba32c72e0dcfefbc617c5"
         },
         {
           "path": "work/man/symvault-agent-uninstall.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4e65457878f2a7ad11b61c57e88e92d7a966e112dc756271a955b3417a8231ba"
+          "sha256": "8d9389eb8635bea066e5940ba15005c3b371e5fcde6609e6475f31b96e11bddc"
         },
         {
           "path": "work/man/symvault-agent-upgrade.1",
           "change": "added",
           "kind": "file",
-          "sha256": "6eec525ff47ffcc82fb95b46dd06948c32141337196c2b4837bc03cb92e34549"
+          "sha256": "ff5deeb7417508a011c4231344f6bd7f8f86ad63efb8ce9a900ebc2d484444a9"
         },
         {
           "path": "work/man/symvault-agent-whoami.1",
           "change": "added",
           "kind": "file",
-          "sha256": "14b0cb2dca458afd6567626333927da4e8c3a0ff561b71de807c2f1588e70ee0"
+          "sha256": "00a1ac897f49e8ba37affd7ab1bde34cfdaf7d4929277a8b1ef89e2310ae725e"
         },
         {
           "path": "work/man/symvault-agent.1",
           "change": "added",
           "kind": "file",
-          "sha256": "76d99cb02b011e635aa85b470d2d2ad5bf58c89623e14b19ecd4c6abca1b214a"
+          "sha256": "7adede33fd612a170da1281f9ee4cbb4c5e9fab373005ab7a60721247b366c72"
         },
         {
           "path": "work/man/symvault-approval-decide.1",
           "change": "added",
           "kind": "file",
-          "sha256": "69b6e92855ac61ff7278a0fed07afafe071575428da2e53cd839e94b32fabe68"
+          "sha256": "7a6398ddc1cf1f828fc583cf8572a03329ed0dbf3b1fde7de2fba3148e3adcb4"
         },
         {
           "path": "work/man/symvault-approval-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b5c8808a357a75da87abea88dea8b93d2857dc6489f2a3b686a7aaa89fc72936"
+          "sha256": "d7304a0ce6c59da211aefc72faabd4ef7a4c13890d1ab2d9855f3a6ce2055435"
         },
         {
           "path": "work/man/symvault-approval.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d1380d5673b111489342f5499d401c15d35c580e576e6dcf35d46ca4b2cff065"
+          "sha256": "bd2d84e4f4329df90756c8e1f7b54645c721f8315d01c19a118cf46d36cab512"
         },
         {
           "path": "work/man/symvault-audit-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5730eac0e7fbd67b51d0a6587e30cd7e72ab17a570d06125bbb6f3a707207828"
+          "sha256": "c754667b3fa0be70f0fef8cf3923e9a0f893b2c1835791c0a1ee3fb41c00f055"
         },
         {
           "path": "work/man/symvault-audit-rotate-key.1",
           "change": "added",
           "kind": "file",
-          "sha256": "efd1bc484b89eedac23aa2a8c9b0ad0d867e9891295a071ac7e6758e76a30916"
+          "sha256": "d3c1e01eaf48b8228962e2c8eb7405da72993db828c60780a9f73cb4583004f7"
         },
         {
           "path": "work/man/symvault-audit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "451d349d094d64ee68527a6b3d4a338f92c1bcaf1533bcab56fc9838fc562749"
+          "sha256": "34824af5c101a213f6de156960795b28bf161f313a1fee938b7163358be0e986"
         },
         {
           "path": "work/man/symvault-auth-rotate-passphrase.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1b665cd02690328913418641423991fd184ed0875fb53b23e54a62087c2846df"
+          "sha256": "284c171842266386b6dc946c4f9587e9534a5e89f7a4cbdaf6070799e26d8264"
         },
         {
           "path": "work/man/symvault-auth-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f99819b0943772043a4673ba09fbe41391a09c86b085539daed3ed0c80e1efff"
+          "sha256": "9b45f84a75c95f6665219f15c1417594eeeb4b2f8738e4beda49b343cb693a21"
         },
         {
           "path": "work/man/symvault-auth-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ba231ec432c3128d768d45b322178fb335d15c1fe7973550c2735b9b1c5666db"
+          "sha256": "920d85410f76db5772c3a93aa898b57011814f4ff4859de030d69cdf376700e4"
         },
         {
           "path": "work/man/symvault-auth.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3c32f2421556b5e00ca921caf17bd6614852c004fbc20fed9c4417f73a4c2899"
+          "sha256": "0efc3d136ecca4803eb0899f74ba995c91b458e290180ea16e605253fd51ca36"
         },
         {
           "path": "work/man/symvault-backup.1",
           "change": "added",
           "kind": "file",
-          "sha256": "17d41c237132069c7d766461b8187ad2da3b5628f63cf8ebdada557eefdfae7a"
+          "sha256": "be61eddb913bd5645c2715ff21990a7458ae7a8ecdf734a6fcf6e8d017eb89e6"
         },
         {
           "path": "work/man/symvault-broker.1",
           "change": "added",
           "kind": "file",
-          "sha256": "acecc4a377cbc99b3d3b1ed8f7a50eb1f122205e873f6e13eee4c643e6009583"
+          "sha256": "919a343876dfccac2a447abd04081c2fd28edbcaf8e7c89889d177d5f46b6944"
         },
         {
           "path": "work/man/symvault-config-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7d79f506502f365021ed76ca20b9e4d2f92a77f60b111ae299992778627fb7fb"
+          "sha256": "8f2ceb7307862e75f8e8059b1b5102323a47a8f2724a40677d18166d3a383221"
         },
         {
           "path": "work/man/symvault-config-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b4e7ab076afa61e5ad890143912160eb9870c4af32844a96463e1150caf52889"
+          "sha256": "08b3a276dcb95694d569347db76b6022c0da6308130f8da7406c8a7caf9b77b2"
         },
         {
           "path": "work/man/symvault-config-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "0ec1103eecf791a3aa0e527044530cbe89076de64a4f65bcc41487e4ef7a0250"
+          "sha256": "79d21261a109f2555870c6ea6eb3624d3c3d023fbd6a11a2d1bd832acdbfbd23"
         },
         {
           "path": "work/man/symvault-config-validate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b7925b33447cf3fe0bfcff5a7e45d91043630c1be64544655b70f54d7396e79a"
+          "sha256": "681dc61cef5f7158d992e59a2c4a09e4dabbb975f92f371e27ff5f4c0f3227b6"
         },
         {
           "path": "work/man/symvault-config.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9a68faa59dec4f3275ce7025e7f300eaf12e8534b7068e951ae8a49eadaa5601"
+          "sha256": "0c6527eb657c5c06bdb465fc62196e3c9e98ee439087c7cee8929e92f819082d"
         },
         {
           "path": "work/man/symvault-delete.1",
           "change": "added",
           "kind": "file",
-          "sha256": "887a00ce0b56e3432a7ee331256e3d2571a837f1b550f883319ddb0f9bd8860a"
+          "sha256": "c319e9ef1bad239a6ef2f6cc528fdef384787e1c47e25611434ae626dc6723c9"
         },
         {
           "path": "work/man/symvault-device-accept.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ba731eca8c3395d42e420fd4c0748a0d578fb244642a7d42712ca27d3186177"
+          "sha256": "d4c3e37786319d82552833b33b99058654b8b8320eb909ccebab04d4fef98588"
         },
         {
           "path": "work/man/symvault-device-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "cc169cde2f66f470fe4214ba9eb5ceb2e6648c5ae09d07d7ab2caa562f7363bb"
+          "sha256": "5ae7a9a6949530e37ecc5ab80a9a8ddd88037e0e336f3c3d04d2894bb2301d6b"
         },
         {
           "path": "work/man/symvault-device-approval-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9df54513a0c278adc699914d4bf4abc2ccc3602ac2583f43d18d26fd8e8ef596"
+          "sha256": "0a016135d906d3def669320b76af5376638b05a0c612125b163e01eaf4e4c03f"
         },
         {
           "path": "work/man/symvault-device-approval-pair.1",
           "change": "added",
           "kind": "file",
-          "sha256": "fd16f216c25774fd7e8ee233525d2f78169638fd9146f3250af0347089723441"
+          "sha256": "fa0a98c90d6ff6773f687b3418455390f58668f099c8ea7bd1b4310009be3ba1"
         },
         {
           "path": "work/man/symvault-device-approval-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e994552145123b8566afac88bbcab9c02e08341de37fbb68a463ca8f9dc4f5a3"
+          "sha256": "f2421f1b75ee11175821adc6ee525d3cce10b481965655d1550f6d859944547d"
         },
         {
           "path": "work/man/symvault-device-join.1",
           "change": "added",
           "kind": "file",
-          "sha256": "63b422cd86eb930c7a60297c9f2e8c549781a120a94cb8aec944de7240df79fe"
+          "sha256": "13365c0b4b3eb7ddf24c643f9fbd4a599f2a5db6d6463a43ebda88034019d943"
         },
         {
           "path": "work/man/symvault-device-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "47bf0b1071b40baad6caaf184740e70100e3d415ee8f26941fc71a490998cb19"
+          "sha256": "f61c2b156d770563adcac3260b078b398d18565d512a091194e5fc4cfac31e76"
         },
         {
           "path": "work/man/symvault-device-pair.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b8a12eb3f72c8b53a063ea94cac7be699555849c75eb5fcba0bda2750dcd3d64"
+          "sha256": "e8bf445eb6acb33d6695161f76ea16b84084183a8272b24a06a98b8361a3b2a6"
         },
         {
           "path": "work/man/symvault-device-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f866b628c44148a5fdb3cbba033bd83271deaaba701f4ae8cfaf720fd5bceb2d"
+          "sha256": "14da3e61d72cded4effa027d2a1fc30d0939a83a50fdb66ac55a357a66769452"
         },
         {
           "path": "work/man/symvault-device.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c46bb52a8f0ae36adf54717c09a8868dd7c94ef2127e6acfaa9dc80d5f935bd1"
+          "sha256": "4fa337f4a460c19d18dede5f35af76d797d7da83edd0c39fe256711b435d6676"
         },
         {
           "path": "work/man/symvault-doctor.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f7a9c5747831df97ba5920b5cfc397eae97fe27916b7d3d91e9427df89f86790"
+          "sha256": "b172d0aad773db3041fa258edd1cf29513895b62ff6e17462ceba9205e6d622c"
         },
         {
           "path": "work/man/symvault-dynamic-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "91ee51495dfaa3bda3570fa6fdfb8638063c491697c809764e1f3285ed846f58"
+          "sha256": "86cf26a745e0400f1e68ebac469c9bac806c2301908490956e6fbe8f27015323"
         },
         {
           "path": "work/man/symvault-dynamic.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2e265de926ab5b54f8cf482ea60ea323db7547e9469c322ccc81fe9bd418441f"
+          "sha256": "bee07c0cfb677a692acd00a2a83a0674af55b12d900c6ac91133da25bae81523"
         },
         {
           "path": "work/man/symvault-edit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d21714e4de3c16455ecca6306d9f3143475b3762c950cf9b6680ca7176ef6d5c"
+          "sha256": "f93510bb969b61c08fce0e2f942c068376a74bca8198cf88ce69f1334c9f8239"
         },
         {
           "path": "work/man/symvault-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "477edb32da7590c1c6d04a0e71e56bca0ed012404e9775105b6cd791f90add27"
+          "sha256": "21ca16e409465c9c96257bfb5ffe86914f4712dfb3545a951c4bca1450ad2fe4"
         },
         {
           "path": "work/man/symvault-file-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "6aa57e400c07a1ffe5652f0b8adc98957773551968daa4bf6dcad3358e379a53"
+          "sha256": "c4ec66a7235d065d7daf20513de5fb1fdc62b07048789db833fce8a02977164a"
         },
         {
           "path": "work/man/symvault-file-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a41797f4aaccd7358638d2d732bebc082c141d5d40bda6997f0ec693fbaef019"
+          "sha256": "0fb6ca73a79701023a3c4c791aba9d363108878059b125f39f6c182e71234f4e"
         },
         {
           "path": "work/man/symvault-file-use.1",
           "change": "added",
           "kind": "file",
-          "sha256": "65d40298b80eb59c743ad764a15a980491b2f20a56daabbe8bfa7c19b7a777a0"
+          "sha256": "68cc1686ad8b0c4ba340039cde985ea9560584629f491eef82025bfedb3b2bba"
         },
         {
           "path": "work/man/symvault-file.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1b3d6eb89162148a749ac535967391c6a3bc4ed0af47bb7b11b2424074585031"
+          "sha256": "5aa531ec3a89f5c6416478da8600f41adff8d3e00653612e1bd9bbe74b0e3159"
         },
         {
           "path": "work/man/symvault-find.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c6975a50bc74d1992158b85bb0d3a3744031fc9cb78ef6a2596efb125ffebc1c"
+          "sha256": "15b5462312f0c67ce846094ee251a85c57999a8cb1f2bc78ff452daeb82250e0"
         },
         {
           "path": "work/man/symvault-generate-manpages.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c5165d943f19b4fd803c588427ae3e0d9764fa4ea29e744fa6437dfc0821d4d6"
+          "sha256": "03b3fd8b58ebf9915ac246f4e3b0a014cfdd43754605d31f03c0df7c7618e4d1"
         },
         {
           "path": "work/man/symvault-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ab3eac8f0d6c96b1ea32e4e9fee8660e6aedc7bfefcbe6ca3f028d52b299f7c"
+          "sha256": "29a67754e0a95889dabee0c7250ae9d6e4f7b6dc1e041545b1a84b0ccb19dd0f"
         },
         {
           "path": "work/man/symvault-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f4b3eb29490bbb8d781249f6687c0a56c24273d04cffbbee7fb30a013aa33f7d"
+          "sha256": "2816e8d234abd9b52e8e2ebefced5ea06fa934e5d9f01b2c32b07f354e9da11d"
         },
         {
           "path": "work/man/symvault-git.1",
           "change": "added",
           "kind": "file",
-          "sha256": "695c4bc2f318acee343f1d20ae56f45a770843fc7dfd8714059f5b5625508682"
+          "sha256": "2d2098351f57a170c5d971f0ec339ec3b2f273a54641a32e706b957ccd95539a"
         },
         {
           "path": "work/man/symvault-import-review-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2b1b06ed4838808d6b0f4c320344d51db01d02e8a5946e4b0dce727793937d7a"
+          "sha256": "6d47e421f980d2e30385871f235ba01a2f7ef78d4c383c58473c5e0e3dffd74a"
         },
         {
           "path": "work/man/symvault-import-review-promote.1",
           "change": "added",
           "kind": "file",
-          "sha256": "35875500e103ede396474b4e9297f66d6c3ee732d57045be34829a8e7a234b1c"
+          "sha256": "c7375be6dcc4421492de5fb75152dc63fe92124fae31d56b1d90b15092b502ca"
         },
         {
           "path": "work/man/symvault-import-review.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ce63bc418f7e3e70808006acbba74219a2183762c4ce305254b16032aaa8addc"
+          "sha256": "958abbf0e099ca861a3abcc249bd574bb844f3328554b066b62e32b0aab27901"
         },
         {
           "path": "work/man/symvault-import.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e02060ec127ba4e1386e7bd174887be1c5a270dd37d27ff83f4f436ba9cf4fd7"
+          "sha256": "1e7d6945eb33d3cc6271331f757c344368184559e7187f2c7c2e496a35c92b47"
         },
         {
           "path": "work/man/symvault-init.1",
           "change": "added",
           "kind": "file",
-          "sha256": "eb8465190b363021eac392d9d64b5a9ae99504a0b230938f516d110e3441dfa5"
+          "sha256": "61289a420a6ebb4905a0bbe7cadfce44b5ecf3c8018ca63cfdf17250304c6699"
         },
         {
           "path": "work/man/symvault-intake-watch-disable.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9aab0be9174896931f464fe378e42d8cb7cbbe743dd26e9588ff15c3a0a3d7fe"
+          "sha256": "63e6c621305e3b00e08db710ae9cb6f154a3b90117bb424a3717f358edea49ff"
         },
         {
           "path": "work/man/symvault-intake-watch.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c420bce928d8b94d668fa778962b1ebb0d90ca4b0fb5828e64644a039a711a73"
+          "sha256": "cce97559b978ee8affe82a62f785921fab8e8597082c4b009f2244ca1514642c"
         },
         {
           "path": "work/man/symvault-intake.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3220aec1b03ea3011382fe350398a1bda8e28a8554df9b95d6ede1e105f8bed6"
+          "sha256": "c92a02da8b0bb6a6c8ac2d09816e1134fdba62f9090b8915548a3005a69f06ad"
         },
         {
           "path": "work/man/symvault-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b8984d009977ce8156c9c92a18c13806d535e97d7f7ab6761ee6081e7480d956"
+          "sha256": "b39507b6963ce1c27fd23569ccef83acf40fe9eaea057e59ed5f341c9aa17c6b"
         },
         {
           "path": "work/man/symvault-lock.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f99d62777aae8544ddc11d2d685061ff14eb10249503eaf88298a38c53c94497"
+          "sha256": "85139b7278e03f17eb8ba8657ac17db2738404884200579fd52b0aa9b02bc7db"
         },
         {
           "path": "work/man/symvault-mcp-install.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e14164ed6be771f4264977b7c79e3b69111e15030eefdd21547e8ac13de0e427"
+          "sha256": "3b89fa1db4f848e732d8ee790e72f26705b0a8b3396a3dd9068e30d15646f726"
         },
         {
           "path": "work/man/symvault-mcp-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "648f2cde8b6a55b067ccfa70d90c9bb15f503347d114eb27fb9aca593d63f8d2"
+          "sha256": "689511bcd83bccc76e0e6300bc81f5b1a89fabd3e04193bd53e5ec04958cae84"
         },
         {
           "path": "work/man/symvault-mcp-uninstall.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7935b9c7016b8bc46e0fb02e93e4bf06a8acf4ada2482fe32b7b27ac624c5b74"
+          "sha256": "5f0e9473f5ba56ad92bd14d85636637603a40ce73538147281d21da412369e55"
         },
         {
           "path": "work/man/symvault-mcp.1",
           "change": "added",
           "kind": "file",
-          "sha256": "415f839bb8c35459d268aef453b9cdd6598d017bb23c6749008d685ff969284f"
+          "sha256": "800ed921e0cb2518dbc64563178c8489acde5614175bf79c9ce9c0602f7ff0b4"
         },
         {
           "path": "work/man/symvault-migrate-kdf.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5790eac8c8ea7b78e577021feefb9d4c10f11a1b905bfd08059ca24b5f328af6"
+          "sha256": "def86941424a701b916f05440e21e434839926aa4e685861be012a6ec7a90c45"
         },
         {
           "path": "work/man/symvault-migrate-paths.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a97901499918ad6430b37c80781eab7b19010611a470a0cb248e2167c9172bb1"
+          "sha256": "94050abf1f096faa4950a217e9a41733ad8e686679b8f28faeb782ea53c3c457"
         },
         {
           "path": "work/man/symvault-migrate-pseudonymize.1",
           "change": "added",
           "kind": "file",
-          "sha256": "dcd7cc762fe2695d43123984c5e9a3f3b333f5fd4577a3d99627093ac9a2dda6"
+          "sha256": "71b90659f993ba625802acc16057e3dc640fcc6d8dd2ccd87c6e8b50ece0de96"
         },
         {
           "path": "work/man/symvault-migrate-session.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b07b6974c7e5778e2486e63839dd4c00eb55990cbb64999459656df5d546dc32"
+          "sha256": "c700f1be936bc30f7636ef764a591773e94001451601608c5e48c6f503b0a6d2"
         },
         {
           "path": "work/man/symvault-migrate-v4.1",
           "change": "added",
           "kind": "file",
-          "sha256": "584f09f7a30e91295f1ca666d75254f707b3fbc00ff457425653c278ac27568a"
+          "sha256": "a88ba55ab872500d53a370646ed5c748a64be7fcc5b1286620f007c91618304c"
         },
         {
           "path": "work/man/symvault-migrate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4d36e1f6c63515d49da871d22a594b55ad9ab3926e61824f3d6011d6a594cf74"
+          "sha256": "f8d52e4c986ad03db0af9b1b0a4186b18baffebc55a39bc6287f9ee750b8d3d2"
         },
         {
           "path": "work/man/symvault-policy-apply.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9d85248220fd8266cc945ef2a2fa5ed2a1d671b6128d4462f58d5db9b28e7f7b"
+          "sha256": "042c9fb1f5823b37c0b9d5de80ba61ed98b3159e3fded35c5093d546d567637b"
         },
         {
           "path": "work/man/symvault-policy-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "466a71f213dbe4dbebaaa2491bb870e9387d2420b67797cf81e3aef10fda0921"
+          "sha256": "088654e70781068259c0a064f1813a599015b26765f4f6110279c4baa6d3714a"
         },
         {
           "path": "work/man/symvault-policy-remove.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5e030ae48899212e46e1ca1590d33138c1e1f0e9565d4a8a9b8b93b0f3e86992"
+          "sha256": "1532dec1ab54efd49aa4e43fc1d9bab28eec4ee1e88364cbb34d442ebc5e744c"
         },
         {
           "path": "work/man/symvault-policy-validate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "378a90e7a8bdec8595ad0bb391d168724320c26024777a7557d699d9bad23f3d"
+          "sha256": "d7bfff4bf9b46e87f1e3ebd8aacf91be791ba3c8bac914222baad5c0fb8d4400"
         },
         {
           "path": "work/man/symvault-policy.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d3d4fd1ae705db08c6ca3dda49e0fec1d7df67943011d0f4187431d54d3c8c21"
+          "sha256": "0b6e0bbee05fe512bb0251efed1c5e9093fb74f8742f18a27569bd53fbbc29ab"
         },
         {
           "path": "work/man/symvault-profile-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "64ca8d15ae8c620babbf79902faa44f0f0c9cc77303d6a1b636428ccec7f00e1"
+          "sha256": "84aca5f3a6d22a6fd6c312760fb6776982da5b01e5a2b4fcdc3c933f83aeba96"
         },
         {
           "path": "work/man/symvault-profile-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "8707280de5a36509fe68d2d1a92a3880b6f2d43e8eb2bc2df0f3786218b7cbfc"
+          "sha256": "ceb49fd2164254a02a786f836ae45f72e099970157f69c1cc3bdafd1c752b241"
         },
         {
           "path": "work/man/symvault-profile-use.1",
           "change": "added",
           "kind": "file",
-          "sha256": "72e96b5c912b18e03014f398eb59ec705efb75474ae2280f0110296e6361ba06"
+          "sha256": "2193f5e649ca00f644ac6e3a69b1369ec4cd021967fbf9e8aee68441b9f0e121"
         },
         {
           "path": "work/man/symvault-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "41f9f3ccbbd7456b15c8590693b423ff018cfafa6961be63033e655f9920c58a"
+          "sha256": "f61056f6db2d88c313a7960cec6e976ce9213404a23b2adcf29b0caba23b2dda"
         },
         {
           "path": "work/man/symvault-recipients-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a453b307b67f5a4785693a8b94253144723fac3010e22848d538cdb36ef57e07"
+          "sha256": "ba26d9c7fe18f66a2993a81a9340c3ce2175ed6ccd7e169346496437169b9e53"
         },
         {
           "path": "work/man/symvault-recipients-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ed119b5d226190dca36aa9831afd09f64eae18fbe6b8423094f0db60944d9bc9"
+          "sha256": "b23eb8f3b2762db23c7910d5826188b7e54b07b4eaa9ddaded292b96d418ca86"
         },
         {
           "path": "work/man/symvault-recipients-remove.1",
           "change": "added",
           "kind": "file",
-          "sha256": "253cf3911b023b86cc87231ab9460ce7111088ba43781b5773df9eb35a31b178"
+          "sha256": "b788eb83e69b273d51518aaed866fade09de31e4a5f9da156248b9c4ef49916f"
         },
         {
           "path": "work/man/symvault-recipients.1",
           "change": "added",
           "kind": "file",
-          "sha256": "cc0b7c2a5f01c8ec34cddcc3bff2612dc7e973d84c461cbf8646fedec20a6e4f"
+          "sha256": "5b68e86c3a78c1ed754684eff1b53c0f7ddf001f1fc7dc3c816264c41b57739e"
         },
         {
           "path": "work/man/symvault-remote-init.1",
           "change": "added",
           "kind": "file",
-          "sha256": "09e63ff255e0c0553179a6d400a1ef38dad58860b5c8a99b3cc2c7892e8a2cdd"
+          "sha256": "ca7cddf2c964d57c002104a21aa680749d17daa2f38a1b449c916be744b0ee52"
         },
         {
           "path": "work/man/symvault-remote-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e34471f8facffab3b71c5c082515f6556635f9367428b24eec8262138f16b2dc"
+          "sha256": "71bc2f1d620a45298bf217e82c3ebf68258c07b445d10dc42dbe1945859f4c3a"
         },
         {
           "path": "work/man/symvault-remote.1",
           "change": "added",
           "kind": "file",
-          "sha256": "10cbad2edcbf44a46b86c1f8fdba2dcab67fc276644e5d81362b681bbe018766"
+          "sha256": "b49ad5dd2f95150d0d99e689cfda8f10785cebccb24d3f16862b5804c6f74ab8"
         },
         {
           "path": "work/man/symvault-restore.1",
           "change": "added",
           "kind": "file",
-          "sha256": "db62582e195c847224767428f3a827581ec644d83a27f9625f22bcc234f2290f"
+          "sha256": "99dbcd84a51f5c15ff3e1e4b4e1a0c0620bb24a57827b8adc3dcbe03c96d0135"
         },
         {
           "path": "work/man/symvault-run.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7896775bdae1e9048dd36e12db589387464f444ae39629ae679702345be3f198"
+          "sha256": "48aa3aa55ad1a0d3500fae378b43af030c51c4d1c793e24aa7d3041ccbf08acf"
         },
         {
           "path": "work/man/symvault-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2d40ebb15d9807bfe3674a29bf68720411a6f9b450c1cf03c0da726f3e10df8a"
+          "sha256": "33445aba2ee2d3d90584e167b8a3d176af217c79294d44148f752e5cf7871e92"
         },
         {
           "path": "work/man/symvault-setup.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ee5070c19ff6f649bd26d750d2e37d1abfa08dae497d7abccc3676973187e8a"
+          "sha256": "857f074564b2caf348a483d396baeda9ea79395ff5b4872d4850d8aab55da705"
         },
         {
           "path": "work/man/symvault-share-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "507358120bd2a3d02f2822a278093aabadc0c5e554569a23abe6d23c1d0f4ddd"
+          "sha256": "617c71d5d33a16066ad531eb5a71be57a100b06b13919b085a03fa9323f96823"
         },
         {
           "path": "work/man/symvault-share-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a9600e8274b88fb1fbbc18972e3c1fc9ada39e6183bb69ceed953ce7a104caca"
+          "sha256": "73ef56f8382d89c640b44c609c581c086b15a7d12411324613bb89d0a1aa704b"
         },
         {
           "path": "work/man/symvault-share.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4d00126be10c1d97a812977d1e16d4cbc969974f02e912e1f564f07aa3ab304a"
+          "sha256": "7684ff466ee5ea93736a6d39706e49056f256cb4261a5180c5343521fe424df0"
         },
         {
           "path": "work/man/symvault-startup-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a8dfefa236d4ddbaf93266c7a6c379b51c1f422a4cfb9d27893d686c557ba6dd"
+          "sha256": "1a430d66525d8aa8e5818ae084e942fd145e38381f5712ae40b546cac4dbcbd8"
         },
         {
           "path": "work/man/symvault-sync.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4e76d05c5b06b4548a3a5b52aa4833eb2090109c84435eb82134d24ec6dd32dd"
+          "sha256": "eb6dc256e4d60ddf3a447083f3ab44ebc14071e94acd3a5698eb28655b93a516"
         },
         {
           "path": "work/man/symvault-template-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "738be70f5b50846393c431d59f48571693b5835fdfd0b029931c9b2037580745"
+          "sha256": "35a779057170b4bffec559b7ce799c1955aa924c5fac0c75fde5549be4ae45d3"
         },
         {
           "path": "work/man/symvault-template.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b9f6fba9e77e6a9aa0742e3229f1ee3cd8281100e55d248a3651303b86e8b62f"
+          "sha256": "4ed4c0895cba6728a08ce4b9438ce2eb8738ed14da8b558eb666da755c1db46f"
         },
         {
           "path": "work/man/symvault-ui.1",
           "change": "added",
           "kind": "file",
-          "sha256": "87a8536ce0bd2b3a55780c6e1cb313642600d57c7c3c30322c1b99396082726c"
+          "sha256": "ededddd1447cd4110bfbd8bdcaa0f8903e8d4eacd7864b1ce124ac25498c8bc1"
         },
         {
           "path": "work/man/symvault-unlock.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9053cc855e46e63ede120db5bf3bcd6f8dd98824fb0e8deeffcbb482b3befecb"
+          "sha256": "b9c22e2eb4cbfbf3a24a51c47fcc1037bc91e96ac52bad6b55ac6395802e7975"
         },
         {
           "path": "work/man/symvault-update-apply.1",
           "change": "added",
           "kind": "file",
-          "sha256": "047bf1e1eab8ae2a1043fa9158e23ad310709d1311c56c32e9d7cf191b0407c2"
+          "sha256": "52c3dbfad0952b1dea68e46662da57d3e19cc0b9504f1676b628fc895db7ba96"
         },
         {
           "path": "work/man/symvault-update-check.1",
           "change": "added",
           "kind": "file",
-          "sha256": "72987acfec61aaee3b5741b3cc5d0a5961562f8473495ddbecf7e7a86147efa3"
+          "sha256": "19757080fdecaae0e2952f10b3cc17a10f60f756dcd96751e7236a9673dff243"
         },
         {
           "path": "work/man/symvault-update-info.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d7b41a334e482ab0517cdd80e9269b2e6a11b2c144549cc97be457afef7cd3d8"
+          "sha256": "0360dfcaf94d67c98bec8ff221ab1cbd0ecb067495c4024cadef4b30758e3a9e"
         },
         {
           "path": "work/man/symvault-update.1",
           "change": "added",
           "kind": "file",
-          "sha256": "73c1997973224323605c32710d02897fef3f90d2654baa10a7b995e7580a2280"
+          "sha256": "de073d189bb8d3ac9f723ea329007831bcd2f0ec5b9881de9b38e97bf8f1e57f"
         },
         {
           "path": "work/man/symvault-verify.1",
           "change": "added",
           "kind": "file",
-          "sha256": "01026c7b8991caa8f9770df880f2df5b34fc60fe66dc04e6ca123a5204a723b1"
+          "sha256": "65e3ee49171cfa541e1d8f7cbf6b505aa1fcc261db06b44bef760e9c0196828c"
         },
         {
           "path": "work/man/symvault-version.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9b3f68b97997692751279c0077c04b7063517f8e46f03109d401d87aee468281"
+          "sha256": "20d382e8a1b53a483603e3ab37a6e474d1233393e2dcf07fefb90d8c9d862692"
         },
         {
           "path": "work/man/symvault.1",
           "change": "added",
           "kind": "file",
-          "sha256": "027e4646218d9b00f9d9c8abc6882a442d730ab819762abdf9d7642e2ab550a6"
+          "sha256": "e07f44fa1e4a832e8e25109a395e70dfa9e0b9f09d4185679a8ebfcbb7dc546b"
         }
       ]
     },
@@ -4393,6 +4396,9 @@
       "mode": "json",
       "desc": "generate manpages into a directory",
       "seed": "empty",
+      "rules": [
+        "man-date"
+      ],
       "argv": [
         "generate",
         "manpages",
@@ -4412,715 +4418,715 @@
           "path": "work/man/symvault-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b1b4376e42356df34761007d021e643ffceb124d88134cc597b2b08240d2c74d"
+          "sha256": "f9435a6c1a8ecdda22ae88ad4306c1ca8b1cb3a907baecd8627549826ef32437"
         },
         {
           "path": "work/man/symvault-agent-audit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e1a95a8f8d5af546bfa08f0a7290636530c1fd21c5009f4a9f70c492791cb08f"
+          "sha256": "323c13a20f2c831c539980cc0b4e6edfae09122bac265ad20bacaa2d800a5bdc"
         },
         {
           "path": "work/man/symvault-agent-doctor.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a1981f756901a5b6de8a3131ab54466ae9cbbe82e2060c936c306a586813bc00"
+          "sha256": "7263572afc80cc95c83ef9ba9f1e0fe4b5dab6783d26af67866112f7ba0a5230"
         },
         {
           "path": "work/man/symvault-agent-install.1",
           "change": "added",
           "kind": "file",
-          "sha256": "be01debbea23184513882b4bc231a13856412eb2d7b547e52dec52cebc16f7d4"
+          "sha256": "b9b7a57567ad7f53834bb4303d330c7cc40248dc4ed0150893abd5a3a29d3167"
         },
         {
           "path": "work/man/symvault-agent-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f2de69aa25c02cd5386a559a53ac78579a6e9f650da7053e26670ae17848c4d8"
+          "sha256": "521c40d34dc2fef1cb35a7c1e4b4a9560cc881d37d3103a3d7660b54eddd19cf"
         },
         {
           "path": "work/man/symvault-agent-profile-edit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "eff9d1a014b50eb9ae54dc5c49f369c0d90c4952c541546403694812761d8499"
+          "sha256": "1c254e11ca0b5eb3bcaf09932f202ac2299c6d397e71bfe297e84ddaa477cc09"
         },
         {
           "path": "work/man/symvault-agent-profile-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "deed1074976c2c7de6a17a3081f3cb12e6624286db5fae49c2723e4fdcc24c33"
+          "sha256": "5a4d09cff33cf822528a7077f6587da5d24032ddf828b5df2de1221bd9fdf3a0"
         },
         {
           "path": "work/man/symvault-agent-profile-show.1",
           "change": "added",
           "kind": "file",
-          "sha256": "0e125f24fc7f0435f4ffb08edb01d1a9bcf0f80953997901138b8285cf163dc0"
+          "sha256": "8546437cf2241b57bd9c98bc63fd824d1e9fc11bacb5dd6476e15c675caa3904"
         },
         {
           "path": "work/man/symvault-agent-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e19301027061f5e54ec1439931833f10e142a4c90180928b6f0e962ae412fa0a"
+          "sha256": "8ca0c002ab66302c60ea11d3963d6a379a9654c9ed298382b14dd79f1f9445da"
         },
         {
           "path": "work/man/symvault-agent-skill-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3866e0fe1e67e966ebc16eb1b868f4d4636c0e7a34a2dc5a1f11ab2115100b96"
+          "sha256": "e42a061c27dc894c8fe7676fbe26f3c8fbb95179e79c09eb57b706fede0a7b84"
         },
         {
           "path": "work/man/symvault-agent-skill-refresh.1",
           "change": "added",
           "kind": "file",
-          "sha256": "73ecfd400fa2c1ce3ae9f5d58bbe517de021995f9f56cbb6337875ba16c9db2b"
+          "sha256": "89408ca876feec65cd0537e4784112a336dc085154b8e1322bb6a3fe091ad265"
         },
         {
           "path": "work/man/symvault-agent-skill.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a4c2ee72ac278097862ca00481eec98a5d259eaeffda49e8b376d7d036897868"
+          "sha256": "cd14bedc046a3573bb14877efdbbb776ef92715fa1c43f9471ddeb8861d2c0dc"
         },
         {
           "path": "work/man/symvault-agent-token-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b5e7724d79955213a0b1abddb550b88913670a6620e831cefd149ed09c18ad8a"
+          "sha256": "570409ea5e51cb2aef004e7e1d863b728bfc635605773e7de0128c648ff3707a"
         },
         {
           "path": "work/man/symvault-agent-token-new.1",
           "change": "added",
           "kind": "file",
-          "sha256": "595d3a4f92a34d7ec12b3c69818a2b3e1ac33464e9d4a071a9b27171a83f33bc"
+          "sha256": "79662e63f3968a8b7c4223674bc2a76147bc29ec2f4751400941e576089628ed"
         },
         {
           "path": "work/man/symvault-agent-token-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "389d17d93e308fc4cb731e5bc10b6b9997a54a708b55b6d2f56fae5651fcc2b5"
+          "sha256": "c4f04e92d703627be6c23a2370ecc58f7a927bed40d330b85e91279b1a80760a"
         },
         {
           "path": "work/man/symvault-agent-token-rotate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5ca4aa4edf9d749bed55724dc55f14d8a0f5bfde3006a21de530936e8ab8beaa"
+          "sha256": "9a8a0ca8832e39ed97a37eaa68727392fc8cc5faba98858e82c9c98e416dd2e6"
         },
         {
           "path": "work/man/symvault-agent-token.1",
           "change": "added",
           "kind": "file",
-          "sha256": "71f987cffe6488dc5c731756fea16d6f2a4847eb43b0bfa6d2234fe08dc35c5e"
+          "sha256": "867c05a3167617e93fef5d7970a1e4f2f2abd7afd19ba32c72e0dcfefbc617c5"
         },
         {
           "path": "work/man/symvault-agent-uninstall.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4e65457878f2a7ad11b61c57e88e92d7a966e112dc756271a955b3417a8231ba"
+          "sha256": "8d9389eb8635bea066e5940ba15005c3b371e5fcde6609e6475f31b96e11bddc"
         },
         {
           "path": "work/man/symvault-agent-upgrade.1",
           "change": "added",
           "kind": "file",
-          "sha256": "6eec525ff47ffcc82fb95b46dd06948c32141337196c2b4837bc03cb92e34549"
+          "sha256": "ff5deeb7417508a011c4231344f6bd7f8f86ad63efb8ce9a900ebc2d484444a9"
         },
         {
           "path": "work/man/symvault-agent-whoami.1",
           "change": "added",
           "kind": "file",
-          "sha256": "14b0cb2dca458afd6567626333927da4e8c3a0ff561b71de807c2f1588e70ee0"
+          "sha256": "00a1ac897f49e8ba37affd7ab1bde34cfdaf7d4929277a8b1ef89e2310ae725e"
         },
         {
           "path": "work/man/symvault-agent.1",
           "change": "added",
           "kind": "file",
-          "sha256": "76d99cb02b011e635aa85b470d2d2ad5bf58c89623e14b19ecd4c6abca1b214a"
+          "sha256": "7adede33fd612a170da1281f9ee4cbb4c5e9fab373005ab7a60721247b366c72"
         },
         {
           "path": "work/man/symvault-approval-decide.1",
           "change": "added",
           "kind": "file",
-          "sha256": "69b6e92855ac61ff7278a0fed07afafe071575428da2e53cd839e94b32fabe68"
+          "sha256": "7a6398ddc1cf1f828fc583cf8572a03329ed0dbf3b1fde7de2fba3148e3adcb4"
         },
         {
           "path": "work/man/symvault-approval-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b5c8808a357a75da87abea88dea8b93d2857dc6489f2a3b686a7aaa89fc72936"
+          "sha256": "d7304a0ce6c59da211aefc72faabd4ef7a4c13890d1ab2d9855f3a6ce2055435"
         },
         {
           "path": "work/man/symvault-approval.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d1380d5673b111489342f5499d401c15d35c580e576e6dcf35d46ca4b2cff065"
+          "sha256": "bd2d84e4f4329df90756c8e1f7b54645c721f8315d01c19a118cf46d36cab512"
         },
         {
           "path": "work/man/symvault-audit-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5730eac0e7fbd67b51d0a6587e30cd7e72ab17a570d06125bbb6f3a707207828"
+          "sha256": "c754667b3fa0be70f0fef8cf3923e9a0f893b2c1835791c0a1ee3fb41c00f055"
         },
         {
           "path": "work/man/symvault-audit-rotate-key.1",
           "change": "added",
           "kind": "file",
-          "sha256": "efd1bc484b89eedac23aa2a8c9b0ad0d867e9891295a071ac7e6758e76a30916"
+          "sha256": "d3c1e01eaf48b8228962e2c8eb7405da72993db828c60780a9f73cb4583004f7"
         },
         {
           "path": "work/man/symvault-audit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "451d349d094d64ee68527a6b3d4a338f92c1bcaf1533bcab56fc9838fc562749"
+          "sha256": "34824af5c101a213f6de156960795b28bf161f313a1fee938b7163358be0e986"
         },
         {
           "path": "work/man/symvault-auth-rotate-passphrase.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1b665cd02690328913418641423991fd184ed0875fb53b23e54a62087c2846df"
+          "sha256": "284c171842266386b6dc946c4f9587e9534a5e89f7a4cbdaf6070799e26d8264"
         },
         {
           "path": "work/man/symvault-auth-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f99819b0943772043a4673ba09fbe41391a09c86b085539daed3ed0c80e1efff"
+          "sha256": "9b45f84a75c95f6665219f15c1417594eeeb4b2f8738e4beda49b343cb693a21"
         },
         {
           "path": "work/man/symvault-auth-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ba231ec432c3128d768d45b322178fb335d15c1fe7973550c2735b9b1c5666db"
+          "sha256": "920d85410f76db5772c3a93aa898b57011814f4ff4859de030d69cdf376700e4"
         },
         {
           "path": "work/man/symvault-auth.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3c32f2421556b5e00ca921caf17bd6614852c004fbc20fed9c4417f73a4c2899"
+          "sha256": "0efc3d136ecca4803eb0899f74ba995c91b458e290180ea16e605253fd51ca36"
         },
         {
           "path": "work/man/symvault-backup.1",
           "change": "added",
           "kind": "file",
-          "sha256": "17d41c237132069c7d766461b8187ad2da3b5628f63cf8ebdada557eefdfae7a"
+          "sha256": "be61eddb913bd5645c2715ff21990a7458ae7a8ecdf734a6fcf6e8d017eb89e6"
         },
         {
           "path": "work/man/symvault-broker.1",
           "change": "added",
           "kind": "file",
-          "sha256": "acecc4a377cbc99b3d3b1ed8f7a50eb1f122205e873f6e13eee4c643e6009583"
+          "sha256": "919a343876dfccac2a447abd04081c2fd28edbcaf8e7c89889d177d5f46b6944"
         },
         {
           "path": "work/man/symvault-config-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7d79f506502f365021ed76ca20b9e4d2f92a77f60b111ae299992778627fb7fb"
+          "sha256": "8f2ceb7307862e75f8e8059b1b5102323a47a8f2724a40677d18166d3a383221"
         },
         {
           "path": "work/man/symvault-config-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b4e7ab076afa61e5ad890143912160eb9870c4af32844a96463e1150caf52889"
+          "sha256": "08b3a276dcb95694d569347db76b6022c0da6308130f8da7406c8a7caf9b77b2"
         },
         {
           "path": "work/man/symvault-config-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "0ec1103eecf791a3aa0e527044530cbe89076de64a4f65bcc41487e4ef7a0250"
+          "sha256": "79d21261a109f2555870c6ea6eb3624d3c3d023fbd6a11a2d1bd832acdbfbd23"
         },
         {
           "path": "work/man/symvault-config-validate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b7925b33447cf3fe0bfcff5a7e45d91043630c1be64544655b70f54d7396e79a"
+          "sha256": "681dc61cef5f7158d992e59a2c4a09e4dabbb975f92f371e27ff5f4c0f3227b6"
         },
         {
           "path": "work/man/symvault-config.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9a68faa59dec4f3275ce7025e7f300eaf12e8534b7068e951ae8a49eadaa5601"
+          "sha256": "0c6527eb657c5c06bdb465fc62196e3c9e98ee439087c7cee8929e92f819082d"
         },
         {
           "path": "work/man/symvault-delete.1",
           "change": "added",
           "kind": "file",
-          "sha256": "887a00ce0b56e3432a7ee331256e3d2571a837f1b550f883319ddb0f9bd8860a"
+          "sha256": "c319e9ef1bad239a6ef2f6cc528fdef384787e1c47e25611434ae626dc6723c9"
         },
         {
           "path": "work/man/symvault-device-accept.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ba731eca8c3395d42e420fd4c0748a0d578fb244642a7d42712ca27d3186177"
+          "sha256": "d4c3e37786319d82552833b33b99058654b8b8320eb909ccebab04d4fef98588"
         },
         {
           "path": "work/man/symvault-device-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "cc169cde2f66f470fe4214ba9eb5ceb2e6648c5ae09d07d7ab2caa562f7363bb"
+          "sha256": "5ae7a9a6949530e37ecc5ab80a9a8ddd88037e0e336f3c3d04d2894bb2301d6b"
         },
         {
           "path": "work/man/symvault-device-approval-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9df54513a0c278adc699914d4bf4abc2ccc3602ac2583f43d18d26fd8e8ef596"
+          "sha256": "0a016135d906d3def669320b76af5376638b05a0c612125b163e01eaf4e4c03f"
         },
         {
           "path": "work/man/symvault-device-approval-pair.1",
           "change": "added",
           "kind": "file",
-          "sha256": "fd16f216c25774fd7e8ee233525d2f78169638fd9146f3250af0347089723441"
+          "sha256": "fa0a98c90d6ff6773f687b3418455390f58668f099c8ea7bd1b4310009be3ba1"
         },
         {
           "path": "work/man/symvault-device-approval-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e994552145123b8566afac88bbcab9c02e08341de37fbb68a463ca8f9dc4f5a3"
+          "sha256": "f2421f1b75ee11175821adc6ee525d3cce10b481965655d1550f6d859944547d"
         },
         {
           "path": "work/man/symvault-device-join.1",
           "change": "added",
           "kind": "file",
-          "sha256": "63b422cd86eb930c7a60297c9f2e8c549781a120a94cb8aec944de7240df79fe"
+          "sha256": "13365c0b4b3eb7ddf24c643f9fbd4a599f2a5db6d6463a43ebda88034019d943"
         },
         {
           "path": "work/man/symvault-device-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "47bf0b1071b40baad6caaf184740e70100e3d415ee8f26941fc71a490998cb19"
+          "sha256": "f61c2b156d770563adcac3260b078b398d18565d512a091194e5fc4cfac31e76"
         },
         {
           "path": "work/man/symvault-device-pair.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b8a12eb3f72c8b53a063ea94cac7be699555849c75eb5fcba0bda2750dcd3d64"
+          "sha256": "e8bf445eb6acb33d6695161f76ea16b84084183a8272b24a06a98b8361a3b2a6"
         },
         {
           "path": "work/man/symvault-device-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f866b628c44148a5fdb3cbba033bd83271deaaba701f4ae8cfaf720fd5bceb2d"
+          "sha256": "14da3e61d72cded4effa027d2a1fc30d0939a83a50fdb66ac55a357a66769452"
         },
         {
           "path": "work/man/symvault-device.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c46bb52a8f0ae36adf54717c09a8868dd7c94ef2127e6acfaa9dc80d5f935bd1"
+          "sha256": "4fa337f4a460c19d18dede5f35af76d797d7da83edd0c39fe256711b435d6676"
         },
         {
           "path": "work/man/symvault-doctor.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f7a9c5747831df97ba5920b5cfc397eae97fe27916b7d3d91e9427df89f86790"
+          "sha256": "b172d0aad773db3041fa258edd1cf29513895b62ff6e17462ceba9205e6d622c"
         },
         {
           "path": "work/man/symvault-dynamic-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "91ee51495dfaa3bda3570fa6fdfb8638063c491697c809764e1f3285ed846f58"
+          "sha256": "86cf26a745e0400f1e68ebac469c9bac806c2301908490956e6fbe8f27015323"
         },
         {
           "path": "work/man/symvault-dynamic.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2e265de926ab5b54f8cf482ea60ea323db7547e9469c322ccc81fe9bd418441f"
+          "sha256": "bee07c0cfb677a692acd00a2a83a0674af55b12d900c6ac91133da25bae81523"
         },
         {
           "path": "work/man/symvault-edit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d21714e4de3c16455ecca6306d9f3143475b3762c950cf9b6680ca7176ef6d5c"
+          "sha256": "f93510bb969b61c08fce0e2f942c068376a74bca8198cf88ce69f1334c9f8239"
         },
         {
           "path": "work/man/symvault-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "477edb32da7590c1c6d04a0e71e56bca0ed012404e9775105b6cd791f90add27"
+          "sha256": "21ca16e409465c9c96257bfb5ffe86914f4712dfb3545a951c4bca1450ad2fe4"
         },
         {
           "path": "work/man/symvault-file-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "6aa57e400c07a1ffe5652f0b8adc98957773551968daa4bf6dcad3358e379a53"
+          "sha256": "c4ec66a7235d065d7daf20513de5fb1fdc62b07048789db833fce8a02977164a"
         },
         {
           "path": "work/man/symvault-file-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a41797f4aaccd7358638d2d732bebc082c141d5d40bda6997f0ec693fbaef019"
+          "sha256": "0fb6ca73a79701023a3c4c791aba9d363108878059b125f39f6c182e71234f4e"
         },
         {
           "path": "work/man/symvault-file-use.1",
           "change": "added",
           "kind": "file",
-          "sha256": "65d40298b80eb59c743ad764a15a980491b2f20a56daabbe8bfa7c19b7a777a0"
+          "sha256": "68cc1686ad8b0c4ba340039cde985ea9560584629f491eef82025bfedb3b2bba"
         },
         {
           "path": "work/man/symvault-file.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1b3d6eb89162148a749ac535967391c6a3bc4ed0af47bb7b11b2424074585031"
+          "sha256": "5aa531ec3a89f5c6416478da8600f41adff8d3e00653612e1bd9bbe74b0e3159"
         },
         {
           "path": "work/man/symvault-find.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c6975a50bc74d1992158b85bb0d3a3744031fc9cb78ef6a2596efb125ffebc1c"
+          "sha256": "15b5462312f0c67ce846094ee251a85c57999a8cb1f2bc78ff452daeb82250e0"
         },
         {
           "path": "work/man/symvault-generate-manpages.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c5165d943f19b4fd803c588427ae3e0d9764fa4ea29e744fa6437dfc0821d4d6"
+          "sha256": "03b3fd8b58ebf9915ac246f4e3b0a014cfdd43754605d31f03c0df7c7618e4d1"
         },
         {
           "path": "work/man/symvault-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ab3eac8f0d6c96b1ea32e4e9fee8660e6aedc7bfefcbe6ca3f028d52b299f7c"
+          "sha256": "29a67754e0a95889dabee0c7250ae9d6e4f7b6dc1e041545b1a84b0ccb19dd0f"
         },
         {
           "path": "work/man/symvault-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f4b3eb29490bbb8d781249f6687c0a56c24273d04cffbbee7fb30a013aa33f7d"
+          "sha256": "2816e8d234abd9b52e8e2ebefced5ea06fa934e5d9f01b2c32b07f354e9da11d"
         },
         {
           "path": "work/man/symvault-git.1",
           "change": "added",
           "kind": "file",
-          "sha256": "695c4bc2f318acee343f1d20ae56f45a770843fc7dfd8714059f5b5625508682"
+          "sha256": "2d2098351f57a170c5d971f0ec339ec3b2f273a54641a32e706b957ccd95539a"
         },
         {
           "path": "work/man/symvault-import-review-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2b1b06ed4838808d6b0f4c320344d51db01d02e8a5946e4b0dce727793937d7a"
+          "sha256": "6d47e421f980d2e30385871f235ba01a2f7ef78d4c383c58473c5e0e3dffd74a"
         },
         {
           "path": "work/man/symvault-import-review-promote.1",
           "change": "added",
           "kind": "file",
-          "sha256": "35875500e103ede396474b4e9297f66d6c3ee732d57045be34829a8e7a234b1c"
+          "sha256": "c7375be6dcc4421492de5fb75152dc63fe92124fae31d56b1d90b15092b502ca"
         },
         {
           "path": "work/man/symvault-import-review.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ce63bc418f7e3e70808006acbba74219a2183762c4ce305254b16032aaa8addc"
+          "sha256": "958abbf0e099ca861a3abcc249bd574bb844f3328554b066b62e32b0aab27901"
         },
         {
           "path": "work/man/symvault-import.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e02060ec127ba4e1386e7bd174887be1c5a270dd37d27ff83f4f436ba9cf4fd7"
+          "sha256": "1e7d6945eb33d3cc6271331f757c344368184559e7187f2c7c2e496a35c92b47"
         },
         {
           "path": "work/man/symvault-init.1",
           "change": "added",
           "kind": "file",
-          "sha256": "eb8465190b363021eac392d9d64b5a9ae99504a0b230938f516d110e3441dfa5"
+          "sha256": "61289a420a6ebb4905a0bbe7cadfce44b5ecf3c8018ca63cfdf17250304c6699"
         },
         {
           "path": "work/man/symvault-intake-watch-disable.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9aab0be9174896931f464fe378e42d8cb7cbbe743dd26e9588ff15c3a0a3d7fe"
+          "sha256": "63e6c621305e3b00e08db710ae9cb6f154a3b90117bb424a3717f358edea49ff"
         },
         {
           "path": "work/man/symvault-intake-watch.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c420bce928d8b94d668fa778962b1ebb0d90ca4b0fb5828e64644a039a711a73"
+          "sha256": "cce97559b978ee8affe82a62f785921fab8e8597082c4b009f2244ca1514642c"
         },
         {
           "path": "work/man/symvault-intake.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3220aec1b03ea3011382fe350398a1bda8e28a8554df9b95d6ede1e105f8bed6"
+          "sha256": "c92a02da8b0bb6a6c8ac2d09816e1134fdba62f9090b8915548a3005a69f06ad"
         },
         {
           "path": "work/man/symvault-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b8984d009977ce8156c9c92a18c13806d535e97d7f7ab6761ee6081e7480d956"
+          "sha256": "b39507b6963ce1c27fd23569ccef83acf40fe9eaea057e59ed5f341c9aa17c6b"
         },
         {
           "path": "work/man/symvault-lock.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f99d62777aae8544ddc11d2d685061ff14eb10249503eaf88298a38c53c94497"
+          "sha256": "85139b7278e03f17eb8ba8657ac17db2738404884200579fd52b0aa9b02bc7db"
         },
         {
           "path": "work/man/symvault-mcp-install.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e14164ed6be771f4264977b7c79e3b69111e15030eefdd21547e8ac13de0e427"
+          "sha256": "3b89fa1db4f848e732d8ee790e72f26705b0a8b3396a3dd9068e30d15646f726"
         },
         {
           "path": "work/man/symvault-mcp-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "648f2cde8b6a55b067ccfa70d90c9bb15f503347d114eb27fb9aca593d63f8d2"
+          "sha256": "689511bcd83bccc76e0e6300bc81f5b1a89fabd3e04193bd53e5ec04958cae84"
         },
         {
           "path": "work/man/symvault-mcp-uninstall.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7935b9c7016b8bc46e0fb02e93e4bf06a8acf4ada2482fe32b7b27ac624c5b74"
+          "sha256": "5f0e9473f5ba56ad92bd14d85636637603a40ce73538147281d21da412369e55"
         },
         {
           "path": "work/man/symvault-mcp.1",
           "change": "added",
           "kind": "file",
-          "sha256": "415f839bb8c35459d268aef453b9cdd6598d017bb23c6749008d685ff969284f"
+          "sha256": "800ed921e0cb2518dbc64563178c8489acde5614175bf79c9ce9c0602f7ff0b4"
         },
         {
           "path": "work/man/symvault-migrate-kdf.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5790eac8c8ea7b78e577021feefb9d4c10f11a1b905bfd08059ca24b5f328af6"
+          "sha256": "def86941424a701b916f05440e21e434839926aa4e685861be012a6ec7a90c45"
         },
         {
           "path": "work/man/symvault-migrate-paths.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a97901499918ad6430b37c80781eab7b19010611a470a0cb248e2167c9172bb1"
+          "sha256": "94050abf1f096faa4950a217e9a41733ad8e686679b8f28faeb782ea53c3c457"
         },
         {
           "path": "work/man/symvault-migrate-pseudonymize.1",
           "change": "added",
           "kind": "file",
-          "sha256": "dcd7cc762fe2695d43123984c5e9a3f3b333f5fd4577a3d99627093ac9a2dda6"
+          "sha256": "71b90659f993ba625802acc16057e3dc640fcc6d8dd2ccd87c6e8b50ece0de96"
         },
         {
           "path": "work/man/symvault-migrate-session.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b07b6974c7e5778e2486e63839dd4c00eb55990cbb64999459656df5d546dc32"
+          "sha256": "c700f1be936bc30f7636ef764a591773e94001451601608c5e48c6f503b0a6d2"
         },
         {
           "path": "work/man/symvault-migrate-v4.1",
           "change": "added",
           "kind": "file",
-          "sha256": "584f09f7a30e91295f1ca666d75254f707b3fbc00ff457425653c278ac27568a"
+          "sha256": "a88ba55ab872500d53a370646ed5c748a64be7fcc5b1286620f007c91618304c"
         },
         {
           "path": "work/man/symvault-migrate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4d36e1f6c63515d49da871d22a594b55ad9ab3926e61824f3d6011d6a594cf74"
+          "sha256": "f8d52e4c986ad03db0af9b1b0a4186b18baffebc55a39bc6287f9ee750b8d3d2"
         },
         {
           "path": "work/man/symvault-policy-apply.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9d85248220fd8266cc945ef2a2fa5ed2a1d671b6128d4462f58d5db9b28e7f7b"
+          "sha256": "042c9fb1f5823b37c0b9d5de80ba61ed98b3159e3fded35c5093d546d567637b"
         },
         {
           "path": "work/man/symvault-policy-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "466a71f213dbe4dbebaaa2491bb870e9387d2420b67797cf81e3aef10fda0921"
+          "sha256": "088654e70781068259c0a064f1813a599015b26765f4f6110279c4baa6d3714a"
         },
         {
           "path": "work/man/symvault-policy-remove.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5e030ae48899212e46e1ca1590d33138c1e1f0e9565d4a8a9b8b93b0f3e86992"
+          "sha256": "1532dec1ab54efd49aa4e43fc1d9bab28eec4ee1e88364cbb34d442ebc5e744c"
         },
         {
           "path": "work/man/symvault-policy-validate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "378a90e7a8bdec8595ad0bb391d168724320c26024777a7557d699d9bad23f3d"
+          "sha256": "d7bfff4bf9b46e87f1e3ebd8aacf91be791ba3c8bac914222baad5c0fb8d4400"
         },
         {
           "path": "work/man/symvault-policy.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d3d4fd1ae705db08c6ca3dda49e0fec1d7df67943011d0f4187431d54d3c8c21"
+          "sha256": "0b6e0bbee05fe512bb0251efed1c5e9093fb74f8742f18a27569bd53fbbc29ab"
         },
         {
           "path": "work/man/symvault-profile-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "64ca8d15ae8c620babbf79902faa44f0f0c9cc77303d6a1b636428ccec7f00e1"
+          "sha256": "84aca5f3a6d22a6fd6c312760fb6776982da5b01e5a2b4fcdc3c933f83aeba96"
         },
         {
           "path": "work/man/symvault-profile-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "8707280de5a36509fe68d2d1a92a3880b6f2d43e8eb2bc2df0f3786218b7cbfc"
+          "sha256": "ceb49fd2164254a02a786f836ae45f72e099970157f69c1cc3bdafd1c752b241"
         },
         {
           "path": "work/man/symvault-profile-use.1",
           "change": "added",
           "kind": "file",
-          "sha256": "72e96b5c912b18e03014f398eb59ec705efb75474ae2280f0110296e6361ba06"
+          "sha256": "2193f5e649ca00f644ac6e3a69b1369ec4cd021967fbf9e8aee68441b9f0e121"
         },
         {
           "path": "work/man/symvault-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "41f9f3ccbbd7456b15c8590693b423ff018cfafa6961be63033e655f9920c58a"
+          "sha256": "f61056f6db2d88c313a7960cec6e976ce9213404a23b2adcf29b0caba23b2dda"
         },
         {
           "path": "work/man/symvault-recipients-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a453b307b67f5a4785693a8b94253144723fac3010e22848d538cdb36ef57e07"
+          "sha256": "ba26d9c7fe18f66a2993a81a9340c3ce2175ed6ccd7e169346496437169b9e53"
         },
         {
           "path": "work/man/symvault-recipients-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ed119b5d226190dca36aa9831afd09f64eae18fbe6b8423094f0db60944d9bc9"
+          "sha256": "b23eb8f3b2762db23c7910d5826188b7e54b07b4eaa9ddaded292b96d418ca86"
         },
         {
           "path": "work/man/symvault-recipients-remove.1",
           "change": "added",
           "kind": "file",
-          "sha256": "253cf3911b023b86cc87231ab9460ce7111088ba43781b5773df9eb35a31b178"
+          "sha256": "b788eb83e69b273d51518aaed866fade09de31e4a5f9da156248b9c4ef49916f"
         },
         {
           "path": "work/man/symvault-recipients.1",
           "change": "added",
           "kind": "file",
-          "sha256": "cc0b7c2a5f01c8ec34cddcc3bff2612dc7e973d84c461cbf8646fedec20a6e4f"
+          "sha256": "5b68e86c3a78c1ed754684eff1b53c0f7ddf001f1fc7dc3c816264c41b57739e"
         },
         {
           "path": "work/man/symvault-remote-init.1",
           "change": "added",
           "kind": "file",
-          "sha256": "09e63ff255e0c0553179a6d400a1ef38dad58860b5c8a99b3cc2c7892e8a2cdd"
+          "sha256": "ca7cddf2c964d57c002104a21aa680749d17daa2f38a1b449c916be744b0ee52"
         },
         {
           "path": "work/man/symvault-remote-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e34471f8facffab3b71c5c082515f6556635f9367428b24eec8262138f16b2dc"
+          "sha256": "71bc2f1d620a45298bf217e82c3ebf68258c07b445d10dc42dbe1945859f4c3a"
         },
         {
           "path": "work/man/symvault-remote.1",
           "change": "added",
           "kind": "file",
-          "sha256": "10cbad2edcbf44a46b86c1f8fdba2dcab67fc276644e5d81362b681bbe018766"
+          "sha256": "b49ad5dd2f95150d0d99e689cfda8f10785cebccb24d3f16862b5804c6f74ab8"
         },
         {
           "path": "work/man/symvault-restore.1",
           "change": "added",
           "kind": "file",
-          "sha256": "db62582e195c847224767428f3a827581ec644d83a27f9625f22bcc234f2290f"
+          "sha256": "99dbcd84a51f5c15ff3e1e4b4e1a0c0620bb24a57827b8adc3dcbe03c96d0135"
         },
         {
           "path": "work/man/symvault-run.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7896775bdae1e9048dd36e12db589387464f444ae39629ae679702345be3f198"
+          "sha256": "48aa3aa55ad1a0d3500fae378b43af030c51c4d1c793e24aa7d3041ccbf08acf"
         },
         {
           "path": "work/man/symvault-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2d40ebb15d9807bfe3674a29bf68720411a6f9b450c1cf03c0da726f3e10df8a"
+          "sha256": "33445aba2ee2d3d90584e167b8a3d176af217c79294d44148f752e5cf7871e92"
         },
         {
           "path": "work/man/symvault-setup.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ee5070c19ff6f649bd26d750d2e37d1abfa08dae497d7abccc3676973187e8a"
+          "sha256": "857f074564b2caf348a483d396baeda9ea79395ff5b4872d4850d8aab55da705"
         },
         {
           "path": "work/man/symvault-share-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "507358120bd2a3d02f2822a278093aabadc0c5e554569a23abe6d23c1d0f4ddd"
+          "sha256": "617c71d5d33a16066ad531eb5a71be57a100b06b13919b085a03fa9323f96823"
         },
         {
           "path": "work/man/symvault-share-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a9600e8274b88fb1fbbc18972e3c1fc9ada39e6183bb69ceed953ce7a104caca"
+          "sha256": "73ef56f8382d89c640b44c609c581c086b15a7d12411324613bb89d0a1aa704b"
         },
         {
           "path": "work/man/symvault-share.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4d00126be10c1d97a812977d1e16d4cbc969974f02e912e1f564f07aa3ab304a"
+          "sha256": "7684ff466ee5ea93736a6d39706e49056f256cb4261a5180c5343521fe424df0"
         },
         {
           "path": "work/man/symvault-startup-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a8dfefa236d4ddbaf93266c7a6c379b51c1f422a4cfb9d27893d686c557ba6dd"
+          "sha256": "1a430d66525d8aa8e5818ae084e942fd145e38381f5712ae40b546cac4dbcbd8"
         },
         {
           "path": "work/man/symvault-sync.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4e76d05c5b06b4548a3a5b52aa4833eb2090109c84435eb82134d24ec6dd32dd"
+          "sha256": "eb6dc256e4d60ddf3a447083f3ab44ebc14071e94acd3a5698eb28655b93a516"
         },
         {
           "path": "work/man/symvault-template-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "738be70f5b50846393c431d59f48571693b5835fdfd0b029931c9b2037580745"
+          "sha256": "35a779057170b4bffec559b7ce799c1955aa924c5fac0c75fde5549be4ae45d3"
         },
         {
           "path": "work/man/symvault-template.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b9f6fba9e77e6a9aa0742e3229f1ee3cd8281100e55d248a3651303b86e8b62f"
+          "sha256": "4ed4c0895cba6728a08ce4b9438ce2eb8738ed14da8b558eb666da755c1db46f"
         },
         {
           "path": "work/man/symvault-ui.1",
           "change": "added",
           "kind": "file",
-          "sha256": "87a8536ce0bd2b3a55780c6e1cb313642600d57c7c3c30322c1b99396082726c"
+          "sha256": "ededddd1447cd4110bfbd8bdcaa0f8903e8d4eacd7864b1ce124ac25498c8bc1"
         },
         {
           "path": "work/man/symvault-unlock.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9053cc855e46e63ede120db5bf3bcd6f8dd98824fb0e8deeffcbb482b3befecb"
+          "sha256": "b9c22e2eb4cbfbf3a24a51c47fcc1037bc91e96ac52bad6b55ac6395802e7975"
         },
         {
           "path": "work/man/symvault-update-apply.1",
           "change": "added",
           "kind": "file",
-          "sha256": "047bf1e1eab8ae2a1043fa9158e23ad310709d1311c56c32e9d7cf191b0407c2"
+          "sha256": "52c3dbfad0952b1dea68e46662da57d3e19cc0b9504f1676b628fc895db7ba96"
         },
         {
           "path": "work/man/symvault-update-check.1",
           "change": "added",
           "kind": "file",
-          "sha256": "72987acfec61aaee3b5741b3cc5d0a5961562f8473495ddbecf7e7a86147efa3"
+          "sha256": "19757080fdecaae0e2952f10b3cc17a10f60f756dcd96751e7236a9673dff243"
         },
         {
           "path": "work/man/symvault-update-info.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d7b41a334e482ab0517cdd80e9269b2e6a11b2c144549cc97be457afef7cd3d8"
+          "sha256": "0360dfcaf94d67c98bec8ff221ab1cbd0ecb067495c4024cadef4b30758e3a9e"
         },
         {
           "path": "work/man/symvault-update.1",
           "change": "added",
           "kind": "file",
-          "sha256": "73c1997973224323605c32710d02897fef3f90d2654baa10a7b995e7580a2280"
+          "sha256": "de073d189bb8d3ac9f723ea329007831bcd2f0ec5b9881de9b38e97bf8f1e57f"
         },
         {
           "path": "work/man/symvault-verify.1",
           "change": "added",
           "kind": "file",
-          "sha256": "01026c7b8991caa8f9770df880f2df5b34fc60fe66dc04e6ca123a5204a723b1"
+          "sha256": "65e3ee49171cfa541e1d8f7cbf6b505aa1fcc261db06b44bef760e9c0196828c"
         },
         {
           "path": "work/man/symvault-version.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9b3f68b97997692751279c0077c04b7063517f8e46f03109d401d87aee468281"
+          "sha256": "20d382e8a1b53a483603e3ab37a6e474d1233393e2dcf07fefb90d8c9d862692"
         },
         {
           "path": "work/man/symvault.1",
           "change": "added",
           "kind": "file",
-          "sha256": "027e4646218d9b00f9d9c8abc6882a442d730ab819762abdf9d7642e2ab550a6"
+          "sha256": "e07f44fa1e4a832e8e25109a395e70dfa9e0b9f09d4185679a8ebfcbb7dc546b"
         }
       ]
     },
@@ -5131,6 +5137,9 @@
       "mode": "yaml",
       "desc": "generate manpages into a directory",
       "seed": "empty",
+      "rules": [
+        "man-date"
+      ],
       "argv": [
         "generate",
         "manpages",
@@ -5151,715 +5160,715 @@
           "path": "work/man/symvault-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b1b4376e42356df34761007d021e643ffceb124d88134cc597b2b08240d2c74d"
+          "sha256": "f9435a6c1a8ecdda22ae88ad4306c1ca8b1cb3a907baecd8627549826ef32437"
         },
         {
           "path": "work/man/symvault-agent-audit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e1a95a8f8d5af546bfa08f0a7290636530c1fd21c5009f4a9f70c492791cb08f"
+          "sha256": "323c13a20f2c831c539980cc0b4e6edfae09122bac265ad20bacaa2d800a5bdc"
         },
         {
           "path": "work/man/symvault-agent-doctor.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a1981f756901a5b6de8a3131ab54466ae9cbbe82e2060c936c306a586813bc00"
+          "sha256": "7263572afc80cc95c83ef9ba9f1e0fe4b5dab6783d26af67866112f7ba0a5230"
         },
         {
           "path": "work/man/symvault-agent-install.1",
           "change": "added",
           "kind": "file",
-          "sha256": "be01debbea23184513882b4bc231a13856412eb2d7b547e52dec52cebc16f7d4"
+          "sha256": "b9b7a57567ad7f53834bb4303d330c7cc40248dc4ed0150893abd5a3a29d3167"
         },
         {
           "path": "work/man/symvault-agent-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f2de69aa25c02cd5386a559a53ac78579a6e9f650da7053e26670ae17848c4d8"
+          "sha256": "521c40d34dc2fef1cb35a7c1e4b4a9560cc881d37d3103a3d7660b54eddd19cf"
         },
         {
           "path": "work/man/symvault-agent-profile-edit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "eff9d1a014b50eb9ae54dc5c49f369c0d90c4952c541546403694812761d8499"
+          "sha256": "1c254e11ca0b5eb3bcaf09932f202ac2299c6d397e71bfe297e84ddaa477cc09"
         },
         {
           "path": "work/man/symvault-agent-profile-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "deed1074976c2c7de6a17a3081f3cb12e6624286db5fae49c2723e4fdcc24c33"
+          "sha256": "5a4d09cff33cf822528a7077f6587da5d24032ddf828b5df2de1221bd9fdf3a0"
         },
         {
           "path": "work/man/symvault-agent-profile-show.1",
           "change": "added",
           "kind": "file",
-          "sha256": "0e125f24fc7f0435f4ffb08edb01d1a9bcf0f80953997901138b8285cf163dc0"
+          "sha256": "8546437cf2241b57bd9c98bc63fd824d1e9fc11bacb5dd6476e15c675caa3904"
         },
         {
           "path": "work/man/symvault-agent-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e19301027061f5e54ec1439931833f10e142a4c90180928b6f0e962ae412fa0a"
+          "sha256": "8ca0c002ab66302c60ea11d3963d6a379a9654c9ed298382b14dd79f1f9445da"
         },
         {
           "path": "work/man/symvault-agent-skill-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3866e0fe1e67e966ebc16eb1b868f4d4636c0e7a34a2dc5a1f11ab2115100b96"
+          "sha256": "e42a061c27dc894c8fe7676fbe26f3c8fbb95179e79c09eb57b706fede0a7b84"
         },
         {
           "path": "work/man/symvault-agent-skill-refresh.1",
           "change": "added",
           "kind": "file",
-          "sha256": "73ecfd400fa2c1ce3ae9f5d58bbe517de021995f9f56cbb6337875ba16c9db2b"
+          "sha256": "89408ca876feec65cd0537e4784112a336dc085154b8e1322bb6a3fe091ad265"
         },
         {
           "path": "work/man/symvault-agent-skill.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a4c2ee72ac278097862ca00481eec98a5d259eaeffda49e8b376d7d036897868"
+          "sha256": "cd14bedc046a3573bb14877efdbbb776ef92715fa1c43f9471ddeb8861d2c0dc"
         },
         {
           "path": "work/man/symvault-agent-token-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b5e7724d79955213a0b1abddb550b88913670a6620e831cefd149ed09c18ad8a"
+          "sha256": "570409ea5e51cb2aef004e7e1d863b728bfc635605773e7de0128c648ff3707a"
         },
         {
           "path": "work/man/symvault-agent-token-new.1",
           "change": "added",
           "kind": "file",
-          "sha256": "595d3a4f92a34d7ec12b3c69818a2b3e1ac33464e9d4a071a9b27171a83f33bc"
+          "sha256": "79662e63f3968a8b7c4223674bc2a76147bc29ec2f4751400941e576089628ed"
         },
         {
           "path": "work/man/symvault-agent-token-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "389d17d93e308fc4cb731e5bc10b6b9997a54a708b55b6d2f56fae5651fcc2b5"
+          "sha256": "c4f04e92d703627be6c23a2370ecc58f7a927bed40d330b85e91279b1a80760a"
         },
         {
           "path": "work/man/symvault-agent-token-rotate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5ca4aa4edf9d749bed55724dc55f14d8a0f5bfde3006a21de530936e8ab8beaa"
+          "sha256": "9a8a0ca8832e39ed97a37eaa68727392fc8cc5faba98858e82c9c98e416dd2e6"
         },
         {
           "path": "work/man/symvault-agent-token.1",
           "change": "added",
           "kind": "file",
-          "sha256": "71f987cffe6488dc5c731756fea16d6f2a4847eb43b0bfa6d2234fe08dc35c5e"
+          "sha256": "867c05a3167617e93fef5d7970a1e4f2f2abd7afd19ba32c72e0dcfefbc617c5"
         },
         {
           "path": "work/man/symvault-agent-uninstall.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4e65457878f2a7ad11b61c57e88e92d7a966e112dc756271a955b3417a8231ba"
+          "sha256": "8d9389eb8635bea066e5940ba15005c3b371e5fcde6609e6475f31b96e11bddc"
         },
         {
           "path": "work/man/symvault-agent-upgrade.1",
           "change": "added",
           "kind": "file",
-          "sha256": "6eec525ff47ffcc82fb95b46dd06948c32141337196c2b4837bc03cb92e34549"
+          "sha256": "ff5deeb7417508a011c4231344f6bd7f8f86ad63efb8ce9a900ebc2d484444a9"
         },
         {
           "path": "work/man/symvault-agent-whoami.1",
           "change": "added",
           "kind": "file",
-          "sha256": "14b0cb2dca458afd6567626333927da4e8c3a0ff561b71de807c2f1588e70ee0"
+          "sha256": "00a1ac897f49e8ba37affd7ab1bde34cfdaf7d4929277a8b1ef89e2310ae725e"
         },
         {
           "path": "work/man/symvault-agent.1",
           "change": "added",
           "kind": "file",
-          "sha256": "76d99cb02b011e635aa85b470d2d2ad5bf58c89623e14b19ecd4c6abca1b214a"
+          "sha256": "7adede33fd612a170da1281f9ee4cbb4c5e9fab373005ab7a60721247b366c72"
         },
         {
           "path": "work/man/symvault-approval-decide.1",
           "change": "added",
           "kind": "file",
-          "sha256": "69b6e92855ac61ff7278a0fed07afafe071575428da2e53cd839e94b32fabe68"
+          "sha256": "7a6398ddc1cf1f828fc583cf8572a03329ed0dbf3b1fde7de2fba3148e3adcb4"
         },
         {
           "path": "work/man/symvault-approval-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b5c8808a357a75da87abea88dea8b93d2857dc6489f2a3b686a7aaa89fc72936"
+          "sha256": "d7304a0ce6c59da211aefc72faabd4ef7a4c13890d1ab2d9855f3a6ce2055435"
         },
         {
           "path": "work/man/symvault-approval.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d1380d5673b111489342f5499d401c15d35c580e576e6dcf35d46ca4b2cff065"
+          "sha256": "bd2d84e4f4329df90756c8e1f7b54645c721f8315d01c19a118cf46d36cab512"
         },
         {
           "path": "work/man/symvault-audit-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5730eac0e7fbd67b51d0a6587e30cd7e72ab17a570d06125bbb6f3a707207828"
+          "sha256": "c754667b3fa0be70f0fef8cf3923e9a0f893b2c1835791c0a1ee3fb41c00f055"
         },
         {
           "path": "work/man/symvault-audit-rotate-key.1",
           "change": "added",
           "kind": "file",
-          "sha256": "efd1bc484b89eedac23aa2a8c9b0ad0d867e9891295a071ac7e6758e76a30916"
+          "sha256": "d3c1e01eaf48b8228962e2c8eb7405da72993db828c60780a9f73cb4583004f7"
         },
         {
           "path": "work/man/symvault-audit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "451d349d094d64ee68527a6b3d4a338f92c1bcaf1533bcab56fc9838fc562749"
+          "sha256": "34824af5c101a213f6de156960795b28bf161f313a1fee938b7163358be0e986"
         },
         {
           "path": "work/man/symvault-auth-rotate-passphrase.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1b665cd02690328913418641423991fd184ed0875fb53b23e54a62087c2846df"
+          "sha256": "284c171842266386b6dc946c4f9587e9534a5e89f7a4cbdaf6070799e26d8264"
         },
         {
           "path": "work/man/symvault-auth-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f99819b0943772043a4673ba09fbe41391a09c86b085539daed3ed0c80e1efff"
+          "sha256": "9b45f84a75c95f6665219f15c1417594eeeb4b2f8738e4beda49b343cb693a21"
         },
         {
           "path": "work/man/symvault-auth-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ba231ec432c3128d768d45b322178fb335d15c1fe7973550c2735b9b1c5666db"
+          "sha256": "920d85410f76db5772c3a93aa898b57011814f4ff4859de030d69cdf376700e4"
         },
         {
           "path": "work/man/symvault-auth.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3c32f2421556b5e00ca921caf17bd6614852c004fbc20fed9c4417f73a4c2899"
+          "sha256": "0efc3d136ecca4803eb0899f74ba995c91b458e290180ea16e605253fd51ca36"
         },
         {
           "path": "work/man/symvault-backup.1",
           "change": "added",
           "kind": "file",
-          "sha256": "17d41c237132069c7d766461b8187ad2da3b5628f63cf8ebdada557eefdfae7a"
+          "sha256": "be61eddb913bd5645c2715ff21990a7458ae7a8ecdf734a6fcf6e8d017eb89e6"
         },
         {
           "path": "work/man/symvault-broker.1",
           "change": "added",
           "kind": "file",
-          "sha256": "acecc4a377cbc99b3d3b1ed8f7a50eb1f122205e873f6e13eee4c643e6009583"
+          "sha256": "919a343876dfccac2a447abd04081c2fd28edbcaf8e7c89889d177d5f46b6944"
         },
         {
           "path": "work/man/symvault-config-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7d79f506502f365021ed76ca20b9e4d2f92a77f60b111ae299992778627fb7fb"
+          "sha256": "8f2ceb7307862e75f8e8059b1b5102323a47a8f2724a40677d18166d3a383221"
         },
         {
           "path": "work/man/symvault-config-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b4e7ab076afa61e5ad890143912160eb9870c4af32844a96463e1150caf52889"
+          "sha256": "08b3a276dcb95694d569347db76b6022c0da6308130f8da7406c8a7caf9b77b2"
         },
         {
           "path": "work/man/symvault-config-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "0ec1103eecf791a3aa0e527044530cbe89076de64a4f65bcc41487e4ef7a0250"
+          "sha256": "79d21261a109f2555870c6ea6eb3624d3c3d023fbd6a11a2d1bd832acdbfbd23"
         },
         {
           "path": "work/man/symvault-config-validate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b7925b33447cf3fe0bfcff5a7e45d91043630c1be64544655b70f54d7396e79a"
+          "sha256": "681dc61cef5f7158d992e59a2c4a09e4dabbb975f92f371e27ff5f4c0f3227b6"
         },
         {
           "path": "work/man/symvault-config.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9a68faa59dec4f3275ce7025e7f300eaf12e8534b7068e951ae8a49eadaa5601"
+          "sha256": "0c6527eb657c5c06bdb465fc62196e3c9e98ee439087c7cee8929e92f819082d"
         },
         {
           "path": "work/man/symvault-delete.1",
           "change": "added",
           "kind": "file",
-          "sha256": "887a00ce0b56e3432a7ee331256e3d2571a837f1b550f883319ddb0f9bd8860a"
+          "sha256": "c319e9ef1bad239a6ef2f6cc528fdef384787e1c47e25611434ae626dc6723c9"
         },
         {
           "path": "work/man/symvault-device-accept.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ba731eca8c3395d42e420fd4c0748a0d578fb244642a7d42712ca27d3186177"
+          "sha256": "d4c3e37786319d82552833b33b99058654b8b8320eb909ccebab04d4fef98588"
         },
         {
           "path": "work/man/symvault-device-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "cc169cde2f66f470fe4214ba9eb5ceb2e6648c5ae09d07d7ab2caa562f7363bb"
+          "sha256": "5ae7a9a6949530e37ecc5ab80a9a8ddd88037e0e336f3c3d04d2894bb2301d6b"
         },
         {
           "path": "work/man/symvault-device-approval-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9df54513a0c278adc699914d4bf4abc2ccc3602ac2583f43d18d26fd8e8ef596"
+          "sha256": "0a016135d906d3def669320b76af5376638b05a0c612125b163e01eaf4e4c03f"
         },
         {
           "path": "work/man/symvault-device-approval-pair.1",
           "change": "added",
           "kind": "file",
-          "sha256": "fd16f216c25774fd7e8ee233525d2f78169638fd9146f3250af0347089723441"
+          "sha256": "fa0a98c90d6ff6773f687b3418455390f58668f099c8ea7bd1b4310009be3ba1"
         },
         {
           "path": "work/man/symvault-device-approval-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e994552145123b8566afac88bbcab9c02e08341de37fbb68a463ca8f9dc4f5a3"
+          "sha256": "f2421f1b75ee11175821adc6ee525d3cce10b481965655d1550f6d859944547d"
         },
         {
           "path": "work/man/symvault-device-join.1",
           "change": "added",
           "kind": "file",
-          "sha256": "63b422cd86eb930c7a60297c9f2e8c549781a120a94cb8aec944de7240df79fe"
+          "sha256": "13365c0b4b3eb7ddf24c643f9fbd4a599f2a5db6d6463a43ebda88034019d943"
         },
         {
           "path": "work/man/symvault-device-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "47bf0b1071b40baad6caaf184740e70100e3d415ee8f26941fc71a490998cb19"
+          "sha256": "f61c2b156d770563adcac3260b078b398d18565d512a091194e5fc4cfac31e76"
         },
         {
           "path": "work/man/symvault-device-pair.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b8a12eb3f72c8b53a063ea94cac7be699555849c75eb5fcba0bda2750dcd3d64"
+          "sha256": "e8bf445eb6acb33d6695161f76ea16b84084183a8272b24a06a98b8361a3b2a6"
         },
         {
           "path": "work/man/symvault-device-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f866b628c44148a5fdb3cbba033bd83271deaaba701f4ae8cfaf720fd5bceb2d"
+          "sha256": "14da3e61d72cded4effa027d2a1fc30d0939a83a50fdb66ac55a357a66769452"
         },
         {
           "path": "work/man/symvault-device.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c46bb52a8f0ae36adf54717c09a8868dd7c94ef2127e6acfaa9dc80d5f935bd1"
+          "sha256": "4fa337f4a460c19d18dede5f35af76d797d7da83edd0c39fe256711b435d6676"
         },
         {
           "path": "work/man/symvault-doctor.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f7a9c5747831df97ba5920b5cfc397eae97fe27916b7d3d91e9427df89f86790"
+          "sha256": "b172d0aad773db3041fa258edd1cf29513895b62ff6e17462ceba9205e6d622c"
         },
         {
           "path": "work/man/symvault-dynamic-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "91ee51495dfaa3bda3570fa6fdfb8638063c491697c809764e1f3285ed846f58"
+          "sha256": "86cf26a745e0400f1e68ebac469c9bac806c2301908490956e6fbe8f27015323"
         },
         {
           "path": "work/man/symvault-dynamic.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2e265de926ab5b54f8cf482ea60ea323db7547e9469c322ccc81fe9bd418441f"
+          "sha256": "bee07c0cfb677a692acd00a2a83a0674af55b12d900c6ac91133da25bae81523"
         },
         {
           "path": "work/man/symvault-edit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d21714e4de3c16455ecca6306d9f3143475b3762c950cf9b6680ca7176ef6d5c"
+          "sha256": "f93510bb969b61c08fce0e2f942c068376a74bca8198cf88ce69f1334c9f8239"
         },
         {
           "path": "work/man/symvault-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "477edb32da7590c1c6d04a0e71e56bca0ed012404e9775105b6cd791f90add27"
+          "sha256": "21ca16e409465c9c96257bfb5ffe86914f4712dfb3545a951c4bca1450ad2fe4"
         },
         {
           "path": "work/man/symvault-file-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "6aa57e400c07a1ffe5652f0b8adc98957773551968daa4bf6dcad3358e379a53"
+          "sha256": "c4ec66a7235d065d7daf20513de5fb1fdc62b07048789db833fce8a02977164a"
         },
         {
           "path": "work/man/symvault-file-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a41797f4aaccd7358638d2d732bebc082c141d5d40bda6997f0ec693fbaef019"
+          "sha256": "0fb6ca73a79701023a3c4c791aba9d363108878059b125f39f6c182e71234f4e"
         },
         {
           "path": "work/man/symvault-file-use.1",
           "change": "added",
           "kind": "file",
-          "sha256": "65d40298b80eb59c743ad764a15a980491b2f20a56daabbe8bfa7c19b7a777a0"
+          "sha256": "68cc1686ad8b0c4ba340039cde985ea9560584629f491eef82025bfedb3b2bba"
         },
         {
           "path": "work/man/symvault-file.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1b3d6eb89162148a749ac535967391c6a3bc4ed0af47bb7b11b2424074585031"
+          "sha256": "5aa531ec3a89f5c6416478da8600f41adff8d3e00653612e1bd9bbe74b0e3159"
         },
         {
           "path": "work/man/symvault-find.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c6975a50bc74d1992158b85bb0d3a3744031fc9cb78ef6a2596efb125ffebc1c"
+          "sha256": "15b5462312f0c67ce846094ee251a85c57999a8cb1f2bc78ff452daeb82250e0"
         },
         {
           "path": "work/man/symvault-generate-manpages.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c5165d943f19b4fd803c588427ae3e0d9764fa4ea29e744fa6437dfc0821d4d6"
+          "sha256": "03b3fd8b58ebf9915ac246f4e3b0a014cfdd43754605d31f03c0df7c7618e4d1"
         },
         {
           "path": "work/man/symvault-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ab3eac8f0d6c96b1ea32e4e9fee8660e6aedc7bfefcbe6ca3f028d52b299f7c"
+          "sha256": "29a67754e0a95889dabee0c7250ae9d6e4f7b6dc1e041545b1a84b0ccb19dd0f"
         },
         {
           "path": "work/man/symvault-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f4b3eb29490bbb8d781249f6687c0a56c24273d04cffbbee7fb30a013aa33f7d"
+          "sha256": "2816e8d234abd9b52e8e2ebefced5ea06fa934e5d9f01b2c32b07f354e9da11d"
         },
         {
           "path": "work/man/symvault-git.1",
           "change": "added",
           "kind": "file",
-          "sha256": "695c4bc2f318acee343f1d20ae56f45a770843fc7dfd8714059f5b5625508682"
+          "sha256": "2d2098351f57a170c5d971f0ec339ec3b2f273a54641a32e706b957ccd95539a"
         },
         {
           "path": "work/man/symvault-import-review-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2b1b06ed4838808d6b0f4c320344d51db01d02e8a5946e4b0dce727793937d7a"
+          "sha256": "6d47e421f980d2e30385871f235ba01a2f7ef78d4c383c58473c5e0e3dffd74a"
         },
         {
           "path": "work/man/symvault-import-review-promote.1",
           "change": "added",
           "kind": "file",
-          "sha256": "35875500e103ede396474b4e9297f66d6c3ee732d57045be34829a8e7a234b1c"
+          "sha256": "c7375be6dcc4421492de5fb75152dc63fe92124fae31d56b1d90b15092b502ca"
         },
         {
           "path": "work/man/symvault-import-review.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ce63bc418f7e3e70808006acbba74219a2183762c4ce305254b16032aaa8addc"
+          "sha256": "958abbf0e099ca861a3abcc249bd574bb844f3328554b066b62e32b0aab27901"
         },
         {
           "path": "work/man/symvault-import.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e02060ec127ba4e1386e7bd174887be1c5a270dd37d27ff83f4f436ba9cf4fd7"
+          "sha256": "1e7d6945eb33d3cc6271331f757c344368184559e7187f2c7c2e496a35c92b47"
         },
         {
           "path": "work/man/symvault-init.1",
           "change": "added",
           "kind": "file",
-          "sha256": "eb8465190b363021eac392d9d64b5a9ae99504a0b230938f516d110e3441dfa5"
+          "sha256": "61289a420a6ebb4905a0bbe7cadfce44b5ecf3c8018ca63cfdf17250304c6699"
         },
         {
           "path": "work/man/symvault-intake-watch-disable.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9aab0be9174896931f464fe378e42d8cb7cbbe743dd26e9588ff15c3a0a3d7fe"
+          "sha256": "63e6c621305e3b00e08db710ae9cb6f154a3b90117bb424a3717f358edea49ff"
         },
         {
           "path": "work/man/symvault-intake-watch.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c420bce928d8b94d668fa778962b1ebb0d90ca4b0fb5828e64644a039a711a73"
+          "sha256": "cce97559b978ee8affe82a62f785921fab8e8597082c4b009f2244ca1514642c"
         },
         {
           "path": "work/man/symvault-intake.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3220aec1b03ea3011382fe350398a1bda8e28a8554df9b95d6ede1e105f8bed6"
+          "sha256": "c92a02da8b0bb6a6c8ac2d09816e1134fdba62f9090b8915548a3005a69f06ad"
         },
         {
           "path": "work/man/symvault-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b8984d009977ce8156c9c92a18c13806d535e97d7f7ab6761ee6081e7480d956"
+          "sha256": "b39507b6963ce1c27fd23569ccef83acf40fe9eaea057e59ed5f341c9aa17c6b"
         },
         {
           "path": "work/man/symvault-lock.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f99d62777aae8544ddc11d2d685061ff14eb10249503eaf88298a38c53c94497"
+          "sha256": "85139b7278e03f17eb8ba8657ac17db2738404884200579fd52b0aa9b02bc7db"
         },
         {
           "path": "work/man/symvault-mcp-install.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e14164ed6be771f4264977b7c79e3b69111e15030eefdd21547e8ac13de0e427"
+          "sha256": "3b89fa1db4f848e732d8ee790e72f26705b0a8b3396a3dd9068e30d15646f726"
         },
         {
           "path": "work/man/symvault-mcp-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "648f2cde8b6a55b067ccfa70d90c9bb15f503347d114eb27fb9aca593d63f8d2"
+          "sha256": "689511bcd83bccc76e0e6300bc81f5b1a89fabd3e04193bd53e5ec04958cae84"
         },
         {
           "path": "work/man/symvault-mcp-uninstall.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7935b9c7016b8bc46e0fb02e93e4bf06a8acf4ada2482fe32b7b27ac624c5b74"
+          "sha256": "5f0e9473f5ba56ad92bd14d85636637603a40ce73538147281d21da412369e55"
         },
         {
           "path": "work/man/symvault-mcp.1",
           "change": "added",
           "kind": "file",
-          "sha256": "415f839bb8c35459d268aef453b9cdd6598d017bb23c6749008d685ff969284f"
+          "sha256": "800ed921e0cb2518dbc64563178c8489acde5614175bf79c9ce9c0602f7ff0b4"
         },
         {
           "path": "work/man/symvault-migrate-kdf.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5790eac8c8ea7b78e577021feefb9d4c10f11a1b905bfd08059ca24b5f328af6"
+          "sha256": "def86941424a701b916f05440e21e434839926aa4e685861be012a6ec7a90c45"
         },
         {
           "path": "work/man/symvault-migrate-paths.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a97901499918ad6430b37c80781eab7b19010611a470a0cb248e2167c9172bb1"
+          "sha256": "94050abf1f096faa4950a217e9a41733ad8e686679b8f28faeb782ea53c3c457"
         },
         {
           "path": "work/man/symvault-migrate-pseudonymize.1",
           "change": "added",
           "kind": "file",
-          "sha256": "dcd7cc762fe2695d43123984c5e9a3f3b333f5fd4577a3d99627093ac9a2dda6"
+          "sha256": "71b90659f993ba625802acc16057e3dc640fcc6d8dd2ccd87c6e8b50ece0de96"
         },
         {
           "path": "work/man/symvault-migrate-session.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b07b6974c7e5778e2486e63839dd4c00eb55990cbb64999459656df5d546dc32"
+          "sha256": "c700f1be936bc30f7636ef764a591773e94001451601608c5e48c6f503b0a6d2"
         },
         {
           "path": "work/man/symvault-migrate-v4.1",
           "change": "added",
           "kind": "file",
-          "sha256": "584f09f7a30e91295f1ca666d75254f707b3fbc00ff457425653c278ac27568a"
+          "sha256": "a88ba55ab872500d53a370646ed5c748a64be7fcc5b1286620f007c91618304c"
         },
         {
           "path": "work/man/symvault-migrate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4d36e1f6c63515d49da871d22a594b55ad9ab3926e61824f3d6011d6a594cf74"
+          "sha256": "f8d52e4c986ad03db0af9b1b0a4186b18baffebc55a39bc6287f9ee750b8d3d2"
         },
         {
           "path": "work/man/symvault-policy-apply.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9d85248220fd8266cc945ef2a2fa5ed2a1d671b6128d4462f58d5db9b28e7f7b"
+          "sha256": "042c9fb1f5823b37c0b9d5de80ba61ed98b3159e3fded35c5093d546d567637b"
         },
         {
           "path": "work/man/symvault-policy-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "466a71f213dbe4dbebaaa2491bb870e9387d2420b67797cf81e3aef10fda0921"
+          "sha256": "088654e70781068259c0a064f1813a599015b26765f4f6110279c4baa6d3714a"
         },
         {
           "path": "work/man/symvault-policy-remove.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5e030ae48899212e46e1ca1590d33138c1e1f0e9565d4a8a9b8b93b0f3e86992"
+          "sha256": "1532dec1ab54efd49aa4e43fc1d9bab28eec4ee1e88364cbb34d442ebc5e744c"
         },
         {
           "path": "work/man/symvault-policy-validate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "378a90e7a8bdec8595ad0bb391d168724320c26024777a7557d699d9bad23f3d"
+          "sha256": "d7bfff4bf9b46e87f1e3ebd8aacf91be791ba3c8bac914222baad5c0fb8d4400"
         },
         {
           "path": "work/man/symvault-policy.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d3d4fd1ae705db08c6ca3dda49e0fec1d7df67943011d0f4187431d54d3c8c21"
+          "sha256": "0b6e0bbee05fe512bb0251efed1c5e9093fb74f8742f18a27569bd53fbbc29ab"
         },
         {
           "path": "work/man/symvault-profile-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "64ca8d15ae8c620babbf79902faa44f0f0c9cc77303d6a1b636428ccec7f00e1"
+          "sha256": "84aca5f3a6d22a6fd6c312760fb6776982da5b01e5a2b4fcdc3c933f83aeba96"
         },
         {
           "path": "work/man/symvault-profile-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "8707280de5a36509fe68d2d1a92a3880b6f2d43e8eb2bc2df0f3786218b7cbfc"
+          "sha256": "ceb49fd2164254a02a786f836ae45f72e099970157f69c1cc3bdafd1c752b241"
         },
         {
           "path": "work/man/symvault-profile-use.1",
           "change": "added",
           "kind": "file",
-          "sha256": "72e96b5c912b18e03014f398eb59ec705efb75474ae2280f0110296e6361ba06"
+          "sha256": "2193f5e649ca00f644ac6e3a69b1369ec4cd021967fbf9e8aee68441b9f0e121"
         },
         {
           "path": "work/man/symvault-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "41f9f3ccbbd7456b15c8590693b423ff018cfafa6961be63033e655f9920c58a"
+          "sha256": "f61056f6db2d88c313a7960cec6e976ce9213404a23b2adcf29b0caba23b2dda"
         },
         {
           "path": "work/man/symvault-recipients-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a453b307b67f5a4785693a8b94253144723fac3010e22848d538cdb36ef57e07"
+          "sha256": "ba26d9c7fe18f66a2993a81a9340c3ce2175ed6ccd7e169346496437169b9e53"
         },
         {
           "path": "work/man/symvault-recipients-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ed119b5d226190dca36aa9831afd09f64eae18fbe6b8423094f0db60944d9bc9"
+          "sha256": "b23eb8f3b2762db23c7910d5826188b7e54b07b4eaa9ddaded292b96d418ca86"
         },
         {
           "path": "work/man/symvault-recipients-remove.1",
           "change": "added",
           "kind": "file",
-          "sha256": "253cf3911b023b86cc87231ab9460ce7111088ba43781b5773df9eb35a31b178"
+          "sha256": "b788eb83e69b273d51518aaed866fade09de31e4a5f9da156248b9c4ef49916f"
         },
         {
           "path": "work/man/symvault-recipients.1",
           "change": "added",
           "kind": "file",
-          "sha256": "cc0b7c2a5f01c8ec34cddcc3bff2612dc7e973d84c461cbf8646fedec20a6e4f"
+          "sha256": "5b68e86c3a78c1ed754684eff1b53c0f7ddf001f1fc7dc3c816264c41b57739e"
         },
         {
           "path": "work/man/symvault-remote-init.1",
           "change": "added",
           "kind": "file",
-          "sha256": "09e63ff255e0c0553179a6d400a1ef38dad58860b5c8a99b3cc2c7892e8a2cdd"
+          "sha256": "ca7cddf2c964d57c002104a21aa680749d17daa2f38a1b449c916be744b0ee52"
         },
         {
           "path": "work/man/symvault-remote-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e34471f8facffab3b71c5c082515f6556635f9367428b24eec8262138f16b2dc"
+          "sha256": "71bc2f1d620a45298bf217e82c3ebf68258c07b445d10dc42dbe1945859f4c3a"
         },
         {
           "path": "work/man/symvault-remote.1",
           "change": "added",
           "kind": "file",
-          "sha256": "10cbad2edcbf44a46b86c1f8fdba2dcab67fc276644e5d81362b681bbe018766"
+          "sha256": "b49ad5dd2f95150d0d99e689cfda8f10785cebccb24d3f16862b5804c6f74ab8"
         },
         {
           "path": "work/man/symvault-restore.1",
           "change": "added",
           "kind": "file",
-          "sha256": "db62582e195c847224767428f3a827581ec644d83a27f9625f22bcc234f2290f"
+          "sha256": "99dbcd84a51f5c15ff3e1e4b4e1a0c0620bb24a57827b8adc3dcbe03c96d0135"
         },
         {
           "path": "work/man/symvault-run.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7896775bdae1e9048dd36e12db589387464f444ae39629ae679702345be3f198"
+          "sha256": "48aa3aa55ad1a0d3500fae378b43af030c51c4d1c793e24aa7d3041ccbf08acf"
         },
         {
           "path": "work/man/symvault-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2d40ebb15d9807bfe3674a29bf68720411a6f9b450c1cf03c0da726f3e10df8a"
+          "sha256": "33445aba2ee2d3d90584e167b8a3d176af217c79294d44148f752e5cf7871e92"
         },
         {
           "path": "work/man/symvault-setup.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ee5070c19ff6f649bd26d750d2e37d1abfa08dae497d7abccc3676973187e8a"
+          "sha256": "857f074564b2caf348a483d396baeda9ea79395ff5b4872d4850d8aab55da705"
         },
         {
           "path": "work/man/symvault-share-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "507358120bd2a3d02f2822a278093aabadc0c5e554569a23abe6d23c1d0f4ddd"
+          "sha256": "617c71d5d33a16066ad531eb5a71be57a100b06b13919b085a03fa9323f96823"
         },
         {
           "path": "work/man/symvault-share-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a9600e8274b88fb1fbbc18972e3c1fc9ada39e6183bb69ceed953ce7a104caca"
+          "sha256": "73ef56f8382d89c640b44c609c581c086b15a7d12411324613bb89d0a1aa704b"
         },
         {
           "path": "work/man/symvault-share.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4d00126be10c1d97a812977d1e16d4cbc969974f02e912e1f564f07aa3ab304a"
+          "sha256": "7684ff466ee5ea93736a6d39706e49056f256cb4261a5180c5343521fe424df0"
         },
         {
           "path": "work/man/symvault-startup-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a8dfefa236d4ddbaf93266c7a6c379b51c1f422a4cfb9d27893d686c557ba6dd"
+          "sha256": "1a430d66525d8aa8e5818ae084e942fd145e38381f5712ae40b546cac4dbcbd8"
         },
         {
           "path": "work/man/symvault-sync.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4e76d05c5b06b4548a3a5b52aa4833eb2090109c84435eb82134d24ec6dd32dd"
+          "sha256": "eb6dc256e4d60ddf3a447083f3ab44ebc14071e94acd3a5698eb28655b93a516"
         },
         {
           "path": "work/man/symvault-template-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "738be70f5b50846393c431d59f48571693b5835fdfd0b029931c9b2037580745"
+          "sha256": "35a779057170b4bffec559b7ce799c1955aa924c5fac0c75fde5549be4ae45d3"
         },
         {
           "path": "work/man/symvault-template.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b9f6fba9e77e6a9aa0742e3229f1ee3cd8281100e55d248a3651303b86e8b62f"
+          "sha256": "4ed4c0895cba6728a08ce4b9438ce2eb8738ed14da8b558eb666da755c1db46f"
         },
         {
           "path": "work/man/symvault-ui.1",
           "change": "added",
           "kind": "file",
-          "sha256": "87a8536ce0bd2b3a55780c6e1cb313642600d57c7c3c30322c1b99396082726c"
+          "sha256": "ededddd1447cd4110bfbd8bdcaa0f8903e8d4eacd7864b1ce124ac25498c8bc1"
         },
         {
           "path": "work/man/symvault-unlock.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9053cc855e46e63ede120db5bf3bcd6f8dd98824fb0e8deeffcbb482b3befecb"
+          "sha256": "b9c22e2eb4cbfbf3a24a51c47fcc1037bc91e96ac52bad6b55ac6395802e7975"
         },
         {
           "path": "work/man/symvault-update-apply.1",
           "change": "added",
           "kind": "file",
-          "sha256": "047bf1e1eab8ae2a1043fa9158e23ad310709d1311c56c32e9d7cf191b0407c2"
+          "sha256": "52c3dbfad0952b1dea68e46662da57d3e19cc0b9504f1676b628fc895db7ba96"
         },
         {
           "path": "work/man/symvault-update-check.1",
           "change": "added",
           "kind": "file",
-          "sha256": "72987acfec61aaee3b5741b3cc5d0a5961562f8473495ddbecf7e7a86147efa3"
+          "sha256": "19757080fdecaae0e2952f10b3cc17a10f60f756dcd96751e7236a9673dff243"
         },
         {
           "path": "work/man/symvault-update-info.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d7b41a334e482ab0517cdd80e9269b2e6a11b2c144549cc97be457afef7cd3d8"
+          "sha256": "0360dfcaf94d67c98bec8ff221ab1cbd0ecb067495c4024cadef4b30758e3a9e"
         },
         {
           "path": "work/man/symvault-update.1",
           "change": "added",
           "kind": "file",
-          "sha256": "73c1997973224323605c32710d02897fef3f90d2654baa10a7b995e7580a2280"
+          "sha256": "de073d189bb8d3ac9f723ea329007831bcd2f0ec5b9881de9b38e97bf8f1e57f"
         },
         {
           "path": "work/man/symvault-verify.1",
           "change": "added",
           "kind": "file",
-          "sha256": "01026c7b8991caa8f9770df880f2df5b34fc60fe66dc04e6ca123a5204a723b1"
+          "sha256": "65e3ee49171cfa541e1d8f7cbf6b505aa1fcc261db06b44bef760e9c0196828c"
         },
         {
           "path": "work/man/symvault-version.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9b3f68b97997692751279c0077c04b7063517f8e46f03109d401d87aee468281"
+          "sha256": "20d382e8a1b53a483603e3ab37a6e474d1233393e2dcf07fefb90d8c9d862692"
         },
         {
           "path": "work/man/symvault.1",
           "change": "added",
           "kind": "file",
-          "sha256": "027e4646218d9b00f9d9c8abc6882a442d730ab819762abdf9d7642e2ab550a6"
+          "sha256": "e07f44fa1e4a832e8e25109a395e70dfa9e0b9f09d4185679a8ebfcbb7dc546b"
         }
       ]
     },
@@ -5870,6 +5879,9 @@
       "mode": "output-json",
       "desc": "generate manpages into a directory",
       "seed": "empty",
+      "rules": [
+        "man-date"
+      ],
       "argv": [
         "generate",
         "manpages",
@@ -5890,715 +5902,715 @@
           "path": "work/man/symvault-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b1b4376e42356df34761007d021e643ffceb124d88134cc597b2b08240d2c74d"
+          "sha256": "f9435a6c1a8ecdda22ae88ad4306c1ca8b1cb3a907baecd8627549826ef32437"
         },
         {
           "path": "work/man/symvault-agent-audit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e1a95a8f8d5af546bfa08f0a7290636530c1fd21c5009f4a9f70c492791cb08f"
+          "sha256": "323c13a20f2c831c539980cc0b4e6edfae09122bac265ad20bacaa2d800a5bdc"
         },
         {
           "path": "work/man/symvault-agent-doctor.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a1981f756901a5b6de8a3131ab54466ae9cbbe82e2060c936c306a586813bc00"
+          "sha256": "7263572afc80cc95c83ef9ba9f1e0fe4b5dab6783d26af67866112f7ba0a5230"
         },
         {
           "path": "work/man/symvault-agent-install.1",
           "change": "added",
           "kind": "file",
-          "sha256": "be01debbea23184513882b4bc231a13856412eb2d7b547e52dec52cebc16f7d4"
+          "sha256": "b9b7a57567ad7f53834bb4303d330c7cc40248dc4ed0150893abd5a3a29d3167"
         },
         {
           "path": "work/man/symvault-agent-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f2de69aa25c02cd5386a559a53ac78579a6e9f650da7053e26670ae17848c4d8"
+          "sha256": "521c40d34dc2fef1cb35a7c1e4b4a9560cc881d37d3103a3d7660b54eddd19cf"
         },
         {
           "path": "work/man/symvault-agent-profile-edit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "eff9d1a014b50eb9ae54dc5c49f369c0d90c4952c541546403694812761d8499"
+          "sha256": "1c254e11ca0b5eb3bcaf09932f202ac2299c6d397e71bfe297e84ddaa477cc09"
         },
         {
           "path": "work/man/symvault-agent-profile-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "deed1074976c2c7de6a17a3081f3cb12e6624286db5fae49c2723e4fdcc24c33"
+          "sha256": "5a4d09cff33cf822528a7077f6587da5d24032ddf828b5df2de1221bd9fdf3a0"
         },
         {
           "path": "work/man/symvault-agent-profile-show.1",
           "change": "added",
           "kind": "file",
-          "sha256": "0e125f24fc7f0435f4ffb08edb01d1a9bcf0f80953997901138b8285cf163dc0"
+          "sha256": "8546437cf2241b57bd9c98bc63fd824d1e9fc11bacb5dd6476e15c675caa3904"
         },
         {
           "path": "work/man/symvault-agent-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e19301027061f5e54ec1439931833f10e142a4c90180928b6f0e962ae412fa0a"
+          "sha256": "8ca0c002ab66302c60ea11d3963d6a379a9654c9ed298382b14dd79f1f9445da"
         },
         {
           "path": "work/man/symvault-agent-skill-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3866e0fe1e67e966ebc16eb1b868f4d4636c0e7a34a2dc5a1f11ab2115100b96"
+          "sha256": "e42a061c27dc894c8fe7676fbe26f3c8fbb95179e79c09eb57b706fede0a7b84"
         },
         {
           "path": "work/man/symvault-agent-skill-refresh.1",
           "change": "added",
           "kind": "file",
-          "sha256": "73ecfd400fa2c1ce3ae9f5d58bbe517de021995f9f56cbb6337875ba16c9db2b"
+          "sha256": "89408ca876feec65cd0537e4784112a336dc085154b8e1322bb6a3fe091ad265"
         },
         {
           "path": "work/man/symvault-agent-skill.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a4c2ee72ac278097862ca00481eec98a5d259eaeffda49e8b376d7d036897868"
+          "sha256": "cd14bedc046a3573bb14877efdbbb776ef92715fa1c43f9471ddeb8861d2c0dc"
         },
         {
           "path": "work/man/symvault-agent-token-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b5e7724d79955213a0b1abddb550b88913670a6620e831cefd149ed09c18ad8a"
+          "sha256": "570409ea5e51cb2aef004e7e1d863b728bfc635605773e7de0128c648ff3707a"
         },
         {
           "path": "work/man/symvault-agent-token-new.1",
           "change": "added",
           "kind": "file",
-          "sha256": "595d3a4f92a34d7ec12b3c69818a2b3e1ac33464e9d4a071a9b27171a83f33bc"
+          "sha256": "79662e63f3968a8b7c4223674bc2a76147bc29ec2f4751400941e576089628ed"
         },
         {
           "path": "work/man/symvault-agent-token-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "389d17d93e308fc4cb731e5bc10b6b9997a54a708b55b6d2f56fae5651fcc2b5"
+          "sha256": "c4f04e92d703627be6c23a2370ecc58f7a927bed40d330b85e91279b1a80760a"
         },
         {
           "path": "work/man/symvault-agent-token-rotate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5ca4aa4edf9d749bed55724dc55f14d8a0f5bfde3006a21de530936e8ab8beaa"
+          "sha256": "9a8a0ca8832e39ed97a37eaa68727392fc8cc5faba98858e82c9c98e416dd2e6"
         },
         {
           "path": "work/man/symvault-agent-token.1",
           "change": "added",
           "kind": "file",
-          "sha256": "71f987cffe6488dc5c731756fea16d6f2a4847eb43b0bfa6d2234fe08dc35c5e"
+          "sha256": "867c05a3167617e93fef5d7970a1e4f2f2abd7afd19ba32c72e0dcfefbc617c5"
         },
         {
           "path": "work/man/symvault-agent-uninstall.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4e65457878f2a7ad11b61c57e88e92d7a966e112dc756271a955b3417a8231ba"
+          "sha256": "8d9389eb8635bea066e5940ba15005c3b371e5fcde6609e6475f31b96e11bddc"
         },
         {
           "path": "work/man/symvault-agent-upgrade.1",
           "change": "added",
           "kind": "file",
-          "sha256": "6eec525ff47ffcc82fb95b46dd06948c32141337196c2b4837bc03cb92e34549"
+          "sha256": "ff5deeb7417508a011c4231344f6bd7f8f86ad63efb8ce9a900ebc2d484444a9"
         },
         {
           "path": "work/man/symvault-agent-whoami.1",
           "change": "added",
           "kind": "file",
-          "sha256": "14b0cb2dca458afd6567626333927da4e8c3a0ff561b71de807c2f1588e70ee0"
+          "sha256": "00a1ac897f49e8ba37affd7ab1bde34cfdaf7d4929277a8b1ef89e2310ae725e"
         },
         {
           "path": "work/man/symvault-agent.1",
           "change": "added",
           "kind": "file",
-          "sha256": "76d99cb02b011e635aa85b470d2d2ad5bf58c89623e14b19ecd4c6abca1b214a"
+          "sha256": "7adede33fd612a170da1281f9ee4cbb4c5e9fab373005ab7a60721247b366c72"
         },
         {
           "path": "work/man/symvault-approval-decide.1",
           "change": "added",
           "kind": "file",
-          "sha256": "69b6e92855ac61ff7278a0fed07afafe071575428da2e53cd839e94b32fabe68"
+          "sha256": "7a6398ddc1cf1f828fc583cf8572a03329ed0dbf3b1fde7de2fba3148e3adcb4"
         },
         {
           "path": "work/man/symvault-approval-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b5c8808a357a75da87abea88dea8b93d2857dc6489f2a3b686a7aaa89fc72936"
+          "sha256": "d7304a0ce6c59da211aefc72faabd4ef7a4c13890d1ab2d9855f3a6ce2055435"
         },
         {
           "path": "work/man/symvault-approval.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d1380d5673b111489342f5499d401c15d35c580e576e6dcf35d46ca4b2cff065"
+          "sha256": "bd2d84e4f4329df90756c8e1f7b54645c721f8315d01c19a118cf46d36cab512"
         },
         {
           "path": "work/man/symvault-audit-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5730eac0e7fbd67b51d0a6587e30cd7e72ab17a570d06125bbb6f3a707207828"
+          "sha256": "c754667b3fa0be70f0fef8cf3923e9a0f893b2c1835791c0a1ee3fb41c00f055"
         },
         {
           "path": "work/man/symvault-audit-rotate-key.1",
           "change": "added",
           "kind": "file",
-          "sha256": "efd1bc484b89eedac23aa2a8c9b0ad0d867e9891295a071ac7e6758e76a30916"
+          "sha256": "d3c1e01eaf48b8228962e2c8eb7405da72993db828c60780a9f73cb4583004f7"
         },
         {
           "path": "work/man/symvault-audit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "451d349d094d64ee68527a6b3d4a338f92c1bcaf1533bcab56fc9838fc562749"
+          "sha256": "34824af5c101a213f6de156960795b28bf161f313a1fee938b7163358be0e986"
         },
         {
           "path": "work/man/symvault-auth-rotate-passphrase.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1b665cd02690328913418641423991fd184ed0875fb53b23e54a62087c2846df"
+          "sha256": "284c171842266386b6dc946c4f9587e9534a5e89f7a4cbdaf6070799e26d8264"
         },
         {
           "path": "work/man/symvault-auth-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f99819b0943772043a4673ba09fbe41391a09c86b085539daed3ed0c80e1efff"
+          "sha256": "9b45f84a75c95f6665219f15c1417594eeeb4b2f8738e4beda49b343cb693a21"
         },
         {
           "path": "work/man/symvault-auth-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ba231ec432c3128d768d45b322178fb335d15c1fe7973550c2735b9b1c5666db"
+          "sha256": "920d85410f76db5772c3a93aa898b57011814f4ff4859de030d69cdf376700e4"
         },
         {
           "path": "work/man/symvault-auth.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3c32f2421556b5e00ca921caf17bd6614852c004fbc20fed9c4417f73a4c2899"
+          "sha256": "0efc3d136ecca4803eb0899f74ba995c91b458e290180ea16e605253fd51ca36"
         },
         {
           "path": "work/man/symvault-backup.1",
           "change": "added",
           "kind": "file",
-          "sha256": "17d41c237132069c7d766461b8187ad2da3b5628f63cf8ebdada557eefdfae7a"
+          "sha256": "be61eddb913bd5645c2715ff21990a7458ae7a8ecdf734a6fcf6e8d017eb89e6"
         },
         {
           "path": "work/man/symvault-broker.1",
           "change": "added",
           "kind": "file",
-          "sha256": "acecc4a377cbc99b3d3b1ed8f7a50eb1f122205e873f6e13eee4c643e6009583"
+          "sha256": "919a343876dfccac2a447abd04081c2fd28edbcaf8e7c89889d177d5f46b6944"
         },
         {
           "path": "work/man/symvault-config-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7d79f506502f365021ed76ca20b9e4d2f92a77f60b111ae299992778627fb7fb"
+          "sha256": "8f2ceb7307862e75f8e8059b1b5102323a47a8f2724a40677d18166d3a383221"
         },
         {
           "path": "work/man/symvault-config-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b4e7ab076afa61e5ad890143912160eb9870c4af32844a96463e1150caf52889"
+          "sha256": "08b3a276dcb95694d569347db76b6022c0da6308130f8da7406c8a7caf9b77b2"
         },
         {
           "path": "work/man/symvault-config-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "0ec1103eecf791a3aa0e527044530cbe89076de64a4f65bcc41487e4ef7a0250"
+          "sha256": "79d21261a109f2555870c6ea6eb3624d3c3d023fbd6a11a2d1bd832acdbfbd23"
         },
         {
           "path": "work/man/symvault-config-validate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b7925b33447cf3fe0bfcff5a7e45d91043630c1be64544655b70f54d7396e79a"
+          "sha256": "681dc61cef5f7158d992e59a2c4a09e4dabbb975f92f371e27ff5f4c0f3227b6"
         },
         {
           "path": "work/man/symvault-config.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9a68faa59dec4f3275ce7025e7f300eaf12e8534b7068e951ae8a49eadaa5601"
+          "sha256": "0c6527eb657c5c06bdb465fc62196e3c9e98ee439087c7cee8929e92f819082d"
         },
         {
           "path": "work/man/symvault-delete.1",
           "change": "added",
           "kind": "file",
-          "sha256": "887a00ce0b56e3432a7ee331256e3d2571a837f1b550f883319ddb0f9bd8860a"
+          "sha256": "c319e9ef1bad239a6ef2f6cc528fdef384787e1c47e25611434ae626dc6723c9"
         },
         {
           "path": "work/man/symvault-device-accept.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ba731eca8c3395d42e420fd4c0748a0d578fb244642a7d42712ca27d3186177"
+          "sha256": "d4c3e37786319d82552833b33b99058654b8b8320eb909ccebab04d4fef98588"
         },
         {
           "path": "work/man/symvault-device-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "cc169cde2f66f470fe4214ba9eb5ceb2e6648c5ae09d07d7ab2caa562f7363bb"
+          "sha256": "5ae7a9a6949530e37ecc5ab80a9a8ddd88037e0e336f3c3d04d2894bb2301d6b"
         },
         {
           "path": "work/man/symvault-device-approval-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9df54513a0c278adc699914d4bf4abc2ccc3602ac2583f43d18d26fd8e8ef596"
+          "sha256": "0a016135d906d3def669320b76af5376638b05a0c612125b163e01eaf4e4c03f"
         },
         {
           "path": "work/man/symvault-device-approval-pair.1",
           "change": "added",
           "kind": "file",
-          "sha256": "fd16f216c25774fd7e8ee233525d2f78169638fd9146f3250af0347089723441"
+          "sha256": "fa0a98c90d6ff6773f687b3418455390f58668f099c8ea7bd1b4310009be3ba1"
         },
         {
           "path": "work/man/symvault-device-approval-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e994552145123b8566afac88bbcab9c02e08341de37fbb68a463ca8f9dc4f5a3"
+          "sha256": "f2421f1b75ee11175821adc6ee525d3cce10b481965655d1550f6d859944547d"
         },
         {
           "path": "work/man/symvault-device-join.1",
           "change": "added",
           "kind": "file",
-          "sha256": "63b422cd86eb930c7a60297c9f2e8c549781a120a94cb8aec944de7240df79fe"
+          "sha256": "13365c0b4b3eb7ddf24c643f9fbd4a599f2a5db6d6463a43ebda88034019d943"
         },
         {
           "path": "work/man/symvault-device-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "47bf0b1071b40baad6caaf184740e70100e3d415ee8f26941fc71a490998cb19"
+          "sha256": "f61c2b156d770563adcac3260b078b398d18565d512a091194e5fc4cfac31e76"
         },
         {
           "path": "work/man/symvault-device-pair.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b8a12eb3f72c8b53a063ea94cac7be699555849c75eb5fcba0bda2750dcd3d64"
+          "sha256": "e8bf445eb6acb33d6695161f76ea16b84084183a8272b24a06a98b8361a3b2a6"
         },
         {
           "path": "work/man/symvault-device-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f866b628c44148a5fdb3cbba033bd83271deaaba701f4ae8cfaf720fd5bceb2d"
+          "sha256": "14da3e61d72cded4effa027d2a1fc30d0939a83a50fdb66ac55a357a66769452"
         },
         {
           "path": "work/man/symvault-device.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c46bb52a8f0ae36adf54717c09a8868dd7c94ef2127e6acfaa9dc80d5f935bd1"
+          "sha256": "4fa337f4a460c19d18dede5f35af76d797d7da83edd0c39fe256711b435d6676"
         },
         {
           "path": "work/man/symvault-doctor.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f7a9c5747831df97ba5920b5cfc397eae97fe27916b7d3d91e9427df89f86790"
+          "sha256": "b172d0aad773db3041fa258edd1cf29513895b62ff6e17462ceba9205e6d622c"
         },
         {
           "path": "work/man/symvault-dynamic-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "91ee51495dfaa3bda3570fa6fdfb8638063c491697c809764e1f3285ed846f58"
+          "sha256": "86cf26a745e0400f1e68ebac469c9bac806c2301908490956e6fbe8f27015323"
         },
         {
           "path": "work/man/symvault-dynamic.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2e265de926ab5b54f8cf482ea60ea323db7547e9469c322ccc81fe9bd418441f"
+          "sha256": "bee07c0cfb677a692acd00a2a83a0674af55b12d900c6ac91133da25bae81523"
         },
         {
           "path": "work/man/symvault-edit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d21714e4de3c16455ecca6306d9f3143475b3762c950cf9b6680ca7176ef6d5c"
+          "sha256": "f93510bb969b61c08fce0e2f942c068376a74bca8198cf88ce69f1334c9f8239"
         },
         {
           "path": "work/man/symvault-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "477edb32da7590c1c6d04a0e71e56bca0ed012404e9775105b6cd791f90add27"
+          "sha256": "21ca16e409465c9c96257bfb5ffe86914f4712dfb3545a951c4bca1450ad2fe4"
         },
         {
           "path": "work/man/symvault-file-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "6aa57e400c07a1ffe5652f0b8adc98957773551968daa4bf6dcad3358e379a53"
+          "sha256": "c4ec66a7235d065d7daf20513de5fb1fdc62b07048789db833fce8a02977164a"
         },
         {
           "path": "work/man/symvault-file-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a41797f4aaccd7358638d2d732bebc082c141d5d40bda6997f0ec693fbaef019"
+          "sha256": "0fb6ca73a79701023a3c4c791aba9d363108878059b125f39f6c182e71234f4e"
         },
         {
           "path": "work/man/symvault-file-use.1",
           "change": "added",
           "kind": "file",
-          "sha256": "65d40298b80eb59c743ad764a15a980491b2f20a56daabbe8bfa7c19b7a777a0"
+          "sha256": "68cc1686ad8b0c4ba340039cde985ea9560584629f491eef82025bfedb3b2bba"
         },
         {
           "path": "work/man/symvault-file.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1b3d6eb89162148a749ac535967391c6a3bc4ed0af47bb7b11b2424074585031"
+          "sha256": "5aa531ec3a89f5c6416478da8600f41adff8d3e00653612e1bd9bbe74b0e3159"
         },
         {
           "path": "work/man/symvault-find.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c6975a50bc74d1992158b85bb0d3a3744031fc9cb78ef6a2596efb125ffebc1c"
+          "sha256": "15b5462312f0c67ce846094ee251a85c57999a8cb1f2bc78ff452daeb82250e0"
         },
         {
           "path": "work/man/symvault-generate-manpages.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c5165d943f19b4fd803c588427ae3e0d9764fa4ea29e744fa6437dfc0821d4d6"
+          "sha256": "03b3fd8b58ebf9915ac246f4e3b0a014cfdd43754605d31f03c0df7c7618e4d1"
         },
         {
           "path": "work/man/symvault-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ab3eac8f0d6c96b1ea32e4e9fee8660e6aedc7bfefcbe6ca3f028d52b299f7c"
+          "sha256": "29a67754e0a95889dabee0c7250ae9d6e4f7b6dc1e041545b1a84b0ccb19dd0f"
         },
         {
           "path": "work/man/symvault-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f4b3eb29490bbb8d781249f6687c0a56c24273d04cffbbee7fb30a013aa33f7d"
+          "sha256": "2816e8d234abd9b52e8e2ebefced5ea06fa934e5d9f01b2c32b07f354e9da11d"
         },
         {
           "path": "work/man/symvault-git.1",
           "change": "added",
           "kind": "file",
-          "sha256": "695c4bc2f318acee343f1d20ae56f45a770843fc7dfd8714059f5b5625508682"
+          "sha256": "2d2098351f57a170c5d971f0ec339ec3b2f273a54641a32e706b957ccd95539a"
         },
         {
           "path": "work/man/symvault-import-review-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2b1b06ed4838808d6b0f4c320344d51db01d02e8a5946e4b0dce727793937d7a"
+          "sha256": "6d47e421f980d2e30385871f235ba01a2f7ef78d4c383c58473c5e0e3dffd74a"
         },
         {
           "path": "work/man/symvault-import-review-promote.1",
           "change": "added",
           "kind": "file",
-          "sha256": "35875500e103ede396474b4e9297f66d6c3ee732d57045be34829a8e7a234b1c"
+          "sha256": "c7375be6dcc4421492de5fb75152dc63fe92124fae31d56b1d90b15092b502ca"
         },
         {
           "path": "work/man/symvault-import-review.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ce63bc418f7e3e70808006acbba74219a2183762c4ce305254b16032aaa8addc"
+          "sha256": "958abbf0e099ca861a3abcc249bd574bb844f3328554b066b62e32b0aab27901"
         },
         {
           "path": "work/man/symvault-import.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e02060ec127ba4e1386e7bd174887be1c5a270dd37d27ff83f4f436ba9cf4fd7"
+          "sha256": "1e7d6945eb33d3cc6271331f757c344368184559e7187f2c7c2e496a35c92b47"
         },
         {
           "path": "work/man/symvault-init.1",
           "change": "added",
           "kind": "file",
-          "sha256": "eb8465190b363021eac392d9d64b5a9ae99504a0b230938f516d110e3441dfa5"
+          "sha256": "61289a420a6ebb4905a0bbe7cadfce44b5ecf3c8018ca63cfdf17250304c6699"
         },
         {
           "path": "work/man/symvault-intake-watch-disable.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9aab0be9174896931f464fe378e42d8cb7cbbe743dd26e9588ff15c3a0a3d7fe"
+          "sha256": "63e6c621305e3b00e08db710ae9cb6f154a3b90117bb424a3717f358edea49ff"
         },
         {
           "path": "work/man/symvault-intake-watch.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c420bce928d8b94d668fa778962b1ebb0d90ca4b0fb5828e64644a039a711a73"
+          "sha256": "cce97559b978ee8affe82a62f785921fab8e8597082c4b009f2244ca1514642c"
         },
         {
           "path": "work/man/symvault-intake.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3220aec1b03ea3011382fe350398a1bda8e28a8554df9b95d6ede1e105f8bed6"
+          "sha256": "c92a02da8b0bb6a6c8ac2d09816e1134fdba62f9090b8915548a3005a69f06ad"
         },
         {
           "path": "work/man/symvault-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b8984d009977ce8156c9c92a18c13806d535e97d7f7ab6761ee6081e7480d956"
+          "sha256": "b39507b6963ce1c27fd23569ccef83acf40fe9eaea057e59ed5f341c9aa17c6b"
         },
         {
           "path": "work/man/symvault-lock.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f99d62777aae8544ddc11d2d685061ff14eb10249503eaf88298a38c53c94497"
+          "sha256": "85139b7278e03f17eb8ba8657ac17db2738404884200579fd52b0aa9b02bc7db"
         },
         {
           "path": "work/man/symvault-mcp-install.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e14164ed6be771f4264977b7c79e3b69111e15030eefdd21547e8ac13de0e427"
+          "sha256": "3b89fa1db4f848e732d8ee790e72f26705b0a8b3396a3dd9068e30d15646f726"
         },
         {
           "path": "work/man/symvault-mcp-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "648f2cde8b6a55b067ccfa70d90c9bb15f503347d114eb27fb9aca593d63f8d2"
+          "sha256": "689511bcd83bccc76e0e6300bc81f5b1a89fabd3e04193bd53e5ec04958cae84"
         },
         {
           "path": "work/man/symvault-mcp-uninstall.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7935b9c7016b8bc46e0fb02e93e4bf06a8acf4ada2482fe32b7b27ac624c5b74"
+          "sha256": "5f0e9473f5ba56ad92bd14d85636637603a40ce73538147281d21da412369e55"
         },
         {
           "path": "work/man/symvault-mcp.1",
           "change": "added",
           "kind": "file",
-          "sha256": "415f839bb8c35459d268aef453b9cdd6598d017bb23c6749008d685ff969284f"
+          "sha256": "800ed921e0cb2518dbc64563178c8489acde5614175bf79c9ce9c0602f7ff0b4"
         },
         {
           "path": "work/man/symvault-migrate-kdf.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5790eac8c8ea7b78e577021feefb9d4c10f11a1b905bfd08059ca24b5f328af6"
+          "sha256": "def86941424a701b916f05440e21e434839926aa4e685861be012a6ec7a90c45"
         },
         {
           "path": "work/man/symvault-migrate-paths.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a97901499918ad6430b37c80781eab7b19010611a470a0cb248e2167c9172bb1"
+          "sha256": "94050abf1f096faa4950a217e9a41733ad8e686679b8f28faeb782ea53c3c457"
         },
         {
           "path": "work/man/symvault-migrate-pseudonymize.1",
           "change": "added",
           "kind": "file",
-          "sha256": "dcd7cc762fe2695d43123984c5e9a3f3b333f5fd4577a3d99627093ac9a2dda6"
+          "sha256": "71b90659f993ba625802acc16057e3dc640fcc6d8dd2ccd87c6e8b50ece0de96"
         },
         {
           "path": "work/man/symvault-migrate-session.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b07b6974c7e5778e2486e63839dd4c00eb55990cbb64999459656df5d546dc32"
+          "sha256": "c700f1be936bc30f7636ef764a591773e94001451601608c5e48c6f503b0a6d2"
         },
         {
           "path": "work/man/symvault-migrate-v4.1",
           "change": "added",
           "kind": "file",
-          "sha256": "584f09f7a30e91295f1ca666d75254f707b3fbc00ff457425653c278ac27568a"
+          "sha256": "a88ba55ab872500d53a370646ed5c748a64be7fcc5b1286620f007c91618304c"
         },
         {
           "path": "work/man/symvault-migrate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4d36e1f6c63515d49da871d22a594b55ad9ab3926e61824f3d6011d6a594cf74"
+          "sha256": "f8d52e4c986ad03db0af9b1b0a4186b18baffebc55a39bc6287f9ee750b8d3d2"
         },
         {
           "path": "work/man/symvault-policy-apply.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9d85248220fd8266cc945ef2a2fa5ed2a1d671b6128d4462f58d5db9b28e7f7b"
+          "sha256": "042c9fb1f5823b37c0b9d5de80ba61ed98b3159e3fded35c5093d546d567637b"
         },
         {
           "path": "work/man/symvault-policy-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "466a71f213dbe4dbebaaa2491bb870e9387d2420b67797cf81e3aef10fda0921"
+          "sha256": "088654e70781068259c0a064f1813a599015b26765f4f6110279c4baa6d3714a"
         },
         {
           "path": "work/man/symvault-policy-remove.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5e030ae48899212e46e1ca1590d33138c1e1f0e9565d4a8a9b8b93b0f3e86992"
+          "sha256": "1532dec1ab54efd49aa4e43fc1d9bab28eec4ee1e88364cbb34d442ebc5e744c"
         },
         {
           "path": "work/man/symvault-policy-validate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "378a90e7a8bdec8595ad0bb391d168724320c26024777a7557d699d9bad23f3d"
+          "sha256": "d7bfff4bf9b46e87f1e3ebd8aacf91be791ba3c8bac914222baad5c0fb8d4400"
         },
         {
           "path": "work/man/symvault-policy.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d3d4fd1ae705db08c6ca3dda49e0fec1d7df67943011d0f4187431d54d3c8c21"
+          "sha256": "0b6e0bbee05fe512bb0251efed1c5e9093fb74f8742f18a27569bd53fbbc29ab"
         },
         {
           "path": "work/man/symvault-profile-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "64ca8d15ae8c620babbf79902faa44f0f0c9cc77303d6a1b636428ccec7f00e1"
+          "sha256": "84aca5f3a6d22a6fd6c312760fb6776982da5b01e5a2b4fcdc3c933f83aeba96"
         },
         {
           "path": "work/man/symvault-profile-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "8707280de5a36509fe68d2d1a92a3880b6f2d43e8eb2bc2df0f3786218b7cbfc"
+          "sha256": "ceb49fd2164254a02a786f836ae45f72e099970157f69c1cc3bdafd1c752b241"
         },
         {
           "path": "work/man/symvault-profile-use.1",
           "change": "added",
           "kind": "file",
-          "sha256": "72e96b5c912b18e03014f398eb59ec705efb75474ae2280f0110296e6361ba06"
+          "sha256": "2193f5e649ca00f644ac6e3a69b1369ec4cd021967fbf9e8aee68441b9f0e121"
         },
         {
           "path": "work/man/symvault-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "41f9f3ccbbd7456b15c8590693b423ff018cfafa6961be63033e655f9920c58a"
+          "sha256": "f61056f6db2d88c313a7960cec6e976ce9213404a23b2adcf29b0caba23b2dda"
         },
         {
           "path": "work/man/symvault-recipients-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a453b307b67f5a4785693a8b94253144723fac3010e22848d538cdb36ef57e07"
+          "sha256": "ba26d9c7fe18f66a2993a81a9340c3ce2175ed6ccd7e169346496437169b9e53"
         },
         {
           "path": "work/man/symvault-recipients-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ed119b5d226190dca36aa9831afd09f64eae18fbe6b8423094f0db60944d9bc9"
+          "sha256": "b23eb8f3b2762db23c7910d5826188b7e54b07b4eaa9ddaded292b96d418ca86"
         },
         {
           "path": "work/man/symvault-recipients-remove.1",
           "change": "added",
           "kind": "file",
-          "sha256": "253cf3911b023b86cc87231ab9460ce7111088ba43781b5773df9eb35a31b178"
+          "sha256": "b788eb83e69b273d51518aaed866fade09de31e4a5f9da156248b9c4ef49916f"
         },
         {
           "path": "work/man/symvault-recipients.1",
           "change": "added",
           "kind": "file",
-          "sha256": "cc0b7c2a5f01c8ec34cddcc3bff2612dc7e973d84c461cbf8646fedec20a6e4f"
+          "sha256": "5b68e86c3a78c1ed754684eff1b53c0f7ddf001f1fc7dc3c816264c41b57739e"
         },
         {
           "path": "work/man/symvault-remote-init.1",
           "change": "added",
           "kind": "file",
-          "sha256": "09e63ff255e0c0553179a6d400a1ef38dad58860b5c8a99b3cc2c7892e8a2cdd"
+          "sha256": "ca7cddf2c964d57c002104a21aa680749d17daa2f38a1b449c916be744b0ee52"
         },
         {
           "path": "work/man/symvault-remote-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e34471f8facffab3b71c5c082515f6556635f9367428b24eec8262138f16b2dc"
+          "sha256": "71bc2f1d620a45298bf217e82c3ebf68258c07b445d10dc42dbe1945859f4c3a"
         },
         {
           "path": "work/man/symvault-remote.1",
           "change": "added",
           "kind": "file",
-          "sha256": "10cbad2edcbf44a46b86c1f8fdba2dcab67fc276644e5d81362b681bbe018766"
+          "sha256": "b49ad5dd2f95150d0d99e689cfda8f10785cebccb24d3f16862b5804c6f74ab8"
         },
         {
           "path": "work/man/symvault-restore.1",
           "change": "added",
           "kind": "file",
-          "sha256": "db62582e195c847224767428f3a827581ec644d83a27f9625f22bcc234f2290f"
+          "sha256": "99dbcd84a51f5c15ff3e1e4b4e1a0c0620bb24a57827b8adc3dcbe03c96d0135"
         },
         {
           "path": "work/man/symvault-run.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7896775bdae1e9048dd36e12db589387464f444ae39629ae679702345be3f198"
+          "sha256": "48aa3aa55ad1a0d3500fae378b43af030c51c4d1c793e24aa7d3041ccbf08acf"
         },
         {
           "path": "work/man/symvault-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2d40ebb15d9807bfe3674a29bf68720411a6f9b450c1cf03c0da726f3e10df8a"
+          "sha256": "33445aba2ee2d3d90584e167b8a3d176af217c79294d44148f752e5cf7871e92"
         },
         {
           "path": "work/man/symvault-setup.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ee5070c19ff6f649bd26d750d2e37d1abfa08dae497d7abccc3676973187e8a"
+          "sha256": "857f074564b2caf348a483d396baeda9ea79395ff5b4872d4850d8aab55da705"
         },
         {
           "path": "work/man/symvault-share-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "507358120bd2a3d02f2822a278093aabadc0c5e554569a23abe6d23c1d0f4ddd"
+          "sha256": "617c71d5d33a16066ad531eb5a71be57a100b06b13919b085a03fa9323f96823"
         },
         {
           "path": "work/man/symvault-share-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a9600e8274b88fb1fbbc18972e3c1fc9ada39e6183bb69ceed953ce7a104caca"
+          "sha256": "73ef56f8382d89c640b44c609c581c086b15a7d12411324613bb89d0a1aa704b"
         },
         {
           "path": "work/man/symvault-share.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4d00126be10c1d97a812977d1e16d4cbc969974f02e912e1f564f07aa3ab304a"
+          "sha256": "7684ff466ee5ea93736a6d39706e49056f256cb4261a5180c5343521fe424df0"
         },
         {
           "path": "work/man/symvault-startup-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a8dfefa236d4ddbaf93266c7a6c379b51c1f422a4cfb9d27893d686c557ba6dd"
+          "sha256": "1a430d66525d8aa8e5818ae084e942fd145e38381f5712ae40b546cac4dbcbd8"
         },
         {
           "path": "work/man/symvault-sync.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4e76d05c5b06b4548a3a5b52aa4833eb2090109c84435eb82134d24ec6dd32dd"
+          "sha256": "eb6dc256e4d60ddf3a447083f3ab44ebc14071e94acd3a5698eb28655b93a516"
         },
         {
           "path": "work/man/symvault-template-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "738be70f5b50846393c431d59f48571693b5835fdfd0b029931c9b2037580745"
+          "sha256": "35a779057170b4bffec559b7ce799c1955aa924c5fac0c75fde5549be4ae45d3"
         },
         {
           "path": "work/man/symvault-template.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b9f6fba9e77e6a9aa0742e3229f1ee3cd8281100e55d248a3651303b86e8b62f"
+          "sha256": "4ed4c0895cba6728a08ce4b9438ce2eb8738ed14da8b558eb666da755c1db46f"
         },
         {
           "path": "work/man/symvault-ui.1",
           "change": "added",
           "kind": "file",
-          "sha256": "87a8536ce0bd2b3a55780c6e1cb313642600d57c7c3c30322c1b99396082726c"
+          "sha256": "ededddd1447cd4110bfbd8bdcaa0f8903e8d4eacd7864b1ce124ac25498c8bc1"
         },
         {
           "path": "work/man/symvault-unlock.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9053cc855e46e63ede120db5bf3bcd6f8dd98824fb0e8deeffcbb482b3befecb"
+          "sha256": "b9c22e2eb4cbfbf3a24a51c47fcc1037bc91e96ac52bad6b55ac6395802e7975"
         },
         {
           "path": "work/man/symvault-update-apply.1",
           "change": "added",
           "kind": "file",
-          "sha256": "047bf1e1eab8ae2a1043fa9158e23ad310709d1311c56c32e9d7cf191b0407c2"
+          "sha256": "52c3dbfad0952b1dea68e46662da57d3e19cc0b9504f1676b628fc895db7ba96"
         },
         {
           "path": "work/man/symvault-update-check.1",
           "change": "added",
           "kind": "file",
-          "sha256": "72987acfec61aaee3b5741b3cc5d0a5961562f8473495ddbecf7e7a86147efa3"
+          "sha256": "19757080fdecaae0e2952f10b3cc17a10f60f756dcd96751e7236a9673dff243"
         },
         {
           "path": "work/man/symvault-update-info.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d7b41a334e482ab0517cdd80e9269b2e6a11b2c144549cc97be457afef7cd3d8"
+          "sha256": "0360dfcaf94d67c98bec8ff221ab1cbd0ecb067495c4024cadef4b30758e3a9e"
         },
         {
           "path": "work/man/symvault-update.1",
           "change": "added",
           "kind": "file",
-          "sha256": "73c1997973224323605c32710d02897fef3f90d2654baa10a7b995e7580a2280"
+          "sha256": "de073d189bb8d3ac9f723ea329007831bcd2f0ec5b9881de9b38e97bf8f1e57f"
         },
         {
           "path": "work/man/symvault-verify.1",
           "change": "added",
           "kind": "file",
-          "sha256": "01026c7b8991caa8f9770df880f2df5b34fc60fe66dc04e6ca123a5204a723b1"
+          "sha256": "65e3ee49171cfa541e1d8f7cbf6b505aa1fcc261db06b44bef760e9c0196828c"
         },
         {
           "path": "work/man/symvault-version.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9b3f68b97997692751279c0077c04b7063517f8e46f03109d401d87aee468281"
+          "sha256": "20d382e8a1b53a483603e3ab37a6e474d1233393e2dcf07fefb90d8c9d862692"
         },
         {
           "path": "work/man/symvault.1",
           "change": "added",
           "kind": "file",
-          "sha256": "027e4646218d9b00f9d9c8abc6882a442d730ab819762abdf9d7642e2ab550a6"
+          "sha256": "e07f44fa1e4a832e8e25109a395e70dfa9e0b9f09d4185679a8ebfcbb7dc546b"
         }
       ]
     },
@@ -6609,6 +6621,9 @@
       "mode": "quiet",
       "desc": "generate manpages into a directory",
       "seed": "empty",
+      "rules": [
+        "man-date"
+      ],
       "argv": [
         "generate",
         "manpages",
@@ -6628,715 +6643,715 @@
           "path": "work/man/symvault-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b1b4376e42356df34761007d021e643ffceb124d88134cc597b2b08240d2c74d"
+          "sha256": "f9435a6c1a8ecdda22ae88ad4306c1ca8b1cb3a907baecd8627549826ef32437"
         },
         {
           "path": "work/man/symvault-agent-audit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e1a95a8f8d5af546bfa08f0a7290636530c1fd21c5009f4a9f70c492791cb08f"
+          "sha256": "323c13a20f2c831c539980cc0b4e6edfae09122bac265ad20bacaa2d800a5bdc"
         },
         {
           "path": "work/man/symvault-agent-doctor.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a1981f756901a5b6de8a3131ab54466ae9cbbe82e2060c936c306a586813bc00"
+          "sha256": "7263572afc80cc95c83ef9ba9f1e0fe4b5dab6783d26af67866112f7ba0a5230"
         },
         {
           "path": "work/man/symvault-agent-install.1",
           "change": "added",
           "kind": "file",
-          "sha256": "be01debbea23184513882b4bc231a13856412eb2d7b547e52dec52cebc16f7d4"
+          "sha256": "b9b7a57567ad7f53834bb4303d330c7cc40248dc4ed0150893abd5a3a29d3167"
         },
         {
           "path": "work/man/symvault-agent-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f2de69aa25c02cd5386a559a53ac78579a6e9f650da7053e26670ae17848c4d8"
+          "sha256": "521c40d34dc2fef1cb35a7c1e4b4a9560cc881d37d3103a3d7660b54eddd19cf"
         },
         {
           "path": "work/man/symvault-agent-profile-edit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "eff9d1a014b50eb9ae54dc5c49f369c0d90c4952c541546403694812761d8499"
+          "sha256": "1c254e11ca0b5eb3bcaf09932f202ac2299c6d397e71bfe297e84ddaa477cc09"
         },
         {
           "path": "work/man/symvault-agent-profile-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "deed1074976c2c7de6a17a3081f3cb12e6624286db5fae49c2723e4fdcc24c33"
+          "sha256": "5a4d09cff33cf822528a7077f6587da5d24032ddf828b5df2de1221bd9fdf3a0"
         },
         {
           "path": "work/man/symvault-agent-profile-show.1",
           "change": "added",
           "kind": "file",
-          "sha256": "0e125f24fc7f0435f4ffb08edb01d1a9bcf0f80953997901138b8285cf163dc0"
+          "sha256": "8546437cf2241b57bd9c98bc63fd824d1e9fc11bacb5dd6476e15c675caa3904"
         },
         {
           "path": "work/man/symvault-agent-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e19301027061f5e54ec1439931833f10e142a4c90180928b6f0e962ae412fa0a"
+          "sha256": "8ca0c002ab66302c60ea11d3963d6a379a9654c9ed298382b14dd79f1f9445da"
         },
         {
           "path": "work/man/symvault-agent-skill-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3866e0fe1e67e966ebc16eb1b868f4d4636c0e7a34a2dc5a1f11ab2115100b96"
+          "sha256": "e42a061c27dc894c8fe7676fbe26f3c8fbb95179e79c09eb57b706fede0a7b84"
         },
         {
           "path": "work/man/symvault-agent-skill-refresh.1",
           "change": "added",
           "kind": "file",
-          "sha256": "73ecfd400fa2c1ce3ae9f5d58bbe517de021995f9f56cbb6337875ba16c9db2b"
+          "sha256": "89408ca876feec65cd0537e4784112a336dc085154b8e1322bb6a3fe091ad265"
         },
         {
           "path": "work/man/symvault-agent-skill.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a4c2ee72ac278097862ca00481eec98a5d259eaeffda49e8b376d7d036897868"
+          "sha256": "cd14bedc046a3573bb14877efdbbb776ef92715fa1c43f9471ddeb8861d2c0dc"
         },
         {
           "path": "work/man/symvault-agent-token-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b5e7724d79955213a0b1abddb550b88913670a6620e831cefd149ed09c18ad8a"
+          "sha256": "570409ea5e51cb2aef004e7e1d863b728bfc635605773e7de0128c648ff3707a"
         },
         {
           "path": "work/man/symvault-agent-token-new.1",
           "change": "added",
           "kind": "file",
-          "sha256": "595d3a4f92a34d7ec12b3c69818a2b3e1ac33464e9d4a071a9b27171a83f33bc"
+          "sha256": "79662e63f3968a8b7c4223674bc2a76147bc29ec2f4751400941e576089628ed"
         },
         {
           "path": "work/man/symvault-agent-token-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "389d17d93e308fc4cb731e5bc10b6b9997a54a708b55b6d2f56fae5651fcc2b5"
+          "sha256": "c4f04e92d703627be6c23a2370ecc58f7a927bed40d330b85e91279b1a80760a"
         },
         {
           "path": "work/man/symvault-agent-token-rotate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5ca4aa4edf9d749bed55724dc55f14d8a0f5bfde3006a21de530936e8ab8beaa"
+          "sha256": "9a8a0ca8832e39ed97a37eaa68727392fc8cc5faba98858e82c9c98e416dd2e6"
         },
         {
           "path": "work/man/symvault-agent-token.1",
           "change": "added",
           "kind": "file",
-          "sha256": "71f987cffe6488dc5c731756fea16d6f2a4847eb43b0bfa6d2234fe08dc35c5e"
+          "sha256": "867c05a3167617e93fef5d7970a1e4f2f2abd7afd19ba32c72e0dcfefbc617c5"
         },
         {
           "path": "work/man/symvault-agent-uninstall.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4e65457878f2a7ad11b61c57e88e92d7a966e112dc756271a955b3417a8231ba"
+          "sha256": "8d9389eb8635bea066e5940ba15005c3b371e5fcde6609e6475f31b96e11bddc"
         },
         {
           "path": "work/man/symvault-agent-upgrade.1",
           "change": "added",
           "kind": "file",
-          "sha256": "6eec525ff47ffcc82fb95b46dd06948c32141337196c2b4837bc03cb92e34549"
+          "sha256": "ff5deeb7417508a011c4231344f6bd7f8f86ad63efb8ce9a900ebc2d484444a9"
         },
         {
           "path": "work/man/symvault-agent-whoami.1",
           "change": "added",
           "kind": "file",
-          "sha256": "14b0cb2dca458afd6567626333927da4e8c3a0ff561b71de807c2f1588e70ee0"
+          "sha256": "00a1ac897f49e8ba37affd7ab1bde34cfdaf7d4929277a8b1ef89e2310ae725e"
         },
         {
           "path": "work/man/symvault-agent.1",
           "change": "added",
           "kind": "file",
-          "sha256": "76d99cb02b011e635aa85b470d2d2ad5bf58c89623e14b19ecd4c6abca1b214a"
+          "sha256": "7adede33fd612a170da1281f9ee4cbb4c5e9fab373005ab7a60721247b366c72"
         },
         {
           "path": "work/man/symvault-approval-decide.1",
           "change": "added",
           "kind": "file",
-          "sha256": "69b6e92855ac61ff7278a0fed07afafe071575428da2e53cd839e94b32fabe68"
+          "sha256": "7a6398ddc1cf1f828fc583cf8572a03329ed0dbf3b1fde7de2fba3148e3adcb4"
         },
         {
           "path": "work/man/symvault-approval-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b5c8808a357a75da87abea88dea8b93d2857dc6489f2a3b686a7aaa89fc72936"
+          "sha256": "d7304a0ce6c59da211aefc72faabd4ef7a4c13890d1ab2d9855f3a6ce2055435"
         },
         {
           "path": "work/man/symvault-approval.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d1380d5673b111489342f5499d401c15d35c580e576e6dcf35d46ca4b2cff065"
+          "sha256": "bd2d84e4f4329df90756c8e1f7b54645c721f8315d01c19a118cf46d36cab512"
         },
         {
           "path": "work/man/symvault-audit-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5730eac0e7fbd67b51d0a6587e30cd7e72ab17a570d06125bbb6f3a707207828"
+          "sha256": "c754667b3fa0be70f0fef8cf3923e9a0f893b2c1835791c0a1ee3fb41c00f055"
         },
         {
           "path": "work/man/symvault-audit-rotate-key.1",
           "change": "added",
           "kind": "file",
-          "sha256": "efd1bc484b89eedac23aa2a8c9b0ad0d867e9891295a071ac7e6758e76a30916"
+          "sha256": "d3c1e01eaf48b8228962e2c8eb7405da72993db828c60780a9f73cb4583004f7"
         },
         {
           "path": "work/man/symvault-audit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "451d349d094d64ee68527a6b3d4a338f92c1bcaf1533bcab56fc9838fc562749"
+          "sha256": "34824af5c101a213f6de156960795b28bf161f313a1fee938b7163358be0e986"
         },
         {
           "path": "work/man/symvault-auth-rotate-passphrase.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1b665cd02690328913418641423991fd184ed0875fb53b23e54a62087c2846df"
+          "sha256": "284c171842266386b6dc946c4f9587e9534a5e89f7a4cbdaf6070799e26d8264"
         },
         {
           "path": "work/man/symvault-auth-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f99819b0943772043a4673ba09fbe41391a09c86b085539daed3ed0c80e1efff"
+          "sha256": "9b45f84a75c95f6665219f15c1417594eeeb4b2f8738e4beda49b343cb693a21"
         },
         {
           "path": "work/man/symvault-auth-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ba231ec432c3128d768d45b322178fb335d15c1fe7973550c2735b9b1c5666db"
+          "sha256": "920d85410f76db5772c3a93aa898b57011814f4ff4859de030d69cdf376700e4"
         },
         {
           "path": "work/man/symvault-auth.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3c32f2421556b5e00ca921caf17bd6614852c004fbc20fed9c4417f73a4c2899"
+          "sha256": "0efc3d136ecca4803eb0899f74ba995c91b458e290180ea16e605253fd51ca36"
         },
         {
           "path": "work/man/symvault-backup.1",
           "change": "added",
           "kind": "file",
-          "sha256": "17d41c237132069c7d766461b8187ad2da3b5628f63cf8ebdada557eefdfae7a"
+          "sha256": "be61eddb913bd5645c2715ff21990a7458ae7a8ecdf734a6fcf6e8d017eb89e6"
         },
         {
           "path": "work/man/symvault-broker.1",
           "change": "added",
           "kind": "file",
-          "sha256": "acecc4a377cbc99b3d3b1ed8f7a50eb1f122205e873f6e13eee4c643e6009583"
+          "sha256": "919a343876dfccac2a447abd04081c2fd28edbcaf8e7c89889d177d5f46b6944"
         },
         {
           "path": "work/man/symvault-config-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7d79f506502f365021ed76ca20b9e4d2f92a77f60b111ae299992778627fb7fb"
+          "sha256": "8f2ceb7307862e75f8e8059b1b5102323a47a8f2724a40677d18166d3a383221"
         },
         {
           "path": "work/man/symvault-config-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b4e7ab076afa61e5ad890143912160eb9870c4af32844a96463e1150caf52889"
+          "sha256": "08b3a276dcb95694d569347db76b6022c0da6308130f8da7406c8a7caf9b77b2"
         },
         {
           "path": "work/man/symvault-config-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "0ec1103eecf791a3aa0e527044530cbe89076de64a4f65bcc41487e4ef7a0250"
+          "sha256": "79d21261a109f2555870c6ea6eb3624d3c3d023fbd6a11a2d1bd832acdbfbd23"
         },
         {
           "path": "work/man/symvault-config-validate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b7925b33447cf3fe0bfcff5a7e45d91043630c1be64544655b70f54d7396e79a"
+          "sha256": "681dc61cef5f7158d992e59a2c4a09e4dabbb975f92f371e27ff5f4c0f3227b6"
         },
         {
           "path": "work/man/symvault-config.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9a68faa59dec4f3275ce7025e7f300eaf12e8534b7068e951ae8a49eadaa5601"
+          "sha256": "0c6527eb657c5c06bdb465fc62196e3c9e98ee439087c7cee8929e92f819082d"
         },
         {
           "path": "work/man/symvault-delete.1",
           "change": "added",
           "kind": "file",
-          "sha256": "887a00ce0b56e3432a7ee331256e3d2571a837f1b550f883319ddb0f9bd8860a"
+          "sha256": "c319e9ef1bad239a6ef2f6cc528fdef384787e1c47e25611434ae626dc6723c9"
         },
         {
           "path": "work/man/symvault-device-accept.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ba731eca8c3395d42e420fd4c0748a0d578fb244642a7d42712ca27d3186177"
+          "sha256": "d4c3e37786319d82552833b33b99058654b8b8320eb909ccebab04d4fef98588"
         },
         {
           "path": "work/man/symvault-device-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "cc169cde2f66f470fe4214ba9eb5ceb2e6648c5ae09d07d7ab2caa562f7363bb"
+          "sha256": "5ae7a9a6949530e37ecc5ab80a9a8ddd88037e0e336f3c3d04d2894bb2301d6b"
         },
         {
           "path": "work/man/symvault-device-approval-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9df54513a0c278adc699914d4bf4abc2ccc3602ac2583f43d18d26fd8e8ef596"
+          "sha256": "0a016135d906d3def669320b76af5376638b05a0c612125b163e01eaf4e4c03f"
         },
         {
           "path": "work/man/symvault-device-approval-pair.1",
           "change": "added",
           "kind": "file",
-          "sha256": "fd16f216c25774fd7e8ee233525d2f78169638fd9146f3250af0347089723441"
+          "sha256": "fa0a98c90d6ff6773f687b3418455390f58668f099c8ea7bd1b4310009be3ba1"
         },
         {
           "path": "work/man/symvault-device-approval-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e994552145123b8566afac88bbcab9c02e08341de37fbb68a463ca8f9dc4f5a3"
+          "sha256": "f2421f1b75ee11175821adc6ee525d3cce10b481965655d1550f6d859944547d"
         },
         {
           "path": "work/man/symvault-device-join.1",
           "change": "added",
           "kind": "file",
-          "sha256": "63b422cd86eb930c7a60297c9f2e8c549781a120a94cb8aec944de7240df79fe"
+          "sha256": "13365c0b4b3eb7ddf24c643f9fbd4a599f2a5db6d6463a43ebda88034019d943"
         },
         {
           "path": "work/man/symvault-device-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "47bf0b1071b40baad6caaf184740e70100e3d415ee8f26941fc71a490998cb19"
+          "sha256": "f61c2b156d770563adcac3260b078b398d18565d512a091194e5fc4cfac31e76"
         },
         {
           "path": "work/man/symvault-device-pair.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b8a12eb3f72c8b53a063ea94cac7be699555849c75eb5fcba0bda2750dcd3d64"
+          "sha256": "e8bf445eb6acb33d6695161f76ea16b84084183a8272b24a06a98b8361a3b2a6"
         },
         {
           "path": "work/man/symvault-device-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f866b628c44148a5fdb3cbba033bd83271deaaba701f4ae8cfaf720fd5bceb2d"
+          "sha256": "14da3e61d72cded4effa027d2a1fc30d0939a83a50fdb66ac55a357a66769452"
         },
         {
           "path": "work/man/symvault-device.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c46bb52a8f0ae36adf54717c09a8868dd7c94ef2127e6acfaa9dc80d5f935bd1"
+          "sha256": "4fa337f4a460c19d18dede5f35af76d797d7da83edd0c39fe256711b435d6676"
         },
         {
           "path": "work/man/symvault-doctor.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f7a9c5747831df97ba5920b5cfc397eae97fe27916b7d3d91e9427df89f86790"
+          "sha256": "b172d0aad773db3041fa258edd1cf29513895b62ff6e17462ceba9205e6d622c"
         },
         {
           "path": "work/man/symvault-dynamic-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "91ee51495dfaa3bda3570fa6fdfb8638063c491697c809764e1f3285ed846f58"
+          "sha256": "86cf26a745e0400f1e68ebac469c9bac806c2301908490956e6fbe8f27015323"
         },
         {
           "path": "work/man/symvault-dynamic.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2e265de926ab5b54f8cf482ea60ea323db7547e9469c322ccc81fe9bd418441f"
+          "sha256": "bee07c0cfb677a692acd00a2a83a0674af55b12d900c6ac91133da25bae81523"
         },
         {
           "path": "work/man/symvault-edit.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d21714e4de3c16455ecca6306d9f3143475b3762c950cf9b6680ca7176ef6d5c"
+          "sha256": "f93510bb969b61c08fce0e2f942c068376a74bca8198cf88ce69f1334c9f8239"
         },
         {
           "path": "work/man/symvault-export.1",
           "change": "added",
           "kind": "file",
-          "sha256": "477edb32da7590c1c6d04a0e71e56bca0ed012404e9775105b6cd791f90add27"
+          "sha256": "21ca16e409465c9c96257bfb5ffe86914f4712dfb3545a951c4bca1450ad2fe4"
         },
         {
           "path": "work/man/symvault-file-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "6aa57e400c07a1ffe5652f0b8adc98957773551968daa4bf6dcad3358e379a53"
+          "sha256": "c4ec66a7235d065d7daf20513de5fb1fdc62b07048789db833fce8a02977164a"
         },
         {
           "path": "work/man/symvault-file-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a41797f4aaccd7358638d2d732bebc082c141d5d40bda6997f0ec693fbaef019"
+          "sha256": "0fb6ca73a79701023a3c4c791aba9d363108878059b125f39f6c182e71234f4e"
         },
         {
           "path": "work/man/symvault-file-use.1",
           "change": "added",
           "kind": "file",
-          "sha256": "65d40298b80eb59c743ad764a15a980491b2f20a56daabbe8bfa7c19b7a777a0"
+          "sha256": "68cc1686ad8b0c4ba340039cde985ea9560584629f491eef82025bfedb3b2bba"
         },
         {
           "path": "work/man/symvault-file.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1b3d6eb89162148a749ac535967391c6a3bc4ed0af47bb7b11b2424074585031"
+          "sha256": "5aa531ec3a89f5c6416478da8600f41adff8d3e00653612e1bd9bbe74b0e3159"
         },
         {
           "path": "work/man/symvault-find.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c6975a50bc74d1992158b85bb0d3a3744031fc9cb78ef6a2596efb125ffebc1c"
+          "sha256": "15b5462312f0c67ce846094ee251a85c57999a8cb1f2bc78ff452daeb82250e0"
         },
         {
           "path": "work/man/symvault-generate-manpages.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c5165d943f19b4fd803c588427ae3e0d9764fa4ea29e744fa6437dfc0821d4d6"
+          "sha256": "03b3fd8b58ebf9915ac246f4e3b0a014cfdd43754605d31f03c0df7c7618e4d1"
         },
         {
           "path": "work/man/symvault-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ab3eac8f0d6c96b1ea32e4e9fee8660e6aedc7bfefcbe6ca3f028d52b299f7c"
+          "sha256": "29a67754e0a95889dabee0c7250ae9d6e4f7b6dc1e041545b1a84b0ccb19dd0f"
         },
         {
           "path": "work/man/symvault-get.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f4b3eb29490bbb8d781249f6687c0a56c24273d04cffbbee7fb30a013aa33f7d"
+          "sha256": "2816e8d234abd9b52e8e2ebefced5ea06fa934e5d9f01b2c32b07f354e9da11d"
         },
         {
           "path": "work/man/symvault-git.1",
           "change": "added",
           "kind": "file",
-          "sha256": "695c4bc2f318acee343f1d20ae56f45a770843fc7dfd8714059f5b5625508682"
+          "sha256": "2d2098351f57a170c5d971f0ec339ec3b2f273a54641a32e706b957ccd95539a"
         },
         {
           "path": "work/man/symvault-import-review-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2b1b06ed4838808d6b0f4c320344d51db01d02e8a5946e4b0dce727793937d7a"
+          "sha256": "6d47e421f980d2e30385871f235ba01a2f7ef78d4c383c58473c5e0e3dffd74a"
         },
         {
           "path": "work/man/symvault-import-review-promote.1",
           "change": "added",
           "kind": "file",
-          "sha256": "35875500e103ede396474b4e9297f66d6c3ee732d57045be34829a8e7a234b1c"
+          "sha256": "c7375be6dcc4421492de5fb75152dc63fe92124fae31d56b1d90b15092b502ca"
         },
         {
           "path": "work/man/symvault-import-review.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ce63bc418f7e3e70808006acbba74219a2183762c4ce305254b16032aaa8addc"
+          "sha256": "958abbf0e099ca861a3abcc249bd574bb844f3328554b066b62e32b0aab27901"
         },
         {
           "path": "work/man/symvault-import.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e02060ec127ba4e1386e7bd174887be1c5a270dd37d27ff83f4f436ba9cf4fd7"
+          "sha256": "1e7d6945eb33d3cc6271331f757c344368184559e7187f2c7c2e496a35c92b47"
         },
         {
           "path": "work/man/symvault-init.1",
           "change": "added",
           "kind": "file",
-          "sha256": "eb8465190b363021eac392d9d64b5a9ae99504a0b230938f516d110e3441dfa5"
+          "sha256": "61289a420a6ebb4905a0bbe7cadfce44b5ecf3c8018ca63cfdf17250304c6699"
         },
         {
           "path": "work/man/symvault-intake-watch-disable.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9aab0be9174896931f464fe378e42d8cb7cbbe743dd26e9588ff15c3a0a3d7fe"
+          "sha256": "63e6c621305e3b00e08db710ae9cb6f154a3b90117bb424a3717f358edea49ff"
         },
         {
           "path": "work/man/symvault-intake-watch.1",
           "change": "added",
           "kind": "file",
-          "sha256": "c420bce928d8b94d668fa778962b1ebb0d90ca4b0fb5828e64644a039a711a73"
+          "sha256": "cce97559b978ee8affe82a62f785921fab8e8597082c4b009f2244ca1514642c"
         },
         {
           "path": "work/man/symvault-intake.1",
           "change": "added",
           "kind": "file",
-          "sha256": "3220aec1b03ea3011382fe350398a1bda8e28a8554df9b95d6ede1e105f8bed6"
+          "sha256": "c92a02da8b0bb6a6c8ac2d09816e1134fdba62f9090b8915548a3005a69f06ad"
         },
         {
           "path": "work/man/symvault-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b8984d009977ce8156c9c92a18c13806d535e97d7f7ab6761ee6081e7480d956"
+          "sha256": "b39507b6963ce1c27fd23569ccef83acf40fe9eaea057e59ed5f341c9aa17c6b"
         },
         {
           "path": "work/man/symvault-lock.1",
           "change": "added",
           "kind": "file",
-          "sha256": "f99d62777aae8544ddc11d2d685061ff14eb10249503eaf88298a38c53c94497"
+          "sha256": "85139b7278e03f17eb8ba8657ac17db2738404884200579fd52b0aa9b02bc7db"
         },
         {
           "path": "work/man/symvault-mcp-install.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e14164ed6be771f4264977b7c79e3b69111e15030eefdd21547e8ac13de0e427"
+          "sha256": "3b89fa1db4f848e732d8ee790e72f26705b0a8b3396a3dd9068e30d15646f726"
         },
         {
           "path": "work/man/symvault-mcp-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "648f2cde8b6a55b067ccfa70d90c9bb15f503347d114eb27fb9aca593d63f8d2"
+          "sha256": "689511bcd83bccc76e0e6300bc81f5b1a89fabd3e04193bd53e5ec04958cae84"
         },
         {
           "path": "work/man/symvault-mcp-uninstall.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7935b9c7016b8bc46e0fb02e93e4bf06a8acf4ada2482fe32b7b27ac624c5b74"
+          "sha256": "5f0e9473f5ba56ad92bd14d85636637603a40ce73538147281d21da412369e55"
         },
         {
           "path": "work/man/symvault-mcp.1",
           "change": "added",
           "kind": "file",
-          "sha256": "415f839bb8c35459d268aef453b9cdd6598d017bb23c6749008d685ff969284f"
+          "sha256": "800ed921e0cb2518dbc64563178c8489acde5614175bf79c9ce9c0602f7ff0b4"
         },
         {
           "path": "work/man/symvault-migrate-kdf.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5790eac8c8ea7b78e577021feefb9d4c10f11a1b905bfd08059ca24b5f328af6"
+          "sha256": "def86941424a701b916f05440e21e434839926aa4e685861be012a6ec7a90c45"
         },
         {
           "path": "work/man/symvault-migrate-paths.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a97901499918ad6430b37c80781eab7b19010611a470a0cb248e2167c9172bb1"
+          "sha256": "94050abf1f096faa4950a217e9a41733ad8e686679b8f28faeb782ea53c3c457"
         },
         {
           "path": "work/man/symvault-migrate-pseudonymize.1",
           "change": "added",
           "kind": "file",
-          "sha256": "dcd7cc762fe2695d43123984c5e9a3f3b333f5fd4577a3d99627093ac9a2dda6"
+          "sha256": "71b90659f993ba625802acc16057e3dc640fcc6d8dd2ccd87c6e8b50ece0de96"
         },
         {
           "path": "work/man/symvault-migrate-session.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b07b6974c7e5778e2486e63839dd4c00eb55990cbb64999459656df5d546dc32"
+          "sha256": "c700f1be936bc30f7636ef764a591773e94001451601608c5e48c6f503b0a6d2"
         },
         {
           "path": "work/man/symvault-migrate-v4.1",
           "change": "added",
           "kind": "file",
-          "sha256": "584f09f7a30e91295f1ca666d75254f707b3fbc00ff457425653c278ac27568a"
+          "sha256": "a88ba55ab872500d53a370646ed5c748a64be7fcc5b1286620f007c91618304c"
         },
         {
           "path": "work/man/symvault-migrate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4d36e1f6c63515d49da871d22a594b55ad9ab3926e61824f3d6011d6a594cf74"
+          "sha256": "f8d52e4c986ad03db0af9b1b0a4186b18baffebc55a39bc6287f9ee750b8d3d2"
         },
         {
           "path": "work/man/symvault-policy-apply.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9d85248220fd8266cc945ef2a2fa5ed2a1d671b6128d4462f58d5db9b28e7f7b"
+          "sha256": "042c9fb1f5823b37c0b9d5de80ba61ed98b3159e3fded35c5093d546d567637b"
         },
         {
           "path": "work/man/symvault-policy-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "466a71f213dbe4dbebaaa2491bb870e9387d2420b67797cf81e3aef10fda0921"
+          "sha256": "088654e70781068259c0a064f1813a599015b26765f4f6110279c4baa6d3714a"
         },
         {
           "path": "work/man/symvault-policy-remove.1",
           "change": "added",
           "kind": "file",
-          "sha256": "5e030ae48899212e46e1ca1590d33138c1e1f0e9565d4a8a9b8b93b0f3e86992"
+          "sha256": "1532dec1ab54efd49aa4e43fc1d9bab28eec4ee1e88364cbb34d442ebc5e744c"
         },
         {
           "path": "work/man/symvault-policy-validate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "378a90e7a8bdec8595ad0bb391d168724320c26024777a7557d699d9bad23f3d"
+          "sha256": "d7bfff4bf9b46e87f1e3ebd8aacf91be791ba3c8bac914222baad5c0fb8d4400"
         },
         {
           "path": "work/man/symvault-policy.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d3d4fd1ae705db08c6ca3dda49e0fec1d7df67943011d0f4187431d54d3c8c21"
+          "sha256": "0b6e0bbee05fe512bb0251efed1c5e9093fb74f8742f18a27569bd53fbbc29ab"
         },
         {
           "path": "work/man/symvault-profile-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "64ca8d15ae8c620babbf79902faa44f0f0c9cc77303d6a1b636428ccec7f00e1"
+          "sha256": "84aca5f3a6d22a6fd6c312760fb6776982da5b01e5a2b4fcdc3c933f83aeba96"
         },
         {
           "path": "work/man/symvault-profile-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "8707280de5a36509fe68d2d1a92a3880b6f2d43e8eb2bc2df0f3786218b7cbfc"
+          "sha256": "ceb49fd2164254a02a786f836ae45f72e099970157f69c1cc3bdafd1c752b241"
         },
         {
           "path": "work/man/symvault-profile-use.1",
           "change": "added",
           "kind": "file",
-          "sha256": "72e96b5c912b18e03014f398eb59ec705efb75474ae2280f0110296e6361ba06"
+          "sha256": "2193f5e649ca00f644ac6e3a69b1369ec4cd021967fbf9e8aee68441b9f0e121"
         },
         {
           "path": "work/man/symvault-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "41f9f3ccbbd7456b15c8590693b423ff018cfafa6961be63033e655f9920c58a"
+          "sha256": "f61056f6db2d88c313a7960cec6e976ce9213404a23b2adcf29b0caba23b2dda"
         },
         {
           "path": "work/man/symvault-recipients-add.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a453b307b67f5a4785693a8b94253144723fac3010e22848d538cdb36ef57e07"
+          "sha256": "ba26d9c7fe18f66a2993a81a9340c3ce2175ed6ccd7e169346496437169b9e53"
         },
         {
           "path": "work/man/symvault-recipients-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "ed119b5d226190dca36aa9831afd09f64eae18fbe6b8423094f0db60944d9bc9"
+          "sha256": "b23eb8f3b2762db23c7910d5826188b7e54b07b4eaa9ddaded292b96d418ca86"
         },
         {
           "path": "work/man/symvault-recipients-remove.1",
           "change": "added",
           "kind": "file",
-          "sha256": "253cf3911b023b86cc87231ab9460ce7111088ba43781b5773df9eb35a31b178"
+          "sha256": "b788eb83e69b273d51518aaed866fade09de31e4a5f9da156248b9c4ef49916f"
         },
         {
           "path": "work/man/symvault-recipients.1",
           "change": "added",
           "kind": "file",
-          "sha256": "cc0b7c2a5f01c8ec34cddcc3bff2612dc7e973d84c461cbf8646fedec20a6e4f"
+          "sha256": "5b68e86c3a78c1ed754684eff1b53c0f7ddf001f1fc7dc3c816264c41b57739e"
         },
         {
           "path": "work/man/symvault-remote-init.1",
           "change": "added",
           "kind": "file",
-          "sha256": "09e63ff255e0c0553179a6d400a1ef38dad58860b5c8a99b3cc2c7892e8a2cdd"
+          "sha256": "ca7cddf2c964d57c002104a21aa680749d17daa2f38a1b449c916be744b0ee52"
         },
         {
           "path": "work/man/symvault-remote-status.1",
           "change": "added",
           "kind": "file",
-          "sha256": "e34471f8facffab3b71c5c082515f6556635f9367428b24eec8262138f16b2dc"
+          "sha256": "71bc2f1d620a45298bf217e82c3ebf68258c07b445d10dc42dbe1945859f4c3a"
         },
         {
           "path": "work/man/symvault-remote.1",
           "change": "added",
           "kind": "file",
-          "sha256": "10cbad2edcbf44a46b86c1f8fdba2dcab67fc276644e5d81362b681bbe018766"
+          "sha256": "b49ad5dd2f95150d0d99e689cfda8f10785cebccb24d3f16862b5804c6f74ab8"
         },
         {
           "path": "work/man/symvault-restore.1",
           "change": "added",
           "kind": "file",
-          "sha256": "db62582e195c847224767428f3a827581ec644d83a27f9625f22bcc234f2290f"
+          "sha256": "99dbcd84a51f5c15ff3e1e4b4e1a0c0620bb24a57827b8adc3dcbe03c96d0135"
         },
         {
           "path": "work/man/symvault-run.1",
           "change": "added",
           "kind": "file",
-          "sha256": "7896775bdae1e9048dd36e12db589387464f444ae39629ae679702345be3f198"
+          "sha256": "48aa3aa55ad1a0d3500fae378b43af030c51c4d1c793e24aa7d3041ccbf08acf"
         },
         {
           "path": "work/man/symvault-set.1",
           "change": "added",
           "kind": "file",
-          "sha256": "2d40ebb15d9807bfe3674a29bf68720411a6f9b450c1cf03c0da726f3e10df8a"
+          "sha256": "33445aba2ee2d3d90584e167b8a3d176af217c79294d44148f752e5cf7871e92"
         },
         {
           "path": "work/man/symvault-setup.1",
           "change": "added",
           "kind": "file",
-          "sha256": "1ee5070c19ff6f649bd26d750d2e37d1abfa08dae497d7abccc3676973187e8a"
+          "sha256": "857f074564b2caf348a483d396baeda9ea79395ff5b4872d4850d8aab55da705"
         },
         {
           "path": "work/man/symvault-share-list.1",
           "change": "added",
           "kind": "file",
-          "sha256": "507358120bd2a3d02f2822a278093aabadc0c5e554569a23abe6d23c1d0f4ddd"
+          "sha256": "617c71d5d33a16066ad531eb5a71be57a100b06b13919b085a03fa9323f96823"
         },
         {
           "path": "work/man/symvault-share-revoke.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a9600e8274b88fb1fbbc18972e3c1fc9ada39e6183bb69ceed953ce7a104caca"
+          "sha256": "73ef56f8382d89c640b44c609c581c086b15a7d12411324613bb89d0a1aa704b"
         },
         {
           "path": "work/man/symvault-share.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4d00126be10c1d97a812977d1e16d4cbc969974f02e912e1f564f07aa3ab304a"
+          "sha256": "7684ff466ee5ea93736a6d39706e49056f256cb4261a5180c5343521fe424df0"
         },
         {
           "path": "work/man/symvault-startup-profile.1",
           "change": "added",
           "kind": "file",
-          "sha256": "a8dfefa236d4ddbaf93266c7a6c379b51c1f422a4cfb9d27893d686c557ba6dd"
+          "sha256": "1a430d66525d8aa8e5818ae084e942fd145e38381f5712ae40b546cac4dbcbd8"
         },
         {
           "path": "work/man/symvault-sync.1",
           "change": "added",
           "kind": "file",
-          "sha256": "4e76d05c5b06b4548a3a5b52aa4833eb2090109c84435eb82134d24ec6dd32dd"
+          "sha256": "eb6dc256e4d60ddf3a447083f3ab44ebc14071e94acd3a5698eb28655b93a516"
         },
         {
           "path": "work/man/symvault-template-generate.1",
           "change": "added",
           "kind": "file",
-          "sha256": "738be70f5b50846393c431d59f48571693b5835fdfd0b029931c9b2037580745"
+          "sha256": "35a779057170b4bffec559b7ce799c1955aa924c5fac0c75fde5549be4ae45d3"
         },
         {
           "path": "work/man/symvault-template.1",
           "change": "added",
           "kind": "file",
-          "sha256": "b9f6fba9e77e6a9aa0742e3229f1ee3cd8281100e55d248a3651303b86e8b62f"
+          "sha256": "4ed4c0895cba6728a08ce4b9438ce2eb8738ed14da8b558eb666da755c1db46f"
         },
         {
           "path": "work/man/symvault-ui.1",
           "change": "added",
           "kind": "file",
-          "sha256": "87a8536ce0bd2b3a55780c6e1cb313642600d57c7c3c30322c1b99396082726c"
+          "sha256": "ededddd1447cd4110bfbd8bdcaa0f8903e8d4eacd7864b1ce124ac25498c8bc1"
         },
         {
           "path": "work/man/symvault-unlock.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9053cc855e46e63ede120db5bf3bcd6f8dd98824fb0e8deeffcbb482b3befecb"
+          "sha256": "b9c22e2eb4cbfbf3a24a51c47fcc1037bc91e96ac52bad6b55ac6395802e7975"
         },
         {
           "path": "work/man/symvault-update-apply.1",
           "change": "added",
           "kind": "file",
-          "sha256": "047bf1e1eab8ae2a1043fa9158e23ad310709d1311c56c32e9d7cf191b0407c2"
+          "sha256": "52c3dbfad0952b1dea68e46662da57d3e19cc0b9504f1676b628fc895db7ba96"
         },
         {
           "path": "work/man/symvault-update-check.1",
           "change": "added",
           "kind": "file",
-          "sha256": "72987acfec61aaee3b5741b3cc5d0a5961562f8473495ddbecf7e7a86147efa3"
+          "sha256": "19757080fdecaae0e2952f10b3cc17a10f60f756dcd96751e7236a9673dff243"
         },
         {
           "path": "work/man/symvault-update-info.1",
           "change": "added",
           "kind": "file",
-          "sha256": "d7b41a334e482ab0517cdd80e9269b2e6a11b2c144549cc97be457afef7cd3d8"
+          "sha256": "0360dfcaf94d67c98bec8ff221ab1cbd0ecb067495c4024cadef4b30758e3a9e"
         },
         {
           "path": "work/man/symvault-update.1",
           "change": "added",
           "kind": "file",
-          "sha256": "73c1997973224323605c32710d02897fef3f90d2654baa10a7b995e7580a2280"
+          "sha256": "de073d189bb8d3ac9f723ea329007831bcd2f0ec5b9881de9b38e97bf8f1e57f"
         },
         {
           "path": "work/man/symvault-verify.1",
           "change": "added",
           "kind": "file",
-          "sha256": "01026c7b8991caa8f9770df880f2df5b34fc60fe66dc04e6ca123a5204a723b1"
+          "sha256": "65e3ee49171cfa541e1d8f7cbf6b505aa1fcc261db06b44bef760e9c0196828c"
         },
         {
           "path": "work/man/symvault-version.1",
           "change": "added",
           "kind": "file",
-          "sha256": "9b3f68b97997692751279c0077c04b7063517f8e46f03109d401d87aee468281"
+          "sha256": "20d382e8a1b53a483603e3ab37a6e474d1233393e2dcf07fefb90d8c9d862692"
         },
         {
           "path": "work/man/symvault.1",
           "change": "added",
           "kind": "file",
-          "sha256": "027e4646218d9b00f9d9c8abc6882a442d730ab819762abdf9d7642e2ab550a6"
+          "sha256": "e07f44fa1e4a832e8e25109a395e70dfa9e0b9f09d4185679a8ebfcbb7dc546b"
         }
       ]
     },

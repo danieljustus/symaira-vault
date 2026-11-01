@@ -484,7 +484,7 @@ func (v *volatile) discover(stdout string) (string, error) {
 				return "", err
 			}
 			v.token = token
-		case rule == "now-ts":
+		case rule == "now-ts", rule == "man-date":
 		default:
 			return "", fmt.Errorf("unknown rule %q", rule)
 		}
@@ -501,7 +501,36 @@ func (v *volatile) apply(text string) string {
 	if v.has("now-ts") {
 		text = replaceNowTimestamps(text, v.now)
 	}
+	if v.has("man-date") {
+		text = replaceManDate(text)
+	}
 	return text
+}
+
+// replaceManDate is rule 9: the date field of a roff `.TH` header ("Nov 2026")
+// is the month of the run, so it becomes "<MAN-DATE>". Only the fourth quoted
+// field of a line starting with `.TH ` and shaped like `Mon YYYY` is touched.
+func replaceManDate(text string) string {
+	lines := strings.SplitAfter(text, "\n")
+	for i, line := range lines {
+		if !strings.HasPrefix(line, ".TH ") {
+			continue
+		}
+		parts := strings.Split(line, `"`)
+		// .TH "NAME" "1" "Nov 2026" "source" "manual": the date is parts[5].
+		if len(parts) > 5 && manDateShape(parts[5]) {
+			parts[5] = "<MAN-DATE>"
+			lines[i] = strings.Join(parts, `"`)
+		}
+	}
+	return strings.Join(lines, "")
+}
+
+// manDateShape reports "Mon YYYY": a capitalized three-letter month and a
+// four-digit year.
+func manDateShape(field string) bool {
+	return len(field) == 8 && field[0] >= 'A' && field[0] <= 'Z' && field[1] >= 'a' && field[1] <= 'z' &&
+		field[2] >= 'a' && field[2] <= 'z' && field[3] == ' ' && allDigits(field[4:])
 }
 
 func isPWBoundaryBefore(b byte) bool { return b == '\n' || b == ' ' || b == '"' }

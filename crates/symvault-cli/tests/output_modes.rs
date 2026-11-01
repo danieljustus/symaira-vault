@@ -544,7 +544,7 @@ impl<'a> Volatile<'a> {
                     continue;
                 }
                 self.token = Some(find_pair_token(&stdout)?);
-            } else if rule != "now-ts" {
+            } else if rule != "now-ts" && rule != "man-date" {
                 return Err(format!("unknown rule {rule}"));
             }
         }
@@ -560,8 +560,40 @@ impl<'a> Volatile<'a> {
         if self.has("now-ts") {
             text = replace_now_timestamps(&text, self.now);
         }
+        if self.has("man-date") {
+            text = replace_man_date(&text);
+        }
         text
     }
+}
+
+/// Rule 9: the date field of a roff `.TH` header (`"Nov 2026"`, the month of the
+/// run) becomes `<MAN-DATE>`; only the fourth quoted field of a line starting
+/// with `.TH ` and shaped like `Mon YYYY` is touched.
+fn replace_man_date(text: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len());
+    for line in text.split_inclusive(|byte| *byte == b'\n') {
+        if !line.starts_with(b".TH ") {
+            out.extend_from_slice(line);
+            continue;
+        }
+        let mut parts: Vec<&[u8]> = line.split(|byte| *byte == b'"').collect();
+        if parts.len() > 5 && man_date_shape(parts[5]) {
+            parts[5] = b"<MAN-DATE>";
+        }
+        out.extend_from_slice(&parts.join(&b'"'));
+    }
+    out
+}
+
+/// `Mon YYYY`: a capitalized three-letter month and a four-digit year.
+fn man_date_shape(field: &[u8]) -> bool {
+    field.len() == 8
+        && field[0].is_ascii_uppercase()
+        && field[1].is_ascii_lowercase()
+        && field[2].is_ascii_lowercase()
+        && field[3] == b' '
+        && all_digits(&field[4..])
 }
 
 // --- sandbox ----------------------------------------------------------------------
@@ -1144,6 +1176,20 @@ fn volatile_rules_are_narrow() {
         text(normalize_temp_suffixes(b"a.age.tmp-123 b.age.tmp-x")),
         "a.age.tmp-<N> b.age.tmp-x"
     );
+    // Rule 9: only the date field of a `.TH` header.
+    assert_eq!(
+        text(replace_man_date(
+            b".TH \"SYMVAULT\" \"1\" \"Nov 2026\" \"Symaira Vault\"\n.SH Nov 2026\n"
+        )),
+        ".TH \"SYMVAULT\" \"1\" \"<MAN-DATE>\" \"Symaira Vault\"\n.SH Nov 2026\n"
+    );
+    for kept in [
+        ".TH \"SYMVAULT\" \"1\" \"November 2026\" \"x\"\n",
+        ".TH \"SYMVAULT\" \"1\" \"nov 2026\" \"x\"\n",
+        "x .TH \"SYMVAULT\" \"1\" \"Nov 2026\" \"x\"\n",
+    ] {
+        assert_eq!(text(replace_man_date(kept.as_bytes())), kept, "{kept}");
+    }
     // Rule 4: exactly one delimited run of the declared length.
     assert_eq!(
         text(replace_generated_password(b"{\"password\":\"aB3dE5gH7jK9mN1pQ3rS\"}\n", 20).unwrap()),

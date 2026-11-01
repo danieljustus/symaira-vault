@@ -30,7 +30,7 @@ host_goos=$(uname -s | tr '[:upper:]' '[:lower:]')
 if [ "$host_goos" != "$recorded_goos" ] && [ "${SYMVAULT_OUTPUT_MODES_REGENERATE:-}" != 1 ]; then
     echo "SKIP output-modes oracle re-verification: corpus recorded on $recorded_goos, running on $host_goos (cmd/outputmodegen --check is darwin-only; the Rust test below also reports its replay as skipped)" >&2
     "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
-        -p symvault-cli --test output_modes --locked
+        -p symvault-cli --test output_modes --locked -- --nocapture
     exit 0
 fi
 oracle_binary=${SYMVAULT_OUTPUT_MODES_GO_BINARY:-}
@@ -57,4 +57,4 @@ fi
 "${GO:-go}" run ./scripts/rust-port/cmd/outputmodegen \
     --check --go-binary "$oracle_binary"
 "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
-    -p symvault-cli --test output_modes --locked
+    -p symvault-cli --test output_modes --locked -- --nocapture
