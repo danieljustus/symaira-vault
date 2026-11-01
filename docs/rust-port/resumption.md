@@ -1,5 +1,37 @@
 # Rust migration handover — 2026-09-09
 
+## CLI-005c review fixes: unlock order and failed passphrase prompts, 2026-11-01
+
+Independent review of `58460a10..d7c01a1c` (REQUEST_CHANGES) found two defects that the
+corpus could not see: every earlier scenario ran with the environment passphrase, so no
+prompt ever reached EOF, and no scenario started from a vault with only one of
+`config.yaml` / `identity.age`. The corpus now has an `unlock_states` section
+(`errtaxgen/unlockstates.go`, 60 Go-recorded scenarios, oracle `0cc78062`) and the native CLI
+follows Go's `UnlockVault` order (`internal/cli/unlock.go`).
+
+| Finding | Before | Now |
+|---|---|---|
+| `device pair` with only one vault file (`device.rs`) | either file missing was taken as proof that the identity is absent: with an identity but no `config.yaml` it reported `open vault: read identity file: ...`; with a `config.yaml` that disables the environment passphrase and no identity it used the passphrase from the environment | resolves the real `config.yaml` (missing = default), obtains the passphrase under its policy, then reads `identity.age`, then loads `config.yaml`: `open vault: load config: open <path>: no such file or directory` for an identity without a config, `open vault: read identity file: ...` for a config without an identity |
+| EOF at the passphrase prompt (`migrate pseudonymize`, and every command that unlocks) | printed once, exit 1 | `Error: read passphrase: read Passphrase: EOF` twice, the locked hint (the Touch ID flavour for `unlock`), exit 4 (`report_failed_passphrase_read`, called by every `finish_*` function and by `intake`) |
+| Interactive unlock with `security.disable_env_passphrase` and `SYMVAULT_PASSPHRASE` set (`device_input.rs`) | error `environment passphrase is disabled; ...`, exit 1 | warning `SYMVAULT_PASSPHRASE is set but ignored: ...`, then the prompt, like `resolveUnlockPassphrase` |
+
+Scenarios per state (`UNLOCK_STATES` in `tests/error_taxonomy.rs`): `locked` 18 (settled vault,
+no `SYMVAULT_PASSPHRASE`: `device pair`, `list`, `find`, `add`, `delete`, `edit`, `verify`,
+`unlock`, `migrate pseudonymize` with and without `--yes`, `recipients add|remove`, `run`,
+`file use`, `import review list|promote`, `intake`), and 7 each (`device pair` with and without a
+positional, `list`, `verify`, `unlock`, `migrate pseudonymize` with and without `--yes`) for
+`identity_only`, `config_only`, `identity_only_locked`, `config_only_locked`,
+`config_only_env_disabled` and `env_disabled`. Native output before the fix, same fixture: 27 of
+the 60 differed (`locked` 16, `identity_only` 2, `config_only_env_disabled` 2,
+`env_disabled` 7); after: 0.
+
+**Not covered, still different from Go (found while sweeping every runnable command in the
+`locked` state):** `get` (Go takes the non-interactive path: `vault locked: this build cannot
+share ...`; Rust prompts), `set` (Go asks for the username first), `file get|add`
+(missing-flag errors), and a `config.yaml` that fails to parse (Go: exit 6,
+`configuration is invalid`, interactive editor offer; Rust: `load config: ...`, exit 1).
+These predate this branch and are not claimed.
+
 ## CLI-005c: 18 of the 28 pinned body divergences closed, 2026-11-01
 
 Branch `local/cli-005c` (base `ee263740`), one commit per class, each removing its
