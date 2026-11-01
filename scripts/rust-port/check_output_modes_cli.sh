@@ -13,12 +13,26 @@
 # rewrites the frozen fixture from the same verified oracle build, KEEPING the
 # frozen seed vaults, and stops before the replay. Add
 # SYMVAULT_OUTPUT_MODES_NEW_SEEDS=1 to rebuild the seeds too (fresh keys).
+#
+# Platform: the corpus is recorded on one OS (oracle.goos in the fixture; doctor,
+# auth status and several path spellings are host probes). On any other OS the
+# Go re-verification cannot reproduce the recorded bytes, so this script prints
+# a visible SKIP for it and goes straight to the Rust test, which prints its own
+# visible SKIP for the replay. Never a silent pass: both notices are on stderr.
 set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$repo_root"
 export GOWORK=off
 export GOTOOLCHAIN=${GO_TOOLCHAIN:-go1.26.6}
+recorded_goos=darwin
+host_goos=$(uname -s | tr '[:upper:]' '[:lower:]')
+if [ "$host_goos" != "$recorded_goos" ] && [ "${SYMVAULT_OUTPUT_MODES_REGENERATE:-}" != 1 ]; then
+    echo "SKIP output-modes oracle re-verification: corpus recorded on $recorded_goos, running on $host_goos (cmd/outputmodegen --check is darwin-only; the Rust test below also reports its replay as skipped)" >&2
+    "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
+        -p symvault-cli --test output_modes --locked
+    exit 0
+fi
 oracle_binary=${SYMVAULT_OUTPUT_MODES_GO_BINARY:-}
 if [ -z "$oracle_binary" ]; then
     run_root=$(mktemp -d "${TMPDIR:-/tmp}/output-modes-cli.XXXXXX")

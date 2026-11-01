@@ -110,7 +110,7 @@
       "scripts/rust-port/cmd/outputmodegen/cases.go",
       "scripts/rust-port/cmd/outputmodegen/main.go"
     ],
-    "generator_digest": "93ec7941b90a739459512e5253284643323706a189de213ba4feeb3e58e685f8",
+    "generator_digest": "cf5fb7a6b3f516d4178b74fb08c549acf43f41760cfa3a3508c14232364d62cc",
     "gate_digest": "c2536c1ffaf681feaa8fa8824f7e302e9633b2c2711c9ecd98531283064e51f1",
     "goos": "darwin"
   },
