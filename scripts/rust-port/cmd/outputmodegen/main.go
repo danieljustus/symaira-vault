@@ -159,6 +159,52 @@ type treeEntry struct {
 	Change string `json:"change"` // added | removed | changed
 	Kind   string `json:"kind"`
 	SHA256 string `json:"sha256,omitempty"`
+	// Audit is the decoded stable fields of every line of a presence-only audit
+	// log (the bytes carry clock values and HMACs, the fields below do not).
+	Audit []auditLine `json:"audit,omitempty"`
+}
+
+// auditLine is the stable part of one audit log line: who (agent, which Go
+// leaves empty for the CLI's own records), what, on which path and field, the
+// outcome, and the SHAPE of the volatile parts (argv_hash length, whether the
+// line is signed). ts, kid, hmac and the hash itself are never recorded.
+type auditLine struct {
+	Agent       string `json:"agent"`
+	Action      string `json:"action"`
+	Path        string `json:"path,omitempty"`
+	Field       string `json:"field,omitempty"`
+	OK          bool   `json:"ok"`
+	ArgvHashLen int    `json:"argv_hash_len"`
+	Signed      bool   `json:"signed"`
+}
+
+// decodeAuditLines parses a presence-only audit log into its stable fields. A
+// line that is not a JSON object is an error: dropping it would hide a diff.
+func decodeAuditLines(data []byte) ([]auditLine, error) {
+	var lines []auditLine
+	for _, raw := range strings.Split(string(data), "\n") {
+		if raw == "" {
+			continue
+		}
+		var entry struct {
+			Agent    string `json:"agent"`
+			Action   string `json:"action"`
+			Path     string `json:"path"`
+			Field    string `json:"field"`
+			OK       bool   `json:"ok"`
+			ArgvHash string `json:"argv_hash"`
+			KID      string `json:"kid"`
+			HMAC     string `json:"hmac"`
+		}
+		if err := json.Unmarshal([]byte(raw), &entry); err != nil {
+			return nil, fmt.Errorf("audit line %q: %w", raw, err)
+		}
+		lines = append(lines, auditLine{
+			Agent: entry.Agent, Action: entry.Action, Path: entry.Path, Field: entry.Field, OK: entry.OK,
+			ArgvHashLen: len(entry.ArgvHash), Signed: entry.KID != "" && entry.HMAC != "",
+		})
+	}
+	return lines, nil
 }
 
 type caseResult struct {
@@ -678,6 +724,8 @@ type treeNode struct {
 	kind    string
 	content string
 	hasData bool
+	// audit is the canonical JSON of the decoded lines of an audit log.
+	audit string
 }
 
 // snapshot walks the sandbox root (not the work/bin or sysbin plumbing) and
@@ -703,12 +751,24 @@ func (s *sandbox) snapshot() (map[string]treeNode, error) {
 		case entry.IsDir():
 			node.kind = "dir"
 		default:
-			if encryptedStore(rel) || strings.HasSuffix(rel, ".age") || presenceOnly(rel) {
+			if encryptedStore(rel) || strings.HasSuffix(rel, ".age") {
 				break
 			}
 			data, err := os.ReadFile(path) // #nosec G304 -- sandbox path
 			if err != nil {
 				return err
+			}
+			if presenceOnly(rel) {
+				lines, err := decodeAuditLines(data)
+				if err != nil {
+					return fmt.Errorf("%s: %w", rel, err)
+				}
+				encoded, err := json.Marshal(lines)
+				if err != nil {
+					return err
+				}
+				node.audit = string(encoded)
+				break
 			}
 			node.content, node.hasData = s.normalize(string(data)), true
 		}
@@ -727,11 +787,17 @@ func diffTrees(before, after map[string]treeNode, v *volatile) []treeEntry {
 			sum := sha256.Sum256([]byte(v.apply(node.content)))
 			sha = hex.EncodeToString(sum[:])
 		}
+		var lines []auditLine
+		if node.audit != "" {
+			if err := json.Unmarshal([]byte(node.audit), &lines); err != nil {
+				panic(err) // node.audit was produced by json.Marshal above
+			}
+		}
 		switch {
 		case !existed:
-			out = append(out, treeEntry{Path: v.apply(path), Change: "added", Kind: node.kind, SHA256: sha})
+			out = append(out, treeEntry{Path: v.apply(path), Change: "added", Kind: node.kind, SHA256: sha, Audit: lines})
 		case old != node:
-			out = append(out, treeEntry{Path: v.apply(path), Change: "changed", Kind: node.kind, SHA256: sha})
+			out = append(out, treeEntry{Path: v.apply(path), Change: "changed", Kind: node.kind, SHA256: sha, Audit: lines})
 		}
 	}
 	for path, node := range before {

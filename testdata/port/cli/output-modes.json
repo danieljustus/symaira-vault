@@ -110,7 +110,7 @@
       "scripts/rust-port/cmd/outputmodegen/cases.go",
       "scripts/rust-port/cmd/outputmodegen/main.go"
     ],
-    "generator_digest": "20cd7070c7b8a0a82c47384296cc3d206614464548132967586d9041c99a96ef",
+    "generator_digest": "2df7e8f5cbe6bc4178262b10ebd39369060851832f2f358b4db0c6c83dd13284",
     "gate_digest": "c2536c1ffaf681feaa8fa8824f7e302e9633b2c2711c9ecd98531283064e51f1",
     "goos": "darwin"
   },
@@ -2649,7 +2649,17 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -2673,7 +2683,17 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -2698,7 +2718,17 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -2723,7 +2753,17 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -2747,7 +2787,193 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-field-print.text",
+      "path": "get",
+      "scenario": "get-field-print",
+      "mode": "text",
+      "desc": "get one field with --print (the audit record names the field)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work/example.username",
+        "--print"
+      ],
+      "exit": 0,
+      "stdout": "alice\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": [
+        {
+          "path": "home/vault/audit-symvault.log",
+          "change": "added",
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "field": "username",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-field-print.json",
+      "path": "get",
+      "scenario": "get-field-print",
+      "mode": "json",
+      "desc": "get one field with --print (the audit record names the field)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work/example.username",
+        "--print",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "\"alice\"\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": [
+        {
+          "path": "home/vault/audit-symvault.log",
+          "change": "added",
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "field": "username",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-field-print.yaml",
+      "path": "get",
+      "scenario": "get-field-print",
+      "mode": "yaml",
+      "desc": "get one field with --print (the audit record names the field)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work/example.username",
+        "--print",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "alice\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": [
+        {
+          "path": "home/vault/audit-symvault.log",
+          "change": "added",
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "field": "username",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-field-print.output-json",
+      "path": "get",
+      "scenario": "get-field-print",
+      "mode": "output-json",
+      "desc": "get one field with --print (the audit record names the field)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work/example.username",
+        "--print",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "\"alice\"\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": [
+        {
+          "path": "home/vault/audit-symvault.log",
+          "change": "added",
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "field": "username",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-field-print.quiet",
+      "path": "get",
+      "scenario": "get-field-print",
+      "mode": "quiet",
+      "desc": "get one field with --print (the audit record names the field)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work/example.username",
+        "--print",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/vault/audit-symvault.log",
+          "change": "added",
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "field": "username",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -2770,7 +2996,17 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "a/first",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -2794,7 +3030,17 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "a/first",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -2819,7 +3065,17 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "a/first",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -2844,7 +3100,17 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "a/first",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -2868,7 +3134,17 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "a/first",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -3241,7 +3517,16 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "export",
+              "ok": true,
+              "argv_hash_len": 0,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -3267,7 +3552,16 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "export",
+              "ok": true,
+              "argv_hash_len": 0,
+              "signed": true
+            }
+          ]
         },
         {
           "path": "work/yaml",
@@ -3299,7 +3593,16 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "export",
+              "ok": true,
+              "argv_hash_len": 0,
+              "signed": true
+            }
+          ]
         },
         {
           "path": "work/json",
@@ -3330,7 +3633,16 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "export",
+              "ok": true,
+              "argv_hash_len": 0,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -3354,7 +3666,16 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "export",
+              "ok": true,
+              "argv_hash_len": 0,
+              "signed": true
+            }
+          ]
         }
       ]
     },
@@ -3380,7 +3701,16 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "export",
+              "ok": true,
+              "argv_hash_len": 0,
+              "signed": true
+            }
+          ]
         },
         {
           "path": "work/yaml",
@@ -3412,7 +3742,16 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "export",
+              "ok": true,
+              "argv_hash_len": 0,
+              "signed": true
+            }
+          ]
         },
         {
           "path": "work/json",
@@ -3443,7 +3782,16 @@
         {
           "path": "home/vault/audit-symvault.log",
           "change": "added",
-          "kind": "file"
+          "kind": "file",
+          "audit": [
+            {
+              "agent": "",
+              "action": "export",
+              "ok": true,
+              "argv_hash_len": 0,
+              "signed": true
+            }
+          ]
         }
       ]
     },

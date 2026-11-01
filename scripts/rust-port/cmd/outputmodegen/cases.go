@@ -92,6 +92,7 @@ func allCaseSpecs() []caseSpec {
 	add(caseSpec{id: "list-empty", path: "list", desc: "list an empty vault", seed: "empty", argv: flags("list")})
 	add(caseSpec{id: "get", path: "get", desc: "get one entry (values masked)", seed: "entries", argv: flags("get", "work/example")})
 	add(caseSpec{id: "get-print", path: "get", desc: "get one entry with --print", seed: "entries", argv: flags("get", "work/example", "--print")})
+	add(caseSpec{id: "get-field-print", path: "get", desc: "get one field with --print (the audit record names the field)", seed: "entries", argv: flags("get", "work/example.username", "--print")})
 	add(caseSpec{id: "get-minimal", path: "get", desc: "get an entry with only a password", seed: "entries", argv: flags("get", "a/first", "--print")})
 	add(caseSpec{id: "get-missing", path: "get", desc: "get a missing entry", seed: "entries", argv: flags("get", "nope/missing")})
 	add(caseSpec{id: "find", path: "find", desc: "find by username", seed: "entries", argv: flags("find", "alice")})

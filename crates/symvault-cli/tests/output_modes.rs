@@ -51,7 +51,7 @@ use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
 
 const PASSPHRASE: &str = "correct horse battery staple";
-const EXPECTED_CASES: usize = 379;
+const EXPECTED_CASES: usize = 384;
 const EXPECTED_PATHS: usize = 47;
 const EXPECTED_SEEDS: usize = 6;
 const FIXTURE: &str = "../../testdata/port/cli/output-modes.json";
@@ -124,6 +124,20 @@ struct Step {
     stdout: String,
 }
 
+/// The stable part of one audit log line (see `decode_audit_lines`).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+struct AuditLine {
+    agent: String,
+    action: String,
+    #[serde(default)]
+    path: String,
+    #[serde(default)]
+    field: String,
+    ok: bool,
+    argv_hash_len: usize,
+    signed: bool,
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 struct TreeEntry {
     path: String,
@@ -131,6 +145,8 @@ struct TreeEntry {
     kind: String,
     #[serde(default)]
     sha256: String,
+    #[serde(default)]
+    audit: Vec<AuditLine>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -611,6 +627,8 @@ struct Sandbox {
 struct TreeNode {
     kind: &'static str,
     content: Option<Vec<u8>>,
+    /// Decoded lines of a presence-only audit log.
+    audit: Option<Vec<AuditLine>>,
 }
 
 struct Observed {
@@ -798,12 +816,17 @@ impl Sandbox {
             let mut node = TreeNode {
                 kind: "file",
                 content: None,
+                audit: None,
             };
             if file_type.is_symlink() {
                 node.kind = "symlink";
             } else if file_type.is_dir() {
                 node.kind = "dir";
-            } else if !(encrypted_store(&rel) || rel.ends_with(".age") || presence_only(&rel)) {
+            } else if presence_only(&rel) {
+                node.audit = Some(decode_audit_lines(
+                    &std::fs::read(&path).expect("read observed audit log"),
+                ));
+            } else if !(encrypted_store(&rel) || rel.ends_with(".age")) {
                 node.content = Some(self.normalize(&std::fs::read(&path).expect("read observed")));
             }
             out.insert(rel, node);
@@ -830,6 +853,31 @@ fn encrypted_store(rel: &str) -> bool {
 fn presence_only(rel: &str) -> bool {
     let base = rel.rsplit('/').next().unwrap_or(rel);
     base.starts_with("audit-") && base.ends_with(".log")
+}
+
+/// Decodes a presence-only audit log into the stable fields the generator
+/// records (agent, action, path, field, ok, `argv_hash` length, signed); ts,
+/// kid, hmac and the hash itself are never compared. A line that is not a JSON
+/// object is a failure: dropping it would hide a difference.
+fn decode_audit_lines(data: &[u8]) -> Vec<AuditLine> {
+    let text = std::str::from_utf8(data).expect("audit log is UTF-8");
+    text.split('\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            let value: serde_json::Value = serde_json::from_str(line)
+                .unwrap_or_else(|error| panic!("audit line {line:?}: {error}"));
+            let text_of = |key: &str| value[key].as_str().unwrap_or_default().to_owned();
+            AuditLine {
+                agent: text_of("agent"),
+                action: text_of("action"),
+                path: text_of("path"),
+                field: text_of("field"),
+                ok: value["ok"].as_bool().unwrap_or(false),
+                argv_hash_len: text_of("argv_hash").len(),
+                signed: !text_of("kid").is_empty() && !text_of("hmac").is_empty(),
+            }
+        })
+        .collect()
 }
 
 fn pair_token_from_tree(after: &BTreeMap<String, TreeNode>) -> Option<String> {
@@ -866,6 +914,7 @@ fn diff_trees(
             change: change.to_owned(),
             kind: node.kind.to_owned(),
             sha256: sha,
+            audit: node.audit.clone().unwrap_or_default(),
         });
     }
     for (path, node) in before {
@@ -875,6 +924,7 @@ fn diff_trees(
                 change: "removed".to_owned(),
                 kind: node.kind.to_owned(),
                 sha256: String::new(),
+                audit: Vec::new(),
             });
         }
     }
@@ -1253,6 +1303,7 @@ fn tree_normalization_hides_nothing_beyond_the_rules() {
         TreeNode {
             kind: "file",
             content: Some(b"{}".to_vec()),
+            audit: None,
         },
     );
     volatile.token = pair_token_from_tree(&after);
@@ -1265,7 +1316,73 @@ fn tree_normalization_hides_nothing_beyond_the_rules() {
             change: "added".into(),
             kind: "file".into(),
             sha256: String::new(),
+            audit: Vec::new(),
         }],
         "opaque files are recorded by presence only"
+    );
+}
+
+/// Negative control for the audit comparison: a presence-only audit log is
+/// compared by its decoded stable fields, so a different agent, action, path,
+/// field, outcome, hash shape or signature is a difference, while the clock and
+/// the HMAC bytes are not.
+#[test]
+fn audit_logs_are_compared_by_decoded_fields_not_presence() {
+    let line = |agent: &str, extra: &str| {
+        format!(
+            "{{\"ts\":\"2026-11-01T00:00:00Z\",\"agent\":\"{agent}\",\"action\":\"expose_plaintext\",\"path\":\"work/example\",{extra}\"kid\":\"fc75e246\",\"hmac\":\"00\",\"argv_hash\":\"37bd64d6d7b42557\",\"ok\":true}}\n"
+        )
+    };
+    let go = decode_audit_lines(line("", "").as_bytes());
+    assert_eq!(
+        go,
+        vec![AuditLine {
+            agent: String::new(),
+            action: "expose_plaintext".into(),
+            path: "work/example".into(),
+            field: String::new(),
+            ok: true,
+            argv_hash_len: 16,
+            signed: true,
+        }]
+    );
+    let other_clock = line("", "").replace("2026-11-01T00:00:00Z", "2030-01-01T00:00:00Z");
+    assert_eq!(
+        decode_audit_lines(other_clock.as_bytes()),
+        go,
+        "ts is not compared"
+    );
+    assert_ne!(
+        decode_audit_lines(line("symvault", "").as_bytes()),
+        go,
+        "agent is compared"
+    );
+    assert_ne!(
+        decode_audit_lines(line("", "\"field\":\"password\",").as_bytes()),
+        go,
+        "field is compared"
+    );
+    assert_ne!(
+        decode_audit_lines(
+            line("", "")
+                .replace("\"ok\":true", "\"ok\":false")
+                .as_bytes()
+        ),
+        go,
+        "outcome is compared"
+    );
+    assert_ne!(
+        decode_audit_lines(line("", "").replace("37bd64d6d7b42557", "37bd").as_bytes()),
+        go,
+        "argv_hash length is compared"
+    );
+    assert_ne!(
+        decode_audit_lines(
+            line("", "")
+                .replace("\"hmac\":\"00\"", "\"hmac\":\"\"")
+                .as_bytes()
+        ),
+        go,
+        "an unsigned line differs"
     );
 }

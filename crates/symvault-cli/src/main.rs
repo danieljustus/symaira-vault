@@ -3333,7 +3333,9 @@ fn run_auth_rotate_passphrase(
         {
             let _ = logger.append(symvault_store::audit::LogEntry {
                 timestamp: export_commands::go_timestamp_seconds(),
-                agent: "symvault".to_owned(),
+                // Go's audit.New("symvault", ...) names the file; the entry
+                // itself never sets Agent, so the record's agent is empty.
+                agent: String::new(),
                 action: "rotate-passphrase".to_owned(),
                 ok: true,
                 ..symvault_store::audit::LogEntry::default()
@@ -3684,7 +3686,9 @@ fn emit_exposure_audit(vault: &Path, path: &str, field: &str) {
         .collect();
     if let Err(error) = logger.append(symvault_store::audit::LogEntry {
         timestamp: export_commands::go_timestamp_seconds(),
-        agent: "symvault".to_owned(),
+        // Go's audit.New("symvault", ...) names the file; emitExposureAudit
+        // never sets LogEntry.Agent, so the record's agent is empty.
+        agent: String::new(),
         action: "expose_plaintext".to_owned(),
         path: path.to_owned(),
         field: field.to_owned(),
