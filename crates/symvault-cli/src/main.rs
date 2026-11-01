@@ -30,6 +30,7 @@ mod deprecated_stubs;
 mod device;
 mod device_approval;
 mod doctor_commands;
+mod dynamic_commands;
 mod edit_commands;
 mod export_commands;
 mod file_commands;
@@ -375,6 +376,11 @@ enum Command {
     Migrate {
         #[command(subcommand)]
         command: MigrateCommand,
+    },
+    /// Generate dynamic secrets with time-limited leases.
+    Dynamic {
+        #[command(subcommand)]
+        command: DynamicCommand,
     },
     /// Generate configuration files from built-in templates.
     Template {
@@ -1289,6 +1295,25 @@ enum TemplateCommand {
         #[arg(long, default_value = "")]
         prefix: String,
         refs: Vec<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum DynamicCommand {
+    /// Generate a dynamic secret.
+    ///
+    /// `cobra_usage` validates the flags first (required `--engine` and
+    /// `--role`, Go duration `--ttl`); the body never reads them because the
+    /// oracle registers no engine (`dynamic_commands`).
+    Generate {
+        #[arg(long = "engine", allow_hyphen_values = true)]
+        _engine: Option<String>,
+        #[arg(long = "role", allow_hyphen_values = true)]
+        _role: Option<String>,
+        #[arg(long = "ttl", allow_hyphen_values = true)]
+        _ttl: Option<String>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
 }
 
@@ -2620,6 +2645,9 @@ fn run_cli() -> ExitCode {
             cli.json,
             cli.quiet,
         ),
+        Some(Command::Dynamic {
+            command: DynamicCommand::Generate { .. },
+        }) => dynamic_commands::generate(cli.vault.as_deref(), cli._profile.as_deref()),
         Some(Command::Template {
             command:
                 TemplateCommand::Generate {
@@ -5865,7 +5893,7 @@ mod nil_args_positional_tests {
     /// Nil-Args commands that are not native subcommands yet; the clap parse
     /// is expected to reject their name. The replay lists them as known
     /// body divergences.
-    const NOT_NATIVE: &[&str] = &["symvault dynamic generate", "symvault setup"];
+    const NOT_NATIVE: &[&str] = &["symvault setup"];
 
     fn nil_args_paths() -> Vec<(String, bool)> {
         let raw = std::fs::read_to_string(concat!(
@@ -5908,8 +5936,8 @@ mod nil_args_positional_tests {
                 checked += 1;
             }
         }
-        // 48 runnable nil-Args commands, two of them not native yet.
-        assert_eq!(checked, 46 * 3);
+        // 48 runnable nil-Args commands, minus the ones not native yet.
+        assert_eq!(checked, (48 - NOT_NATIVE.len()) * 3);
     }
 
     #[test]

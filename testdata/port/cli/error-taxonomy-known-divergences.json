@@ -23,26 +23,6 @@
     {
       "expected_rust": {
         "exit_code": 1,
-        "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
-        "stdout": ""
-      },
-      "name": "extra_initialized_dynamic_generate_x1",
-      "reason": "`dynamic` is not a native subcommand yet (only its help page is frozen)",
-      "state": "initialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
-        "stdout": ""
-      },
-      "name": "extra_initialized_dynamic_generate_x2",
-      "reason": "`dynamic` is not a native subcommand yet (only its help page is frozen)",
-      "state": "initialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
         "stderr": "Migrate all entries to pseudonymized paths. Make a backup first (y/N): Error: read confirmation: EOF\n",
         "stdout": ""
       },
@@ -158,36 +138,6 @@
       },
       "name": "extra_uninitialized_device_pair_x2",
       "reason": "Go asks for the passphrase before it checks the vault (exit 4); the native command reports `vault is not initialized` (exit 1)",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_dynamic_generate_dd1",
-      "reason": "`dynamic` is not a native subcommand yet (only its help page is frozen)",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_dynamic_generate_x1",
-      "reason": "`dynamic` is not a native subcommand yet (only its help page is frozen)",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_dynamic_generate_x2",
-      "reason": "`dynamic` is not a native subcommand yet (only its help page is frozen)",
       "state": "uninitialized"
     },
     {
