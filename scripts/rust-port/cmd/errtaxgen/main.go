@@ -28,6 +28,11 @@
 //     vault (vault_seed).
 //   - run_file_use_argv: argv permutations of the commands that forward a
 //     trailing command line (`run`, `file use`).
+//
+// The oracle never touches the host's service manager, keychain, clipboard or
+// notifications: every sandbox puts stand-in executables first on PATH (see
+// hosttools.go). Service-manager calls are recorded with the scenario that made
+// them; a call of any other stand-in fails the generator.
 package main
 
 import (
@@ -131,7 +136,12 @@ type shapeCase struct {
 }
 
 type fixture struct {
-	SchemaVersion  int           `json:"schema_version"`
+	SchemaVersion int `json:"schema_version"`
+	// GeneratedOn is the GOOS the oracle ran on. Host-dependent output (the
+	// service-manager commands) and the recorded host-tool calls belong to it.
+	GeneratedOn string `json:"generated_on"`
+	// HostTools names the stand-in executables every sandbox puts first on PATH.
+	HostTools      hostToolSet   `json:"host_tools"`
 	Oracle         oracle        `json:"oracle"`
 	Usage          []usageCase   `json:"usage"`
 	Arity          []arityRow    `json:"arity"`
@@ -144,8 +154,11 @@ type fixture struct {
 	VaultSeed        []seedFile     `json:"vault_seed"`
 	ExtraPositionals []scenarioCase `json:"extra_positionals"`
 	// ExtraPositionalExclusions are the nil-Args commands left out of a state, with the reason.
-	ExtraPositionalExclusions []exclusion    `json:"extra_positional_exclusions"`
-	RunFileUseArgv            []scenarioCase `json:"run_file_use_argv"`
+	ExtraPositionalExclusions []exclusion `json:"extra_positional_exclusions"`
+	// HostDependentCommands are the nil-Args commands whose scenarios are only
+	// byte-comparable on the platforms named (their scenarios carry the same list).
+	HostDependentCommands []hostDependence `json:"host_dependent_commands"`
+	RunFileUseArgv        []scenarioCase   `json:"run_file_use_argv"`
 }
 
 type treeFile struct {
@@ -287,8 +300,15 @@ func newSandbox() (*sandbox, error) {
 		_ = os.RemoveAll(root)
 		return nil, err
 	}
+	box := &sandbox{root: root}
+	if err := box.installHostTools(); err != nil {
+		_ = os.RemoveAll(root)
+		return nil, err
+	}
+	// The sandbox PATH starts with the host-tool stand-ins and holds only the
+	// system directories after them: nothing of the developer's PATH is visible.
 	env := []string{
-		"PATH=" + os.Getenv("PATH"),
+		"PATH=" + box.hostToolsDir() + string(os.PathListSeparator) + sandboxPathSystem,
 		"HOME=" + home,
 		"USERPROFILE=" + home,
 		"XDG_CONFIG_HOME=" + filepath.Join(root, "xdg-config"),
@@ -298,7 +318,8 @@ func newSandbox() (*sandbox, error) {
 		"CI=1",
 		"NO_COLOR=1",
 	}
-	return &sandbox{root: root, env: env}, nil
+	box.env = env
+	return box, nil
 }
 
 func (s *sandbox) normalize(text string) string {
@@ -315,6 +336,9 @@ func (s *sandbox) normalize(text string) string {
 type result struct {
 	obs      observation
 	timedOut bool
+	// hostCalls are the calls the run made to the host-tool stand-ins (service
+	// managers only: a call of any other stand-in is an error), in call order.
+	hostCalls []string
 }
 
 // runSpec is what a run needs besides argv: disposable working-directory files,
@@ -383,6 +407,14 @@ func runInSandbox(goBinary string, box *sandbox, args []string) (result, error) 
 		}
 		*text.dest = box.normalize(string(text.raw))
 	}
+	calls, err := box.hostToolCalls()
+	if err != nil {
+		return result{}, fmt.Errorf("read host-tool log of %v: %w", args, err)
+	}
+	if err := guardHostCalls(args, calls); err != nil {
+		return result{}, err
+	}
+	out.hostCalls = calls
 	return out, nil
 }
 
@@ -720,6 +752,8 @@ func main() {
 	}
 	content, err := marshalJSON(fixture{
 		SchemaVersion:  1,
+		GeneratedOn:    runtime.GOOS,
+		HostTools:      standInTools(),
 		Oracle:         oracle{commitLabel, resolved, releaseLabel, sources, sourceDigest, generatorDigest},
 		Usage:          usage,
 		Arity:          arity,
@@ -731,6 +765,7 @@ func main() {
 		VaultSeed:                 extras.seed,
 		ExtraPositionals:          extras.extraPositionals,
 		ExtraPositionalExclusions: extras.exclusions,
+		HostDependentCommands:     extras.hostDependent,
 		RunFileUseArgv:            extras.runFileUse,
 	})
 	if err != nil {

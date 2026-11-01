@@ -31,11 +31,18 @@ const (
 	// reports for the key it just drew.
 	normalizeKeyBytes = "key_bytes"
 	keyBytesLine      = "New key: __KEY__ (first 4 bytes)"
+
+	// normalizeTouchID replaces the Touch ID availability `auth status` reports:
+	// it is a probe of the machine's biometric hardware (true on the recording
+	// MacBook, false on a Mac without Touch ID and on Linux), not of the CLI.
+	normalizeTouchID = "touch_id_available"
+	touchIDLine      = "Touch ID available: __BOOL__\n"
 )
 
 var (
 	password20 = regexp.MustCompile(`^[A-Za-z0-9]{20}\n$`)
 	keyBytes   = regexp.MustCompile(`New key: [0-9a-f]{8} \(first 4 bytes\)`)
+	touchID    = regexp.MustCompile(`Touch ID available: (true|false)\n`)
 )
 
 // seedFile is one entry of the frozen vault tree, relative to the sandbox root.
@@ -52,17 +59,26 @@ type seedFile struct {
 // one, or one holding the vault_seed tree plus the passphrase environment) and
 // Normalize names the narrow, documented rewrites applied to both sides.
 type scenarioCase struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	State       string      `json:"state"`
-	Normalize   []string    `json:"normalize,omitempty"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	State       string   `json:"state"`
+	Normalize   []string `json:"normalize,omitempty"`
+	// Platforms lists the GOOS values the observation can be compared on; empty
+	// means every platform. A scenario of a host-dependent command carries the
+	// platform it was recorded on.
+	Platforms   []string    `json:"platforms,omitempty"`
 	Observation observation `json:"observation"`
+	// HostToolCalls are the service-manager calls the run made to the sandbox
+	// stand-ins (`launchctl unload <plist>`), recorded on the fixture's
+	// generated_on platform; a replay compares them only there.
+	HostToolCalls []string `json:"host_tool_calls,omitempty"`
 }
 
 type scenarioInput struct {
 	name, description, state string
 	args                     []string
 	normalize                []string
+	platforms                []string
 }
 
 type extraSections struct {
@@ -70,6 +86,7 @@ type extraSections struct {
 	seed             []seedFile
 	extraPositionals []scenarioCase
 	exclusions       []exclusion
+	hostDependent    []hostDependence
 	runFileUse       []scenarioCase
 }
 
@@ -99,6 +116,29 @@ var scenarioExclusions = []exclusion{
 	{"symvault startup-profile", bothStates, "prints measured timings"},
 }
 
+// hostDependence is a nil-Args command whose output names the service manager
+// of the platform it ran on, so its scenarios are only comparable there. The
+// fixture records the list, and a stale key (a command that is no longer in the
+// inventory) is an error.
+type hostDependence struct {
+	Path      string   `json:"path"`
+	Platforms []string `json:"platforms"`
+	Reason    string   `json:"reason"`
+}
+
+var darwinOnly = []string{"darwin"}
+
+// scenarioHostDependence lists the commands the Linux replay skips (with a
+// visible count) and replays against stand-in tools only. `mcp|serve uninstall`
+// print the same text on both platforms and are not listed: their stdout and
+// stderr compare everywhere, only their recorded launchctl calls are darwin's.
+var scenarioHostDependence = []hostDependence{
+	{"symvault mcp install", darwinOnly, "prints the launchd plist path (<home>/LaunchAgents/com.symvault.mcp.plist); Linux installs a systemd user unit"},
+	{"symvault mcp status", darwinOnly, "prints the launchd plist path; Linux reports the systemd unit"},
+	{"symvault serve install", darwinOnly, "deprecated alias of mcp install: prints the launchd plist path; Linux installs a systemd user unit"},
+	{"symvault serve status", darwinOnly, "deprecated alias of mcp status: prints the launchd plist path; Linux reports the systemd unit"},
+}
+
 func (e exclusion) excludes(state string) bool {
 	for _, s := range e.States {
 		if s == state {
@@ -112,6 +152,7 @@ func (e exclusion) excludes(state string) bool {
 var scenarioNormalizers = map[string][]string{
 	"symvault generate":         {normalizePassword20},
 	"symvault audit rotate-key": {normalizeKeyBytes},
+	"symvault auth status":      {normalizeTouchID},
 }
 
 func initializedEnv() []string {
@@ -131,6 +172,8 @@ func applyNormalizers(names []string, obs observation) (observation, error) {
 			}
 		case normalizeKeyBytes:
 			obs.Stderr = keyBytes.ReplaceAllString(obs.Stderr, keyBytesLine)
+		case normalizeTouchID:
+			obs.Stdout = touchID.ReplaceAllString(obs.Stdout, touchIDLine)
 		default:
 			return obs, fmt.Errorf("unknown normalizer %q", name)
 		}
@@ -295,6 +338,13 @@ func extraPositionalInputs(inventory []nilArgsEntry) ([]scenarioInput, error) {
 		}
 		excluded[item.Path] = item
 	}
+	dependent := map[string]hostDependence{}
+	for _, item := range scenarioHostDependence {
+		if !paths[item.Path] {
+			return nil, fmt.Errorf("scenarioHostDependence names %q, which is not a nil-Args command", item.Path)
+		}
+		dependent[item.Path] = item
+	}
 	for path := range scenarioNormalizers {
 		if !paths[path] {
 			return nil, fmt.Errorf("scenarioNormalizers names %q, which is not a nil-Args command", path)
@@ -327,6 +377,7 @@ func extraPositionalInputs(inventory []nilArgsEntry) ([]scenarioInput, error) {
 					state:       state,
 					args:        concat(base, variant.extra),
 					normalize:   scenarioNormalizers[entry.Path],
+					platforms:   dependent[entry.Path].Platforms,
 				})
 			}
 		}
@@ -473,6 +524,7 @@ func recordScenarios(goBinary string, seed []seedFile, inputs []scenarioInput) (
 			spec.seed = seed
 		}
 		var recorded []observation
+		var calls [][]string
 		for attempt := 0; attempt < 2; attempt++ {
 			res, err := runSpecified(goBinary, in.args, spec)
 			if err != nil {
@@ -487,6 +539,7 @@ func recordScenarios(goBinary string, seed []seedFile, inputs []scenarioInput) (
 				return nil, fmt.Errorf("scenario %s: %w", in.name, err)
 			}
 			recorded = append(recorded, obs)
+			calls = append(calls, res.hostCalls)
 		}
 		if len(recorded) < 2 {
 			continue
@@ -495,7 +548,11 @@ func recordScenarios(goBinary string, seed []seedFile, inputs []scenarioInput) (
 			problems = append(problems, fmt.Sprintf("scenario %s is not deterministic: %s", in.name, firstDifference(recorded[0], recorded[1])))
 			continue
 		}
-		out = append(out, scenarioCase{Name: in.name, Description: in.description, State: in.state, Normalize: in.normalize, Observation: recorded[0]})
+		if strings.Join(calls[0], "\n") != strings.Join(calls[1], "\n") {
+			problems = append(problems, fmt.Sprintf("scenario %s makes different host-tool calls per run: %q vs %q", in.name, calls[0], calls[1]))
+			continue
+		}
+		out = append(out, scenarioCase{Name: in.name, Description: in.description, State: in.state, Normalize: in.normalize, Platforms: in.platforms, Observation: recorded[0], HostToolCalls: calls[0]})
 	}
 	if len(problems) > 0 {
 		return nil, fmt.Errorf("%d scenario(s) cannot be recorded:\n%s", len(problems), strings.Join(problems, "\n"))
@@ -535,7 +592,7 @@ func buildExtraSections(goBinary, output string, newSeed bool) (extraSections, e
 		return extraSections{}, err
 	}
 	sort.SliceStable(inventory, func(i, j int) bool { return inventory[i].Path < inventory[j].Path })
-	return extraSections{nilArgs: inventory, seed: seed, extraPositionals: extra, exclusions: scenarioExclusions, runFileUse: forwarded}, nil
+	return extraSections{nilArgs: inventory, seed: seed, extraPositionals: extra, exclusions: scenarioExclusions, hostDependent: scenarioHostDependence, runFileUse: forwarded}, nil
 }
 
 // firstDifference names the first line that differs between two observations.

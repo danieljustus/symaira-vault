@@ -1,5 +1,25 @@
 {
   "schema_version": 1,
+  "generated_on": "darwin",
+  "host_tools": {
+    "service_managers": [
+      "launchctl",
+      "systemctl"
+    ],
+    "refused": [
+      "security",
+      "secret-tool",
+      "pbcopy",
+      "pbpaste",
+      "xclip",
+      "xsel",
+      "wl-copy",
+      "wl-paste",
+      "osascript",
+      "notify-send",
+      "xdotool"
+    ]
+  },
   "oracle": {
     "commit": "0cc780626d3275afad14eb64c44abf8adb23d2ce",
     "commit_sha": "0cc780626d3275afad14eb64c44abf8adb23d2ce",
@@ -98,7 +118,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "a3213108ec20aa3b3a8970b0108ea8b18441c4417356f4aea8b7785a820121df"
+    "generator_digest": "5501e442876384f43ce7b559f93eafa4875e5d864aefed18ed2fea77583e9144"
   },
   "usage": [
     {
@@ -12366,6 +12386,9 @@
       "name": "extra_uninitialized_auth_status_x1",
       "description": "symvault auth status: one extra positional of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "normalize": [
+        "touch_id_available"
+      ],
       "observation": {
         "args": [
           "auth",
@@ -12381,6 +12404,9 @@
       "name": "extra_initialized_auth_status_x1",
       "description": "symvault auth status: one extra positional of a nil-Args command (initialized)",
       "state": "initialized",
+      "normalize": [
+        "touch_id_available"
+      ],
       "observation": {
         "args": [
           "auth",
@@ -12388,7 +12414,7 @@
           "x"
         ],
         "exit_code": 0,
-        "stdout": "Vault: __ROOT__/xdg-data/symaira-vault\nAuth method: passphrase\nTouch ID available: true\nSession cache: memory (persistent: false)\nKeyring health: unavailable\n",
+        "stdout": "Vault: __ROOT__/xdg-data/symaira-vault\nAuth method: passphrase\nTouch ID available: __BOOL__\nSession cache: memory (persistent: false)\nKeyring health: unavailable\n",
         "stderr": ""
       }
     },
@@ -12396,6 +12422,9 @@
       "name": "extra_uninitialized_auth_status_x2",
       "description": "symvault auth status: two extra positionals of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "normalize": [
+        "touch_id_available"
+      ],
       "observation": {
         "args": [
           "auth",
@@ -12412,6 +12441,9 @@
       "name": "extra_initialized_auth_status_x2",
       "description": "symvault auth status: two extra positionals of a nil-Args command (initialized)",
       "state": "initialized",
+      "normalize": [
+        "touch_id_available"
+      ],
       "observation": {
         "args": [
           "auth",
@@ -12420,7 +12452,7 @@
           "y"
         ],
         "exit_code": 0,
-        "stdout": "Vault: __ROOT__/xdg-data/symaira-vault\nAuth method: passphrase\nTouch ID available: true\nSession cache: memory (persistent: false)\nKeyring health: unavailable\n",
+        "stdout": "Vault: __ROOT__/xdg-data/symaira-vault\nAuth method: passphrase\nTouch ID available: __BOOL__\nSession cache: memory (persistent: false)\nKeyring health: unavailable\n",
         "stderr": ""
       }
     },
@@ -12428,6 +12460,9 @@
       "name": "extra_uninitialized_auth_status_dd1",
       "description": "symvault auth status: one positional after -- of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "normalize": [
+        "touch_id_available"
+      ],
       "observation": {
         "args": [
           "auth",
@@ -13281,6 +13316,9 @@
       "name": "extra_uninitialized_mcp_install_x1",
       "description": "symvault mcp install: one extra positional of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "mcp",
@@ -13290,12 +13328,19 @@
         "exit_code": 0,
         "stdout": "Service installed successfully.\n  Service file: __ROOT__/home/LaunchAgents/com.symvault.mcp.plist\n  Port:         8080\n  Bind:         127.0.0.1\n  Vault:        __ROOT__/xdg-data/symaira-vault\n",
         "stderr": "Could not load config, using defaults: open __ROOT__/home/.symvault/config.yaml: no such file or directory\n"
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist",
+        "launchctl load __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_initialized_mcp_install_x1",
       "description": "symvault mcp install: one extra positional of a nil-Args command (initialized)",
       "state": "initialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "mcp",
@@ -13305,12 +13350,19 @@
         "exit_code": 0,
         "stdout": "Service installed successfully.\n  Service file: __ROOT__/home/LaunchAgents/com.symvault.mcp.plist\n  Port:         8080\n  Bind:         127.0.0.1\n  Vault:        __ROOT__/xdg-data/symaira-vault\n",
         "stderr": "Could not load config, using defaults: open __ROOT__/home/.symvault/config.yaml: no such file or directory\n"
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist",
+        "launchctl load __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_mcp_install_x2",
       "description": "symvault mcp install: two extra positionals of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "mcp",
@@ -13321,12 +13373,19 @@
         "exit_code": 0,
         "stdout": "Service installed successfully.\n  Service file: __ROOT__/home/LaunchAgents/com.symvault.mcp.plist\n  Port:         8080\n  Bind:         127.0.0.1\n  Vault:        __ROOT__/xdg-data/symaira-vault\n",
         "stderr": "Could not load config, using defaults: open __ROOT__/home/.symvault/config.yaml: no such file or directory\n"
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist",
+        "launchctl load __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_initialized_mcp_install_x2",
       "description": "symvault mcp install: two extra positionals of a nil-Args command (initialized)",
       "state": "initialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "mcp",
@@ -13337,12 +13396,19 @@
         "exit_code": 0,
         "stdout": "Service installed successfully.\n  Service file: __ROOT__/home/LaunchAgents/com.symvault.mcp.plist\n  Port:         8080\n  Bind:         127.0.0.1\n  Vault:        __ROOT__/xdg-data/symaira-vault\n",
         "stderr": "Could not load config, using defaults: open __ROOT__/home/.symvault/config.yaml: no such file or directory\n"
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist",
+        "launchctl load __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_mcp_install_dd1",
       "description": "symvault mcp install: one positional after -- of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "mcp",
@@ -13353,12 +13419,19 @@
         "exit_code": 0,
         "stdout": "Service installed successfully.\n  Service file: __ROOT__/home/LaunchAgents/com.symvault.mcp.plist\n  Port:         8080\n  Bind:         127.0.0.1\n  Vault:        __ROOT__/xdg-data/symaira-vault\n",
         "stderr": "Could not load config, using defaults: open __ROOT__/home/.symvault/config.yaml: no such file or directory\n"
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist",
+        "launchctl load __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_mcp_status_x1",
       "description": "symvault mcp status: one extra positional of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "mcp",
@@ -13374,6 +13447,9 @@
       "name": "extra_initialized_mcp_status_x1",
       "description": "symvault mcp status: one extra positional of a nil-Args command (initialized)",
       "state": "initialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "mcp",
@@ -13389,6 +13465,9 @@
       "name": "extra_uninitialized_mcp_status_x2",
       "description": "symvault mcp status: two extra positionals of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "mcp",
@@ -13405,6 +13484,9 @@
       "name": "extra_initialized_mcp_status_x2",
       "description": "symvault mcp status: two extra positionals of a nil-Args command (initialized)",
       "state": "initialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "mcp",
@@ -13421,6 +13503,9 @@
       "name": "extra_uninitialized_mcp_status_dd1",
       "description": "symvault mcp status: one positional after -- of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "mcp",
@@ -13690,7 +13775,10 @@
         "exit_code": 0,
         "stdout": "Service uninstalled successfully.\n",
         "stderr": ""
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_initialized_mcp_uninstall_x1",
@@ -13705,7 +13793,10 @@
         "exit_code": 0,
         "stdout": "Service uninstalled successfully.\n",
         "stderr": ""
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_mcp_uninstall_x2",
@@ -13721,7 +13812,10 @@
         "exit_code": 0,
         "stdout": "Service uninstalled successfully.\n",
         "stderr": ""
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_initialized_mcp_uninstall_x2",
@@ -13737,7 +13831,10 @@
         "exit_code": 0,
         "stdout": "Service uninstalled successfully.\n",
         "stderr": ""
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_mcp_uninstall_dd1",
@@ -13753,7 +13850,10 @@
         "exit_code": 0,
         "stdout": "Service uninstalled successfully.\n",
         "stderr": ""
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_migrate_kdf_x1",
@@ -14318,6 +14418,9 @@
       "name": "extra_uninitialized_serve_install_x1",
       "description": "symvault serve install: one extra positional of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "serve",
@@ -14327,12 +14430,19 @@
         "exit_code": 0,
         "stdout": "Service installed successfully.\n  Service file: __ROOT__/home/LaunchAgents/com.symvault.mcp.plist\n  Port:         8080\n  Bind:         127.0.0.1\n  Vault:        __ROOT__/xdg-data/symaira-vault\n",
         "stderr": "Could not load config, using defaults: open __ROOT__/home/.symvault/config.yaml: no such file or directory\n"
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist",
+        "launchctl load __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_initialized_serve_install_x1",
       "description": "symvault serve install: one extra positional of a nil-Args command (initialized)",
       "state": "initialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "serve",
@@ -14342,12 +14452,19 @@
         "exit_code": 0,
         "stdout": "Service installed successfully.\n  Service file: __ROOT__/home/LaunchAgents/com.symvault.mcp.plist\n  Port:         8080\n  Bind:         127.0.0.1\n  Vault:        __ROOT__/xdg-data/symaira-vault\n",
         "stderr": "Could not load config, using defaults: open __ROOT__/home/.symvault/config.yaml: no such file or directory\n"
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist",
+        "launchctl load __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_serve_install_x2",
       "description": "symvault serve install: two extra positionals of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "serve",
@@ -14358,12 +14475,19 @@
         "exit_code": 0,
         "stdout": "Service installed successfully.\n  Service file: __ROOT__/home/LaunchAgents/com.symvault.mcp.plist\n  Port:         8080\n  Bind:         127.0.0.1\n  Vault:        __ROOT__/xdg-data/symaira-vault\n",
         "stderr": "Could not load config, using defaults: open __ROOT__/home/.symvault/config.yaml: no such file or directory\n"
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist",
+        "launchctl load __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_initialized_serve_install_x2",
       "description": "symvault serve install: two extra positionals of a nil-Args command (initialized)",
       "state": "initialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "serve",
@@ -14374,12 +14498,19 @@
         "exit_code": 0,
         "stdout": "Service installed successfully.\n  Service file: __ROOT__/home/LaunchAgents/com.symvault.mcp.plist\n  Port:         8080\n  Bind:         127.0.0.1\n  Vault:        __ROOT__/xdg-data/symaira-vault\n",
         "stderr": "Could not load config, using defaults: open __ROOT__/home/.symvault/config.yaml: no such file or directory\n"
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist",
+        "launchctl load __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_serve_install_dd1",
       "description": "symvault serve install: one positional after -- of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "serve",
@@ -14390,12 +14521,19 @@
         "exit_code": 0,
         "stdout": "Service installed successfully.\n  Service file: __ROOT__/home/LaunchAgents/com.symvault.mcp.plist\n  Port:         8080\n  Bind:         127.0.0.1\n  Vault:        __ROOT__/xdg-data/symaira-vault\n",
         "stderr": "Could not load config, using defaults: open __ROOT__/home/.symvault/config.yaml: no such file or directory\n"
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist",
+        "launchctl load __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_serve_status_x1",
       "description": "symvault serve status: one extra positional of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "serve",
@@ -14411,6 +14549,9 @@
       "name": "extra_initialized_serve_status_x1",
       "description": "symvault serve status: one extra positional of a nil-Args command (initialized)",
       "state": "initialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "serve",
@@ -14426,6 +14567,9 @@
       "name": "extra_uninitialized_serve_status_x2",
       "description": "symvault serve status: two extra positionals of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "serve",
@@ -14442,6 +14586,9 @@
       "name": "extra_initialized_serve_status_x2",
       "description": "symvault serve status: two extra positionals of a nil-Args command (initialized)",
       "state": "initialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "serve",
@@ -14458,6 +14605,9 @@
       "name": "extra_uninitialized_serve_status_dd1",
       "description": "symvault serve status: one positional after -- of a nil-Args command (uninitialized)",
       "state": "uninitialized",
+      "platforms": [
+        "darwin"
+      ],
       "observation": {
         "args": [
           "serve",
@@ -14727,7 +14877,10 @@
         "exit_code": 0,
         "stdout": "Service uninstalled successfully.\n",
         "stderr": ""
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_initialized_serve_uninstall_x1",
@@ -14742,7 +14895,10 @@
         "exit_code": 0,
         "stdout": "Service uninstalled successfully.\n",
         "stderr": ""
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_serve_uninstall_x2",
@@ -14758,7 +14914,10 @@
         "exit_code": 0,
         "stdout": "Service uninstalled successfully.\n",
         "stderr": ""
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_initialized_serve_uninstall_x2",
@@ -14774,7 +14933,10 @@
         "exit_code": 0,
         "stdout": "Service uninstalled successfully.\n",
         "stderr": ""
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_serve_uninstall_dd1",
@@ -14790,7 +14952,10 @@
         "exit_code": 0,
         "stdout": "Service uninstalled successfully.\n",
         "stderr": ""
-      }
+      },
+      "host_tool_calls": [
+        "launchctl unload __ROOT__/home/LaunchAgents/com.symvault.mcp.plist"
+      ]
     },
     {
       "name": "extra_uninitialized_setup_x1",
@@ -15292,6 +15457,36 @@
         "initialized"
       ],
       "reason": "prints measured timings"
+    }
+  ],
+  "host_dependent_commands": [
+    {
+      "path": "symvault mcp install",
+      "platforms": [
+        "darwin"
+      ],
+      "reason": "prints the launchd plist path (<home>/LaunchAgents/com.symvault.mcp.plist); Linux installs a systemd user unit"
+    },
+    {
+      "path": "symvault mcp status",
+      "platforms": [
+        "darwin"
+      ],
+      "reason": "prints the launchd plist path; Linux reports the systemd unit"
+    },
+    {
+      "path": "symvault serve install",
+      "platforms": [
+        "darwin"
+      ],
+      "reason": "deprecated alias of mcp install: prints the launchd plist path; Linux installs a systemd user unit"
+    },
+    {
+      "path": "symvault serve status",
+      "platforms": [
+        "darwin"
+      ],
+      "reason": "deprecated alias of mcp status: prints the launchd plist path; Linux reports the systemd unit"
     }
   ],
   "run_file_use_argv": [

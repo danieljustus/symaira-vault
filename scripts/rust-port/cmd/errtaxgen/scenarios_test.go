@@ -22,6 +22,16 @@ func TestApplyNormalizers(t *testing.T) {
 	if err != nil || got.Stderr != keyBytesLine+"\nNew key: zz (first 4 bytes)\n" {
 		t.Fatalf("key_bytes = %q, %v", got.Stderr, err)
 	}
+	for _, available := range []string{"true", "false"} {
+		got, err = applyNormalizers([]string{normalizeTouchID}, observation{Stdout: "Auth method: passphrase\nTouch ID available: " + available + "\nKeyring health: unavailable\n", Stderr: "Touch ID available: true\n"})
+		if err != nil || got.Stdout != "Auth method: passphrase\n"+touchIDLine+"Keyring health: unavailable\n" || got.Stderr != "Touch ID available: true\n" {
+			t.Fatalf("touch_id_available(%s) = %+v, %v", available, got, err)
+		}
+	}
+	got, err = applyNormalizers([]string{normalizeTouchID}, observation{Stdout: "Touch ID available: maybe\n"})
+	if err != nil || got.Stdout != "Touch ID available: maybe\n" {
+		t.Fatalf("touch_id_available must leave other values alone, got %q, %v", got.Stdout, err)
+	}
 	if _, err := applyNormalizers([]string{"bogus"}, observation{}); err == nil {
 		t.Fatal("an unknown normalizer must be an error")
 	}
@@ -30,9 +40,11 @@ func TestApplyNormalizers(t *testing.T) {
 // withBookkeeping swaps the exclusion and normalizer tables for one test.
 func withBookkeeping(t *testing.T, exclusions []exclusion, normalizers map[string][]string) {
 	t.Helper()
-	origExclusions, origNormalizers := scenarioExclusions, scenarioNormalizers
-	t.Cleanup(func() { scenarioExclusions, scenarioNormalizers = origExclusions, origNormalizers })
-	scenarioExclusions, scenarioNormalizers = exclusions, normalizers
+	origExclusions, origNormalizers, origHostDependence := scenarioExclusions, scenarioNormalizers, scenarioHostDependence
+	t.Cleanup(func() {
+		scenarioExclusions, scenarioNormalizers, scenarioHostDependence = origExclusions, origNormalizers, origHostDependence
+	})
+	scenarioExclusions, scenarioNormalizers, scenarioHostDependence = exclusions, normalizers, nil
 }
 
 func TestExtraPositionalInputsMatrix(t *testing.T) {

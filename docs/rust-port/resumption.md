@@ -1,5 +1,49 @@
 # Rust migration handover — 2026-09-09
 
+## CLI-005b: host tools in the error-taxonomy corpus, 2026-11-01
+
+Branch `local/cli-005b` (base `18f7cd20`). Two defects of the extra-positional corpus:
+
+- **Linux gate failure.** The fixture is darwin's. `mcp|serve install|status` print the launchd plist path
+  (`<home>/LaunchAgents/com.symvault.mcp.plist`); the native Linux build installs a systemd user unit, and its
+  `systemctl --user daemon-reload` failed in the container (`Failed to connect to bus`). The local gate run at
+  `18f7cd20` stopped at 2 failures of `symvault-cli::error_taxonomy`, with 11 tests cancelled; a quick Linux run of the
+  whole test file after the first fix found one more host-dependent scenario, `auth status` in the initialized vault
+  (`Touch ID available: true` vs `false`).
+- **Host side effect.** Go's `internal/daemon` runs `launchctl unload/load/list` (and `systemctl`) resolved through
+  `PATH`, and so does the native `daemon_commands.rs`. Recording the oracle and every macOS replay of `mcp install x` /
+  `serve install x` therefore called the real launchctl in the developer's user domain (plist under the sandbox HOME).
+
+Fix (both implementations resolve the tools through `PATH`, so a stand-in directory is clean):
+
+- `errtaxgen/hosttools.go`: every sandbox gets `.host-tools/` with stand-ins for `launchctl`, `systemctl` (service
+  managers) and `security`, `secret-tool`, `pbcopy`, `pbpaste`, `xclip`, `xsel`, `wl-copy`, `wl-paste`, `osascript`,
+  `notify-send`, `xdotool` (refused). Each logs `tool argv...` to a file inside the sandbox (path baked into the script:
+  the service managers run with a cleared or filtered environment) and exits 0. Sandbox `PATH` = stand-ins +
+  `/usr/bin:/bin`. The generator reads the log after every run (all sections, not only the scenarios): a refused tool
+  fails it; service-manager calls are recorded per scenario as `host_tool_calls` (20 scenarios: `launchctl unload` for
+  `mcp|serve uninstall`, `unload` then `load` for `install`; `status` makes none) and must repeat across the two
+  recordings. The fixture gains `generated_on`, `host_tools` and `host_dependent_commands`.
+- Platform tag: the 4 commands `mcp|serve install|status` are `host_dependent_commands`; their 20 scenarios carry
+  `platforms: ["darwin"]` (12 uninitialized, 8 initialized). `mcp|serve uninstall` print the same text on both platforms
+  and stay untagged. The replay skips tagged scenarios on other hosts with `SKIP n ...` on stderr and asserts the exact
+  skip count (12 / 8 off darwin, 0 on darwin).
+- `auth status`: `Touch ID available` is a hardware probe, not CLI behavior; the named normalizer `touch_id_available`
+  rewrites that line to `__BOOL__` on both sides (5 scenarios).
+- Replay (`error_taxonomy.rs`): same stand-ins (installed from the fixture's `host_tools`), same `PATH`, guard on every
+  run, recorded `host_tool_calls` compared on darwin. Tests: `host_dependent_scenarios_are_tagged_and_counted`,
+  `sandbox_path_resolves_every_host_tool_to_its_stand_in`, `stand_ins_log_their_calls_and_the_guard_flags_other_tools`
+  (negative control for the guard), `darwin_service_commands_make_the_recorded_launchctl_calls`,
+  `linux_service_commands_use_systemd_through_the_stand_in` (Linux smoke, not Go parity),
+  `touch_id_normalizer_rewrites_only_the_availability_line`; Go: `hosttools_test.go`.
+- Not redirected (documented residuals): absolute-path calls (`/bin/launchctl` of `intake watch disable` needs an
+  existing plist; `/usr/bin/osascript` of the intake notification needs an import; no scenario does either) and the
+  native `auth status` Touch ID probe, which runs `/usr/bin/osascript -l JavaScript` (`canEvaluatePolicy`, read-only, no
+  prompt). The session cache stays in memory because the sandbox sets `CI=1`; the oracle is built without OS keyring
+  support, so no run reads the developer's keychain.
+- The oracle recording itself did not change a single observation: the regenerated fixture differs by the new fields,
+  the touch-id placeholder and the generator digest only.
+
 ## CLI-005 partial: nil-`Args` extra positionals, 2026-11-01
 
 Branch `local/cli-005`. Every cobra command whose `Args` validator is nil accepts

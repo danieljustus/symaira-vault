@@ -22,11 +22,26 @@
 //! run); `run_file_use_argv` does the same for the argv permutations of `run` and
 //! `file use`. The only rewrites applied (to both sides) are the named `normalize`
 //! entries of a case; they replace a random password or key fragment.
+//!
+//! Host tools. Some commands act on the machine they run on: `mcp|serve
+//! install|uninstall` register a user service (launchd or systemd), `doctor` and the
+//! session code probe the keychain, clipboard and notification helpers. No run reaches
+//! the real ones. Every sandbox puts stand-in executables first on `PATH` (the
+//! fixture's `host_tools`, installed exactly like the generator's): each logs its argv
+//! to a file inside the sandbox and exits 0. Service-manager calls are compared with
+//! the recorded `host_tool_calls` on the recording platform (`generated_on`); a call
+//! of any other stand-in fails the run. The commands whose output names the
+//! platform's service manager carry `platforms: ["darwin"]`: other hosts skip them
+//! with a counted, asserted skip. Absolute-path calls (`/bin/launchctl unload` of
+//! `intake watch disable`, `/usr/bin/osascript` of the intake notification) cannot be
+//! redirected and are reachable only after a LaunchAgent plist or an import exists,
+//! which no scenario creates. The session cache stays in memory because the sandbox
+//! sets `CI=1`, so no run reads or writes the developer's keychain.
 
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
-use std::{collections::BTreeMap, fs, process::Command};
+use std::{collections::BTreeMap, fs, path::Path, process::Command, sync::OnceLock};
 
 use serde::Deserialize;
 
@@ -95,7 +110,27 @@ struct ScenarioCase {
     state: String,
     #[serde(default)]
     normalize: Vec<String>,
+    /// Host platforms (Go `GOOS` names) the observation can be compared on; empty
+    /// means every platform.
+    #[serde(default)]
+    platforms: Vec<String>,
     observation: Observation,
+    /// Service-manager calls the recording made, valid on `generated_on`.
+    #[serde(default)]
+    host_tool_calls: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HostDependence {
+    path: String,
+    platforms: Vec<String>,
+    reason: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct HostTools {
+    service_managers: Vec<String>,
+    refused: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -117,6 +152,8 @@ struct Oracle {
 #[derive(Debug, Deserialize)]
 struct Fixture {
     schema_version: u32,
+    generated_on: String,
+    host_tools: HostTools,
     oracle: Oracle,
     usage: Vec<UsageCase>,
     arity: Vec<ArityRow>,
@@ -127,6 +164,7 @@ struct Fixture {
     vault_seed: Vec<SeedFile>,
     extra_positionals: Vec<ScenarioCase>,
     extra_positional_exclusions: Vec<Exclusion>,
+    host_dependent_commands: Vec<HostDependence>,
     run_file_use_argv: Vec<ScenarioCase>,
 }
 
@@ -144,6 +182,34 @@ const EXTRA_POSITIONALS_INITIALIZED: usize = 82;
 const RUN_FILE_USE_ARGV_PER_STATE: usize = 82;
 const KNOWN_DIVERGENT_UNINITIALIZED: usize = 18;
 const KNOWN_DIVERGENT_INITIALIZED: usize = 10;
+/// Scenarios of the host-dependent commands (`mcp|serve install|status`, three
+/// variants uninitialized and two initialized each), skipped off darwin.
+const DARWIN_ONLY_UNINITIALIZED: usize = 12;
+const DARWIN_ONLY_INITIALIZED: usize = 8;
+const HOST_DEPENDENT_COMMANDS: [&str; 4] = [
+    "symvault mcp install",
+    "symvault mcp status",
+    "symvault serve install",
+    "symvault serve status",
+];
+
+/// The name the fixture uses for this host (Go's `GOOS`).
+fn host_os() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "darwin"
+    } else {
+        std::env::consts::OS
+    }
+}
+
+/// How many of `darwin_only` scenarios this host skips.
+fn expected_skips(darwin_only: usize) -> usize {
+    if host_os() == "darwin" {
+        0
+    } else {
+        darwin_only
+    }
+}
 
 /// Scenarios whose command body still differs from Go for a reason that has
 /// nothing to do with the positionals: the same command without them differs in
@@ -291,6 +357,12 @@ fn check_known_divergence(
     problems
 }
 
+/// The stand-in tools of the recording, read once from the fixture.
+fn host_tools() -> &'static HostTools {
+    static TOOLS: OnceLock<HostTools> = OnceLock::new();
+    TOOLS.get_or_init(|| fixture().host_tools)
+}
+
 fn fixture() -> Fixture {
     let raw = fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -326,6 +398,96 @@ fn run_with_files(args: &[String], files: &BTreeMap<String, String>) -> (i32, St
     run_scenario(args, files, &[], false)
 }
 
+/// What one sandboxed run did, including the calls it made to the host-tool stand-ins.
+#[derive(Clone, Debug)]
+struct RunOutput {
+    code: i32,
+    stdout: String,
+    stderr: String,
+    /// `tool argv...` per call, sandbox root normalized, in call order.
+    calls: Vec<String>,
+}
+
+const HOST_TOOLS_DIR: &str = ".host-tools";
+const HOST_TOOLS_LOG: &str = "calls.log";
+/// The rest of the sandbox `PATH`, after the stand-ins (sh, printf, echo, sleep, git).
+const SANDBOX_PATH_SYSTEM: &str = "/usr/bin:/bin";
+
+/// Single-quotes text for a POSIX shell.
+#[cfg(unix)]
+fn shell_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "'\\''"))
+}
+
+/// Writes the stand-in executables into the sandbox, byte for byte what the
+/// generator's `installHostTools` writes. The log path is baked in: a service
+/// manager runs with a cleared or filtered environment.
+#[cfg(unix)]
+fn install_host_tools(root: &Path) {
+    use std::os::unix::fs::PermissionsExt as _;
+    let dir = root.join(HOST_TOOLS_DIR);
+    fs::create_dir_all(&dir).expect("create host-tool directory");
+    let log = dir.join(HOST_TOOLS_LOG);
+    let tools = host_tools();
+    for name in tools.service_managers.iter().chain(&tools.refused) {
+        let script = format!(
+            "#!/bin/sh\nprintf '%s %s\\n' {} \"$*\" >> {}\nexit 0\n",
+            shell_quote(name),
+            shell_quote(&log.to_string_lossy())
+        );
+        let path = dir.join(name);
+        fs::write(&path, script).expect("write host-tool stand-in");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
+            .expect("make the stand-in executable");
+    }
+}
+
+#[cfg(not(unix))]
+fn install_host_tools(_root: &Path) {}
+
+/// The sandbox `PATH`: the stand-ins first, then the system directories only.
+#[cfg(unix)]
+fn sandbox_path(root: &Path) -> String {
+    format!(
+        "{}:{SANDBOX_PATH_SYSTEM}",
+        root.join(HOST_TOOLS_DIR).display()
+    )
+}
+
+/// The calls the stand-ins logged, one `tool argv...` line each.
+fn read_host_calls(root: &Path) -> Vec<String> {
+    let raw =
+        fs::read_to_string(root.join(HOST_TOOLS_DIR).join(HOST_TOOLS_LOG)).unwrap_or_default();
+    normalize_root(root, &raw)
+        .lines()
+        .map(|line| line.trim_end().to_owned())
+        .collect()
+}
+
+/// The calls of `calls` that name a tool no scenario may use.
+fn refused_calls(calls: &[String], tools: &HostTools) -> Vec<String> {
+    calls
+        .iter()
+        .filter(|call| {
+            let name = call.split(' ').next().unwrap_or("");
+            !tools.service_managers.iter().any(|manager| manager == name)
+        })
+        .cloned()
+        .collect()
+}
+
+/// Replaces the sandbox root (in the spellings the platform renders) by `__ROOT__`.
+fn normalize_root(root: &Path, raw: &str) -> String {
+    let mut text = raw.to_owned();
+    let path = root.to_path_buf();
+    let cleaned: std::path::PathBuf = path.components().collect();
+    for form in [path.to_string_lossy(), cleaned.to_string_lossy()] {
+        text = text.replace(&form.replace('\\', "\\\\"), "__ROOT__");
+        text = text.replace(&*form, "__ROOT__");
+    }
+    text
+}
+
 /// Runs the binary in a fresh sandbox. `seed` is the frozen vault tree (text carries
 /// the sandbox root as `__ROOT__`); `initialized` adds the passphrase environment
 /// the recorded initialized runs had.
@@ -335,6 +497,16 @@ fn run_scenario(
     seed: &[SeedFile],
     initialized: bool,
 ) -> (i32, String, String) {
+    let run = run_scenario_full(args, files, seed, initialized);
+    (run.code, run.stdout, run.stderr)
+}
+
+fn run_scenario_full(
+    args: &[String],
+    files: &BTreeMap<String, String>,
+    seed: &[SeedFile],
+    initialized: bool,
+) -> RunOutput {
     let root = test_temp_root::TempRoot::existing("symvault-error-taxonomy-");
     let home = root.join("home");
     fs::create_dir_all(&home).expect("create isolated home");
@@ -342,12 +514,15 @@ fn run_scenario(
     for (name, content) in files {
         fs::write(root.join(name), content).expect("write disposable file");
     }
+    install_host_tools(&root);
     let mut command = Command::new(env!("CARGO_BIN_EXE_symvault"));
     for (name, _) in std::env::vars_os() {
         if name.to_string_lossy().starts_with("SYMVAULT_") {
             command.env_remove(name);
         }
     }
+    #[cfg(unix)]
+    command.env("PATH", sandbox_path(&root));
     if initialized {
         command
             .env("TZ", "UTC")
@@ -366,21 +541,20 @@ fn run_scenario(
         .args(args)
         .output()
         .expect("run symvault");
-    let normalize = |raw: &[u8]| {
-        let mut text = String::from_utf8_lossy(raw).into_owned();
-        let path = root.to_path_buf();
-        let cleaned: std::path::PathBuf = path.components().collect();
-        for form in [path.to_string_lossy(), cleaned.to_string_lossy()] {
-            text = text.replace(&form.replace('\\', "\\\\"), "__ROOT__");
-            text = text.replace(&*form, "__ROOT__");
-        }
-        windows_errno_to_go_unix(text)
-    };
-    (
-        output.status.code().unwrap_or(-1),
-        normalize(&output.stdout),
-        normalize(&output.stderr),
-    )
+    let normalize =
+        |raw: &[u8]| windows_errno_to_go_unix(normalize_root(&root, &String::from_utf8_lossy(raw)));
+    let calls = read_host_calls(&root);
+    let refused = refused_calls(&calls, host_tools());
+    assert!(
+        refused.is_empty(),
+        "{args:?} reached host tools that no scenario may use: {refused:?}"
+    );
+    RunOutput {
+        code: output.status.code().unwrap_or(-1),
+        stdout: normalize(&output.stdout),
+        stderr: normalize(&output.stderr),
+        calls,
+    }
 }
 
 /// Recreates the frozen vault tree, parents before their contents.
@@ -427,6 +601,18 @@ fn apply_normalizers(names: &[String], stdout: &mut String, stderr: &mut String)
                 }
             }
             "key_bytes" => *stderr = replace_key_bytes(stderr),
+            // A probe of the machine's biometric hardware, not of the CLI.
+            "touch_id_available" => {
+                *stdout = stdout
+                    .replace(
+                        "Touch ID available: true\n",
+                        "Touch ID available: __BOOL__\n",
+                    )
+                    .replace(
+                        "Touch ID available: false\n",
+                        "Touch ID available: __BOOL__\n",
+                    );
+            }
             other => panic!("unknown normalizer {other}"),
         }
     }
@@ -484,30 +670,64 @@ fn record_difference(
 }
 
 /// Runs one recorded scenario in a fresh sandbox, with its normalizers applied.
-fn run_case(case: &ScenarioCase, seed: &[SeedFile]) -> (i32, String, String) {
+fn run_case_full(case: &ScenarioCase, seed: &[SeedFile]) -> RunOutput {
     let initialized = case.state == "initialized";
-    let (code, mut stdout, mut stderr) = run_scenario(
+    let mut run = run_scenario_full(
         &case.observation.args,
         &BTreeMap::new(),
         if initialized { seed } else { &[] },
         initialized,
     );
-    apply_normalizers(&case.normalize, &mut stdout, &mut stderr);
-    (code, stdout, stderr)
+    apply_normalizers(&case.normalize, &mut run.stdout, &mut run.stderr);
+    run
 }
 
-/// Replays the scenarios recorded for `state`; returns how many ran. Known
-/// divergences are compared with their pinned native observation instead of Go's.
+fn run_case(case: &ScenarioCase, seed: &[SeedFile]) -> (i32, String, String) {
+    let run = run_case_full(case, seed);
+    (run.code, run.stdout, run.stderr)
+}
+
+/// Whether `case` can be compared on this host.
+fn runs_on_this_host(case: &ScenarioCase) -> bool {
+    case.platforms.is_empty() || case.platforms.iter().any(|platform| platform == host_os())
+}
+
+/// How many scenarios a replay compared and how many it skipped on this host.
+#[derive(Debug, PartialEq, Eq)]
+struct Replay {
+    replayed: usize,
+    skipped: usize,
+}
+
+/// Replays the scenarios recorded for `state`. Known divergences are compared with
+/// their pinned native observation instead of Go's. A scenario tagged for other
+/// platforms is skipped and counted: its output names the recording platform's
+/// service manager. The recorded service-manager calls are compared where they were
+/// recorded; everywhere the stand-in guard still holds.
 fn replay_scenarios(
+    fixture: &Fixture,
     cases: &[ScenarioCase],
     state: &str,
-    seed: &[SeedFile],
     failures: &mut Vec<String>,
-) -> usize {
+) -> Replay {
+    let seed = &fixture.vault_seed;
+    let compare_calls = host_os() == fixture.generated_on;
     let pinned = pinned_divergences();
     let mut replayed = 0;
+    let mut skipped = 0;
     for case in cases.iter().filter(|case| case.state == state) {
-        let actual = run_case(case, seed);
+        if !runs_on_this_host(case) {
+            skipped += 1;
+            continue;
+        }
+        let run = run_case_full(case, seed);
+        if compare_calls && run.calls != case.host_tool_calls {
+            failures.push(format!(
+                "{} host-tool calls\n  go:   {:?}\n  rust: {:?}",
+                case.name, case.host_tool_calls, run.calls
+            ));
+        }
+        let actual = (run.code, run.stdout, run.stderr);
         if known_divergence(&case.name, state).is_some() {
             match pinned.get(&case.name) {
                 Some(entry) => failures.extend(check_known_divergence(
@@ -523,7 +743,14 @@ fn replay_scenarios(
         }
         replayed += 1;
     }
-    replayed
+    if skipped > 0 {
+        eprintln!(
+            "SKIP {skipped} {state} scenarios of host-dependent commands (recorded on {}, this host is {})",
+            fixture.generated_on,
+            host_os()
+        );
+    }
+    Replay { replayed, skipped }
 }
 
 #[test]
@@ -844,13 +1071,17 @@ fn native_cli_matches_go_not_initialized_failures() {
 fn native_cli_matches_go_extra_positionals_uninitialized() {
     let fixture = fixture();
     let mut failures = Vec::new();
-    let replayed = replay_scenarios(
+    let replay = replay_scenarios(
+        &fixture,
         &fixture.extra_positionals,
         "uninitialized",
-        &fixture.vault_seed,
         &mut failures,
     );
-    assert_eq!(replayed, EXTRA_POSITIONALS_UNINITIALIZED);
+    assert_eq!(
+        replay.replayed + replay.skipped,
+        EXTRA_POSITIONALS_UNINITIALIZED
+    );
+    assert_eq!(replay.skipped, expected_skips(DARWIN_ONLY_UNINITIALIZED));
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
@@ -861,13 +1092,17 @@ fn native_cli_matches_go_extra_positionals_uninitialized() {
 fn native_cli_matches_go_extra_positionals_initialized() {
     let fixture = fixture();
     let mut failures = Vec::new();
-    let replayed = replay_scenarios(
+    let replay = replay_scenarios(
+        &fixture,
         &fixture.extra_positionals,
         "initialized",
-        &fixture.vault_seed,
         &mut failures,
     );
-    assert_eq!(replayed, EXTRA_POSITIONALS_INITIALIZED);
+    assert_eq!(
+        replay.replayed + replay.skipped,
+        EXTRA_POSITIONALS_INITIALIZED
+    );
+    assert_eq!(replay.skipped, expected_skips(DARWIN_ONLY_INITIALIZED));
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
@@ -877,13 +1112,19 @@ fn native_cli_matches_go_extra_positionals_initialized() {
 fn native_cli_matches_go_run_file_use_argv_uninitialized() {
     let fixture = fixture();
     let mut failures = Vec::new();
-    let replayed = replay_scenarios(
+    let replay = replay_scenarios(
+        &fixture,
         &fixture.run_file_use_argv,
         "uninitialized",
-        &fixture.vault_seed,
         &mut failures,
     );
-    assert_eq!(replayed, RUN_FILE_USE_ARGV_PER_STATE);
+    assert_eq!(
+        replay,
+        Replay {
+            replayed: RUN_FILE_USE_ARGV_PER_STATE,
+            skipped: 0
+        }
+    );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
@@ -892,14 +1133,243 @@ fn native_cli_matches_go_run_file_use_argv_uninitialized() {
 fn native_cli_matches_go_run_file_use_argv_initialized() {
     let fixture = fixture();
     let mut failures = Vec::new();
-    let replayed = replay_scenarios(
+    let replay = replay_scenarios(
+        &fixture,
         &fixture.run_file_use_argv,
         "initialized",
-        &fixture.vault_seed,
         &mut failures,
     );
-    assert_eq!(replayed, RUN_FILE_USE_ARGV_PER_STATE);
+    assert_eq!(
+        replay,
+        Replay {
+            replayed: RUN_FILE_USE_ARGV_PER_STATE,
+            skipped: 0
+        }
+    );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The scenarios of the host-dependent commands, and only those, carry the platform
+/// tag; the fixture says where it was recorded and which stand-ins the recording had.
+#[test]
+fn host_dependent_scenarios_are_tagged_and_counted() {
+    let fixture = fixture();
+    assert_eq!(fixture.generated_on, "darwin");
+    let paths: Vec<&str> = fixture
+        .host_dependent_commands
+        .iter()
+        .map(|item| item.path.as_str())
+        .collect();
+    assert_eq!(paths, HOST_DEPENDENT_COMMANDS);
+    for item in &fixture.host_dependent_commands {
+        assert_eq!(item.platforms, ["darwin"], "{}", item.path);
+        assert!(!item.reason.is_empty(), "{} has no reason", item.path);
+        assert!(
+            fixture.nil_args.iter().any(|entry| entry.path == item.path),
+            "{} is not a nil-Args command",
+            item.path
+        );
+    }
+    let slug = |path: &str| path.trim_start_matches("symvault ").replace(' ', "_");
+    for state in ["uninitialized", "initialized"] {
+        let tagged = fixture
+            .extra_positionals
+            .iter()
+            .filter(|case| case.state == state && !case.platforms.is_empty())
+            .count();
+        let expected = if state == "uninitialized" {
+            DARWIN_ONLY_UNINITIALIZED
+        } else {
+            DARWIN_ONLY_INITIALIZED
+        };
+        assert_eq!(tagged, expected, "{state}");
+    }
+    for case in &fixture.extra_positionals {
+        let dependent = HOST_DEPENDENT_COMMANDS.iter().any(|path| {
+            case.name
+                .starts_with(&format!("extra_{}_{}_", case.state, slug(path)))
+        });
+        assert_eq!(
+            !case.platforms.is_empty(),
+            dependent,
+            "{} is tagged inconsistently",
+            case.name
+        );
+        if dependent {
+            assert_eq!(case.platforms, ["darwin"], "{}", case.name);
+        }
+    }
+    assert!(
+        fixture
+            .run_file_use_argv
+            .iter()
+            .all(|case| case.platforms.is_empty()),
+        "run/file-use scenarios compare on every platform"
+    );
+    let tools = &fixture.host_tools;
+    assert_eq!(tools.service_managers, ["launchctl", "systemctl"]);
+    for refused in ["security", "osascript", "pbcopy", "pbpaste", "notify-send"] {
+        assert!(
+            tools.refused.iter().any(|tool| tool == refused),
+            "{refused} must be a refused stand-in"
+        );
+    }
+    assert!(
+        tools
+            .refused
+            .iter()
+            .all(|tool| !tools.service_managers.contains(tool))
+    );
+    // Only the service-manager scenarios made host-tool calls, and the install ones
+    // ran launchctl unload then load.
+    for case in fixture
+        .extra_positionals
+        .iter()
+        .chain(&fixture.run_file_use_argv)
+    {
+        let service = [
+            "mcp_install",
+            "mcp_uninstall",
+            "serve_install",
+            "serve_uninstall",
+        ]
+        .iter()
+        .any(|command| case.name.contains(&format!("_{command}_")));
+        assert_eq!(!case.host_tool_calls.is_empty(), service, "{}", case.name);
+        assert!(
+            refused_calls(&case.host_tool_calls, tools).is_empty(),
+            "{} recorded a refused tool",
+            case.name
+        );
+        if case.name.contains("_install_") {
+            assert_eq!(case.host_tool_calls.len(), 2, "{}", case.name);
+            assert!(case.host_tool_calls[0].starts_with("launchctl unload "));
+            assert!(case.host_tool_calls[1].starts_with("launchctl load "));
+        }
+    }
+}
+
+/// Every host tool resolves to its stand-in on the sandbox `PATH`, never to the
+/// developer's `launchctl`, `security`, `pbcopy`, ...
+#[cfg(unix)]
+#[test]
+fn sandbox_path_resolves_every_host_tool_to_its_stand_in() {
+    let root = test_temp_root::TempRoot::existing("symvault-host-tools-");
+    install_host_tools(&root);
+    let tools = host_tools();
+    for name in tools.service_managers.iter().chain(&tools.refused) {
+        let output = Command::new("/bin/sh")
+            .args(["-c", &format!("command -v {name}")])
+            .env_clear()
+            .env("PATH", sandbox_path(&root))
+            .output()
+            .expect("run sh");
+        assert!(output.status.success(), "{name} is not on the sandbox PATH");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            root.join(HOST_TOOLS_DIR).join(name).to_string_lossy(),
+            "{name} does not resolve to its stand-in"
+        );
+    }
+}
+
+/// The stand-ins log argv without any environment and succeed silently; the guard
+/// flags every tool that is not a service manager (negative control).
+#[cfg(unix)]
+#[test]
+fn stand_ins_log_their_calls_and_the_guard_flags_other_tools() {
+    let root = test_temp_root::TempRoot::existing("symvault-host-tools-");
+    install_host_tools(&root);
+    let run = |name: &str, args: &[&str]| {
+        let output = Command::new(root.join(HOST_TOOLS_DIR).join(name))
+            .args(args)
+            .env_clear()
+            .output()
+            .expect("run stand-in");
+        assert!(output.status.success());
+        assert!(output.stdout.is_empty() && output.stderr.is_empty());
+    };
+    let plist = root.join("home/LaunchAgents/x.plist");
+    run("launchctl", &["unload", &plist.to_string_lossy()]);
+    run("systemctl", &["--user", "daemon-reload"]);
+    run("security", &[]);
+    run("pbcopy", &["-pboard", "general"]);
+    let calls = read_host_calls(&root);
+    assert_eq!(
+        calls,
+        [
+            "launchctl unload __ROOT__/home/LaunchAgents/x.plist",
+            "systemctl --user daemon-reload",
+            "security",
+            "pbcopy -pboard general",
+        ]
+    );
+    assert_eq!(
+        refused_calls(&calls, host_tools()),
+        ["security", "pbcopy -pboard general"]
+    );
+    assert!(refused_calls(&calls[..2], host_tools()).is_empty());
+}
+
+/// On the recording platform the native service commands make exactly the
+/// launchctl calls Go made, in order, against the stand-in.
+#[cfg(target_os = "macos")]
+#[test]
+fn darwin_service_commands_make_the_recorded_launchctl_calls() {
+    let fixture = fixture();
+    let mut checked = 0;
+    for case in fixture
+        .extra_positionals
+        .iter()
+        .filter(|case| case.name.contains("_install_x1") || case.name.contains("_uninstall_x1"))
+    {
+        assert!(!case.host_tool_calls.is_empty(), "{}", case.name);
+        let run = run_case_full(case, &fixture.vault_seed);
+        assert_eq!(run.calls, case.host_tool_calls, "{}", case.name);
+        checked += 1;
+    }
+    assert_eq!(checked, 8);
+}
+
+/// Linux has no recording of these commands (the corpus is darwin's), so this is
+/// not Go parity: it shows that the skipped scenarios still reach the command, that
+/// the native service code talks to systemd's stand-in only, and that the output
+/// differs from the darwin recording in nothing but the service-file path.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_service_commands_use_systemd_through_the_stand_in() {
+    const PLIST: &str = "__ROOT__/home/LaunchAgents/com.symvault.mcp.plist";
+    const UNIT: &str = "__ROOT__/home/.config/systemd/user/symvault-mcp.service";
+    let fixture = fixture();
+    let mut checked = 0;
+    for case in fixture
+        .extra_positionals
+        .iter()
+        .filter(|case| !case.platforms.is_empty())
+    {
+        let run = run_case_full(case, &fixture.vault_seed);
+        let recorded = &case.observation;
+        assert_eq!(run.code, recorded.exit_code, "{}", case.name);
+        assert_eq!(run.stderr, recorded.stderr, "{}", case.name);
+        assert_eq!(
+            run.stdout,
+            recorded.stdout.replace(PLIST, UNIT),
+            "{}",
+            case.name
+        );
+        let expected: &[&str] = if case.name.contains("_install_") {
+            &[
+                "systemctl --user daemon-reload",
+                "systemctl --user enable symvault-mcp",
+                "systemctl --user start symvault-mcp",
+            ]
+        } else {
+            &[]
+        };
+        assert_eq!(run.calls, expected, "{}", case.name);
+        checked += 1;
+    }
+    assert_eq!(checked, DARWIN_ONLY_UNINITIALIZED + DARWIN_ONLY_INITIALIZED);
 }
 
 #[test]
@@ -919,6 +1389,26 @@ fn key_bytes_normalizer_rewrites_only_the_drawn_key() {
     let mut short = "abc\n".to_string();
     apply_normalizers(&["password20".to_string()], &mut short, &mut none);
     assert_eq!(short, "abc\n");
+}
+
+#[test]
+fn touch_id_normalizer_rewrites_only_the_availability_line() {
+    let names = ["touch_id_available".to_string()];
+    for available in ["true", "false"] {
+        let mut stdout = format!(
+            "Auth method: passphrase\nTouch ID available: {available}\nKeyring health: unavailable\n"
+        );
+        let mut stderr = "Touch ID available: true\n".to_string();
+        apply_normalizers(&names, &mut stdout, &mut stderr);
+        assert_eq!(
+            stdout,
+            "Auth method: passphrase\nTouch ID available: __BOOL__\nKeyring health: unavailable\n"
+        );
+        assert_eq!(stderr, "Touch ID available: true\n", "stderr is untouched");
+    }
+    let mut other = "Touch ID available: maybe\n".to_string();
+    apply_normalizers(&names, &mut other, &mut String::new());
+    assert_eq!(other, "Touch ID available: maybe\n");
 }
 
 /// Negative control: an expectation that differs by one byte must be reported.
