@@ -2541,6 +2541,11 @@ fn goos() -> &'static str {
 /// Mirrors the environment part of `health.isTestOrCIEnv`: test/CI processes
 /// must never touch the real OS keychain.
 fn is_test_or_ci_env() -> bool {
+    // Go also treats its own test binaries as test processes; the Rust unit
+    // test binary must equally never reach the real keychain.
+    if cfg!(test) {
+        return true;
+    }
     for key in ["CI", "GITHUB_ACTIONS", "HEADLESS"] {
         if std::env::var(key).is_ok_and(|value| !value.is_empty()) {
             return true;
@@ -2639,18 +2644,119 @@ fn touch_id_available() -> bool {
     }
 }
 
+/// Verifies end to end that the OS keyring persists data, bypassing the
+/// session layer's in-memory fallback (Go `session.VerifyOSKeyring`): a
+/// write, read-back and delete of a throw-away `symvault-doctor` item.
+/// Test/CI processes never dial the real keychain.
+#[cfg(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "windows",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+fn verify_os_keyring() -> Result<(), String> {
+    use symvault_core::session::Keyring;
+    use symvault_platform::OsKeyring;
+
+    const PROBE_VALUE: &[u8] = b"symvault-doctor-probe-value";
+
+    if is_test_or_ci_env() {
+        return Err(KEYRING_UNAVAILABLE.to_owned());
+    }
+    let nanos = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    let key = format!("symvault-doctor|probe-{nanos}");
+    let keyring = OsKeyring;
+
+    keyring
+        .set(&key, PROBE_VALUE)
+        .map_err(|err| format!("keyring write failed: {err}"))?;
+    let read = keyring.get(&key);
+    // Go only warns when the cleanup fails; the verdict is the read-back.
+    if let Err(err) = keyring.delete(&key) {
+        eprintln!("doctor keyring probe cleanup failed for \"symvault-doctor:probe\": {err}");
+    }
+    match read {
+        Err(err) => Err(format!("keyring read-back failed: {err}")),
+        Ok(got) if got != PROBE_VALUE => {
+            Err("keyring read-back returned unexpected data".to_owned())
+        }
+        Ok(_) => Ok(()),
+    }
+}
+
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "windows",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+)))]
+fn verify_os_keyring() -> Result<(), String> {
+    Err(KEYRING_UNAVAILABLE.to_owned())
+}
+
+/// Go `session.ErrKeyringUnavailable`.
+const KEYRING_UNAVAILABLE: &str = "session: OS keyring unavailable (locked or non-interactive)";
+
+/// Backend the session layer would use right now (Go `GetCacheStatus().Backend`).
+fn session_cache_backend() -> String {
+    if cfg!(test) {
+        // Unit-test binary: the session layer is forced to memory like Go's.
+        return "memory".to_owned();
+    }
+    crate::runtime_session_manager().cache_status().backend
+}
+
 fn check_session_cache(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
-    // ponytail: the session layer has only the in-memory backend until the
-    // native keyring slice lands, so this is always Go's memory branch.
+    session_cache_result(&session_cache_backend(), &verify_os_keyring)
+}
+
+/// Decision logic behind `session.cache`, pure so every branch is unit-tested
+/// with an injected backend and probe (Go `checkSessionCache`).
+fn session_cache_result(backend: &str, probe: &dyn Fn() -> Result<(), String>) -> DoctorResult {
+    const ID: &str = "session.cache";
+    const NAME: &str = "Session cache";
+
+    if backend == "memory" || backend.is_empty() {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            "session cache uses in-memory backend (not persistent)",
+            false,
+        )
+        .with_hint(
+            "install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions",
+        );
+    }
+
+    // The configured backend claims the OS keyring, but configuration is not
+    // proof: verify that persistence actually works.
+    if let Err(err) = probe() {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Fail,
+            format!(
+                "backend: os-keyring (configured), persistent: false \u{2014} persistence check failed: {err}"
+            ),
+            false,
+        )
+        .with_hint(
+            "the OS keyring accepts writes but cannot be read back; check that the login keychain is in the keychain search list (`security list-keychains`) and unlocked",
+        );
+    }
     DoctorResult::new(
-        "session.cache",
-        "Session cache",
-        Status::Warn,
-        "session cache uses in-memory backend (not persistent)",
+        ID,
+        NAME,
+        Status::Ok,
+        "backend: os-keyring, persistent: true (verified)",
         false,
-    )
-    .with_hint(
-        "install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions",
     )
 }
 
@@ -2969,31 +3075,279 @@ fn check_env_passphrase(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult
 }
 
 fn check_session_keyring(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    session_keyring_result(
+        &session_cache_backend(),
+        &verify_os_keyring,
+        is_test_or_ci_env(),
+        goos(),
+    )
+}
+
+/// Decision logic behind `session.keyring` (Go `sessionKeyringResult`), pure
+/// so unit tests can exercise every branch with injected fakes.
+fn session_keyring_result(
+    backend: &str,
+    probe: &dyn Fn() -> Result<(), String>,
+    test_env: bool,
+    os: &str,
+) -> DoctorResult {
     const ID: &str = "session.keyring";
     const NAME: &str = "Session keyring roundtrip";
 
-    if is_test_or_ci_env() {
+    if backend == "memory" || backend.is_empty() {
+        // The session layer already runs on the in-memory fallback: a
+        // Save->Load roundtrip would be served from memory and prove nothing.
+        if test_env {
+            return DoctorResult::new(
+                ID,
+                NAME,
+                Status::Warn,
+                "OS keyring persistence not verified in test/CI environment (in-memory backend active)",
+                false,
+            );
+        }
+        if matches!(os, "darwin" | "linux" | "windows") {
+            return DoctorResult::new(
+                ID,
+                NAME,
+                Status::Fail,
+                "OS keyring persistence unavailable \u{2014} session cache has fallen back to in-memory storage; sessions will not survive process exit",
+                false,
+            )
+            .with_hint(
+                "check that the login keychain is present and in the keychain search list (`security list-keychains`), then re-run `symvault doctor`",
+            );
+        }
         return DoctorResult::new(
             ID,
             NAME,
             Status::Warn,
-            "OS keyring persistence not verified in test/CI environment (in-memory backend active)",
+            "session cache uses in-memory backend (not persistent on this platform)",
             false,
-        );
+        )
+        .with_hint("sessions on this platform do not persist across restarts");
     }
 
-    if matches!(goos(), "darwin" | "linux" | "windows") {
-        // ponytail: without the native keyring layer the session cache really has
-        // fallen back to memory, which is Go's fail branch — not a warning.
+    // Verify persistence directly against the OS keyring, bypassing any
+    // in-memory fallback, so a broken keychain fails the check.
+    if let Err(err) = probe() {
         return DoctorResult::new(
             ID,
             NAME,
             Status::Fail,
-            "OS keyring persistence unavailable — session cache has fallen back to in-memory storage; sessions will not survive process exit",
+            format!("OS keyring persistence check failed: {err}"),
             false,
         )
         .with_hint(
-            "check that the login keychain is present and in the keychain search list (`security list-keychains`), then re-run `symvault doctor`",
+            "writes may land in the default keychain while lookups search a list that excludes it \u{2014} verify `security list-keychains` includes the login keychain and that it is unlocked",
+        );
+    }
+    DoctorResult::new(
+        ID,
+        NAME,
+        Status::Ok,
+        "OS keyring write/read roundtrip OK (persistence verified)",
+        false,
+    )
+}
+
+/// Service names under which audit HMAC keys may be stored: the current
+/// "symaira" and the legacy "openpass" (pre-rename) name.
+const AUDIT_KEYRING_SERVICES: [&str; 2] = ["symaira", "openpass"];
+const AUDIT_KEY_ACCOUNT_PREFIX: &str = "audit-hmac-key:";
+/// Bounds the `security dump-keychain` enumeration (Go `keyringDumpTimeout`).
+const KEYRING_DUMP_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// A `(service, account)` pair found in the OS keychain.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct KeyringAccountEntry {
+    service: String,
+    account: String,
+}
+
+/// Splits a `security dump-keychain` attribute line such as
+/// `"svce"<blob>="symaira"` or `0x00000007 <blob>="symaira"` into its
+/// attribute name and unquoted value; `("", "")` for non-blob lines.
+fn parse_blob_attr(line: &str) -> (String, String) {
+    let Some(idx) = line.find("<blob>=") else {
+        return (String::new(), String::new());
+    };
+    let key = line[..idx].trim().trim_matches('"').to_owned();
+    let val = line[idx + "<blob>=".len()..].trim_matches('"').to_owned();
+    (key, val)
+}
+
+/// Extracts every `(service, account)` whose service is one of
+/// `AUDIT_KEYRING_SERVICES` and whose account uses the `audit-hmac-key:`
+/// scheme from a `security dump-keychain` transcript (Go `parseKeychainDump`).
+/// Both attribute naming schemes (`svce`/`acct` and `0x00000007`/`0x00000008`)
+/// are understood; items end at a `keychain:` header or a blank line.
+fn parse_keychain_dump(data: &[u8]) -> Vec<KeyringAccountEntry> {
+    let text = String::from_utf8_lossy(data);
+    let mut entries = Vec::new();
+    let (mut service, mut account) = (String::new(), String::new());
+
+    fn flush(entries: &mut Vec<KeyringAccountEntry>, service: &mut String, account: &mut String) {
+        if !service.is_empty()
+            && account.starts_with(AUDIT_KEY_ACCOUNT_PREFIX)
+            && AUDIT_KEYRING_SERVICES.contains(&service.as_str())
+        {
+            entries.push(KeyringAccountEntry {
+                service: std::mem::take(service),
+                account: std::mem::take(account),
+            });
+        }
+        service.clear();
+        account.clear();
+    }
+
+    for line in text.split('\n') {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("keychain:") {
+            if !service.is_empty() || !account.is_empty() {
+                flush(&mut entries, &mut service, &mut account);
+            }
+            continue;
+        }
+        let (key, val) = parse_blob_attr(trimmed);
+        match key.as_str() {
+            "svce" | "0x00000007" => service = val,
+            "acct" | "0x00000008" => account = val,
+            _ => {}
+        }
+    }
+    flush(&mut entries, &mut service, &mut account);
+    entries
+}
+
+/// Go `exec.ExitError` text for a finished child.
+fn go_exit_status_text(status: &std::process::ExitStatus) -> String {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return match signal {
+                9 => "signal: killed".to_owned(),
+                15 => "signal: terminated".to_owned(),
+                other => format!("signal: {other}"),
+            };
+        }
+    }
+    status.code().map_or_else(
+        || "exit status unknown".to_owned(),
+        |code| format!("exit status {code}"),
+    )
+}
+
+/// Runs `security dump-keychain` (attributes only, never `-d`, so no secret
+/// value is read) bounded by `KEYRING_DUMP_TIMEOUT`.
+fn dump_default_keychain() -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new("/usr/bin/security")
+        .arg("dump-keychain")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|err| {
+            if err.kind() == io::ErrorKind::NotFound {
+                "exec: \"security\": executable file not found in $PATH".to_owned()
+            } else {
+                err.to_string()
+            }
+        })?;
+    let mut stdout = child.stdout.take().ok_or("security stdout unavailable")?;
+    let reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stdout.read_to_end(&mut buf);
+        buf
+    });
+
+    let deadline = Instant::now() + KEYRING_DUMP_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                // The reader ends once the killed child's pipe closes; a
+                // descendant holding the pipe is not waited for.
+                return Err("signal: killed".to_owned());
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(10)),
+            Err(err) => return Err(err.to_string()),
+        }
+    };
+    let out = reader.join().unwrap_or_default();
+    if status.success() {
+        Ok(out)
+    } else {
+        Err(go_exit_status_text(&status))
+    }
+}
+
+/// Every audit-HMAC-key account stored under `symaira`/`openpass` in the
+/// default OS keychain (macOS only; empty elsewhere).
+fn keyring_audit_key_accounts() -> Result<Vec<KeyringAccountEntry>, String> {
+    if goos() != "darwin" {
+        return Ok(Vec::new());
+    }
+    dump_default_keychain()
+        .map(|out| parse_keychain_dump(&out))
+        .map_err(|err| format!("enumerate OS keychain: {err}"))
+}
+
+/// Removes one generic-password item (Go `keyringEntryDelete`). A missing item
+/// (`errSecItemNotFound`, exit 44) is the desired end state, not an error.
+fn keyring_entry_delete(service: &str, account: &str) -> Result<(), String> {
+    use std::process::Command;
+
+    let output = Command::new("/usr/bin/security")
+        .args(["delete-generic-password", "-s", service, "-a", account])
+        .output()
+        .map_err(|err| format!("delete keychain entry: {err}"))?;
+    if output.status.success() || output.status.code() == Some(44) {
+        return Ok(());
+    }
+    let combined = [output.stdout.as_slice(), output.stderr.as_slice()].concat();
+    if String::from_utf8_lossy(&combined).contains("could not be found") {
+        return Ok(());
+    }
+    Err(format!(
+        "delete keychain entry: {}",
+        go_exit_status_text(&output.status)
+    ))
+}
+
+/// Decision logic behind `audit.keyring.orphans` (Go `auditKeyringOrphansResult`);
+/// `delete` is injected so tests never invoke the `security` binary.
+fn audit_keyring_orphans_result(
+    entries: &[KeyringAccountEntry],
+    delete: fn(&str, &str) -> Result<(), String>,
+) -> DoctorResult {
+    const ID: &str = "audit.keyring.orphans";
+    const NAME: &str = "Orphaned audit HMAC keys in OS keychain";
+
+    let orphans: Vec<KeyringAccountEntry> = entries
+        .iter()
+        .filter(|entry| {
+            entry
+                .account
+                .strip_prefix(AUDIT_KEY_ACCOUNT_PREFIX)
+                .is_some_and(|dir| fs::metadata(dir).is_err())
+        })
+        .cloned()
+        .collect();
+
+    if orphans.is_empty() {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Ok,
+            "no orphaned audit HMAC keys in the OS keychain (service \"symaira\")",
+            false,
         );
     }
 
@@ -3001,10 +3355,22 @@ fn check_session_keyring(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResu
         ID,
         NAME,
         Status::Warn,
-        "session cache uses in-memory backend (not persistent on this platform)",
-        false,
+        format!(
+            "{} audit HMAC key(s) in the OS keychain point to a vault directory that no longer exists",
+            orphans.len()
+        ),
+        true,
     )
-    .with_hint("sessions on this platform do not persist across restarts")
+    .with_hint("run `symvault doctor --fix` to remove the orphaned keychain entries")
+    .with_fix(move || {
+        let mut first_err = None;
+        for entry in &orphans {
+            if let Err(err) = delete(&entry.service, &entry.account) {
+                first_err.get_or_insert(err);
+            }
+        }
+        first_err.map_or(Ok(()), Err)
+    })
 }
 
 fn check_audit_keyring_orphans(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
@@ -3031,15 +3397,17 @@ fn check_audit_keyring_orphans(_vault_dir: &Path, _opts: &DoctorOptions) -> Doct
         );
     }
 
-    // ponytail: enumeration needs the native keyring layer (platform slice).
-    // Warn instead of a false "no orphans".
-    DoctorResult::new(
-        ID,
-        NAME,
-        Status::Warn,
-        "OS keychain enumeration requires the native platform layer, which is not ported yet",
-        false,
-    )
+    match keyring_audit_key_accounts() {
+        Ok(entries) => audit_keyring_orphans_result(&entries, keyring_entry_delete),
+        Err(err) => DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            format!("cannot enumerate OS keychain: {err}"),
+            false,
+        )
+        .with_hint("ensure the login keychain is unlocked, then re-run `symvault doctor`"),
+    }
 }
 
 fn check_manifest_intact(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
@@ -3615,5 +3983,276 @@ mod tests {
         apply_fixes(&mut results, true, false, &mut output).unwrap();
         assert!(!conflict_redundant.exists());
         assert!(conflict_different.exists());
+    }
+
+    fn probe_ok() -> Result<(), String> {
+        Ok(())
+    }
+
+    fn probe_fail() -> Result<(), String> {
+        Err("keyring read-back failed: boom".to_owned())
+    }
+
+    #[test]
+    fn session_cache_memory_backend_warns() {
+        for backend in ["memory", ""] {
+            let r = session_cache_result(backend, &probe_ok);
+            assert_eq!(r.status, Status::Warn);
+            assert_eq!(
+                r.message,
+                "session cache uses in-memory backend (not persistent)"
+            );
+            assert!(
+                r.hint
+                    .as_deref()
+                    .unwrap()
+                    .starts_with("install a system keyring")
+            );
+        }
+    }
+
+    #[test]
+    fn session_cache_verifies_os_keyring_persistence() {
+        let ok = session_cache_result("os-keyring", &probe_ok);
+        assert_eq!(ok.status, Status::Ok);
+        assert_eq!(
+            ok.message,
+            "backend: os-keyring, persistent: true (verified)"
+        );
+        assert!(ok.hint.is_none());
+
+        let fail = session_cache_result("os-keyring", &probe_fail);
+        assert_eq!(fail.status, Status::Fail);
+        assert_eq!(
+            fail.message,
+            "backend: os-keyring (configured), persistent: false \u{2014} persistence check failed: keyring read-back failed: boom"
+        );
+        assert!(
+            fail.hint
+                .as_deref()
+                .unwrap()
+                .contains("security list-keychains")
+        );
+    }
+
+    #[test]
+    fn session_keyring_branches_match_go() {
+        let test_env = session_keyring_result("memory", &probe_ok, true, "darwin");
+        assert_eq!(test_env.status, Status::Warn);
+        assert_eq!(
+            test_env.message,
+            "OS keyring persistence not verified in test/CI environment (in-memory backend active)"
+        );
+        assert!(test_env.hint.is_none());
+
+        for os in ["darwin", "linux", "windows"] {
+            let r = session_keyring_result("", &probe_ok, false, os);
+            assert_eq!(r.status, Status::Fail, "{os}");
+            assert!(r.message.starts_with("OS keyring persistence unavailable"));
+            assert!(r.hint.is_some());
+        }
+        let other = session_keyring_result("memory", &probe_ok, false, "freebsd");
+        assert_eq!(other.status, Status::Warn);
+        assert_eq!(
+            other.message,
+            "session cache uses in-memory backend (not persistent on this platform)"
+        );
+        assert_eq!(
+            other.hint.as_deref(),
+            Some("sessions on this platform do not persist across restarts")
+        );
+
+        let fail = session_keyring_result("os-keyring", &probe_fail, false, "darwin");
+        assert_eq!(fail.status, Status::Fail);
+        assert_eq!(
+            fail.message,
+            "OS keyring persistence check failed: keyring read-back failed: boom"
+        );
+        let ok = session_keyring_result("os-keyring", &probe_ok, false, "darwin");
+        assert_eq!(ok.status, Status::Ok);
+        assert_eq!(
+            ok.message,
+            "OS keyring write/read roundtrip OK (persistence verified)"
+        );
+    }
+
+    #[test]
+    fn keychain_dump_parser_handles_both_attribute_schemes() {
+        let dump = "keychain: \"/Users/x/Library/Keychains/login.keychain-db\"\n\
+version: 512\n\
+class: \"genp\"\n\
+attributes:\n\
+    0x00000007 <blob>=\"symaira\"\n\
+    0x00000008 <blob>=\"audit-hmac-key:/tmp/gone\"\n\
+    \"acct\"<blob>=\"audit-hmac-key:/tmp/gone\"\n\
+    \"svce\"<blob>=\"symaira\"\n\
+keychain: \"/Users/x/Library/Keychains/login.keychain-db\"\n\
+class: \"genp\"\n\
+attributes:\n\
+    \"svce\"<blob>=\"openpass\"\n\
+    \"acct\"<blob>=\"audit-hmac-key:/tmp/legacy\"\n\
+keychain: \"/Users/x/Library/Keychains/login.keychain-db\"\n\
+attributes:\n\
+    \"svce\"<blob>=\"symaira\"\n\
+    \"acct\"<blob>=\"session\"\n\
+keychain: \"/Users/x/Library/Keychains/login.keychain-db\"\n\
+attributes:\n\
+    \"svce\"<blob>=\"other\"\n\
+    \"acct\"<blob>=\"audit-hmac-key:/tmp/other\"\n\
+\n\
+attributes:\n\
+    \"svce\"<blob>=\"symaira\"\n\
+    \"acct\"<blob>=\"audit-hmac-key:/tmp/blank-separated\"\n";
+        let entries = parse_keychain_dump(dump.as_bytes());
+        let pairs: Vec<(&str, &str)> = entries
+            .iter()
+            .map(|e| (e.service.as_str(), e.account.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![
+                ("symaira", "audit-hmac-key:/tmp/gone"),
+                ("openpass", "audit-hmac-key:/tmp/legacy"),
+                ("symaira", "audit-hmac-key:/tmp/blank-separated"),
+            ]
+        );
+    }
+
+    thread_local! {
+        static DELETED: std::cell::RefCell<Vec<(String, String)>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    fn record_delete(service: &str, account: &str) -> Result<(), String> {
+        DELETED.with(|d| {
+            d.borrow_mut()
+                .push((service.to_owned(), account.to_owned()))
+        });
+        if account.ends_with("fail") {
+            Err("delete keychain entry: exit status 1".to_owned())
+        } else {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn audit_keyring_orphans_none_is_ok() {
+        let tmp = tempfile::tempdir().unwrap();
+        let live = KeyringAccountEntry {
+            service: "symaira".to_owned(),
+            account: format!("audit-hmac-key:{}", tmp.path().display()),
+        };
+        for entries in [vec![], vec![live]] {
+            let r = audit_keyring_orphans_result(&entries, record_delete);
+            assert_eq!(r.status, Status::Ok);
+            assert_eq!(
+                r.message,
+                "no orphaned audit HMAC keys in the OS keychain (service \"symaira\")"
+            );
+            assert!(!r.fixable && r.fix.is_none() && r.hint.is_none());
+        }
+    }
+
+    #[test]
+    fn audit_keyring_orphans_fix_deletes_every_orphan_and_reports_first_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let live_account = format!("audit-hmac-key:{}", tmp.path().display());
+        let gone = tmp.path().join("gone");
+        let entries = vec![
+            KeyringAccountEntry {
+                service: "symaira".to_owned(),
+                account: live_account.clone(),
+            },
+            KeyringAccountEntry {
+                service: "symaira".to_owned(),
+                account: format!("audit-hmac-key:{}-fail", gone.display()),
+            },
+            KeyringAccountEntry {
+                service: "openpass".to_owned(),
+                account: format!("audit-hmac-key:{}", gone.display()),
+            },
+            KeyringAccountEntry {
+                service: "symaira".to_owned(),
+                account: "no-scheme".to_owned(),
+            },
+        ];
+        let r = audit_keyring_orphans_result(&entries, record_delete);
+        assert_eq!(r.status, Status::Warn);
+        assert!(r.fixable);
+        assert_eq!(
+            r.message,
+            "2 audit HMAC key(s) in the OS keychain point to a vault directory that no longer exists"
+        );
+        assert_eq!(
+            r.hint.as_deref(),
+            Some("run `symvault doctor --fix` to remove the orphaned keychain entries")
+        );
+
+        // Dry run must not delete anything.
+        DELETED.with(|d| d.borrow_mut().clear());
+        let mut results = vec![r];
+        let mut out = Vec::new();
+        apply_fixes(&mut results, true, true, &mut out).unwrap();
+        assert!(DELETED.with(|d| d.borrow().is_empty()));
+
+        apply_fixes(&mut results, true, false, &mut out).unwrap();
+        let deleted = DELETED.with(|d| d.borrow().clone());
+        assert_eq!(deleted.len(), 2, "a failing delete must not stop the rest");
+        assert!(deleted.iter().all(|(_, a)| a != &live_account));
+        assert_eq!(
+            results[0].message,
+            "fix failed: delete keychain entry: exit status 1"
+        );
+        assert!(!results[0].fixed);
+    }
+
+    #[test]
+    fn audit_keyring_orphans_check_skips_in_test_env() {
+        let tmp = tempfile::tempdir().unwrap();
+        let r = check_audit_keyring_orphans(tmp.path(), &DoctorOptions::default());
+        assert_eq!(r.status, Status::Ok);
+        let expected = if goos() == "darwin" {
+            "keychain enumeration skipped in test/CI environment".to_owned()
+        } else {
+            format!("not applicable on {}", goos())
+        };
+        assert_eq!(r.message, expected);
+    }
+
+    /// Manual check against the real login keychain (`cargo test -- --ignored`):
+    /// deleting a present item removes it, deleting a missing one is success.
+    #[test]
+    #[ignore = "touches the real macOS keychain"]
+    #[cfg(target_os = "macos")]
+    fn keyring_entry_delete_removes_present_and_tolerates_missing_items() {
+        use std::process::Command;
+
+        let service = format!("symvault-doctor-delete-test-{}", std::process::id());
+        let account = "audit-hmac-key:/nonexistent/doctor-delete-test";
+        let added = Command::new("/usr/bin/security")
+            .args([
+                "add-generic-password",
+                "-s",
+                &service,
+                "-a",
+                account,
+                "-w",
+                "x",
+            ])
+            .status()
+            .unwrap();
+        assert!(added.success());
+        let exists = || {
+            Command::new("/usr/bin/security")
+                .args(["find-generic-password", "-s", &service, "-a", account])
+                .output()
+                .unwrap()
+                .status
+                .success()
+        };
+        assert!(exists());
+        keyring_entry_delete(&service, account).unwrap();
+        assert!(!exists());
+        keyring_entry_delete(&service, account).unwrap();
     }
 }
