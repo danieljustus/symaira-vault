@@ -27,11 +27,43 @@ Differences from Go left open (all asserted, none silent): rust-age's random `*-
 ciphertexts by 8–200 bytes; non-mapping `config.yaml` wording (`known-divergences.json`, CFG owner); `symvault-store`
 `prepare_entry` keeps `Entry.path` (bridge clears it); Go-written integer `-0` reads as `0`.
 
-Not done: iOS slices (`aarch64-apple-ios`, `aarch64-apple-ios-sim` Rust targets are not installed; nothing was installed),
-XCFramework packaging, switching `client/` (`MobileVaultCore.swift`, `Package.swift`, `project.yml`), `release.yml` and
-`scripts/build-vaultcore.sh`, FFI-002 real-device RSS. Next action: `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`,
-build the `ffi` profile for both, `xcodebuild -create-xcframework`, run the Swift tests on a simulator destination, then
-point `client/` at the Rust framework.
+iOS slices, 2026-11-01 (branch `local/ffi-001`, after `a2feae44`):
+- `make ffi-xcframework` (`scripts/rust-port/build-ffi-xcframework.sh`, exit 0): `ffi` profile for `aarch64-apple-darwin`,
+  `aarch64-apple-ios`, `aarch64-apple-ios-sim` -> `$CARGO_TARGET_DIR/xcframework/SymvaultFFI.xcframework` with 3 slices
+  (`Info.plist` `AvailableLibraries`: `ios-arm64`, `ios-arm64-simulator`, `macos-arm64`; header + `CSymvaultFFI` module map in
+  each). Sizes (bytes): 48,027,088 / 48,022,888 / 48,252,800, total 144,302,776; linked and dead-stripped with all 15
+  exports kept about 2.23 MB per slice (ADR 0031 has the table; the old "8.97 MB" figure did not reproduce and is withdrawn).
+  `xcodebuild` is called plain there because `dev-external` appends `-derivedDataPath`, which `-create-xcframework` rejects.
+- `Package.swift`: default unchanged (`make ffi-differential` still exit 0, 548 steps on macOS); with
+  `SYMVAULT_FFI_XCFRAMEWORK=<xcframework>` a `binaryTarget` replaces the C shim (macOS `swift test` in that mode: 548 steps).
+- `make ffi-ios-simulator-test` (exit 0): 548 steps / 462 cases replayed inside an iOS 18.6 Simulator (arm64) against the
+  `ios-arm64-simulator` slice, 21.5 s. Route: `xcodebuild build-for-testing -destination generic/platform=iOS Simulator
+  ARCHS=arm64`, `simctl boot`, `simctl spawn <udid> xctest SymvaultFFITests.xctest`, using the real simctl binary
+  (`SIMCTL=/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/bin/simctl`). The script created and
+  afterwards removed one device of its own (`symvault-ffi001-iPhone16`); no other device or service was touched.
+
+Environment wall (CoreSimulator, this host, 2026-11-01), evidence:
+- `/usr/bin/xcrun simctl list runtimes` (Xcode's `/Applications/Xcode.app/Contents/Developer/usr/bin/simctl`, a bash wrapper)
+  produced no output for 1184 s (started 05:49, killed by me at 06:09; also a foreign session's identical probe, pid 23517,
+  was still hung at 20 min and was left alone). `ps`: wrapper `bash simctl` -> child `xcodebuild -runFirstLaunch`; `sample`
+  of the child: main thread in `mach_msg`, another in `xpc_connection_send_message_with_reply_sync`, i.e. waiting on an XPC
+  reply that never came. Cause from the wrapper source: it runs `-runFirstLaunch` when
+  `/Library/Developer/PrivateFrameworks/CoreSimulator.framework/.../Info.plist` `CFBundleVersion` (here `1174.9.2`) is older
+  than `EXPECTED_VERSION="1174.21"`.
+- The real simctl binary under that framework answers immediately (`list runtimes` 0 s): only runtime `iOS 18.6 (22G86)`
+  and `watchOS 27.0`; no iOS device existed before (created one).
+- `xcodebuild test -destination 'platform=iOS Simulator,id=<udid>'` fails at once: "CoreSimulator is out of date. Current
+  version (1174.9.2) is older than build version (1174.21.0) ... Simulator device support disabled", then `scheme
+  "SymvaultFFI-Package"` not found. So `xcodebuild test` against a simulator destination is blocked until the CoreSimulator
+  component is updated (smallest human action: let `xcodebuild -runFirstLaunch` / the Xcode components installer finish with
+  administrator rights, or install the matching CoreSimulator package). The simctl-spawn route above does not need it.
+
+Not done: switching `client/` (`MobileVaultCore.swift`, `Package.swift`, `project.yml`), `release.yml` and
+`scripts/build-vaultcore.sh` to the Rust framework; FFI-002 real-device RSS; a test run on a physical iPhone (needs hardware and
+signing; the `ios-arm64` slice is built but never executed); `x86_64-apple-ios` (Intel simulator) slice (Apple-silicon only by
+design, `ARCHS=arm64`); XCFramework signing/checksum for distribution. Next action: point `client/` at the XCFramework
+(`SYMVAULT_FFI_XCFRAMEWORK` mode of `crates/symvault-ffi/swift/Package.swift` or a `binaryTarget` with checksum in the app
+package).
 
 ## CLI-006 positive output matrix, 2026-10-31 (review fixes 2026-11-01)
 

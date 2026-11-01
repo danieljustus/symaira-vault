@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-generate ffi-fixtures-check ffi-differential
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-generate ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
 
 # Variables
 BINARY_NAME := symvault
@@ -855,6 +855,21 @@ ffi-differential: ffi-fixtures-check
 	else \
 		echo "SKIP ffi-differential: Swift package test needs macOS (host: $$(uname -s)); Go check and Rust tests passed"; \
 	fi
+
+# FFI-001 iOS: SymvaultFFI.xcframework (macOS arm64, iOS device arm64, iOS
+# Simulator arm64; `ffi` profile) under $(CARGO_TARGET_DIR)/xcframework, never in
+# the tracked tree. Prints per-slice and total sizes (recorded in ADR 0031).
+# Needs `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`.
+ffi-xcframework:
+	CARGO="$(CARGO)" CARGO_TARGET_DIR="$(FFI_TARGET_ABS)" \
+		scripts/rust-port/build-ffi-xcframework.sh
+
+# FFI-001 iOS: replay the 548-step fixture through the Swift package on an iOS
+# Simulator (xcodebuild test) against the XCFramework's simulator slice. Needs a
+# working CoreSimulator and an installed iOS runtime; see the script header for
+# SIMCTL / IOS_SIM_UDID. Not part of `port-contract` (needs a simulator).
+ffi-ios-simulator-test: ffi-xcframework
+	CARGO_TARGET_DIR="$(FFI_TARGET_ABS)" scripts/rust-port/ffi-ios-simulator-test.sh
 
 # Split from `rust-gates` so CI can run the interpreter-heavy Miri pass in its
 # own parallel job: Miri accounts for roughly two thirds of the aggregate gate
