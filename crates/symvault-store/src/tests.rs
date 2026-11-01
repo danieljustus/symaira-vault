@@ -1284,7 +1284,7 @@ fn write_new_entry_and_write_entry_at_reject_symlinked_entry_parent() {
         .write_new_entry("safe/second", &Entry::default(), &identity)
         .unwrap_err();
     assert!(
-        matches!(new_entry_error, StoreError::Read { .. }),
+        matches!(new_entry_error, StoreError::Symlink(_)),
         "write_new_entry followed a symlinked parent: {new_entry_error:?}"
     );
 
@@ -1299,7 +1299,7 @@ fn write_new_entry_and_write_entry_at_reject_symlinked_entry_parent() {
         )
         .unwrap_err();
     assert!(
-        matches!(write_at_error, StoreError::Read { .. }),
+        matches!(write_at_error, StoreError::Symlink(_)),
         "write_entry_at followed a symlinked parent: {write_at_error:?}"
     );
 
@@ -1560,21 +1560,25 @@ fn root_acquisition_rejects_replaced_root_before_parsing_invalid_config() {
     fs::write(root.join("identity.age"), b"presence fixture").unwrap();
     let canonical_root = root.canonicalize().unwrap();
     let hook_ran = Arc::new(AtomicBool::new(false));
-    let error = Store::open_with_root_acquisition(&root, {
-        let root = root.clone();
-        let canonical_root = canonical_root.clone();
-        let moved = moved.clone();
-        let replacement = replacement.clone();
-        let hook_ran = hook_ran.clone();
-        move |canonical| {
-            assert_eq!(canonical, canonical_root);
-            fs::rename(&root, &moved).unwrap();
-            fs::rename(&replacement, &root).unwrap();
-            fs::write(root.join("config.yaml"), b"vault: invalid\n").unwrap();
-            fs::write(root.join("identity.age"), b"outsider identity").unwrap();
-            hook_ran.store(true, Ordering::SeqCst);
-        }
-    })
+    let error = Store::open_with_root_acquisition(
+        &root,
+        {
+            let root = root.clone();
+            let canonical_root = canonical_root.clone();
+            let moved = moved.clone();
+            let replacement = replacement.clone();
+            let hook_ran = hook_ran.clone();
+            move |canonical| {
+                assert_eq!(canonical, canonical_root);
+                fs::rename(&root, &moved).unwrap();
+                fs::rename(&replacement, &root).unwrap();
+                fs::write(root.join("config.yaml"), b"vault: invalid\n").unwrap();
+                fs::write(root.join("identity.age"), b"outsider identity").unwrap();
+                hook_ran.store(true, Ordering::SeqCst);
+            }
+        },
+        false,
+    )
     .unwrap_err();
     assert!(hook_ran.load(Ordering::SeqCst));
     assert!(matches!(error, StoreError::RootChanged(path) if path == root));
