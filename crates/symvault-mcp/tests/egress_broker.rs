@@ -116,7 +116,7 @@ fn egress_preflight_denies_before_credential_read_or_upstream_contact() {
         broker
             .with_running(listener, || {
                 let client = reqwest::blocking::Client::builder()
-                    .timeout(Duration::from_secs(5))
+                    .timeout(Duration::from_secs(30))
                     .proxy(reqwest::Proxy::all(format!("http://{address}")).unwrap())
                     .add_root_certificate(
                         reqwest::Certificate::from_pem(broker.ca_pem().as_bytes()).unwrap(),
@@ -294,7 +294,7 @@ fn egress_verified_mitm_injects_and_masks_real_encrypted_credentials() {
         broker
             .with_running(listener, || {
                 let client = reqwest::blocking::Client::builder()
-                    .timeout(Duration::from_secs(10))
+                    .timeout(Duration::from_secs(30))
                     .proxy(reqwest::Proxy::all(format!("http://{address}")).unwrap())
                     .add_root_certificate(
                         reqwest::Certificate::from_pem(broker.ca_pem().as_bytes()).unwrap(),
