@@ -21,6 +21,13 @@
 //     a value, not a positional), run against disposable files in the sandbox
 //     working directory, plus group help pages. Every row ends before the
 //     command touches a vault or the network.
+//   - nil_args / extra_positionals: every cobra command of the pinned tree whose
+//     Args validator is nil (cobra then accepts any positionals), derived from
+//     the compiled command tree, and what the binary does when such a command is
+//     given extra positionals, in an empty sandbox and in a frozen initialized
+//     vault (vault_seed).
+//   - run_file_use_argv: argv permutations of the commands that forward a
+//     trailing command line (`run`, `file use`).
 package main
 
 import (
@@ -131,6 +138,14 @@ type fixture struct {
 	Gate           []gateRow     `json:"gate"`
 	NotInitialized []observation `json:"not_initialized"`
 	ArgvShapes     []shapeCase   `json:"argv_shapes"`
+	// NilArgs lists the commands whose cobra Args validator is nil.
+	NilArgs []nilArgsEntry `json:"nil_args"`
+	// VaultSeed is the frozen initialized vault the initialized scenarios start from.
+	VaultSeed        []seedFile     `json:"vault_seed"`
+	ExtraPositionals []scenarioCase `json:"extra_positionals"`
+	// ExtraPositionalExclusions are the nil-Args commands left out of a state, with the reason.
+	ExtraPositionalExclusions []exclusion    `json:"extra_positional_exclusions"`
+	RunFileUseArgv            []scenarioCase `json:"run_file_use_argv"`
 }
 
 type treeFile struct {
@@ -302,19 +317,42 @@ type result struct {
 	timedOut bool
 }
 
+// runSpec is what a run needs besides argv: disposable working-directory files,
+// a frozen vault tree and whether the initialized-vault environment applies.
+type runSpec struct {
+	files       map[string]string
+	seed        []seedFile
+	initialized bool
+}
+
 // run executes the oracle in a fresh sandbox whose working directory holds files. A timed-out command keeps the
 // partial stderr so a gate refusal (which is immediate) can still be told apart.
 func run(goBinary string, args []string, files map[string]string) (result, error) {
+	return runSpecified(goBinary, args, runSpec{files: files})
+}
+
+func runSpecified(goBinary string, args []string, spec runSpec) (result, error) {
 	box, err := newSandbox()
 	if err != nil {
 		return result{}, err
 	}
 	defer func() { _ = os.RemoveAll(box.root) }()
-	for name, content := range files {
+	if spec.initialized {
+		box.env = append(box.env, initializedEnv()...)
+	}
+	if err := box.writeSeed(spec.seed); err != nil {
+		return result{}, err
+	}
+	for name, content := range spec.files {
 		if err := os.WriteFile(filepath.Join(box.root, name), []byte(content), 0o600); err != nil {
 			return result{}, err
 		}
 	}
+	return runInSandbox(goBinary, box, args)
+}
+
+// runInSandbox executes the oracle in box, which the caller prepared and removes.
+func runInSandbox(goBinary string, box *sandbox, args []string) (result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	defer cancel()
 	// #nosec G204 -- validateGoBinary checked the pinned, clean oracle before this command.
@@ -599,6 +637,7 @@ func main() {
 	commit := flag.String("oracle-commit", "", "Go oracle commit for a new fixture")
 	release := flag.String("oracle-release", "", "Go oracle release for a new fixture")
 	goBinary := flag.String("go-binary", "", "validated Go symvault binary used as the oracle")
+	newSeed := flag.Bool("new-seed", false, "record a fresh initialized-vault seed instead of reusing the existing fixture's")
 	flag.Parse()
 	if *goBinary == "" {
 		fatal("--go-binary is required")
@@ -642,6 +681,10 @@ func main() {
 	if err != nil {
 		fatal("build argument shapes: %v", err)
 	}
+	extras, err := buildExtraSections(*goBinary, *output, *newSeed)
+	if err != nil {
+		fatal("build extra-positional scenarios: %v", err)
+	}
 	content, err := marshalJSON(fixture{
 		SchemaVersion:  1,
 		Oracle:         oracle{commitLabel, resolved, releaseLabel, sources, sourceDigest, generatorDigest},
@@ -650,11 +693,18 @@ func main() {
 		Gate:           gate,
 		NotInitialized: notInitialized,
 		ArgvShapes:     shapes,
+
+		NilArgs:                   extras.nilArgs,
+		VaultSeed:                 extras.seed,
+		ExtraPositionals:          extras.extraPositionals,
+		ExtraPositionalExclusions: extras.exclusions,
+		RunFileUseArgv:            extras.runFileUse,
 	})
 	if err != nil {
 		fatal("marshal fixture: %v", err)
 	}
-	summary := fmt.Sprintf("%d usage cases, %d arity rows, %d gate rows, %d not-initialized cases, %d argv shapes", len(usage), len(arity), len(gate), len(notInitialized), len(shapes))
+	summary := fmt.Sprintf("%d usage cases, %d arity rows, %d gate rows, %d not-initialized cases, %d argv shapes, %d nil-Args commands, %d extra-positional scenarios, %d run/file-use argv scenarios",
+		len(usage), len(arity), len(gate), len(notInitialized), len(shapes), len(extras.nilArgs), len(extras.extraPositionals), len(extras.runFileUse))
 	if *check {
 		existing, err := os.ReadFile(*output) // #nosec G304 -- repository fixture path
 		if err != nil {

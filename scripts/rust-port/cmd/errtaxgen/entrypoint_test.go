@@ -131,10 +131,25 @@ func newMainEnv(t *testing.T) mainEnv {
 	commit := gitIn(t, root, "rev-parse", "HEAD")
 
 	origCommit, origValidate, origLocate := pinnedOracleCommit, validateOracle, locateRoot
-	t.Cleanup(func() { pinnedOracleCommit, validateOracle, locateRoot = origCommit, origValidate, origLocate })
+	origInventory, origSeed := nilArgsInventory, seedBuilder
+	origExclusions, origNormalizers := scenarioExclusions, scenarioNormalizers
+	t.Cleanup(func() {
+		pinnedOracleCommit, validateOracle, locateRoot = origCommit, origValidate, origLocate
+		nilArgsInventory, seedBuilder = origInventory, origSeed
+		scenarioExclusions, scenarioNormalizers = origExclusions, origNormalizers
+	})
+	scenarioExclusions, scenarioNormalizers = nil, nil
 	pinnedOracleCommit = commit
 	validateOracle = func(string) error { return nil }
 	locateRoot = func() (string, error) { return root, nil }
+	// The fake oracle has no vault and the real inventory is the compiled tree of
+	// the product: replace both with one command and a fixed one-file seed.
+	nilArgsInventory = func() ([]nilArgsEntry, error) {
+		return []nilArgsEntry{{Path: "symvault version", Runnable: true, Origin: "tree"}}, nil
+	}
+	seedBuilder = func(string) ([]seedFile, error) {
+		return []seedFile{{Path: "xdg-data", Kind: "dir", Mode: 0o700}}, nil
+	}
 	return mainEnv{root: root, oracle: pathOracle(t), commit: commit}
 }
 
