@@ -1,5 +1,22 @@
 # Rust migration handover — 2026-09-09
 
+## Coordination note, 2026-11-01 23:57 (read first)
+
+`local/rust-port` is integrated by ONE coordinator chat at a time. Since 23:57 the owner is the Hermes chat that
+started at 22:28 ("vollständige /go-to-rust-migration ... alles lokal"). Another chat committed `62fa4449` with the
+message "handoff, local/cli-005c review fixes gated, re-review pending" while this owner's merge of
+`local/dynamic-generate` was staged; that commit IS the dynamic merge (parents `29436f42`, `321acd6c`) plus its doc
+edit. Actual state at `62fa4449`:
+
+- `local/cli-005c` is merged (`29436f42`, via `local/cli-005c-fix`): the delta review of `d7c01a1c..c936dd00`
+  returned REQUEST_CHANGES (`auth set touchid` became exit 4 instead of Go's exit 1; the cached-passphrase unlock
+  branch skipped the missing-`config.yaml` check). Both fixed in `3743f0ad` (8/8 Go probes byte-identical,
+  symvault-cli nextest 648/648). Its gate receipts `2c5ad3ee` are at `c936dd00`, not at the merge.
+- `local/dynamic-generate` (`023217df`, `321acd6c`) is merged: native `dynamic generate`; review REQUEST_CHANGES
+  (repeated flags) fixed. Error-taxonomy pins now 3 uninitialized / 2 initialized (`setup` only).
+- Do not merge, rebase or push `local/rust-port` from another chat. No push at all until the closing step (user
+  instruction in the owner chat: everything local, no GitHub).
+
 ## CLI-005c review fixes: unlock order and failed passphrase prompts, 2026-11-01
 
 Independent review of `58460a10..d7c01a1c` (REQUEST_CHANGES) found two defects that the
