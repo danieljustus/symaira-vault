@@ -159,9 +159,56 @@ func allCaseSpecs() []caseSpec {
 		add(caseSpec{id: "config-set-" + bad.id, path: "config set", desc: "set " + bad.desc, seed: "entries", argv: flags("config", "set", bad.key, bad.value)})
 	}
 	add(caseSpec{id: "config-set-yes-bool", path: "config set", desc: "set a YAML 1.1 boolean word (accepted for a bool key)", seed: "entries", argv: flags("config", "set", "git.auto_push", "yes"), post: [][]string{{"config", "get", "git.auto_push"}}})
+	// The reload after `config set` decodes the whole file, so the value being set
+	// is irrelevant: the file already on disk carries the offending node. yaml.v3
+	// follows aliases (the error names the anchor's line), merge keys and
+	// explicit tags, and a time.Time field takes a mapping or any RFC 3339 text.
+	text := []string{"text"}
+	for _, pre := range []struct{ id, config, desc string }{
+		{"alias-scalar", "a: &x 12\nsessionTimeout: *x\n", "an aliased int for a Duration key"},
+		{"alias-collection", "a: &a\n  p: 1\nsessionTimeout: *a\n", "an aliased mapping for a Duration key (the anchor's line)"},
+		{"anchored-collection", "sessionTimeout: &a\n  p: 1\n", "an anchored mapping that sits on the next line"},
+		{"alias-string-tag", "sessionTimeout: &t !!str 12\nsessionMaxLifetime: *t\n", "one anchored !!str 12 for two Duration keys"},
+		{"alias-null", "n: &n ~\nmcp:\n  port: *n\n  read_timeout: *n\n", "an aliased null for int and Duration keys (zero value, no error)"},
+		{"merge-int", "b: &b\n  port: abc\nmcp:\n  <<: *b\n", "a merged mapping holding a string for an int key"},
+		{"merge-flow", "b: &b {port: abc}\nmcp: {<<: *b}\n", "a merge key in a flow mapping"},
+		{"merge-own-key-wins", "b: &b\n  port: abc\nmcp:\n  port: 3\n  <<: *b\n", "the mapping's own key hides the merged one"},
+		{"merge-sequence", "m: &m {port: abc}\nmcp:\n  <<: [*m, {port: x}]\n", "a sequence of mappings to merge"},
+		{"merge-sequence-order", "p: &p {approvalTimeout: 5}\nq: &q {approvalTimeout: 6}\nagents:\n  a:\n    <<: [*p, *q]\n", "the first merged mapping wins"},
+		{"merge-profiles", "p: &p\n  approvalTimeout: 5\nagents:\n  a:\n    <<: *p\n  b:\n    <<: *p\n    approvalTimeout: 7s\n", "a merged agent profile, overridden in one of two"},
+		{"merge-scalar", "mcp:\n  <<: 5\n", "a merge key whose value is a scalar"},
+		{"merge-sequence-scalar", "p: &p {port: 1}\nmcp:\n  <<: [*p, 5]\n", "a merge sequence holding a scalar"},
+		{"merge-alias-sequence", "p: &p [1]\nmcp:\n  <<: *p\n", "a merge key aliasing a sequence"},
+		{"tag-int", "sessionTimeout: !!int 12\n", "an explicitly tagged int for a Duration key"},
+		{"tag-str-int", "sessionTimeout: !!str 12\n", "an explicitly tagged !!str 12 for a Duration key"},
+		{"tag-str-ok", "sessionTimeout: !!str 5m\n", "an explicitly tagged !!str duration (accepted)"},
+		{"tag-int-text", "sessionTimeout: !!int abc\n", "text its !!int tag cannot represent (aborts the decode)"},
+		{"tag-int-float", "mcp:\n  port: !!int 1.5\n", "a float its !!int tag cannot represent"},
+		{"tag-null-text", "sessionTimeout: !!null foo\n", "text its !!null tag cannot represent"},
+		{"tag-binary", "sessionTimeout: !!binary MTI=\n", "a !!binary scalar for a Duration key"},
+		{"tag-seq-on-map", "sessionTimeout: !!map [1]\n", "a sequence tagged as a mapping"},
+		{"duplicate-key", "vaultDir: a\nvaultDir: b\n", "a key defined twice"},
+		{"time-int", "vault:\n  last_rotated: 12\n", "an int for the time.Time key"},
+		{"time-date-text", "vault:\n  last_rotated: \"2026-10-31\"\n", "a quoted date for the time.Time key"},
+		{"time-plain-date", "vault:\n  last_rotated: 2026-10-31\n", "a plain date for the time.Time key (a timestamp, accepted)"},
+		{"time-zone-hour", "vault:\n  last_rotated: \"2026-10-31T10:00:00+25:00\"\n", "an out-of-range zone hour"},
+		{"time-month", "vault:\n  last_rotated: \"2026-13-01T00:00:00Z\"\n", "an out-of-range month"},
+		{"time-day", "vault:\n  last_rotated: \"2026-02-30T00:00:00Z\"\n", "a day the month does not have"},
+		{"time-extra", "vault:\n  last_rotated: \"2026-10-31T10:00:00Zjunk\"\n", "text after the zone"},
+		{"time-no-zone", "vault:\n  last_rotated: \"2026-10-31T10:00:00\"\n", "a time without a zone"},
+		{"time-short-hour", "vault:\n  last_rotated: \"2026-10-31T1:00:00Z\"\n", "a one-digit hour (Go accepts it)"},
+		{"time-fraction", "vault:\n  last_rotated: \"2026-10-31T10:00:00,5+02:00\"\n", "a comma fraction (Go accepts it)"},
+		{"time-multibyte", "vault:\n  last_rotated: \"é\"\n", "a non-ASCII value (quoted as \\\\x bytes)"},
+		{"time-mapping", "vault:\n  last_rotated: {a: 1}\n", "a mapping for the time.Time key (accepted, every key ignored)"},
+		{"time-empty-mapping", "vault:\n  last_rotated: {}\n", "an empty mapping for the time.Time key (accepted)"},
+		{"time-sequence", "vault:\n  last_rotated: [1]\n", "a sequence for the time.Time key"},
+		{"time-tag-str", "vault:\n  last_rotated: !!str 2026-10-31\n", "an explicit !!str date for the time.Time key"},
+	} {
+		add(caseSpec{id: "config-set-file-" + pre.id, path: "config set", desc: "set a key in a file with " + pre.desc, seed: "entries", modes: text, argv: flags("config", "set", "vaultDir", "/y"),
+			files: []workFile{{Name: "../home/.symvault/config.yaml", Text: pre.config}}})
+	}
 	// A config file that cannot be read: Go names the failed syscall and repeats
 	// the cause (text mode only; the wording does not depend on the mode flags).
-	text := []string{"text"}
 	add(caseSpec{id: "config-get-missing-file", path: "config get", desc: "get from a config file that does not exist", seed: "entries", modes: text, argv: flags("config", "get", "x", "--file", "$ROOT/work/missing.yaml")})
 	add(caseSpec{id: "config-list-missing-file", path: "config list", desc: "list a config file that does not exist", seed: "entries", modes: text, argv: flags("config", "list", "--file", "$ROOT/work/missing.yaml")})
 	add(caseSpec{id: "config-set-missing-file", path: "config set", desc: "set in a config file that does not exist", seed: "entries", modes: text, argv: flags("config", "set", "x", "1", "--file", "$ROOT/work/missing.yaml")})

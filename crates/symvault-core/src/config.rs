@@ -1808,8 +1808,12 @@ fn parse_vault(
         out.auto_heal_zero_key = bool_field(v, "auto_heal_zero_key")?;
     }
     // `last_rotated` is a `time.Time` in Go: null decodes to the zero time,
-    // which is the same as absent.
-    if let Some(v) = map.get(key("last_rotated")).filter(|v| !v.is_null()) {
+    // which is the same as absent, and so does a mapping (a struct with no
+    // exported field ignores every key).
+    if let Some(v) = map
+        .get(key("last_rotated"))
+        .filter(|v| !v.is_null() && !v.is_mapping())
+    {
         out.last_rotated = Some(string(v, "last_rotated")?);
     }
     if let Some(v) = map.get(key("format_version")) {

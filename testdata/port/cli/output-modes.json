@@ -110,7 +110,7 @@
       "scripts/rust-port/cmd/outputmodegen/cases.go",
       "scripts/rust-port/cmd/outputmodegen/main.go"
     ],
-    "generator_digest": "7d570e782f3cd00cfa19e1fb4fec865a34e6f0d09c6a70a885a837146d390c0b",
+    "generator_digest": "fd90db6528e75ee0881879c38372ad1124d46a7b419c46398b2ae1551f031978",
     "gate_digest": "c2536c1ffaf681feaa8fa8824f7e302e9633b2c2711c9ecd98531283064e51f1",
     "goos": "darwin"
   },
@@ -13058,6 +13058,1222 @@
           ],
           "exit": 0,
           "stdout": "yes\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-alias-scalar.text",
+      "path": "config set",
+      "scenario": "config-set-file-alias-scalar",
+      "mode": "text",
+      "desc": "set a key in a file with an aliased int for a Duration key",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "a: &x 12\nsessionTimeout: *x\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `12` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `12` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "f125193917150c3dd87af515d2e6c242a71d15de99eecf512a9bdb19efbc2575",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-alias-collection.text",
+      "path": "config set",
+      "scenario": "config-set-file-alias-collection",
+      "mode": "text",
+      "desc": "set a key in a file with an aliased mapping for a Duration key (the anchor's line)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "a: &a\n  p: 1\nsessionTimeout: *a\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "7b39434241962e58bd88dc3e9d922a965d94e2b806c2225d15e242cb563da823",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-anchored-collection.text",
+      "path": "config set",
+      "scenario": "config-set-file-anchored-collection",
+      "mode": "text",
+      "desc": "set a key in a file with an anchored mapping that sits on the next line",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "sessionTimeout: &a\n  p: 1\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "6fa436d161636a5e2e07d70ba8757f17f9e9511e52afede6f9236461bc595455",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-alias-string-tag.text",
+      "path": "config set",
+      "scenario": "config-set-file-alias-string-tag",
+      "mode": "text",
+      "desc": "set a key in a file with one anchored !!str 12 for two Duration keys",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "sessionTimeout: &t !!str 12\nsessionMaxLifetime: *t\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `12` into time.Duration\n  line 1: cannot unmarshal !!str `12` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `12` into time.Duration\n  line 1: cannot unmarshal !!str `12` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `12` into time.Duration\n  line 1: cannot unmarshal !!str `12` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `12` into time.Duration\n  line 1: cannot unmarshal !!str `12` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e8a260db2fc4451d54a479e286a2421e5376c682e43c4c337b8940ab9651ef97",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-alias-null.text",
+      "path": "config set",
+      "scenario": "config-set-file-alias-null",
+      "mode": "text",
+      "desc": "set a key in a file with an aliased null for int and Duration keys (zero value, no error)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "n: &n ~\nmcp:\n  port: *n\n  read_timeout: *n\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = /y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "fc89540c846886570a8faa02c4073d35e9e0517b585781cb1ae951419f57c191",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-merge-int.text",
+      "path": "config set",
+      "scenario": "config-set-file-merge-int",
+      "mode": "text",
+      "desc": "set a key in a file with a merged mapping holding a string for an int key",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "b: &b\n  port: abc\nmcp:\n  <<: *b\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int\nError: config is invalid after update: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "96fee11f0affb75416621615c36aa148d1c289593588a43ab0208867572b16b1",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-merge-flow.text",
+      "path": "config set",
+      "scenario": "config-set-file-merge-flow",
+      "mode": "text",
+      "desc": "set a key in a file with a merge key in a flow mapping",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "b: &b {port: abc}\nmcp: {<<: *b}\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into int\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into int\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "439c92eed89462b12eb1386bee6449a91f4af53858a17cfc90e1888130a89ed5",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-merge-own-key-wins.text",
+      "path": "config set",
+      "scenario": "config-set-file-merge-own-key-wins",
+      "mode": "text",
+      "desc": "set a key in a file with the mapping's own key hides the merged one",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "b: &b\n  port: abc\nmcp:\n  port: 3\n  <<: *b\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = /y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "1ff972775f614a8fd651d89873d02609384665695f767d22fa85516790ef8bef",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-merge-sequence.text",
+      "path": "config set",
+      "scenario": "config-set-file-merge-sequence",
+      "mode": "text",
+      "desc": "set a key in a file with a sequence of mappings to merge",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "m: &m {port: abc}\nmcp:\n  <<: [*m, {port: x}]\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into int\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into int: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into int\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "ae2107a5c49949872e2a1e0867db48a528ede578efde22150636fe9f7bca68de",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-merge-sequence-order.text",
+      "path": "config set",
+      "scenario": "config-set-file-merge-sequence-order",
+      "mode": "text",
+      "desc": "set a key in a file with the first merged mapping wins",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "p: &p {approvalTimeout: 5}\nq: &q {approvalTimeout: 6}\nagents:\n  a:\n    <<: [*p, *q]\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "a2d386b9504af881653007ae1201abd29a3236aae6007d523aefc01862a6b127",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-merge-profiles.text",
+      "path": "config set",
+      "scenario": "config-set-file-merge-profiles",
+      "mode": "text",
+      "desc": "set a key in a file with a merged agent profile, overridden in one of two",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "p: &p\n  approvalTimeout: 5\nagents:\n  a:\n    <<: *p\n  b:\n    <<: *p\n    approvalTimeout: 7s\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!int `5` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!int `5` into time.Duration: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!int `5` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "91962cd09e0964ec5497b20c42f187032c5f6cdf3ecaa807c2ce7db2fa070a0a",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-merge-scalar.text",
+      "path": "config set",
+      "scenario": "config-set-file-merge-scalar",
+      "mode": "text",
+      "desc": "set a key in a file with a merge key whose value is a scalar",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "mcp:\n  <<: 5\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: map merge requires map or sequence of maps as the value: yaml: map merge requires map or sequence of maps as the value\nError: config is invalid after update: yaml: map merge requires map or sequence of maps as the value: yaml: map merge requires map or sequence of maps as the value\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "6c3e7e0f08d84d91c75e272797ca230d4b55f8c8759afc3b2086c6d51b8a15ea",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-merge-sequence-scalar.text",
+      "path": "config set",
+      "scenario": "config-set-file-merge-sequence-scalar",
+      "mode": "text",
+      "desc": "set a key in a file with a merge sequence holding a scalar",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "p: &p {port: 1}\nmcp:\n  <<: [*p, 5]\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: map merge requires map or sequence of maps as the value: yaml: map merge requires map or sequence of maps as the value\nError: config is invalid after update: yaml: map merge requires map or sequence of maps as the value: yaml: map merge requires map or sequence of maps as the value\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "96622abefc14ab2d1aec641f63666f4144aed39093889dfd3f4313cc1140eac9",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-merge-alias-sequence.text",
+      "path": "config set",
+      "scenario": "config-set-file-merge-alias-sequence",
+      "mode": "text",
+      "desc": "set a key in a file with a merge key aliasing a sequence",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "p: &p [1]\nmcp:\n  <<: *p\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: map merge requires map or sequence of maps as the value: yaml: map merge requires map or sequence of maps as the value\nError: config is invalid after update: yaml: map merge requires map or sequence of maps as the value: yaml: map merge requires map or sequence of maps as the value\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "bd72c992afe84becf272fe4c861541ea0829fefa20045f05eb3e564c3f3c897c",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-tag-int.text",
+      "path": "config set",
+      "scenario": "config-set-file-tag-int",
+      "mode": "text",
+      "desc": "set a key in a file with an explicitly tagged int for a Duration key",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "sessionTimeout: !!int 12\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `12` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `12` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `12` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "05f9f9090f67478f0bd2e2d40f0306284f8cdd76d9f4f8ec876ba00d78130306",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-tag-str-int.text",
+      "path": "config set",
+      "scenario": "config-set-file-tag-str-int",
+      "mode": "text",
+      "desc": "set a key in a file with an explicitly tagged !!str 12 for a Duration key",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "sessionTimeout: !!str 12\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `12` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `12` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `12` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `12` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "40ad49a834519a093749291ae85a49e9bad8a00c48f113b57d4b98e25c0fcbbf",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-tag-str-ok.text",
+      "path": "config set",
+      "scenario": "config-set-file-tag-str-ok",
+      "mode": "text",
+      "desc": "set a key in a file with an explicitly tagged !!str duration (accepted)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "sessionTimeout: !!str 5m\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = /y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "1b6d8403b9e7d4ebf673713a09b940a4628b8b92ceebcb5f9ff9369ca9d89ad1",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-tag-int-text.text",
+      "path": "config set",
+      "scenario": "config-set-file-tag-int-text",
+      "mode": "text",
+      "desc": "set a key in a file with text its !!int tag cannot represent (aborts the decode)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "sessionTimeout: !!int abc\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: cannot decode !!str `abc` as a !!int: yaml: cannot decode !!str `abc` as a !!int\nError: config is invalid after update: yaml: cannot decode !!str `abc` as a !!int: yaml: cannot decode !!str `abc` as a !!int\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "532386de15a2c72b8e7323a2efb7a2a5d542a8f96e59de78511f99b72ebead14",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-tag-int-float.text",
+      "path": "config set",
+      "scenario": "config-set-file-tag-int-float",
+      "mode": "text",
+      "desc": "set a key in a file with a float its !!int tag cannot represent",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "mcp:\n  port: !!int 1.5\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: cannot decode !!float `1.5` as a !!int: yaml: cannot decode !!float `1.5` as a !!int\nError: config is invalid after update: yaml: cannot decode !!float `1.5` as a !!int: yaml: cannot decode !!float `1.5` as a !!int\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "11a661f159ead6a05bd6f3d5831a638328c2d5382e841846b3178bd807ec71c1",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-tag-null-text.text",
+      "path": "config set",
+      "scenario": "config-set-file-tag-null-text",
+      "mode": "text",
+      "desc": "set a key in a file with text its !!null tag cannot represent",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "sessionTimeout: !!null foo\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: cannot decode !!str `foo` as a !!null: yaml: cannot decode !!str `foo` as a !!null\nError: config is invalid after update: yaml: cannot decode !!str `foo` as a !!null: yaml: cannot decode !!str `foo` as a !!null\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "12cb72dd4e26aff4b6d701f8d46015bc24f0c5a7d3541844fa9e1a1d884a0a6c",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-tag-binary.text",
+      "path": "config set",
+      "scenario": "config-set-file-tag-binary",
+      "mode": "text",
+      "desc": "set a key in a file with a !!binary scalar for a Duration key",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "sessionTimeout: !!binary MTI=\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!binary `MTI=` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!binary `MTI=` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!binary `MTI=` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!binary `MTI=` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "815dec2445dfb72913188b6125cc6738aab8acd1cf8f0b1e0be82376fb731923",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-tag-seq-on-map.text",
+      "path": "config set",
+      "scenario": "config-set-file-tag-seq-on-map",
+      "mode": "text",
+      "desc": "set a key in a file with a sequence tagged as a mapping",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "sessionTimeout: !!map [1]\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "41dca9d3e84b72552a348b25a9bcdd9df36eef41087eddffd60229bf017ba836",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-duplicate-key.text",
+      "path": "config set",
+      "scenario": "config-set-file-duplicate-key",
+      "mode": "text",
+      "desc": "set a key in a file with a key defined twice",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vaultDir: a\nvaultDir: b\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 2: mapping key \"vaultDir\" already defined at line 1: yaml: unmarshal errors:\n  line 2: mapping key \"vaultDir\" already defined at line 1\nError: config is invalid after update: yaml: unmarshal errors:\n  line 2: mapping key \"vaultDir\" already defined at line 1: yaml: unmarshal errors:\n  line 2: mapping key \"vaultDir\" already defined at line 1\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "3b6dbd0ef1020b33845a477be975ef75c48dcb3d532bba30b018e3b05222e8ad",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-int.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-int",
+      "mode": "text",
+      "desc": "set a key in a file with an int for the time.Time key",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: 12\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: parsing time \"12\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"12\" as \"2006\": parsing time \"12\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"12\" as \"2006\"\nError: config is invalid after update: parsing time \"12\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"12\" as \"2006\": parsing time \"12\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"12\" as \"2006\"\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "ec346367ebd99536fbc2679b2f386c52999299c4f6c6dde7a368f200e9371a7c",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-date-text.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-date-text",
+      "mode": "text",
+      "desc": "set a key in a file with a quoted date for the time.Time key",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: \"2026-10-31\"\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: parsing time \"2026-10-31\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"T\": parsing time \"2026-10-31\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"T\"\nError: config is invalid after update: parsing time \"2026-10-31\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"T\": parsing time \"2026-10-31\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"T\"\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "80d687be6e7bf387368c5a169ab63524c48e1ef7ac2a9d4f5ef9d0ce28ec3ab1",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-plain-date.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-plain-date",
+      "mode": "text",
+      "desc": "set a key in a file with a plain date for the time.Time key (a timestamp, accepted)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: 2026-10-31\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = /y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "dc15d43d87e709dd2cf2781908d668083b71061e62652463c09f3ab0a34423b6",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-zone-hour.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-zone-hour",
+      "mode": "text",
+      "desc": "set a key in a file with an out-of-range zone hour",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: \"2026-10-31T10:00:00+25:00\"\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: parsing time \"2026-10-31T10:00:00+25:00\": time zone offset hour out of range: parsing time \"2026-10-31T10:00:00+25:00\": time zone offset hour out of range\nError: config is invalid after update: parsing time \"2026-10-31T10:00:00+25:00\": time zone offset hour out of range: parsing time \"2026-10-31T10:00:00+25:00\": time zone offset hour out of range\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "c7d0dbc0a5d8b0ea3b325f408c7a65e5711d1b2cfa7f6fb11c90668d1867e338",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-month.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-month",
+      "mode": "text",
+      "desc": "set a key in a file with an out-of-range month",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: \"2026-13-01T00:00:00Z\"\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: parsing time \"2026-13-01T00:00:00Z\": month out of range: parsing time \"2026-13-01T00:00:00Z\": month out of range\nError: config is invalid after update: parsing time \"2026-13-01T00:00:00Z\": month out of range: parsing time \"2026-13-01T00:00:00Z\": month out of range\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "4ffba187528fcb4ee2d2388c8885be04d02ccdd4f6973975d099166c08fbaec5",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-day.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-day",
+      "mode": "text",
+      "desc": "set a key in a file with a day the month does not have",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: \"2026-02-30T00:00:00Z\"\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: parsing time \"2026-02-30T00:00:00Z\": day out of range: parsing time \"2026-02-30T00:00:00Z\": day out of range\nError: config is invalid after update: parsing time \"2026-02-30T00:00:00Z\": day out of range: parsing time \"2026-02-30T00:00:00Z\": day out of range\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "1ab6be2aab5909bdbaffbe488254ec2e06183a84b4c792e2a779496700b91166",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-extra.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-extra",
+      "mode": "text",
+      "desc": "set a key in a file with text after the zone",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: \"2026-10-31T10:00:00Zjunk\"\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: parsing time \"2026-10-31T10:00:00Zjunk\": extra text: \"junk\": parsing time \"2026-10-31T10:00:00Zjunk\": extra text: \"junk\"\nError: config is invalid after update: parsing time \"2026-10-31T10:00:00Zjunk\": extra text: \"junk\": parsing time \"2026-10-31T10:00:00Zjunk\": extra text: \"junk\"\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "3112ff6ead88c81060d06246d8a2f50d0a624898e7bbfce18aecde6cf391f730",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-no-zone.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-no-zone",
+      "mode": "text",
+      "desc": "set a key in a file with a time without a zone",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: \"2026-10-31T10:00:00\"\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: parsing time \"2026-10-31T10:00:00\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"Z07:00\": parsing time \"2026-10-31T10:00:00\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"Z07:00\"\nError: config is invalid after update: parsing time \"2026-10-31T10:00:00\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"Z07:00\": parsing time \"2026-10-31T10:00:00\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"Z07:00\"\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "5f781fcb784538a57aebefec8e22aa3193a054bb48f21fc6125485a98af976cb",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-short-hour.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-short-hour",
+      "mode": "text",
+      "desc": "set a key in a file with a one-digit hour (Go accepts it)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: \"2026-10-31T1:00:00Z\"\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = /y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "91a3ce840276b2876ec3e4b57a973877af18924aa5f1941c9aa7cd5afe1e9b70",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-fraction.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-fraction",
+      "mode": "text",
+      "desc": "set a key in a file with a comma fraction (Go accepts it)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: \"2026-10-31T10:00:00,5+02:00\"\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = /y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "c22c52ff4b1ccd2ecad38e6bd7a1b548d8b8d7431a20cca0601bbbcbb9821764",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-multibyte.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-multibyte",
+      "mode": "text",
+      "desc": "set a key in a file with a non-ASCII value (quoted as \\\\x bytes)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: \"é\"\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: parsing time \"\\xc3\\xa9\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\\xc3\\xa9\" as \"2006\": parsing time \"\\xc3\\xa9\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\\xc3\\xa9\" as \"2006\"\nError: config is invalid after update: parsing time \"\\xc3\\xa9\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\\xc3\\xa9\" as \"2006\": parsing time \"\\xc3\\xa9\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\\xc3\\xa9\" as \"2006\"\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "a261e0c2c317fe5cec004cbb405c65a4f7b96defb3c555282f385dd61f67a20e",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-mapping.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-mapping",
+      "mode": "text",
+      "desc": "set a key in a file with a mapping for the time.Time key (accepted, every key ignored)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: {a: 1}\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = /y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "bf787b488d62362158c9cfd4e60a97dc5a06c3a31b8e1654d8b84018669584c0",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-empty-mapping.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-empty-mapping",
+      "mode": "text",
+      "desc": "set a key in a file with an empty mapping for the time.Time key (accepted)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: {}\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = /y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "c5d5e99eda30576c369fc3062e0c8f30dcd44a2ff4e8a5e034ed53d03d171975",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-sequence.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-sequence",
+      "mode": "text",
+      "desc": "set a key in a file with a sequence for the time.Time key",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: [1]\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into time.Time: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into time.Time\nError: config is invalid after update: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into time.Time: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into time.Time\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "eb658e19ddc105e6df26e886cb9d14571116ceec13f0c7cd0269488107163e9b",
+          "mode": 384
+        }
+      ]
+    },
+    {
+      "id": "config-set-file-time-tag-str.text",
+      "path": "config set",
+      "scenario": "config-set-file-time-tag-str",
+      "mode": "text",
+      "desc": "set a key in a file with an explicit !!str date for the time.Time key",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: !!str 2026-10-31\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: parsing time \"2026-10-31\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"T\": parsing time \"2026-10-31\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"T\"\nError: config is invalid after update: parsing time \"2026-10-31\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"T\": parsing time \"2026-10-31\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"T\"\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9f0199429098fd8b08c7f537de4b316a70bd855697877d5088e129daa93f094e",
+          "mode": 384
         }
       ]
     },

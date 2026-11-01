@@ -138,7 +138,7 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Confi
         rendered.push('\n');
     }
     // Go re-encodes the whole document with a two-space indent.
-    let rendered = reindent_two_spaces(&rendered);
+    let rendered = crate::config_typed::tag_merge_keys(&reindent_two_spaces(&rendered));
     atomic_write(path, rendered.as_bytes())?;
     // Go rejects traversal on its post-write reload, even when Windows
     // resolves the raw rename destination through a parent component.
