@@ -23,6 +23,8 @@ pub mod broker;
 mod call;
 pub mod http;
 mod oauth;
+pub mod payment;
+pub mod perplexity;
 mod prompts;
 pub mod render;
 mod request_context;
@@ -246,7 +248,8 @@ impl Message {
     /// Builds a response whose result is a typed value, preserving that type's
     /// declared field order.
     fn response_from<T: Serialize>(id: Option<Box<RawValue>>, result: &T) -> Result<Self, Error> {
-        let raw = serde_json::value::to_raw_value(result).map_err(Error::Serialize)?;
+        let raw =
+            go_escaped_raw(&serde_json::value::to_raw_value(result).map_err(Error::Serialize)?)?;
         Ok(Message {
             error: None,
             jsonrpc: "2.0".to_string(),
@@ -258,7 +261,8 @@ impl Message {
     }
 
     fn response(id: Option<Box<RawValue>>, result: serde_json::Value) -> Result<Self, Error> {
-        let raw = serde_json::value::to_raw_value(&result).map_err(Error::Serialize)?;
+        let raw =
+            go_escaped_raw(&serde_json::value::to_raw_value(&result).map_err(Error::Serialize)?)?;
         Ok(Message {
             error: None,
             jsonrpc: "2.0".to_string(),
@@ -1056,6 +1060,14 @@ fn max_nesting_depth(line: &str) -> usize {
         }
     }
     max
+}
+
+/// Go marshals every handler result as data, so `<`, `>`, `&`, U+2028 and
+/// U+2029 inside result strings (tool error texts, tool descriptions) leave
+/// the process escaped. A `RawValue` is emitted verbatim by the frame
+/// encoder, so apply the same escaping to the pre-rendered result here.
+fn go_escaped_raw(raw: &RawValue) -> Result<Box<RawValue>, Error> {
+    RawValue::from_string(symvault_gojson::compact(raw.get())).map_err(Error::Serialize)
 }
 
 /// Encodes a frame the way the oracle's `json.Marshal` would.

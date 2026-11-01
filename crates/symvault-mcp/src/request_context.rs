@@ -44,6 +44,21 @@ impl RequestContext {
         }
     }
 
+    /// Go's `ctx.Err()` text once the context is done, for handlers that
+    /// wrap the context error itself (`requireApproval`).
+    pub fn go_err(&self) -> Option<&'static str> {
+        if self.cancelled.load(Ordering::Acquire) {
+            Some("context canceled")
+        } else if self
+            .deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            Some("context deadline exceeded")
+        } else {
+            None
+        }
+    }
+
     pub(crate) async fn wait<T>(
         &self,
         future: impl Future<Output = Result<T, String>>,
@@ -59,5 +74,22 @@ impl RequestContext {
                 Err(_) => continue,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn go_err_matches_go_context_errors() {
+        let context = RequestContext::default();
+        assert_eq!(context.go_err(), None);
+        assert_eq!(
+            context.with_timeout(Duration::ZERO).go_err(),
+            Some("context deadline exceeded")
+        );
+        context.cancel();
+        assert_eq!(context.go_err(), Some("context canceled"));
     }
 }
