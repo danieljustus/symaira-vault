@@ -178,6 +178,40 @@ a message starting with `vault not initialized` with doubled error lines and
 the init hint (including approval/file commands). `auth status` (code 1) and
 `finish_vault_result_exit_1` keep a single error line.
 
+## CLI-006 delta review follow-ups, 2026-11-01
+
+Fixed, each pinned against the real Go binary (oracle `bf7f687b`) in
+`testdata/port/cli/output-modes.json` (524 cases now; 54 added, 48 of them differed before):
+
+- `config set` reload: aliases (the error names the anchor's line), `<<` merge keys (own keys win, a
+  sequence of maps, a non-mapping operand aborts), explicit tags (`!!str 12` stays a string, `!!int abc`
+  aborts with `yaml: cannot decode …`), duplicate keys, and `time.Time` fields (`vault.last_rotated`
+  takes a mapping, a plain timestamp and RFC 3339 text; anything else aborts with Go's
+  `parsing time … as "2006-01-02T15:04:05Z07:00": …`). Core `Config::load` treats a `last_rotated` mapping
+  as the zero time.
+- yaml.v3 resolver: `0b+1`, `0b-1`, `0o-12`, `0o+12` are ints, `.1_0`, `.5_6`, `.5e1_0` floats, so Go quotes
+  them (`yaml-scalars.json`, 306 values).
+- `gen_config_schema.py` reads every non-test `internal/config` file and stops on a field it cannot model.
+- Config reads and `agent profile export -o` print ENOTDIR, ELOOP, ENAMETOOLONG (and every other
+  create failure) as Go's `open <path>: <cause>`.
+
+Still open (probed, not fixed; see the CFG-003 and CLI-005 rows of the contract matrix):
+
+| Class | Go | Rust |
+| --- | --- | --- |
+| `Config::load`: `vault.authMethod: 12` / `abc` | accepted by the typed reload | `must be a string` / `invalid authMethod` |
+| `Config::load`: `mcp.port: 1.5`, `!!float 3` | accepted | `port must be an integer` |
+| `Config::load`: `useTouchID: y`, `approval_required: n` | accepted (YAML 1.1 words) | `must be a boolean` |
+| `Config::load`: `sessionTimeout: null` | `must be greater than 0, got 0s (default: 15m, …)` | `parse config: sessionTimeout must be a string` |
+| `Config::load`: custom or non-specific tags on scalars | accepted | serde_yaml_ng enum error |
+| `Config::load`: recursive alias under an unread key | accepted | `recursion limit exceeded` |
+| `profiles:\n  x: null` | nil pointer panic, exit 2 | parse error, exit 6 |
+| `config set x 1e3` / `0b11` / `010` / `y` / `2026-10-31` | writes `1000` / `3` / `8` / `"y"` / `2026-10-31T00:00:00Z` | `1000.0` / `"0b11"` / `10` / `y` / `2026-10-31` |
+| `config set x '<<'` | writes `!!merge <<` | writes `"<<"` |
+| re-encode of the rest of the file | CRLF becomes LF; anchor comments move behind the collection (changing reported lines); explicit keys, `\u00e9` escapes, verbatim and `!` tags, `!!int &a 12` order, tagged block sequence indent are normalised | kept as written |
+| root that is not a mapping | `root node is a scalar, not a mapping` (or `a sequence`) | `document has no root to descend into` |
+| typed decode, anchors | the preceding definition of a redefined anchor; the anchor's line even behind a comment | the last definition; the collection's line |
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate

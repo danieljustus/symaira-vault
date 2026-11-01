@@ -3,7 +3,7 @@
 ## CLI-006 positive output matrix, 2026-10-31 (review fixes 2026-11-01)
 
 `outputmodegen` (oracle `bf7f687b`, darwin) records text, `--json`, `--output yaml`, `--output json` and
-`--quiet` for the 47 gate rows that do not refuse both formats: 470 cases, 47 paths, 6 frozen seeds, in
+`--quiet` for the 47 gate rows that do not refuse both formats: 524 cases (470 at the first recording), 47 paths, 6 frozen seeds, in
 `testdata/port/cli/output-modes.json`; `crates/symvault-cli/tests/output_modes.rs` replays them byte for byte
 (stdout, stderr, exit, file-tree effect incl. permission bits). Targets: `make output-modes-cli-differential`
 (re-verifies against a rebuilt oracle, then replays) and `make output-modes-regenerate` (keeps the frozen seeds).
@@ -23,8 +23,9 @@ Review fixes (REQUEST_CHANGES, each pinned against the real Go binary):
   (the corpus is darwin-recorded: `oracle.goos`); the Rust replay prints its own `SKIP`. Verified in the local
   gate image on Linux (`make output-modes-cli-differential` exit 0, both notices on stderr). The corpus therefore
   does not gate Linux/Windows: the evidence is the darwin run.
-- **`config set` typed decode.** The panic on `&value[..7]` is gone (Go cuts at seven bytes; the text keeps the
-  invalid tail as U+FFFD), and a scalar of the wrong YAML type for a typed field (`sessionTimeout 12` is
+- **`config set` typed decode.** The panic on `&value[..7]` is gone (Go cuts at seven bytes; the error text carries
+  the raw bytes, and U+FFFD shows up only in the fixture's reader-facing `stderr` field, the exact bytes being
+  `stderr_b64`), and a scalar of the wrong YAML type for a typed field (`sessionTimeout 12` is
   `!!int` into a `Duration`) fails like Go with exit 6 instead of being written. The cases are recorded from
   the Go binary.
 - **Normalization honesty.** One numbered list of 14 rules (`root`, `bin`, `dated-id`, `tmp-suffix`,
@@ -46,7 +47,7 @@ Review fixes (REQUEST_CHANGES, each pinned against the real Go binary):
   (`make yaml-scalar-differential`).
 
 Verified (HEAD at commit time): `outputmodegen --check` PASS against the rebuilt-pin oracle; replay 470 cases
-(>= 3 per path, all 47 paths) green; negative control (one byte of `version.text` changed) fails both `--check`
+(>= 3 per path, all 47 paths; 524 after the delta-review follow-ups below) green; negative control (one byte of `version.text` changed) fails both `--check`
 and the replay. `error_taxonomy` and `cli_device_approval` expectations moved with the fixes (`delete x`,
 `device approval-revoke` now Go-exact); `empty_flow_mapping_root` became a regular `config-yaml-syntax.json` case
 (94 cases, 32 open divergences, 441 comparisons). Like all 16 `accepted` cases it records `validate`,
@@ -62,6 +63,18 @@ was a Rust bug, not a sandbox effect: every JXA adapter in `symvault-platform/sr
 `console.log`, which osascript writes to stderr, so `run_jxa` read an empty stdout. Fixed by ending each script in
 its result expression (and asking Go's biometric-only policy 1, not 2);
 `jxa_reports_through_the_last_expression_on_stdout` and `jxa_scripts_never_report_through_console_log` pin it.
+
+## CLI-006 delta review follow-ups, 2026-11-01
+
+Branch `local/cli006` on 22c51834, one commit per area: `config set` typed reload ported from yaml.v3's
+`decode.go` (aliases, merge keys, explicit tags, duplicate keys, `time.Time`; `time.ParseError` wording in
+`symvault-gojson::rfc3339`; plain `<<` written as `!!merge <<`), resolver quirks (`0b+1`, `0o-12`, `.1_0`; 7
+more strings in `yaml-scalars.json`), `gen_config_schema.py` (all `internal/config` files, loud failures,
+`test_gen_config_schema.py` mutation controls inside `config-cli-differential`), and `go_path_error` for config
+reads and `agent profile export -o`. 54 Go-recorded cases (`output-modes.json`, text mode), 48 differ at the
+base. The open classes the review listed (loader strictness, value inference and re-encode differences,
+`profiles.x: null`) are recorded with probes in the CFG-003 and CLI-005 rows of the contract matrix and in
+`cli-gap-inventory.md`. The one `output-modes` harness change: work files may be symbolic links (`link`).
 
 ## IO-001 invalid-byte representation, 2026-10-31
 
