@@ -162,6 +162,9 @@ type fixture struct {
 	// launchctl or systemctl.
 	ServiceManagerCommands []string       `json:"service_manager_commands"`
 	RunFileUseArgv         []scenarioCase `json:"run_file_use_argv"`
+	// UnlockStates are the commands that unlock the vault, run against the vault
+	// shapes the other sections never reach (see unlockStateInputs).
+	UnlockStates []scenarioCase `json:"unlock_states"`
 }
 
 type treeFile struct {
@@ -347,9 +350,16 @@ type result struct {
 // runSpec is what a run needs besides argv: disposable working-directory files,
 // a frozen vault tree and whether the initialized-vault environment applies.
 type runSpec struct {
-	files       map[string]string
-	seed        []seedFile
+	files map[string]string
+	seed  []seedFile
+	// initialized adds the passphrase environment (SYMVAULT_PASSPHRASE with its
+	// opt-in); the locked states leave it out and only pin the time zone.
 	initialized bool
+	tzOnly      bool
+	// omit names vault files (by base name) left out of the seed.
+	omit []string
+	// configSuffix is appended to the seeded config.yaml.
+	configSuffix string
 }
 
 // run executes the oracle in a fresh sandbox whose working directory holds files. A timed-out command keeps the
@@ -366,8 +376,10 @@ func runSpecified(goBinary string, args []string, spec runSpec) (result, error) 
 	defer func() { _ = os.RemoveAll(box.root) }()
 	if spec.initialized {
 		box.env = append(box.env, initializedEnv()...)
+	} else if spec.tzOnly {
+		box.env = append(box.env, "TZ=UTC")
 	}
-	if err := box.writeSeed(spec.seed); err != nil {
+	if err := box.writeSeed(withConfigSuffix(withoutFiles(spec.seed, spec.omit), spec.configSuffix)); err != nil {
 		return result{}, err
 	}
 	for name, content := range spec.files {
@@ -771,13 +783,14 @@ func main() {
 		HostDependentCommands:     extras.hostDependent,
 		ServiceManagerCommands:    extras.serviceManager,
 		RunFileUseArgv:            extras.runFileUse,
+		UnlockStates:              extras.unlockStates,
 	}
 	content, err := marshalJSON(fresh)
 	if err != nil {
 		fatal("marshal fixture: %v", err)
 	}
-	summary := fmt.Sprintf("%d usage cases, %d arity rows, %d gate rows, %d not-initialized cases, %d argv shapes, %d nil-Args commands, %d extra-positional scenarios, %d run/file-use argv scenarios",
-		len(usage), len(arity), len(gate), len(notInitialized), len(shapes), len(extras.nilArgs), len(extras.extraPositionals), len(extras.runFileUse))
+	summary := fmt.Sprintf("%d usage cases, %d arity rows, %d gate rows, %d not-initialized cases, %d argv shapes, %d nil-Args commands, %d extra-positional scenarios, %d run/file-use argv scenarios, %d unlock-state scenarios",
+		len(usage), len(arity), len(gate), len(notInitialized), len(shapes), len(extras.nilArgs), len(extras.extraPositionals), len(extras.runFileUse), len(extras.unlockStates))
 	if *check {
 		existing, err := os.ReadFile(*output) // #nosec G304 -- repository fixture path
 		if err != nil {

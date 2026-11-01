@@ -401,6 +401,9 @@ pub fn finish(result: Result<(), Error>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err((code, message)) => {
+            if let Some(locked) = crate::report_failed_passphrase_read(&message, false) {
+                return locked;
+            }
             if code == 3 && crate::is_not_initialized(&message) {
                 crate::write_not_initialized(&message);
             } else {
