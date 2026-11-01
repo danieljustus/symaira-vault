@@ -14,6 +14,7 @@ mod agent_whoami_commands;
 mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
+mod authguard;
 mod backup_commands;
 mod broker_commands;
 mod cli_artifacts;
@@ -30,6 +31,7 @@ mod deprecated_stubs;
 mod device;
 mod device_approval;
 mod doctor_commands;
+mod dynamic_commands;
 mod edit_commands;
 mod export_commands;
 mod file_commands;
@@ -375,6 +377,11 @@ enum Command {
     Migrate {
         #[command(subcommand)]
         command: MigrateCommand,
+    },
+    /// Generate dynamic secrets with time-limited leases.
+    Dynamic {
+        #[command(subcommand)]
+        command: DynamicCommand,
     },
     /// Generate configuration files from built-in templates.
     Template {
@@ -1292,6 +1299,27 @@ enum TemplateCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum DynamicCommand {
+    /// Generate a dynamic secret.
+    ///
+    /// `cobra_usage` validates the flags first (required `--engine` and
+    /// `--role`, Go duration `--ttl`); the body never reads them because the
+    /// oracle registers no engine (`dynamic_commands`). pflag keeps the last
+    /// value of a repeated flag, so repeats must not be a clap error.
+    #[command(args_override_self = true)]
+    Generate {
+        #[arg(long = "engine", allow_hyphen_values = true)]
+        _engine: Option<String>,
+        #[arg(long = "role", allow_hyphen_values = true)]
+        _role: Option<String>,
+        #[arg(long = "ttl", allow_hyphen_values = true)]
+        _ttl: Option<String>,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
+    },
+}
+
 #[derive(Debug, Args)]
 struct VersionArgs {
     #[arg(value_name = "ARG", num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true)]
@@ -1782,6 +1810,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !error.starts_with(READ_PASSPHRASE_PREFIX)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2620,6 +2649,9 @@ fn run_cli() -> ExitCode {
             cli.json,
             cli.quiet,
         ),
+        Some(Command::Dynamic {
+            command: DynamicCommand::Generate { .. },
+        }) => dynamic_commands::generate(cli.vault.as_deref(), cli._profile.as_deref()),
         Some(Command::Template {
             command:
                 TemplateCommand::Generate {
@@ -2718,6 +2750,10 @@ fn run_cli() -> ExitCode {
                 Err(error) if is_not_initialized(&error) => {
                     write_not_initialized(&error);
                     ExitCode::from(3)
+                }
+                // A failed passphrase read is an ExitLocked error in Go.
+                Err(error) if error.starts_with(READ_PASSPHRASE_PREFIX) => {
+                    report_failed_passphrase_read(&error, false).unwrap_or(ExitCode::from(4))
                 }
                 Err(error) if doubled_errors => {
                     print_error_like_go(&error);
@@ -3240,7 +3276,8 @@ fn run_auth_set(
                         fs::read(&config_path).map_err(|error| format!("read config: {error}"))?;
                     let identity_bytes = fs::read(vault.join("identity.age"))
                         .map_err(|error| format!("read identity: {error}"))?;
-                    let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
+                    let _ = &config_bytes;
+                    let passphrase = passphrase_for_biometric_setup(&vault, &runtime)?;
                     decrypt_identity(&identity_bytes, &SecretBytes::new(passphrase.as_bytes()))
                         .map_err(|error| format!("open vault: {error}"))?;
                     session_commands::save_touch_id_passphrase(
@@ -4048,10 +4085,33 @@ pub(crate) fn write_not_initialized(error: &str) {
     );
 }
 
+/// Go's `resolveUnlockPassphrase` wraps a failed passphrase read (an EOF at the
+/// `Passphrase: ` prompt included) in an `ExitLocked` error: cobra and
+/// `ExecuteRoot` each print it, then the locked hint follows and the exit status
+/// is 4. `symvault unlock` swaps the hint (`invokedCommandIsUnlock`).
+const READ_PASSPHRASE_PREFIX: &str = "read passphrase: ";
+
+pub(crate) fn report_failed_passphrase_read(error: &str, unlock_command: bool) -> Option<ExitCode> {
+    if !error.starts_with(READ_PASSPHRASE_PREFIX) {
+        return None;
+    }
+    print_error_like_go(error);
+    let hint = if unlock_command {
+        "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) \u{2014} the passphrase variable alone is ignored."
+    } else {
+        "Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) \u{2014} the passphrase variable alone is ignored."
+    };
+    let _ = writeln!(io::stderr(), "{hint}");
+    Some(ExitCode::from(4))
+}
+
 fn finish_execution_result(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
             if is_not_initialized(&error) {
                 write_not_initialized(&error);
                 return ExitCode::from(3);
@@ -4073,7 +4133,28 @@ fn finish_vault_result_exit_1(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
             let _ = writeln!(io::stderr(), "Error: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+/// A command whose failures Go returns from `RunE` unchanged: cobra and
+/// `ExecuteRoot` each print `Error: <message>`, the exit status is 1.
+fn finish_vault_result_doubled(result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            if let Some(code) = error.strip_prefix(REPORTED_PREFIX) {
+                return ExitCode::from(code.parse().unwrap_or(1));
+            }
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
+            print_error_like_go(&error);
             ExitCode::from(1)
         }
     }
@@ -4085,6 +4166,9 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
         Err(error) => {
             if let Some(code) = error.strip_prefix(REPORTED_PREFIX) {
                 return ExitCode::from(code.parse().unwrap_or(1));
+            }
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
             }
             if is_not_initialized(&error) {
                 write_not_initialized(&error);
@@ -4314,6 +4398,9 @@ fn finish_go_command_result(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
             if is_not_initialized(&error) {
                 write_not_initialized(&error);
                 return ExitCode::from(3);
@@ -4477,8 +4564,8 @@ fn run_migrate_v4(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         let config_path = vault.join("config.yaml");
-        let mut config =
-            Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+        let mut config = Config::load(&config_path)
+            .map_err(|error| config::go_load_config_error(&config_path, &error))?;
 
         // Tier assignment mirrors the oracle: profiles that already carry a
         // non-empty tier are left alone, which makes the migration idempotent.
@@ -4567,7 +4654,7 @@ fn run_migrate_v4(
         );
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled(result)
 }
 
 fn run_migrate_pseudonymize(
@@ -4579,6 +4666,9 @@ fn run_migrate_pseudonymize(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
+        // Go unlocks the vault (environment-passphrase warning, passphrase
+        // prompt) before it asks for the confirmation.
+        let identity = device::unlock_vault(&vault)?;
         if !yes {
             eprint!("Migrate all entries to pseudonymized paths. Make a backup first (y/N): ");
             io::stderr().flush().map_err(|error| error.to_string())?;
@@ -4588,7 +4678,8 @@ fn run_migrate_pseudonymize(
                 .map_err(|error| format!("read confirmation: {error}"))?
                 == 0
             {
-                return Err("read confirmation: EOF".to_owned());
+                // Cobra reports the failure, then `ExecuteRoot` does.
+                return Err(reported(1, "read confirmation: EOF", None));
             }
             if !answer.trim().eq_ignore_ascii_case("y") {
                 eprintln!("Canceled");
@@ -4611,7 +4702,6 @@ fn run_migrate_pseudonymize(
                 .map_err(|error| format!("save config: {error}"))?;
         }
 
-        let identity = device::unlock_vault(&vault)?;
         let store = symvault_store::Store::open_with_legacy_migration(&vault, &identity)
             .map_err(|error| format!("open vault: {error}"))?;
         let summary = store
@@ -4743,7 +4833,7 @@ fn run_migrate_kdf(
         println!("The previous identity.age was backed up to identity.age.bak.");
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled(result)
 }
 
 /// Which `mcp` service action to run.
@@ -4935,6 +5025,7 @@ fn run_mcp(
             .keyring
             .as_deref()
             .ok_or_else(|| "MCP audit keyring unavailable".to_owned())?;
+        mcp_commands::install_auth_guard(authguard::mcp_seams(runtime.keyring.clone()));
         mcp_commands::run(
             &vault,
             agent,
@@ -5195,6 +5286,7 @@ fn run_import_review(
     })();
     if let Err(error) = &result
         && !is_not_initialized(error)
+        && !error.starts_with(READ_PASSPHRASE_PREFIX)
     {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
@@ -5364,6 +5456,30 @@ fn run_unlock(
     finish_session_result(result, true, 3)
 }
 
+/// Go `passphraseForBiometricSetup` (cmd/auth/auth.go): a cached session
+/// passphrase, else a bare `ReadHiddenInput("Passphrase: ")`. It is not
+/// `UnlockVault`: no passphrase policy, no Touch ID and a failed read is a plain
+/// error (exit 1), not `ExitLocked`. Its `SYMVAULT_PASSPHRASE` branch is dead in
+/// the shipped binary because `main` moves the variable out of the environment
+/// (`SniffAndClearEnvPassphrase`) before any command runs.
+#[cfg(target_os = "macos")]
+fn passphrase_for_biometric_setup(
+    vault: &Path,
+    runtime: &RuntimeSession,
+) -> Result<Zeroizing<String>, String> {
+    let vault_string = vault
+        .to_str()
+        .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+    if let Ok(bytes) = runtime.manager.load_passphrase(vault_string)
+        && !bytes.is_empty()
+    {
+        return String::from_utf8(bytes)
+            .map(Zeroizing::new)
+            .map_err(|_| "cached session passphrase is not valid UTF-8".to_owned());
+    }
+    session_input::read_passphrase("Passphrase: ")
+}
+
 fn unlock_passphrase(
     config_bytes: &[u8],
     config: &Config,
@@ -5472,17 +5588,27 @@ fn finish_session_result(
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, locked_error) {
+                return code;
+            }
             if not_initialized_code == 3 && is_not_initialized(&error) {
                 write_not_initialized(&error);
                 return ExitCode::from(3);
             }
+            if locked_error && error.starts_with("session cache is memory-only") {
+                // Cobra reports the ExitLocked error, then `ExecuteRoot` does and
+                // adds the `unlock` flavour of the locked hint.
+                print_error_like_go(&error);
+                let _ = writeln!(
+                    io::stderr(),
+                    "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored."
+                );
+                return ExitCode::from(4);
+            }
             let _ = writeln!(io::stderr(), "Error: {error}");
             if error.contains("vault not initialized") {
                 ExitCode::from(not_initialized_code)
-            } else if locked_error
-                && (error == "no active session"
-                    || error.starts_with("session cache is memory-only"))
-            {
+            } else if locked_error && error == "no active session" {
                 ExitCode::from(4)
             } else {
                 ExitCode::from(1)
@@ -5865,7 +5991,7 @@ mod nil_args_positional_tests {
     /// Nil-Args commands that are not native subcommands yet; the clap parse
     /// is expected to reject their name. The replay lists them as known
     /// body divergences.
-    const NOT_NATIVE: &[&str] = &["symvault dynamic generate", "symvault setup"];
+    const NOT_NATIVE: &[&str] = &["symvault setup"];
 
     fn nil_args_paths() -> Vec<(String, bool)> {
         let raw = std::fs::read_to_string(concat!(
@@ -5908,8 +6034,8 @@ mod nil_args_positional_tests {
                 checked += 1;
             }
         }
-        // 48 runnable nil-Args commands, two of them not native yet.
-        assert_eq!(checked, 46 * 3);
+        // 48 runnable nil-Args commands, minus the ones not native yet.
+        assert_eq!(checked, (48 - NOT_NATIVE.len()) * 3);
     }
 
     #[test]
@@ -5917,6 +6043,33 @@ mod nil_args_positional_tests {
         let paths = nil_args_paths();
         for name in NOT_NATIVE {
             assert!(paths.iter().any(|(path, _)| path == name), "{name}");
+        }
+    }
+
+    /// pflag keeps the last value of a repeated string/duration flag.
+    #[test]
+    fn dynamic_generate_accepts_repeated_flags_like_pflag() {
+        for args in [
+            &[
+                "symvault", "dynamic", "generate", "--engine", "e", "--engine", "f", "--role", "r",
+            ][..],
+            &[
+                "symvault",
+                "dynamic",
+                "generate",
+                "--engine=e",
+                "--engine=f",
+                "--role=r",
+            ][..],
+            &[
+                "symvault", "dynamic", "generate", "--engine", "e", "--role", "r", "--role", "s",
+            ][..],
+            &[
+                "symvault", "dynamic", "generate", "--engine", "e", "--role", "r", "--ttl", "1m",
+                "--ttl", "2m",
+            ][..],
+        ] {
+            Cli::try_parse_from(args).unwrap_or_else(|error| panic!("{args:?}: {error}"));
         }
     }
 
