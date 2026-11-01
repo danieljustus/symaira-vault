@@ -82,12 +82,41 @@ Environment wall (CoreSimulator, this host, 2026-11-01), evidence:
   component is updated (smallest human action: let `xcodebuild -runFirstLaunch` / the Xcode components installer finish with
   administrator rights, or install the matching CoreSimulator package). The simctl-spawn route above does not need it.
 
-Not done: switching `client/` (`MobileVaultCore.swift`, `Package.swift`, `project.yml`), `release.yml` and
-`scripts/build-vaultcore.sh` to the Rust framework; FFI-002 real-device RSS; a test run on a physical iPhone (needs hardware and
-signing; the `ios-arm64` slice is built but never executed); `x86_64-apple-ios` (Intel simulator) slice (Apple-silicon only by
-design, `ARCHS=arm64`); XCFramework signing/checksum for distribution. Next action: point `client/` at the XCFramework
-(`SYMVAULT_FFI_XCFRAMEWORK` mode of `crates/symvault-ffi/swift/Package.swift` or a `binaryTarget` with checksum in the app
-package).
+Client switch, 2026-11-01 (branch `local/ffi-client`, base `1fd66491`):
+- `client/` now uses the Rust core: `MobileVaultCore.swift` imports `SymvaultFFI` (public API unchanged; every
+  `SymvaultFFIError` becomes `MobileVaultCoreError.frameworkError(<core text>)`, the former `NSError.localizedDescription`
+  surface; `fingerprint(of:)` stays non-throwing). `client/Package.swift` has the `CSymvaultFFI` binaryTarget at
+  `.build/mobilecore/SymvaultFFI.xcframework` plus a `SymvaultFFI` target whose sources are the reviewed wrapper through the
+  symlink `client/Sources/SymvaultFFI` (SwiftPM rejects a target path outside the package; Swift 5 language mode as the wrapper
+  is written for it); `SymvaultKit` links it on iOS, `SymvaultIOS` (SwiftPM target, now also compiling `MobileVaultCore.swift`
+  on macOS) and its tests use it, `project.yml` adds the `SymvaultFFI` product to `SymvaultIOSApp` and excludes `x86_64` for the
+  iOS Simulator SDK (the XCFramework is arm64 only).
+- `scripts/build-vaultcore.sh` builds the Rust XCFramework by default (`rustup target add`, `build-ffi-xcframework.sh`, copy to
+  `client/.build/mobilecore`); `SYMVAULT_VAULTCORE=gomobile` keeps the old gomobile bind (framework only: the Swift side is not
+  switchable, shipping gomobile means building the commit before the switch). `pkg/mobilebind` Go code is untouched (Go
+  removal needs owner authorization). `release.yml` gui-release, `ci.yml` Vaultcore (macOS) and `codeql.yml` (swift) install the
+  pinned toolchain with the three Apple targets before the script; `ci.yml` path filter also routes `crates/symvault-ffi/**`.
+- Two latent `MobileVaultCore.readEntry` bugs fixed (the same under gomobile; found by the new test, red before): the core's
+  entry JSON has no `path` (decoding threw `keyNotFound`, so `VaultStore.loadEntries` silently listed nothing) and field values
+  were interpolated as `string("alice")`. `IntakeTests.swift` is macOS-only now (`#if os(macOS)`, the models are), which unblocked
+  `build-for-testing` for iOS.
+- Verified locally (macOS 27.2, Xcode, `CARGO_TARGET_DIR` under builds/): `make ffi-xcframework` exit 0;
+  `scripts/build-vaultcore.sh` exit 0; `xcodegen generate` + `xcodebuild -scheme SymvaultIOSApp -destination 'generic/platform=iOS
+  Simulator' CODE_SIGNING_ALLOWED=NO build` exit 0, same for `generic/platform=iOS` (device, unsigned) exit 0; `swift build` and
+  `swift test` in `client/` exit 0 (`MobileVaultCoreTests` 3/3 against the real core on macOS, 21 + 9 existing tests);
+  `MobileVaultCoreTests` 3/3 inside the iOS 18.6 Simulator (`build-for-testing` of the package scheme, `simctl spawn xctest
+  -XCTest SymvaultIOSTests.MobileVaultCoreTests`); `make ffi-differential` exit 0 (674 steps / 553 cases; needs a `TMPDIR` that
+  is not under the `/var` symlink, otherwise the Go oracle check reports `/private$ROOT` for four symlink-loop texts: environment,
+  not a regression).
+- Not run: the app itself (compiled and linked only; the simulator run covers `MobileVaultCore` through an XCTest bundle, not
+  the SwiftUI app), the unsigned archive/IPA path of `ios-testflight.sh`, any CI job (release/ci/codeql edits checked with
+  `actionlint` only).
+
+Not done: FFI-002 real-device RSS; a test run on a physical iPhone (needs hardware and signing; the `ios-arm64` slice is built
+and linked into the unsigned device app but never executed); `x86_64-apple-ios` (Intel simulator) slice (Apple-silicon only by
+design, `ARCHS=arm64`); XCFramework signing/checksum for distribution; CI evidence for the changed `release.yml`/`ci.yml`/
+`codeql.yml` steps; Go removal (`pkg/mobilebind`, gomobile tooling in `go.mod`) needs owner authorization. Next action: let the
+closing CI run the three macOS jobs on this branch and read the Rust-target install and XCFramework build steps there.
 
 ## CLI-006 positive output matrix, 2026-10-31 (review fixes 2026-11-01)
 
