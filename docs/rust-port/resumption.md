@@ -30,7 +30,15 @@ then does nothing on a TTY (`setup` wizard) or with both flags (`dynamic generat
 engines `postgres` and `aws-sts`, leases) would claim a port that does not exist, so the
 pins stay until the commands are ported.
 
-Evidence: see the gate section below once the local gate has run at the tip.
+Evidence (local gate at `ad3d35a4`, clean tree, `MAKE_PREFIX=dev-external`, receipts in
+`builds/symaira-vault/local-gate-cli005c/receipts.jsonl`): `macos` exit 0 (1581 tests, 0
+failed; includes `config-cli-differential`, hence the `agent_list`, `auth`, `migrate kdf`
+Go differentials), `linux` exit 0 (1569 tests; `port-contract` incl.
+`error-taxonomy-cli-differential`). The first `linux` receipt for the same SHA is exit 2:
+the Docker VM ran out of disk (`No space left on device` while compiling); the obsolete
+shared volume `symvault-gate-target` (44.6 GB, unused since the per-worktree volumes)
+was removed and `linux` rerun, which overwrote that log (exit 0). Local-only evidence;
+`PASS (local)` is not claimed for the CLI-005 row, which stays TODO.
 
 ## CLI-005b: host tools in the error-taxonomy corpus, 2026-11-01
 
