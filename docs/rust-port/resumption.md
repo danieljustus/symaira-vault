@@ -23,9 +23,24 @@ Evidence (branch `local/ffi-001`, base `22c51834`):
   ffi-fixtures-generate` re-records (new random seed, deliberate), `make ffi-fixtures-check` is the Go check alone.
 - Negative control: one changed byte in an expected error text fails `--check` and the replay.
 
-Differences from Go left open (all asserted, none silent): rust-age's random `*-grease` stanza lengthens X25519
-ciphertexts by 8–200 bytes; non-mapping `config.yaml` wording (`known-divergences.json`, CFG owner); `symvault-store`
-`prepare_entry` keeps `Entry.path` (bridge clears it); Go-written integer `-0` reads as `0`.
+Differences from Go left open (all asserted with the exact Rust text, none silent): rust-age's random `*-grease` stanza
+lengthens X25519 ciphertexts by 8–200 bytes; non-mapping `config.yaml` wording (`known-divergences.json`, CFG owner);
+`symvault-store` `prepare_entry` keeps `Entry.path` (bridge clears it); **D-SYMLINK** (24 cases, needs owner approval):
+Rust refuses a symlink anywhere inside the vault tree where Go follows it (ADR 0031).
+
+Review fixes, 2026-11-01 (independent review of `a2feae44`: REQUEST_CHANGES, F1-F8), on `local/ffi-001` after `4a04546c`:
+- Fixture now 553 cases / 674 steps. New Go-recorded cases: JSON nesting depth 33/129/5000/9999/10000/10001 (objects and
+  arrays, under `data`), store value limits (string > 1 MiB, > 1024 array items, > 1024 fields, nesting > 32), missing
+  `config.yaml` for every vault function, Open's config rewrite, stored and written `-0`, symlink mutations (identity,
+  config, manifest, entry, `entries` and subdirectories; dangling and outside-root targets).
+- Red before: at `4a04546c` the deep cases abort the replay and the 256 KiB-stack test with `stack overflow` (SIGABRT);
+  the missing-config cases mismatch.
+- Green after: `make ffi-differential` exit 0 on macOS (Rust 14 lib + 8 ABI + 1 C ABI + 3 replay/interop + 2, Swift 2
+  tests) and in the Linux gate image (Swift part SKIP); `make ffi-ios-simulator-test`; workspace clippy `-D warnings`,
+  fmt, gofmt/go vet on `mobilebindgen`, `cargo test -p symvault-store`.
+- `tests/c_abi.rs` builds the staticlib itself: `cargo test` never writes `libsymvault_ffi.a`, so an archive left from an
+  earlier `cargo build` could be stale (first Linux run failed for exactly that reason).
+- Pending: independent delta review of these fixes; owner decision on D-SYMLINK.
 
 iOS slices, 2026-11-01 (branch `local/ffi-001`, after `a2feae44`):
 - `make ffi-xcframework` (`scripts/rust-port/build-ffi-xcframework.sh`, exit 0): `ffi` profile for `aarch64-apple-darwin`,

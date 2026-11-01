@@ -145,8 +145,12 @@ if [ "$status" -ne 0 ]; then
   exit "$status"
 fi
 # A green run that replayed nothing is not a pass.
-grep -q 'FFI-001 swift replayed 548 steps over 462 cases' "$log" || {
-  echo "xctest exited 0 but the 548-step replay line is missing: $log" >&2
+# The expected totals come from the fixture, so a re-recorded fixture cannot
+# leave a stale number here.
+fixture="$repo_root/testdata/port/ffi/mobilebind.json"
+expected="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("%d steps over %d cases" % (sum(d["step_counts"].values()), len(d["cases"])))' "$fixture")"
+grep -qF "FFI-001 swift replayed $expected" "$log" || {
+  echo "xctest exited 0 but the replay line 'FFI-001 swift replayed $expected' is missing: $log" >&2
   exit 1
 }
-echo "OK ffi-ios-simulator-test: 548 steps replayed on $udid via the XCFramework iOS-Simulator slice"
+echo "OK ffi-ios-simulator-test: $expected replayed on $udid via the XCFramework iOS-Simulator slice"

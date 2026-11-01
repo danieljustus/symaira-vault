@@ -19,9 +19,9 @@ narrow JSON/string/byte API.
 
 | | Narrow C ABI (chosen) | UniFFI (`mozilla/uniffi-rs`) |
 |---|---|---|
-| Generated API surface | None generated. 13 `extern "C"` functions plus `symvault_buf_free` and `symvault_ffi_abi_version` in one 120-line header; the Swift wrapper (`SymvaultFFI`, ~190 lines) is reviewed source. | A scaffolding crate, a UDL or proc-macro description of the 13 functions, and a generated Swift file plus module map produced by `uniffi-bindgen`. Every change to the description regenerates Swift. |
+| Generated API surface | None generated. 13 `extern "C"` functions plus `symvault_buf_free` and `symvault_ffi_abi_version` in one header; the Swift wrapper (`SymvaultFFI`, ~190 lines) is reviewed source. | A scaffolding crate, a UDL or proc-macro description of the 13 functions, and a generated Swift file plus module map produced by `uniffi-bindgen`. Every change to the description regenerates Swift. |
 | Error texts | `Err(String)` crosses as the exact bytes; Swift throws `SymvaultFFIError.go(text)`. Nothing re-words it. | A `[Error]` type is generated; keeping Go's free-form texts byte-exact means one string-carrying error variant, so the typed-error feature is unused. |
-| Secrets | Caller passes `(ptr, len)`; results come back in a Rust-owned buffer that `symvault_buf_free` zeroizes. No intermediate copies in generated glue. | Arguments and results are serialized through `RustBuffer`; the generated Swift builds `String`/`Data` copies the library cannot zeroize. |
+| Secrets | Caller passes `(ptr, len)`; results come back in a Rust-owned buffer that `symvault_buf_free` zeroizes. The library adds no generated glue and zeroizes its own intermediates (bech32 groups, the entry parse tree, result payloads). Copies made by the caller are outside its control: the Swift wrapper takes `String`/`Data` and returns `String`/`Data`, and Swift does not zeroize those. | Arguments and results are serialized through `RustBuffer`; the generated Swift builds `String`/`Data` copies the library cannot zeroize. |
 | Panics | Every call runs under `catch_unwind`; status 2 reports a contained bug. | Generated scaffolding also catches panics. |
 | New dependency | **None.** Reuses `age`, `zeroize`, `serde_json`, already in `Cargo.lock`. `Cargo.lock` only gains the `symvault-ffi` package entry. | `uniffi` 0.32.x and its tree (`uniffi_core`, `uniffi_macros`, `uniffi_bindgen`, `uniffi_meta`, …) in the shipped supply chain, plus a `uniffi-bindgen` binary in the build. |
 | License | Apache-2.0 like the repository. | `uniffi` is **MPL-2.0** (crate metadata and `LICENSE` upstream). `deny.toml` allows only Apache-2.0, BSD-3-Clause, ISC, MIT, MIT-0, NCSA, Unicode-3.0 and Zlib, so adoption needs a licence exception and a review of MPL file-level obligations for a statically linked iOS binary. |
@@ -98,16 +98,16 @@ Use the narrow C ABI.
   SymvaultFFI.xcframework>` it swaps the C shim target for a `binaryTarget`
   named `CSymvaultFFI`, for any platform the framework has a slice for (the
   manifest turns the absolute path into the relative path SwiftPM requires).
-  Verified on macOS with `swift test` in that mode (548 steps). A consumer
+  Verified on macOS with `swift test` in that mode (674 steps). A consumer
   `Package.swift` for the app (`client/`) is not switched here.
-- **iOS Simulator replay: passed, `xcodebuild test` route blocked.** The 548
+- **iOS Simulator replay: passed, `xcodebuild test` route blocked.** The 674
   steps run green inside an iOS 18.6 Simulator (arm64) against the XCFramework's
   `ios-arm64-simulator` slice: `make ffi-ios-simulator-test`
   (`scripts/rust-port/ffi-ios-simulator-test.sh`) runs `xcodebuild
   build-for-testing -destination generic/platform=iOS Simulator ARCHS=arm64`,
   then `simctl boot` and `simctl spawn <udid> .../iPhoneSimulator.platform/
   Developer/Library/Xcode/Agents/xctest SymvaultFFITests.xctest`; 2 tests, 0
-  failures, `FFI-001 swift replayed 548 steps over 462 cases` in 21.5 s; the
+  failures, `FFI-001 swift replayed 674 steps over 553 cases` in 27.4 s; the
   fixture is read through the host path (`#filePath`), which a Simulator
   process can open. `xcodebuild test -destination 'platform=iOS Simulator,id=…'`
   does **not** work on this host: Xcode 27.2 reports "CoreSimulator is out of
@@ -121,19 +121,63 @@ Use the narrow C ABI.
 - **Not verified: a physical iPhone.** The `ios-arm64` slice is built, the
   linked stub carries `platform IOS`, but no test ran on a device (needs
   hardware and code signing; FFI-002).
-- Residual differences from Go that this bridge carries (not hidden; the replay
-  asserts them):
+- Differences from Go that this bridge carries. The replay asserts every one
+  of them; there is no silent case. An entry in
+  `testdata/port/ffi/known-divergences.json` pins the exact path-normalized
+  text Rust returns (`expected_rust`); the Rust and Swift replays fail when the
+  text is anything else, and when the case starts matching Go.
   1. X25519 ciphertexts from `EncryptWithPublicKey` are 8 to 200 bytes longer
      than Go's: rust-age appends a random `*-grease` stanza to every X25519
      header, Go's age does not. They are valid age files that Go decrypts
      (proved in both directions); only an exact length cannot match.
   2. `OpenVaultWithPassphrase` on a config whose top level is not a mapping
      returns the config loader's wording instead of yaml.v3's
-     `unmarshal errors` text (`testdata/port/ffi/known-divergences.json`, owner:
-     the `symvault-core` config loader).
-  3. `symvault-store`'s `prepare_entry` keeps an `Entry.path` that Go's
+     `unmarshal errors` text (`config-type-mismatch`; owner: the
+     `symvault-core` config loader, CFG rows).
+  3. **D-SYMLINK, needs owner approval.** `symvault-store` never follows a
+     symlink inside the vault tree (`O_NOFOLLOW` traversal, STORE hardening);
+     Go follows them. 24 recorded cases (`symlink-hardening`: symlinked
+     `identity.age`, `config.yaml`, `manifest.age`, an entry, the `entries`
+     directory or a subdirectory of it, dangling and outside-root targets) end
+     in `vault path is a symlink: <path>` where Go succeeds or fails later with
+     a different text. Rust's refusal is deliberately stricter: a symlink
+     planted in a vault directory can redirect a read or an atomic write to a
+     file outside it. This is a security choice made by the STORE rows, not an
+     FFI decision; Go-compatible following would have to be an explicit owner
+     decision. **Needs owner approval** (accept the stricter behaviour, or
+     reopen STORE hardening for the mobile bridge).
+  4. `symvault-store`'s `prepare_entry` keeps an `Entry.path` that Go's
      `cloneEntry` drops; the bridge clears it before writing so stored and
      returned JSON match Go. The store still differs for other callers.
-  4. A stored number written by Go as the integer literal `-0` reads back as
-     `0` (serde_json folds the sign of an integer literal); `-0.0` is kept.
-     Entries the bridge writes itself use `-0.0`.
+- Fixed by the FFI-001 review (no longer divergences, each with fixture cases
+  recorded from the live Go functions):
+  - **Nesting.** `WriteEntryJSON` parses iteratively; Go answers `vault
+    resource limit exceeded` at depth 5000 and a json error beyond 10 000
+    levels. Depths 33, 129, 5000, 9999, 10000 and 10001 for objects and arrays
+    are replayed, also on a 256 KiB thread stack (`fixture_replay.rs`). The
+    store's value limits (nesting > 32, string > 1 MiB, > 1024 array items,
+    too many fields) map to Go's `resource limit` text like `ResourceLimit`.
+  - **Missing `config.yaml`.** `ListEntriesJSON`, `WriteEntryJSON` and
+    `VerifyManifestIntegrity` use default settings and never read
+    `identity.age` (`Store::open_lenient`), as Go does; `OpenVaultWithPassphrase`
+    and `ReadEntryJSON` keep their own behaviour. The config rewrite that
+    `Vault.Open` performs (Go rewrites an init-style or section-less config to
+    the full default config) is replayed, including the untouched case when
+    legacy mode is set.
+  - **Stored `-0`.** A Go-written integer literal `-0` (and `-0.0`) is read
+    back as Go reads it and written back as `-0`; the replay asserts it
+    (`ReadEntryJSON/stored-minus-zero`, `WriteEntryJSON/numbers-minus-zero-forms`).
+    The earlier claim that it read back as `0` is withdrawn.
+  - **Paths.** Errors under a nested directory name the path once
+    (`entries/a/b.age`), not `entries/entries/a/b.age`.
+  - **Writes.** Temporary names in the atomic write are unique per call, so
+    concurrent writers to one target cannot collide (unit test with threads).
+- **Secrets.** Rust-side intermediates holding secret material (bech32 5-bit
+  groups, the identity key, the entry parse tree, result payloads, including
+  one the caller ignores) are zeroized. The caller owns every returned
+  `SvBuf` and frees each exactly once. This does not cover copies on the Swift
+  side (`String`, `Data`) or in the host app.
+- **C check.** `tests/c_abi.rs` compiles `tests/c/abi_check.c` with the system
+  C compiler against the public header and runs it against the static library:
+  struct layout, argument order and widths, buffer ownership, and passphrases
+  as raw bytes (invalid UTF-8 and NUL accepted, as in Go) are checked from C.

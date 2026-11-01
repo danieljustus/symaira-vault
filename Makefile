@@ -835,9 +835,14 @@ FFI_TARGET_ABS := $(abspath $(CARGO_TARGET_DIR))
 FFI_DRIVER := $(FFI_TARGET_ABS)/ffi-driver/mobilebindgen
 ffi-fixtures-generate ffi-fixtures-check ffi-differential: export SYMVAULT_TEST_KEYRING := memory
 
+# FFI_GENERATE_FLAGS=--keep-seed regenerates from the seed already stored in the
+# fixture: existing cases stay byte-identical and only new or changed cases and
+# the provenance header move (without it a fresh random seed rewrites every
+# ciphertext).
+FFI_GENERATE_FLAGS ?=
 ffi-fixtures-generate:
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mobilebindgen \
-		--output testdata/port/ffi/mobilebind.json
+		$(FFI_GENERATE_FLAGS) --output testdata/port/ffi/mobilebind.json
 
 ffi-fixtures-check:
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mobilebindgen \
@@ -864,7 +869,7 @@ ffi-xcframework:
 	CARGO="$(CARGO)" CARGO_TARGET_DIR="$(FFI_TARGET_ABS)" \
 		scripts/rust-port/build-ffi-xcframework.sh
 
-# FFI-001 iOS: replay the 548-step fixture through the Swift package on an iOS
+# FFI-001 iOS: replay the recorded fixture through the Swift package on an iOS
 # Simulator (xcodebuild test) against the XCFramework's simulator slice. Needs a
 # working CoreSimulator and an installed iOS runtime; see the script header for
 # SIMCTL / IOS_SIM_UDID. Not part of `port-contract` (needs a simulator).
