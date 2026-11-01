@@ -110,11 +110,20 @@ fn unlock_passphrase_with_mode(
             if policy.disable_env_passphrase
                 || !(policy.allow_env_passphrase || matches!(opt_in.as_str(), "1" | "true" | "yes"))
             {
-                return Err(if interactive {
-                    "environment passphrase is disabled; opt in with security.allow_env_passphrase or SYMVAULT_ALLOW_ENV_PASSPHRASE=1"
-                } else {
-                    "vault locked: SYMVAULT_PASSPHRASE is set but env passphrase unlock is disabled"
-                }.to_owned());
+                if !interactive {
+                    return Err(
+                        "vault locked: SYMVAULT_PASSPHRASE is set but env passphrase unlock is disabled"
+                            .to_owned(),
+                    );
+                }
+                // Go warns and falls through to the prompt (`resolveUnlockPassphrase`).
+                if !QUIET.load(Ordering::Relaxed) {
+                    eprintln!(
+                        "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it."
+                    );
+                }
+                return read_passphrase("Passphrase: ")
+                    .map_err(|error| format!("read passphrase: {error}"));
             }
             if !QUIET.load(Ordering::Relaxed)
                 && !std::env::var("SYMVAULT_NO_ENV_WARNING")

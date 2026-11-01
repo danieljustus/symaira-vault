@@ -1782,6 +1782,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !error.starts_with(READ_PASSPHRASE_PREFIX)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2719,15 +2720,9 @@ fn run_cli() -> ExitCode {
                     write_not_initialized(&error);
                     ExitCode::from(3)
                 }
-                // A failed passphrase read is an ExitLocked error in Go, which
-                // `ExecuteRoot` follows with the locked hint.
-                Err(error) if error.starts_with("read passphrase: ") => {
-                    print_error_like_go(&error);
-                    let _ = writeln!(
-                        io::stderr(),
-                        "Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored."
-                    );
-                    ExitCode::from(4)
+                // A failed passphrase read is an ExitLocked error in Go.
+                Err(error) if error.starts_with(READ_PASSPHRASE_PREFIX) => {
+                    report_failed_passphrase_read(&error, false).unwrap_or(ExitCode::from(4))
                 }
                 Err(error) if doubled_errors => {
                     print_error_like_go(&error);
@@ -4058,10 +4053,33 @@ pub(crate) fn write_not_initialized(error: &str) {
     );
 }
 
+/// Go's `resolveUnlockPassphrase` wraps a failed passphrase read (an EOF at the
+/// `Passphrase: ` prompt included) in an `ExitLocked` error: cobra and
+/// `ExecuteRoot` each print it, then the locked hint follows and the exit status
+/// is 4. `symvault unlock` swaps the hint (`invokedCommandIsUnlock`).
+const READ_PASSPHRASE_PREFIX: &str = "read passphrase: ";
+
+pub(crate) fn report_failed_passphrase_read(error: &str, unlock_command: bool) -> Option<ExitCode> {
+    if !error.starts_with(READ_PASSPHRASE_PREFIX) {
+        return None;
+    }
+    print_error_like_go(error);
+    let hint = if unlock_command {
+        "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) \u{2014} the passphrase variable alone is ignored."
+    } else {
+        "Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) \u{2014} the passphrase variable alone is ignored."
+    };
+    let _ = writeln!(io::stderr(), "{hint}");
+    Some(ExitCode::from(4))
+}
+
 fn finish_execution_result(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
             if is_not_initialized(&error) {
                 write_not_initialized(&error);
                 return ExitCode::from(3);
@@ -4083,6 +4101,9 @@ fn finish_vault_result_exit_1(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
             let _ = writeln!(io::stderr(), "Error: {error}");
             ExitCode::from(1)
         }
@@ -4098,6 +4119,9 @@ fn finish_vault_result_doubled(result: Result<(), String>) -> ExitCode {
             if let Some(code) = error.strip_prefix(REPORTED_PREFIX) {
                 return ExitCode::from(code.parse().unwrap_or(1));
             }
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
             print_error_like_go(&error);
             ExitCode::from(1)
         }
@@ -4110,6 +4134,9 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
         Err(error) => {
             if let Some(code) = error.strip_prefix(REPORTED_PREFIX) {
                 return ExitCode::from(code.parse().unwrap_or(1));
+            }
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
             }
             if is_not_initialized(&error) {
                 write_not_initialized(&error);
@@ -4339,6 +4366,9 @@ fn finish_go_command_result(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
             if is_not_initialized(&error) {
                 write_not_initialized(&error);
                 return ExitCode::from(3);
@@ -5223,6 +5253,7 @@ fn run_import_review(
     })();
     if let Err(error) = &result
         && !is_not_initialized(error)
+        && !error.starts_with(READ_PASSPHRASE_PREFIX)
     {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
@@ -5500,6 +5531,9 @@ fn finish_session_result(
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(code) = report_failed_passphrase_read(&error, locked_error) {
+                return code;
+            }
             if not_initialized_code == 3 && is_not_initialized(&error) {
                 write_not_initialized(&error);
                 return ExitCode::from(3);

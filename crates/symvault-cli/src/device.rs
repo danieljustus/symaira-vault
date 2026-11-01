@@ -91,23 +91,20 @@ pub(crate) fn unlock_vault(vault: &Path) -> Result<Identity, String> {
 }
 
 /// `device pair` has no initialization gate in Go: `UnlockVault` resolves the
-/// passphrase against the default configuration (prompt included) and only then
-/// fails to open the missing identity file.
+/// actual configuration (a missing `config.yaml` is the default one), obtains
+/// the passphrase under that policy and only then opens the vault, which reads
+/// `identity.age` and loads `config.yaml`.
 fn unlock_vault_like_go_pair(vault: &Path) -> Result<Identity, String> {
-    if is_initialized(vault) {
-        return unlock_vault(vault);
-    }
     let runtime = crate::runtime_session_manager();
-    crate::unlock_passphrase_with_mode(b"{}", &Config::default(), vault, &runtime, true)?;
-    let identity_path = vault.join("identity.age");
-    Err(format!(
-        "open vault: read identity file: {}",
-        crate::config::format_go_path_error(
-            "open",
-            &identity_path,
-            &std::io::Error::from(std::io::ErrorKind::NotFound)
-        )
-    ))
+    unlock_vault_with_mode(vault, &runtime, true)
+}
+
+fn go_missing_file_error(vault: &Path, name: &str) -> String {
+    crate::config::format_go_path_error(
+        "open",
+        &vault.join(name),
+        &std::io::Error::from(std::io::ErrorKind::NotFound),
+    )
 }
 
 pub(crate) fn unlock_vault_for_transport(
@@ -141,18 +138,32 @@ fn unlock_vault_with_mode(
         .to_str()
         .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
     let config_path = vault.join("config.yaml");
-    let config = Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
-    let config_bytes = safeio::read(&config_path)
-        .map_err(|e| format!("read config: {e}"))?
-        .ok_or_else(|| "configuration is missing".to_owned())?;
+    // Go resolves the configuration first; a missing file is the default one
+    // (and `OpenWithPassphrase` reports it later, once the identity is read).
+    let (config, config_bytes, config_present) = match Config::load(&config_path) {
+        Ok(config) => {
+            let bytes = safeio::read(&config_path)
+                .map_err(|e| format!("read config: {e}"))?
+                .ok_or_else(|| "configuration is missing".to_owned())?;
+            (config, bytes, true)
+        }
+        Err(symvault_core::config::ConfigError::Read(error))
+            if error.kind() == std::io::ErrorKind::NotFound =>
+        {
+            (Config::default(), b"{}".to_vec(), false)
+        }
+        Err(error) => return Err(format!("load config: {error}")),
+    };
 
     // A cached private identity is the fastest path and deliberately avoids
     // reading or decrypting the on-disk envelope. SessionManager renews the
-    // idle timestamp when `refresh` is true, matching Go's vault reads.
-    if let Ok(cached) = runtime
-        .manager
-        .load_identity(vault_string, true)
-        .map(zeroize::Zeroizing::new)
+    // idle timestamp when `refresh` is true, matching Go's vault reads. Go opens
+    // the cached identity through the configuration, so without one it is a miss.
+    if config_present
+        && let Ok(cached) = runtime
+            .manager
+            .load_identity(vault_string, true)
+            .map(zeroize::Zeroizing::new)
         && let Ok(text) = std::str::from_utf8(&cached)
         && let Ok(identity) = parse_identity(text.trim())
     {
@@ -160,10 +171,16 @@ fn unlock_vault_with_mode(
         return Ok(identity);
     }
 
+    // Go reads the identity file only once a passphrase is in hand, so a missing
+    // one must not hide the passphrase policy (prompt, Touch ID, environment).
     let id_path = vault.join("identity.age");
-    let data = safeio::read(&id_path)
-        .map_err(|e| format!("read identity: {e}"))?
-        .ok_or_else(|| "vault is not initialized (run 'symvault init' first)".to_owned())?;
+    let data = safeio::read(&id_path).map_err(|e| format!("read identity: {e}"))?;
+    let missing_identity = || {
+        format!(
+            "open vault: read identity file: {}",
+            go_missing_file_error(vault, "identity.age")
+        )
+    };
 
     // Prefer the encrypted session passphrase before invoking Touch ID or a
     // prompt. A bad/expired cache is recoverable and falls through to the
@@ -172,17 +189,29 @@ fn unlock_vault_with_mode(
         .manager
         .load_passphrase(vault_string)
         .map(zeroize::Zeroizing::new)
-        && let Ok(identity) = decrypt_identity(&data, &SecretBytes::new(&cached))
     {
-        open_unlocked_vault(vault, &identity).map_err(|error| format!("open vault: {error}"))?;
-        save_unlocked_session(runtime, vault_string, &config, &cached, &identity)?;
-        return Ok(identity);
+        let Some(data) = data.as_deref() else {
+            return Err(missing_identity());
+        };
+        if let Ok(identity) = decrypt_identity(data, &SecretBytes::new(&cached)) {
+            open_unlocked_vault(vault, &identity)
+                .map_err(|error| format!("open vault: {error}"))?;
+            save_unlocked_session(runtime, vault_string, &config, &cached, &identity)?;
+            return Ok(identity);
+        }
     }
 
     let passphrase =
         crate::unlock_passphrase_with_mode(&config_bytes, &config, vault, runtime, interactive)?;
+    let data = data.ok_or_else(missing_identity)?;
     let sec_pass = SecretBytes::new(passphrase.as_bytes());
     let identity = decrypt_identity(&data, &sec_pass).map_err(|e| format!("unlock vault: {e}"))?;
+    if !config_present {
+        return Err(format!(
+            "open vault: load config: {}",
+            go_missing_file_error(vault, "config.yaml")
+        ));
+    }
     open_unlocked_vault(vault, &identity).map_err(|error| format!("open vault: {error}"))?;
     if !input::env_passphrase_selected(&config_bytes) {
         save_unlocked_session(
