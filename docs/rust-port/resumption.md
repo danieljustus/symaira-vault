@@ -112,6 +112,19 @@ Client switch, 2026-11-01 (branch `local/ffi-client`, base `1fd66491`):
   the SwiftUI app), the unsigned archive/IPA path of `ios-testflight.sh`, any CI job (release/ci/codeql edits checked with
   `actionlint` only).
 
+Client switch review and merge (2026-11-01): review of `a690a4c9` REQUEST_CHANGES; fixed in `c0b5d561`
+(`build-vaultcore.sh` rebuilds the Rust framework on every run and swaps an existing one aside instead of moving the new one
+into it; `release.yml`/`codeql.yml` build the Rust core before the signing keychain and the appkit git token exist; ci.yml
+`macos-vaultcore` path filter covers `crates/*`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`; no global `rustup
+default`; numbers render exactly instead of `%g`; docs name the arm64-only requirement and that the gomobile fallback is not
+linkable by this client). Delta review REQUEST_CHANGES (`-0` lost its sign), fixed in `6cf57b8c`, re-review APPROVE.
+Fast-forwarded into `local/rust-port` at `6cf57b8c`; local gate macos and linux exit 0 (receipts in
+`builds/symaira-vault/local-gate/receipts.jsonl`). `xcodebuild test -scheme SymvaultClient-Package -destination
+'id=<iOS 18.6 Simulator>' -only-testing:SymvaultIOSTests/MobileVaultCoreTests` passed 3/3 (the generated `Symvault.xcodeproj`
+must be moved aside, otherwise xcodebuild picks the project, which only has the app scheme); the CoreSimulator wall below did
+not reproduce. The whole `SymvaultIOSTests` bundle unsigned: `ApprovalSessionStoreTests` fail with `-34018` (missing keychain
+entitlement without a signed test host), not caused by the switch.
+
 Not done: FFI-002 real-device RSS; a test run on a physical iPhone (needs hardware and signing; the `ios-arm64` slice is built
 and linked into the unsigned device app but never executed); `x86_64-apple-ios` (Intel simulator) slice (Apple-silicon only by
 design, `ARCHS=arm64`); XCFramework signing/checksum for distribution; CI evidence for the changed `release.yml`/`ci.yml`/
