@@ -1502,6 +1502,7 @@ pub fn run_add_form(force: bool, defaults: &FormDefaults) -> Result<FormResult, 
     form.start(Instant::now());
     let signals = SignalFlags::install();
     let mut pending: Option<Event> = None;
+    let mut dirty = true;
     let flow = loop {
         if signals.interrupted() {
             let _ = write!(out, "\r\n");
@@ -1513,10 +1514,16 @@ pub fn run_add_form(force: bool, defaults: &FormDefaults) -> Result<FormResult, 
             break Flow::Submit;
         }
         let now = Instant::now();
-        form.run_due_ticks(now);
-        renderer
-            .draw(&mut out, &form.view(now), terminal_columns())
-            .map_err(fail)?;
+        if form.next_tick().is_some_and(|due| due <= now) {
+            form.run_due_ticks(now);
+            dirty = true;
+        }
+        if dirty {
+            renderer
+                .draw(&mut out, &form.view(now), terminal_columns())
+                .map_err(fail)?;
+            dirty = false;
+        }
         if pending.is_none() {
             let wait = form.next_tick().map_or(Duration::from_millis(50), |due| {
                 due.saturating_duration_since(Instant::now())
@@ -1526,6 +1533,7 @@ pub fn run_add_form(force: bool, defaults: &FormDefaults) -> Result<FormResult, 
                 continue;
             }
         }
+        dirty = true;
         let flow = match read_message(&mut pending)? {
             Some(Message::Key(key)) => form.key(&key, Instant::now()),
             Some(Message::Text(runes)) => form.text(&runes, Instant::now()),

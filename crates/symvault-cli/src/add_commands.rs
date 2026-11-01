@@ -10,7 +10,7 @@ use std::{
 use serde_json::Value;
 use symvault_core::{password, totp};
 use symvault_crypto::Identity;
-use symvault_store::{Entry, SecretMetadata, SecretType, WriteRecord, infer_secret_type};
+use symvault_store::{Entry, SecretMetadata, SecretType, infer_secret_type};
 use symvault_sync::GoTime;
 
 #[path = "add_form.rs"]
@@ -148,14 +148,8 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<(),
         for (key, value) in &result.data {
             data.insert(key.clone(), value.clone());
         }
-        let field = if result.data.contains_key("password") {
-            "password"
-        } else {
-            ""
-        }
-        .to_owned();
         form = Some(result);
-        (String::new(), field, SecretType::Custom)
+        (String::new(), String::new(), SecretType::Custom)
     } else {
         return Err(
             "interactive add form is not implemented; use --value, --stdin-value, or --generate"
@@ -231,24 +225,20 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<(),
         secret_metadata.expires_at = Some(parsed.to_rfc3339_nano());
     }
 
-    let record = WriteRecord {
-        field,
-        action: "add".to_owned(),
-        ..WriteRecord::default()
-    };
-    let entry = Entry {
+    // Go's `add` writes a fresh `Entry{Created, Updated, Version: 1}` without a
+    // pending write record: the store bumps the version to 2 and keeps no
+    // write history.
+    let now = GoTime::now().to_rfc3339_nano();
+    let mut entry = Entry {
         data,
         secret_metadata,
         ..Entry::default()
     };
+    entry.metadata.created = now.clone();
+    entry.metadata.updated = now.clone();
+    entry.metadata.version = 1;
     store
-        .write_entry_with_recipients_at(
-            &options.path,
-            &entry,
-            identity,
-            &GoTime::now().to_rfc3339_nano(),
-            Some(&record),
-        )
+        .write_entry_with_recipients_at(&options.path, &entry, identity, &now, None)
         .map_err(|error| format!("cannot create entry: {error}"))?;
 
     // Go treats auto-commit failure as a warning after the entry is durable.
@@ -308,7 +298,9 @@ fn form_secret_metadata(options: &AddOptions, form: &add_form::FormResult) -> Se
 /// Go's `warnArgvExposure`: secrets on the command line are visible in process
 /// listings, which matters when a person is sitting at the terminal.
 fn warn_argv_exposure(options: &AddOptions) {
-    if quiet_requested() || !std::io::stdin().is_terminal() {
+    // Go prints these even under `--quiet` (observed with the oracle: the
+    // command-scoped quiet flag is applied after `cliout.Warnf` consults it).
+    if !std::io::stdin().is_terminal() {
         return;
     }
     if options
@@ -325,24 +317,6 @@ fn warn_argv_exposure(options: &AddOptions) {
             "Warning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input."
         );
     }
-}
-
-/// Reads `--quiet` from the command line: `cliout.Warnf` is silent under
-/// `QuietMode`, and the flag is not otherwise visible to this module.
-fn quiet_requested() -> bool {
-    let mut quiet = false;
-    for arg in std::env::args().skip(1) {
-        match arg.as_str() {
-            "--" => break,
-            "--quiet" => quiet = true,
-            other => {
-                if let Some(value) = other.strip_prefix("--quiet=") {
-                    quiet = matches!(value, "1" | "t" | "T" | "true" | "TRUE" | "True");
-                }
-            }
-        }
-    }
-    quiet
 }
 
 fn value_for_type(data: &BTreeMap<String, Value>, field: &str) -> String {

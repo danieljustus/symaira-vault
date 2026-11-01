@@ -432,10 +432,16 @@ fn value_flag_on_a_terminal_warns_about_process_listings() {
         ),
         "{text}"
     );
+    // Go prints the warning even under --quiet (only "Entry created" is silenced).
     let quiet = {
         let pty = Pty::spawn(&root, &["add", "e2", "--quiet", "--value", STRONG]);
         pty.finish()
     };
     assert_eq!(quiet.0, 0, "{}", quiet.1);
-    assert!(!quiet.1.contains("Warning:"), "{}", quiet.1);
+    assert!(
+        quiet.1.contains("Warning: --value is visible"),
+        "{}",
+        quiet.1
+    );
+    assert!(!quiet.1.contains("Entry created"), "{}", quiet.1);
 }
