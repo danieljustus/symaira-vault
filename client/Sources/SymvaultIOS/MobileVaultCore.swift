@@ -133,9 +133,12 @@ public struct MobileVaultCore: Sendable {
             switch self {
             case .string(let s): return s
             case .number(let n):
-                // Integral values print exactly (Go stores numbers as float64,
-                // exact up to 2^53); others use Swift's shortest round-trip form.
-                if n == n.rounded(), abs(n) < 9_007_199_254_740_992 { return String(Int64(n)) }
+                // Integral doubles in Int64 range print as their exact integer
+                // value (Go stores numbers as float64); others, and -0 (whose
+                // sign Int64 would drop), use Swift's shortest round-trip form.
+                if n == n.rounded(), abs(n) < 0x1p63, !(n == 0 && n.sign == .minus) {
+                    return String(Int64(n))
+                }
                 return "\(n)"
             case .bool(let b): return b ? "true" : "false"
             }
