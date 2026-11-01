@@ -52,6 +52,7 @@ mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod setup_wizard;
 mod share_commands;
 mod startup_profile_commands;
 mod sync_commands;
@@ -235,6 +236,19 @@ enum Command {
         vault_dir: Option<PathBuf>,
         #[arg(long, default_value = "ask")]
         auth: String,
+    },
+    /// Interactive setup wizard for Symaira Vault.
+    Setup {
+        /// Do not rollback vault init artifacts when subsequent steps fail.
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "keep_on_error")]
+        keep_on_error: bool,
+        /// Disable setup resume after abort.
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_resume")]
+        no_resume: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Add a new password entry.
     #[command(alias = "new", alias = "create")]
@@ -1420,6 +1434,16 @@ fn run_cli() -> ExitCode {
             shell,
             no_descriptions,
         }) => completion_commands::generate(shell.as_deref(), no_descriptions, Cli::command()),
+        Some(Command::Setup {
+            keep_on_error,
+            no_resume,
+            ..
+        }) => run_setup(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            keep_on_error,
+            no_resume,
+        ),
         Some(Command::Init { vault_dir, auth }) => run_init(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -3568,6 +3592,55 @@ fn run_file(
         Ok::<(), String>(())
     })();
     finish_vault_result(result)
+}
+
+/// `symvault setup`: the Go command refuses to start without a terminal on
+/// stdin, then hands the vault directory `cli.GetVaultDir()` resolves to
+/// (the resolver's data directory when resolution fails) to the wizard.
+fn run_setup(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    keep_on_error: bool,
+    no_resume: bool,
+) -> ExitCode {
+    if !setup_wizard::stdin_is_terminal() {
+        print_error_like_go(setup_wizard::NON_TTY_ERROR);
+        return ExitCode::from(1);
+    }
+    let vault_dir = resolve_vault(explicit_vault, profile)
+        .unwrap_or_else(|_| PathResolver::new().data_dir)
+        .to_string_lossy()
+        .into_owned();
+    let environment = setup_wizard::Environment {
+        // Like the unlock path, never probe or use Touch ID under CI/headless
+        // runs: the probe shells out to JXA and a later save would touch the
+        // login keychain.
+        touch_id_available: !is_test_or_ci() && touch_id_available(),
+        save_touch_id: Box::new(|vault, passphrase| {
+            #[cfg(target_os = "macos")]
+            {
+                let runtime = runtime_session_manager();
+                session_commands::save_touch_id_passphrase(
+                    vault,
+                    touch_id_items(&runtime).as_ref(),
+                    passphrase,
+                )
+                .map_err(|error| error.to_string())
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (vault, passphrase);
+                Err("touch ID is not available in this Symaira Vault build".to_owned())
+            }
+        }),
+    };
+    match setup_wizard::run(&vault_dir, keep_on_error, no_resume, environment) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(message) => {
+            print_error_like_go(&message);
+            ExitCode::from(1)
+        }
+    }
 }
 
 fn run_init(
