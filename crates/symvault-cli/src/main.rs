@@ -2719,6 +2719,16 @@ fn run_cli() -> ExitCode {
                     write_not_initialized(&error);
                     ExitCode::from(3)
                 }
+                // A failed passphrase read is an ExitLocked error in Go, which
+                // `ExecuteRoot` follows with the locked hint.
+                Err(error) if error.starts_with("read passphrase: ") => {
+                    print_error_like_go(&error);
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored."
+                    );
+                    ExitCode::from(4)
+                }
                 Err(error) if doubled_errors => {
                     print_error_like_go(&error);
                     ExitCode::from(1)

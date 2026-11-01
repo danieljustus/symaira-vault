@@ -73,36 +73,6 @@
     {
       "expected_rust": {
         "exit_code": 1,
-        "stderr": "Error: vault is not initialized (run 'symvault init' first)\nError: vault is not initialized (run 'symvault init' first)\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_device_pair_dd1",
-      "reason": "Go asks for the passphrase before it checks the vault (exit 4); the native command reports `vault is not initialized` (exit 1)",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "Error: vault is not initialized (run 'symvault init' first)\nError: vault is not initialized (run 'symvault init' first)\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_device_pair_x1",
-      "reason": "Go asks for the passphrase before it checks the vault (exit 4); the native command reports `vault is not initialized` (exit 1)",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "Error: vault is not initialized (run 'symvault init' first)\nError: vault is not initialized (run 'symvault init' first)\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_device_pair_x2",
-      "reason": "Go asks for the passphrase before it checks the vault (exit 4); the native command reports `vault is not initialized` (exit 1)",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
         "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
         "stdout": ""
       },

@@ -133,5 +133,6 @@ fn unlock_passphrase_with_mode(
         }
         return Err("vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1".to_owned());
     }
-    read_passphrase("Enter passphrase: ")
+    // `resolveUnlockPassphrase` prompts `Passphrase: ` and wraps a failed read.
+    read_passphrase("Passphrase: ").map_err(|error| format!("read passphrase: {error}"))
 }

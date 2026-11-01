@@ -90,6 +90,26 @@ pub(crate) fn unlock_vault(vault: &Path) -> Result<Identity, String> {
     unlock_vault_with_runtime(vault, &runtime)
 }
 
+/// `device pair` has no initialization gate in Go: `UnlockVault` resolves the
+/// passphrase against the default configuration (prompt included) and only then
+/// fails to open the missing identity file.
+fn unlock_vault_like_go_pair(vault: &Path) -> Result<Identity, String> {
+    if is_initialized(vault) {
+        return unlock_vault(vault);
+    }
+    let runtime = crate::runtime_session_manager();
+    crate::unlock_passphrase_with_mode(b"{}", &Config::default(), vault, &runtime, true)?;
+    let identity_path = vault.join("identity.age");
+    Err(format!(
+        "open vault: read identity file: {}",
+        crate::config::format_go_path_error(
+            "open",
+            &identity_path,
+            &std::io::Error::from(std::io::ErrorKind::NotFound)
+        )
+    ))
+}
+
 pub(crate) fn unlock_vault_for_transport(
     vault: &Path,
     interactive: bool,
@@ -974,7 +994,7 @@ fn auto_commit_and_push(vault: &Path, message: &str) {
 }
 
 pub(super) fn pair(vault: &Path, quiet: bool) -> Result<(), String> {
-    let identity = unlock_vault(vault)?;
+    let identity = unlock_vault_like_go_pair(vault)?;
     let token = generate_token().map_err(|e| format!("generate token: {e}"))?;
     let public_key = recipient_string(&identity);
 
