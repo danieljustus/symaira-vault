@@ -23,26 +23,6 @@
     {
       "expected_rust": {
         "exit_code": 1,
-        "stderr": "Migrate all entries to pseudonymized paths. Make a backup first (y/N): Error: read confirmation: EOF\n",
-        "stdout": ""
-      },
-      "name": "extra_initialized_migrate_pseudonymize_x1",
-      "reason": "Go prints the SYMVAULT_PASSPHRASE warning before the prompt and the failure twice; the native command prints neither the warning nor the second line",
-      "state": "initialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "Migrate all entries to pseudonymized paths. Make a backup first (y/N): Error: read confirmation: EOF\n",
-        "stdout": ""
-      },
-      "name": "extra_initialized_migrate_pseudonymize_x2",
-      "reason": "Go prints the SYMVAULT_PASSPHRASE warning before the prompt and the failure twice; the native command prints neither the warning nor the second line",
-      "state": "initialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
         "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
         "stdout": ""
       },

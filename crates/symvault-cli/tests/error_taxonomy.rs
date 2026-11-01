@@ -182,7 +182,7 @@ const EXTRA_POSITIONALS_UNINITIALIZED: usize = 138;
 const EXTRA_POSITIONALS_INITIALIZED: usize = 82;
 const RUN_FILE_USE_ARGV_PER_STATE: usize = 82;
 const KNOWN_DIVERGENT_UNINITIALIZED: usize = 18;
-const KNOWN_DIVERGENT_INITIALIZED: usize = 6;
+const KNOWN_DIVERGENT_INITIALIZED: usize = 4;
 /// Scenarios of the host-dependent commands (`mcp|serve install|status`, three
 /// variants uninitialized and two initialized each), skipped off darwin.
 const DARWIN_ONLY_UNINITIALIZED: usize = 12;
@@ -273,11 +273,6 @@ const KNOWN_BODY_DIVERGENCES: &[(&str, &str, &str)] = &[
         "setup",
         "initialized",
         "`setup` is not a native subcommand yet (only its help page is frozen)",
-    ),
-    (
-        "migrate_pseudonymize",
-        "initialized",
-        "Go prints the SYMVAULT_PASSPHRASE warning before the prompt and the failure twice; the native command prints neither the warning nor the second line",
     ),
 ];
 

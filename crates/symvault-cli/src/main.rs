@@ -4579,6 +4579,9 @@ fn run_migrate_pseudonymize(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
+        // Go unlocks the vault (environment-passphrase warning, passphrase
+        // prompt) before it asks for the confirmation.
+        let identity = device::unlock_vault(&vault)?;
         if !yes {
             eprint!("Migrate all entries to pseudonymized paths. Make a backup first (y/N): ");
             io::stderr().flush().map_err(|error| error.to_string())?;
@@ -4588,7 +4591,8 @@ fn run_migrate_pseudonymize(
                 .map_err(|error| format!("read confirmation: {error}"))?
                 == 0
             {
-                return Err("read confirmation: EOF".to_owned());
+                // Cobra reports the failure, then `ExecuteRoot` does.
+                return Err(reported(1, "read confirmation: EOF", None));
             }
             if !answer.trim().eq_ignore_ascii_case("y") {
                 eprintln!("Canceled");
@@ -4611,7 +4615,6 @@ fn run_migrate_pseudonymize(
                 .map_err(|error| format!("save config: {error}"))?;
         }
 
-        let identity = device::unlock_vault(&vault)?;
         let store = symvault_store::Store::open_with_legacy_migration(&vault, &identity)
             .map_err(|error| format!("open vault: {error}"))?;
         let summary = store
