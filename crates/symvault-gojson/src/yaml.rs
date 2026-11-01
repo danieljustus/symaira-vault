@@ -5,15 +5,28 @@
 //! four-space indentation, mapping keys in declaration order (structs) or
 //! sorted (maps), a sequence under a mapping key indented by one level, a
 //! sequence of mappings written `- key: value` with the continuation lines two
-//! columns in, and empty collections as `[]`/`{}`. Strings are plain unless
-//! `yaml.v3` would not read them back as the same string, in which case the
-//! scalar is single- or double-quoted exactly as its emitter picks.
+//! columns in, and empty collections as `[]`/`{}`.
+//!
+//! Strings are not guessed: this is a port of the parts of yaml.v3's encoder
+//! (`encode.go` `stringv`) and emitter (`emitterc.go`: `analyze_scalar`,
+//! `select_scalar_style`, the plain/single-quoted/double-quoted/literal
+//! writers, `write_indent`, `write_indicator`) that a block document of
+//! scalars, sequences and mappings reaches, including their quirks (an
+//! astral character forces double quotes, `is_bom` looks at the first byte of
+//! the value instead of the current one, a line break other than `\n` is
+//! written raw and restarts the column). The emitter state (`column`,
+//! `whitespace`, `indention`, `indent`) is tracked like the original because
+//! the block styles and the quoted line breaks depend on it. The corpus in
+//! `testdata/port/cli/yaml-scalars.json` is recorded from the pinned
+//! yaml.v3 and replayed by `tests/yaml_scalars.rs`.
 //!
 //! This is intentionally not a general YAML library: only the value shapes the
 //! CLI renders (null, bool, integers, strings, sequences, mappings) are
-//! supported.
+//! supported, with `best_width` unlimited (yaml.v3's default for `Marshal`).
 
 use serde_json::Value;
+
+use crate::resolve::{Resolved, is_base60_float, is_old_bool, resolve};
 
 /// An ordered YAML value.
 #[derive(Clone, Debug, PartialEq)]
@@ -51,87 +64,363 @@ impl Node {
     }
 }
 
-/// Marshal `node` like `yaml.Marshal`/`yaml.NewEncoder(...).Encode`.
+/// Marshal `node` like `yaml.Marshal`.
 pub fn to_string(node: &Node) -> String {
-    let mut out = String::new();
-    match node {
-        Node::Map(entries) if !entries.is_empty() => emit_map(entries, 0, &mut out),
-        Node::Seq(items) if !items.is_empty() => emit_seq(items, 0, &mut out),
-        other => {
-            out.push_str(&scalar_text(other, 0));
-            out.push('\n');
+    let mut emitter = Emitter::new();
+    emitter.document(node);
+    emitter.out
+}
+
+/// yaml.v3's `best_indent` for `Marshal`.
+const BEST_INDENT: i32 = 4;
+
+/// The writer state of yaml.v3's emitter that scalars and block collections
+/// depend on.
+struct Emitter {
+    out: String,
+    column: i32,
+    whitespace: bool,
+    indention: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Style {
+    Plain,
+    SingleQuoted,
+    DoubleQuoted,
+    Literal,
+}
+
+/// Where a collection node sits: it decides the indentation of what it holds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Parent {
+    /// The document root (`indent` is `-1`).
+    Root,
+    /// A value of a block mapping.
+    MappingValue,
+    /// An item of a block sequence.
+    SequenceItem,
+}
+
+impl Emitter {
+    fn new() -> Self {
+        Self {
+            out: String::new(),
+            column: 0,
+            whitespace: true,
+            indention: true,
         }
     }
-    out
-}
 
-fn indent(out: &mut String, width: usize) {
-    for _ in 0..width {
-        out.push(' ');
+    fn put(&mut self, character: char) {
+        self.out.push(character);
+        self.column += 1;
     }
-}
 
-fn is_collection(node: &Node) -> bool {
-    matches!(node, Node::Seq(items) if !items.is_empty())
-        || matches!(node, Node::Map(entries) if !entries.is_empty())
-}
+    fn put_break(&mut self) {
+        self.out.push('\n');
+        self.column = 0;
+        self.indention = true;
+    }
 
-fn emit_map(entries: &[(String, Node)], width: usize, out: &mut String) {
-    for (key, value) in entries {
-        indent(out, width);
-        out.push_str(&string_scalar(key, width));
-        out.push(':');
-        if is_collection(value) {
-            out.push('\n');
-            // yaml.v3 `increase_indent`: a collection under a mapping key
-            // aligns to the next multiple of the indentation (4); one that is
-            // itself a sequence item only skips the `- ` indicator (+2).
-            let inner_width = 4 * ((width + 4) / 4);
-            match value {
-                Node::Map(inner) => emit_map(inner, inner_width, out),
-                Node::Seq(inner) => emit_seq(inner, inner_width, out),
-                _ => unreachable!("collection"),
-            }
+    /// `write`: copy one character.
+    fn write(&mut self, character: char) {
+        self.out.push(character);
+        self.column += 1;
+    }
+
+    /// `write_break`: `\n` is a real line break, any other break character is
+    /// copied and only resets the column.
+    fn write_break(&mut self, character: char) {
+        if character == '\n' {
+            self.put_break();
         } else {
-            out.push(' ');
-            out.push_str(&scalar_text(value, width));
-            out.push('\n');
+            self.out.push(character);
+            self.column = 0;
+            self.indention = true;
         }
     }
-}
 
-fn emit_seq(items: &[Node], width: usize, out: &mut String) {
-    for item in items {
-        indent(out, width);
-        out.push('-');
-        if is_collection(item) {
-            let mut nested = String::new();
-            match item {
-                Node::Map(inner) => emit_map(inner, width + 2, &mut nested),
-                Node::Seq(inner) => emit_seq(inner, width + 2, &mut nested),
-                _ => unreachable!("collection"),
+    fn write_indent(&mut self, indent: i32) {
+        let indent = indent.max(0);
+        if !self.indention || self.column > indent || (self.column == indent && !self.whitespace) {
+            self.put_break();
+        }
+        while self.column < indent {
+            self.put(' ');
+        }
+        self.whitespace = true;
+    }
+
+    fn write_indicator(
+        &mut self,
+        indicator: &str,
+        need_whitespace: bool,
+        is_whitespace: bool,
+        is_indention: bool,
+    ) {
+        if need_whitespace && !self.whitespace {
+            self.put(' ');
+        }
+        for character in indicator.chars() {
+            self.write(character);
+        }
+        self.whitespace = is_whitespace;
+        self.indention = self.indention && is_indention;
+    }
+
+    fn document(&mut self, node: &Node) {
+        self.node(node, -1, Parent::Root);
+        // yaml_emitter_emit_document_end: terminate the last line.
+        self.write_indent(-1);
+    }
+
+    /// One node; `indent` is the emitter's current indentation (the enclosing
+    /// collection's, `-1` at the root).
+    fn node(&mut self, node: &Node, indent: i32, parent: Parent) {
+        match node {
+            Node::Map(entries) if !entries.is_empty() => {
+                let inner = collection_indent(indent, parent);
+                self.mapping(entries, inner);
             }
-            // The first line of the nested block sits after the dash.
-            out.push(' ');
-            out.push_str(&nested[width + 2..]);
+            Node::Seq(items) if !items.is_empty() => {
+                let inner = collection_indent(indent, parent);
+                self.sequence(items, inner);
+            }
+            Node::Str(text) => {
+                let scalar_indent = scalar_indent(indent, parent);
+                self.string(text, false, scalar_indent);
+            }
+            other => {
+                let text = plain_text(other);
+                self.write_plain(&text);
+            }
+        }
+    }
+
+    fn mapping(&mut self, entries: &[(String, Node)], indent: i32) {
+        for (key, value) in entries {
+            self.write_indent(indent);
+            if is_simple_key(key) {
+                self.string(key, true, indent);
+                self.write_indicator(":", false, false, false);
+            } else {
+                self.write_indicator("?", true, false, true);
+                self.string(key, false, scalar_indent(indent, Parent::MappingValue));
+                self.write_indent(indent);
+                self.write_indicator(":", true, false, true);
+            }
+            self.node(value, indent, Parent::MappingValue);
+        }
+    }
+
+    fn sequence(&mut self, items: &[Node], indent: i32) {
+        for item in items {
+            self.write_indent(indent);
+            self.write_indicator("-", true, false, true);
+            self.node(item, indent, Parent::SequenceItem);
+        }
+    }
+
+    fn write_plain(&mut self, text: &str) {
+        if !text.is_empty() && !self.whitespace {
+            self.put(' ');
+        }
+        for character in text.chars() {
+            self.write(character);
+        }
+        if !text.is_empty() {
+            self.whitespace = false;
+        }
+        self.indention = false;
+    }
+
+    /// `stringv` + `select_scalar_style` + `process_scalar` for a string.
+    fn string(&mut self, text: &str, simple_key: bool, indent: i32) {
+        let can_use_plain =
+            matches!(resolve(text), Resolved::Str) && !(is_base60_float(text) || is_old_bool(text));
+        let analysis = analyze(text);
+        let mut style = if text.contains('\n') {
+            Style::Literal
+        } else if can_use_plain {
+            Style::Plain
         } else {
-            out.push(' ');
-            out.push_str(&scalar_text(item, width));
-            out.push('\n');
+            Style::DoubleQuoted
+        };
+        if simple_key && analysis.multiline {
+            style = Style::DoubleQuoted;
+        }
+        if style == Style::Plain {
+            if !analysis.block_plain_allowed {
+                style = Style::SingleQuoted;
+            }
+            if text.is_empty() && simple_key {
+                style = Style::SingleQuoted;
+            }
+        }
+        if style == Style::SingleQuoted && !analysis.single_quoted_allowed {
+            style = Style::DoubleQuoted;
+        }
+        if style == Style::Literal && (!analysis.block_allowed || simple_key) {
+            style = Style::DoubleQuoted;
+        }
+        match style {
+            Style::Plain => self.write_plain(text),
+            Style::SingleQuoted => self.write_single_quoted(text, indent),
+            Style::DoubleQuoted => self.write_double_quoted(text),
+            Style::Literal => self.write_literal(text, indent),
+        }
+    }
+
+    fn write_single_quoted(&mut self, text: &str, indent: i32) {
+        self.write_indicator("'", true, false, false);
+        let mut breaks = false;
+        for character in text.chars() {
+            if character == ' ' {
+                self.write(character);
+                breaks = false;
+            } else if is_break(character) {
+                if !breaks && character == '\n' {
+                    self.put_break();
+                }
+                self.write_break(character);
+                breaks = true;
+            } else {
+                if breaks {
+                    self.write_indent(indent);
+                }
+                if character == '\'' {
+                    self.put('\'');
+                }
+                self.write(character);
+                self.indention = false;
+                breaks = false;
+            }
+        }
+        self.write_indicator("'", false, false, false);
+        self.whitespace = false;
+        self.indention = false;
+    }
+
+    fn write_double_quoted(&mut self, text: &str) {
+        self.write_indicator("\"", true, false, false);
+        // yaml.v3's `is_bom(value, i)` reads the first bytes of the value, not
+        // the ones at `i`: a value that starts with U+FEFF escapes every
+        // character.
+        let starts_with_bom = text.starts_with('\u{feff}');
+        for character in text.chars() {
+            if !is_printable(character)
+                || starts_with_bom
+                || is_break(character)
+                || character == '"'
+                || character == '\\'
+            {
+                self.put('\\');
+                let value = character as u32;
+                let escaped = match value {
+                    0x00 => "0".to_owned(),
+                    0x07 => "a".to_owned(),
+                    0x08 => "b".to_owned(),
+                    0x09 => "t".to_owned(),
+                    0x0A => "n".to_owned(),
+                    0x0B => "v".to_owned(),
+                    0x0C => "f".to_owned(),
+                    0x0D => "r".to_owned(),
+                    0x1B => "e".to_owned(),
+                    0x22 => "\"".to_owned(),
+                    0x5C => "\\".to_owned(),
+                    0x85 => "N".to_owned(),
+                    0xA0 => "_".to_owned(),
+                    0x2028 => "L".to_owned(),
+                    0x2029 => "P".to_owned(),
+                    v if v <= 0xFF => format!("x{v:02X}"),
+                    v if v <= 0xFFFF => format!("u{v:04X}"),
+                    v => format!("U{v:08X}"),
+                };
+                for escape in escaped.chars() {
+                    self.put(escape);
+                }
+            } else {
+                self.write(character);
+            }
+        }
+        self.write_indicator("\"", false, false, false);
+        self.whitespace = false;
+        self.indention = false;
+    }
+
+    fn write_literal(&mut self, text: &str, indent: i32) {
+        self.write_indicator("|", true, false, false);
+        // yaml_emitter_write_block_scalar_hints
+        let first = text.chars().next();
+        if first.is_some_and(|c| c == ' ' || is_break(c)) {
+            self.write_indicator(&BEST_INDENT.to_string(), false, false, false);
+        }
+        let mut reversed = text.chars().rev();
+        let chomp = match reversed.next() {
+            None => Some("-"),
+            Some(last) if !is_break(last) => Some("-"),
+            Some(_) if text.chars().count() == 1 => Some("+"),
+            Some(_) if reversed.next().is_some_and(is_break) => Some("+"),
+            Some(_) => None,
+        };
+        if let Some(hint) = chomp {
+            self.write_indicator(hint, false, false, false);
+        }
+        self.whitespace = true;
+        let mut breaks = true;
+        for character in text.chars() {
+            if is_break(character) {
+                self.write_break(character);
+                breaks = true;
+            } else {
+                if breaks {
+                    self.write_indent(indent);
+                }
+                self.write(character);
+                self.indention = false;
+                breaks = false;
+            }
         }
     }
 }
 
-fn scalar_text(node: &Node, width: usize) -> String {
+/// `yaml_emitter_increase_indent` for a collection node.
+fn collection_indent(indent: i32, parent: Parent) -> i32 {
+    match parent {
+        Parent::Root => 0,
+        Parent::SequenceItem => indent + 2,
+        Parent::MappingValue => BEST_INDENT * ((indent + BEST_INDENT) / BEST_INDENT),
+    }
+}
+
+/// The indentation of a scalar's block content. `yaml_emitter_emit_scalar`
+/// asks for a FLOW increase, which only differs at the document root: there the
+/// indentation becomes `best_indent`, not `0`.
+fn scalar_indent(indent: i32, parent: Parent) -> i32 {
+    if parent == Parent::Root {
+        BEST_INDENT
+    } else {
+        collection_indent(indent, parent)
+    }
+}
+
+/// `yaml_emitter_check_simple_key` for a string key: a single line of at most
+/// 128 bytes.
+fn is_simple_key(key: &str) -> bool {
+    !analyze(key).multiline && key.len() <= 128
+}
+
+fn plain_text(node: &Node) -> String {
     match node {
         Node::Null => "null".to_owned(),
         Node::Bool(true) => "true".to_owned(),
         Node::Bool(false) => "false".to_owned(),
         Node::Int(number) => number.to_string(),
         Node::Float(number) => format_float(*number),
-        Node::Str(text) => string_scalar(text, width),
         Node::Seq(_) => "[]".to_owned(),
         Node::Map(_) => "{}".to_owned(),
+        Node::Str(_) => unreachable!("strings take the scalar path"),
     }
 }
 
@@ -143,229 +432,144 @@ fn format_float(number: f64) -> String {
     }
 }
 
-/// How yaml.v3 renders a string.
-fn string_scalar(text: &str, width: usize) -> String {
+/// `is_break`: CR, LF, NEL, LS, PS.
+fn is_break(character: char) -> bool {
+    matches!(character, '\r' | '\n' | '\u{85}' | '\u{2028}' | '\u{2029}')
+}
+
+/// `is_printable`: `\n`, U+0020..U+007E, U+00A0..U+D7FF and U+E000..U+FFFD
+/// except U+FEFF. Control characters, U+007F..U+009F, surrogates' neighbours
+/// U+FFFE/U+FFFF, U+FEFF and every astral character are not.
+fn is_printable(character: char) -> bool {
+    let value = character as u32;
+    value == 0x0A
+        || (0x20..=0x7E).contains(&value)
+        || (0xA0..=0xD7FF).contains(&value)
+        || ((0xE000..=0xFFFD).contains(&value) && value != 0xFEFF)
+}
+
+/// The fields of `yaml_emitter_analyze_scalar` the block writer uses.
+struct Analysis {
+    multiline: bool,
+    block_plain_allowed: bool,
+    single_quoted_allowed: bool,
+    block_allowed: bool,
+}
+
+fn analyze(text: &str) -> Analysis {
     if text.is_empty() {
-        return "\"\"".to_owned();
-    }
-    if text.contains('\n') {
-        // Multi-line strings use the literal block style.
-        let chomp = match text.strip_suffix('\n') {
-            Some(rest) if !rest.ends_with('\n') => "",
-            Some(_) => "+",
-            None => "-",
+        return Analysis {
+            multiline: false,
+            block_plain_allowed: true,
+            single_quoted_allowed: true,
+            block_allowed: false,
         };
-        let body = text.strip_suffix('\n').unwrap_or(text);
-        if body
-            .chars()
-            .any(|c| c.is_control() && c != '\n' && c != '\t')
-        {
-            return double_quoted(text);
-        }
-        let mut out = format!("|{chomp}");
-        for line in body.split('\n') {
-            out.push('\n');
-            if !line.is_empty() {
-                indent(&mut out, width + 4);
-                out.push_str(line);
+    }
+    let characters: Vec<char> = text.chars().collect();
+    let mut block_indicators = false;
+    let mut line_breaks = false;
+    let mut special_characters = false;
+    let mut tab_characters = false;
+    let mut leading_space = false;
+    let mut leading_break = false;
+    let mut trailing_space = false;
+    let mut trailing_break = false;
+    let mut break_space = false;
+    let mut space_break = false;
+    let mut previous_space = false;
+    let mut previous_break = false;
+    let mut preceded_by_whitespace = true;
+
+    if text.starts_with("---") || text.starts_with("...") {
+        block_indicators = true;
+    }
+    let blank = |character: char| character == ' ' || character == '\t';
+    for (index, &character) in characters.iter().enumerate() {
+        let followed_by_whitespace = characters.get(index + 1).is_none_or(|next| blank(*next));
+        if index == 0 {
+            match character {
+                '#' | ',' | '[' | ']' | '{' | '}' | '&' | '*' | '!' | '|' | '>' | '\'' | '"'
+                | '%' | '@' | '`' => block_indicators = true,
+                '?' | ':' | '-' if followed_by_whitespace => block_indicators = true,
+                _ => {}
+            }
+        } else {
+            match character {
+                ':' if followed_by_whitespace => block_indicators = true,
+                '#' if preceded_by_whitespace => block_indicators = true,
+                _ => {}
             }
         }
-        return out;
-    }
-    if text.chars().any(|c| c.is_control() || c == '\u{feff}') {
-        return double_quoted(text);
-    }
-    if resolves_to_non_string(text) {
-        return double_quoted(text);
-    }
-    if needs_single_quotes(text) {
-        return format!("'{}'", text.replace('\'', "''"));
-    }
-    text.to_owned()
-}
-
-fn double_quoted(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push('"');
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\0' => out.push_str("\\0"),
-            c if c.is_control() => out.push_str(&format!("\\x{:02X}", c as u32)),
-            c => out.push(c),
+        if character == '\t' {
+            tab_characters = true;
+        } else if !is_printable(character) {
+            special_characters = true;
         }
-    }
-    out.push('"');
-    out
-}
-
-/// Whether `yaml.v3`'s resolver would read the plain scalar as something other
-/// than a string (its encoder then forces double quotes).
-fn resolves_to_non_string(text: &str) -> bool {
-    if matches!(
-        text,
-        "~" | "null"
-            | "Null"
-            | "NULL"
-            | "true"
-            | "True"
-            | "TRUE"
-            | "false"
-            | "False"
-            | "FALSE"
-            | "y"
-            | "Y"
-            | "yes"
-            | "Yes"
-            | "YES"
-            | "n"
-            | "N"
-            | "no"
-            | "No"
-            | "NO"
-            | "on"
-            | "On"
-            | "ON"
-            | "off"
-            | "Off"
-            | "OFF"
-            | ".inf"
-            | ".Inf"
-            | ".INF"
-            | "+.inf"
-            | "+.Inf"
-            | "+.INF"
-            | "-.inf"
-            | "-.Inf"
-            | "-.INF"
-            | ".nan"
-            | ".NaN"
-            | ".NAN"
-            | "<<"
-    ) {
-        return true;
-    }
-    let digits = text.replace('_', "");
-    if digits.parse::<i64>().is_ok() || digits.parse::<u64>().is_ok() {
-        return true;
-    }
-    if let Some(rest) = digits
-        .strip_prefix("0x")
-        .or_else(|| digits.strip_prefix("0o"))
-        .or_else(|| digits.strip_prefix("0b"))
-        && !rest.is_empty()
-    {
-        let radix = match &digits[..2] {
-            "0x" => 16,
-            "0o" => 8,
-            _ => 2,
-        };
-        if i64::from_str_radix(rest, radix).is_ok() {
-            return true;
+        let last = index + 1 == characters.len();
+        if character == ' ' {
+            if index == 0 {
+                leading_space = true;
+            }
+            if last {
+                trailing_space = true;
+            }
+            if previous_break {
+                break_space = true;
+            }
+            previous_space = true;
+            previous_break = false;
+        } else if is_break(character) {
+            line_breaks = true;
+            if index == 0 {
+                leading_break = true;
+            }
+            if last {
+                trailing_break = true;
+            }
+            if previous_space {
+                space_break = true;
+            }
+            previous_space = false;
+            previous_break = true;
+        } else {
+            previous_space = false;
+            previous_break = false;
         }
+        preceded_by_whitespace = blank(character) || is_break(character);
     }
-    if digits.parse::<f64>().is_ok()
-        && digits
-            .chars()
-            .all(|c| c.is_ascii_digit() || matches!(c, '+' | '-' | '.' | 'e' | 'E'))
-    {
-        return true;
-    }
-    is_timestamp(text)
-}
 
-/// `yaml.v3`'s timestamp forms: a date, optionally followed by `T`/`t`/space
-/// and a time with seconds.
-fn is_timestamp(text: &str) -> bool {
-    let bytes = text.as_bytes();
-    let digit = |index: usize| bytes.get(index).is_some_and(u8::is_ascii_digit);
-    if !(digit(0) && digit(1) && digit(2) && digit(3) && bytes.get(4) == Some(&b'-')) {
-        return false;
+    let mut block_plain_allowed = true;
+    let mut single_quoted_allowed = true;
+    let mut block_allowed = true;
+    if leading_space || leading_break || trailing_space || trailing_break {
+        block_plain_allowed = false;
     }
-    let rest = &text[5..];
-    let (month, rest) = split_digits(rest);
-    if month.is_empty() || month.len() > 2 || !rest.starts_with('-') {
-        return false;
+    if trailing_space {
+        block_allowed = false;
     }
-    let (day, rest) = split_digits(&rest[1..]);
-    if day.is_empty() || day.len() > 2 {
-        return false;
+    if break_space {
+        block_plain_allowed = false;
+        single_quoted_allowed = false;
     }
-    if rest.is_empty() {
-        return true;
+    if space_break || tab_characters || special_characters {
+        block_plain_allowed = false;
+        single_quoted_allowed = false;
     }
-    let Some(time) = rest
-        .strip_prefix('T')
-        .or_else(|| rest.strip_prefix('t'))
-        .or_else(|| rest.strip_prefix(' '))
-    else {
-        return false;
-    };
-    let (hour, time) = split_digits(time);
-    if hour.is_empty() || hour.len() > 2 || !time.starts_with(':') {
-        return false;
+    if space_break || special_characters {
+        block_allowed = false;
     }
-    let (minute, time) = split_digits(&time[1..]);
-    if minute.len() != 2 || !time.starts_with(':') {
-        return false;
+    if line_breaks {
+        block_plain_allowed = false;
     }
-    let (second, _zone) = split_digits(&time[1..]);
-    !second.is_empty() && second.len() <= 2
-}
-
-fn split_digits(text: &str) -> (&str, &str) {
-    let end = text
-        .find(|c: char| !c.is_ascii_digit())
-        .unwrap_or(text.len());
-    text.split_at(end)
-}
-
-/// Plain scalars that must be quoted for syntax reasons; yaml.v3 then picks
-/// single quotes.
-fn needs_single_quotes(text: &str) -> bool {
-    let first = text.chars().next().unwrap_or(' ');
-    if matches!(
-        first,
-        '?' | ':'
-            | ','
-            | '['
-            | ']'
-            | '{'
-            | '}'
-            | '#'
-            | '&'
-            | '*'
-            | '!'
-            | '|'
-            | '>'
-            | '\''
-            | '"'
-            | '%'
-            | '@'
-            | '`'
-    ) {
-        // `?`, `:` and `-` only start an indicator when followed by a space.
-        if matches!(first, '?' | ':') {
-            return text.len() == 1 || text.as_bytes().get(1) == Some(&b' ');
-        }
-        return true;
+    if block_indicators {
+        block_plain_allowed = false;
     }
-    if first == '-' && (text.len() == 1 || text.as_bytes().get(1) == Some(&b' ')) {
-        return true;
+    Analysis {
+        multiline: line_breaks,
+        block_plain_allowed,
+        single_quoted_allowed,
+        block_allowed,
     }
-    if text.starts_with("---") || text.starts_with("...") {
-        return true;
-    }
-    text.starts_with(' ')
-        || text.ends_with(' ')
-        || text.ends_with(':')
-        || text.contains(": ")
-        || text.contains(" #")
-        || text.contains('\t')
 }
 
 #[cfg(test)]
@@ -416,31 +620,42 @@ mod tests {
         );
     }
 
+    /// Spot checks of the styles; the full corpus (every position, 400+
+    /// strings recorded from yaml.v3) is `tests/yaml_scalars.rs`.
     #[test]
-    fn strings_are_quoted_like_yaml_v3() {
+    fn strings_are_emitted_like_yaml_v3() {
         for (input, want) in [
-            ("***", "'***'"),
-            ("", "\"\""),
-            ("true", "\"true\""),
-            ("null", "\"null\""),
-            ("yes", "\"yes\""),
-            ("12", "\"12\""),
-            ("1.5", "\"1.5\""),
-            ("2026-10-31", "\"2026-10-31\""),
-            ("2026-10-31T10:00:00Z", "\"2026-10-31T10:00:00Z\""),
-            ("2026-10-31 22:01", "2026-10-31 22:01"),
-            ("a: b", "'a: b'"),
-            ("it's: x", "'it''s: x'"),
-            (" lead", "' lead'"),
-            ("Val-Alpha-001", "Val-Alpha-001"),
-            ("https://example.test", "https://example.test"),
-            ("a,b", "a,b"),
-            ("tab\there", "\"tab\\there\""),
-            ("bell\u{7}", "\"bell\\x07\""),
+            ("***", "k: '***'\n"),
+            ("", "k: \"\"\n"),
+            ("true", "k: \"true\"\n"),
+            ("null", "k: \"null\"\n"),
+            ("yes", "k: \"yes\"\n"),
+            ("12", "k: \"12\"\n"),
+            ("1.5", "k: \"1.5\"\n"),
+            ("2026-10-31", "k: \"2026-10-31\"\n"),
+            ("2026-10-31T10:00:00Z", "k: \"2026-10-31T10:00:00Z\"\n"),
+            ("2026-10-31 22:01", "k: 2026-10-31 22:01\n"),
+            ("a: b", "k: 'a: b'\n"),
+            ("it's: x", "k: 'it''s: x'\n"),
+            (" lead", "k: ' lead'\n"),
+            ("Val-Alpha-001", "k: Val-Alpha-001\n"),
+            ("https://example.test", "k: https://example.test\n"),
+            ("a,b", "k: a,b\n"),
+            ("tab\there", "k: \"tab\\there\"\n"),
+            // BEL is `\a`, not `\x07`.
+            ("bell\u{7}", "k: \"bell\\a\"\n"),
+            // `<<` is a plain string for the encoder's resolver.
+            ("<<", "k: <<\n"),
+            // Astral characters are not printable for yaml.v3's emitter.
+            ("\u{1F600}", "k: \"\\U0001F600\"\n"),
+            // A leading line break needs an indentation hint.
+            ("\na", "k: |4-\n    a\n"),
+            // A break other than `\n` is written raw and restarts the column.
+            ("a\u{2028}b", "k: 'a\u{2028}    b'\n"),
+            ("a\nb", "k: |-\n    a\n    b\n"),
+            ("a\nb\n", "k: |\n    a\n    b\n"),
         ] {
-            assert_eq!(string_scalar(input, 0), want, "{input:?}");
+            assert_eq!(render(json!({"k": input})), want, "{input:?}");
         }
-        assert_eq!(string_scalar("a\nb", 0), "|-\n    a\n    b");
-        assert_eq!(string_scalar("a\nb\n", 0), "|\n    a\n    b");
     }
 }

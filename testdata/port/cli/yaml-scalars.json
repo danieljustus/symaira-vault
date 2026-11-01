@@ -1,0 +1,3012 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "module": "gopkg.in/yaml.v3",
+    "version": "v3.0.1",
+    "go_sum_lines": [
+      "gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=",
+      "gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM="
+    ],
+    "generator_files": [
+      "scripts/rust-port/cmd/yamlscalargen/main.go"
+    ],
+    "generator_digest": "1104c7cd3186d8348fc67f0b27919f60104858692f906760c08cdbee7c0f3364"
+  },
+  "notes": [
+    "Every string is marshalled by the pinned gopkg.in/yaml.v3 in six positions: value of a map, key of a map, item of a sequence, field of a mapping inside a sequence inside a mapping, value two mappings deep, and the document root.",
+    "The renders are byte-exact yaml.Marshal output, which is what internal/cli/output does for --output yaml.",
+    "Values are valid UTF-8; the CLI never marshals invalid UTF-8 as text (yaml.v3 would emit !!binary)."
+  ],
+  "rows": [
+    {
+      "name": "empty-and-null",
+      "value": "",
+      "map_value": "k: \"\"\n",
+      "map_key": "\"\": v\n",
+      "seq_item": "- \"\"\n",
+      "nested": "list:\n    - k: \"\"\n",
+      "deep": "a:\n    b:\n        c: \"\"\n",
+      "root": "\"\"\n"
+    },
+    {
+      "name": "empty-and-null",
+      "value": "~",
+      "map_value": "k: \"~\"\n",
+      "map_key": "\"~\": v\n",
+      "seq_item": "- \"~\"\n",
+      "nested": "list:\n    - k: \"~\"\n",
+      "deep": "a:\n    b:\n        c: \"~\"\n",
+      "root": "\"~\"\n"
+    },
+    {
+      "name": "empty-and-null",
+      "value": "null",
+      "map_value": "k: \"null\"\n",
+      "map_key": "\"null\": v\n",
+      "seq_item": "- \"null\"\n",
+      "nested": "list:\n    - k: \"null\"\n",
+      "deep": "a:\n    b:\n        c: \"null\"\n",
+      "root": "\"null\"\n"
+    },
+    {
+      "name": "empty-and-null",
+      "value": "Null",
+      "map_value": "k: \"Null\"\n",
+      "map_key": "\"Null\": v\n",
+      "seq_item": "- \"Null\"\n",
+      "nested": "list:\n    - k: \"Null\"\n",
+      "deep": "a:\n    b:\n        c: \"Null\"\n",
+      "root": "\"Null\"\n"
+    },
+    {
+      "name": "empty-and-null",
+      "value": "NULL",
+      "map_value": "k: \"NULL\"\n",
+      "map_key": "\"NULL\": v\n",
+      "seq_item": "- \"NULL\"\n",
+      "nested": "list:\n    - k: \"NULL\"\n",
+      "deep": "a:\n    b:\n        c: \"NULL\"\n",
+      "root": "\"NULL\"\n"
+    },
+    {
+      "name": "empty-and-null",
+      "value": "NuLL",
+      "map_value": "k: NuLL\n",
+      "map_key": "NuLL: v\n",
+      "seq_item": "- NuLL\n",
+      "nested": "list:\n    - k: NuLL\n",
+      "deep": "a:\n    b:\n        c: NuLL\n",
+      "root": "NuLL\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "true",
+      "map_value": "k: \"true\"\n",
+      "map_key": "\"true\": v\n",
+      "seq_item": "- \"true\"\n",
+      "nested": "list:\n    - k: \"true\"\n",
+      "deep": "a:\n    b:\n        c: \"true\"\n",
+      "root": "\"true\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "True",
+      "map_value": "k: \"True\"\n",
+      "map_key": "\"True\": v\n",
+      "seq_item": "- \"True\"\n",
+      "nested": "list:\n    - k: \"True\"\n",
+      "deep": "a:\n    b:\n        c: \"True\"\n",
+      "root": "\"True\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "TRUE",
+      "map_value": "k: \"TRUE\"\n",
+      "map_key": "\"TRUE\": v\n",
+      "seq_item": "- \"TRUE\"\n",
+      "nested": "list:\n    - k: \"TRUE\"\n",
+      "deep": "a:\n    b:\n        c: \"TRUE\"\n",
+      "root": "\"TRUE\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "tRUE",
+      "map_value": "k: tRUE\n",
+      "map_key": "tRUE: v\n",
+      "seq_item": "- tRUE\n",
+      "nested": "list:\n    - k: tRUE\n",
+      "deep": "a:\n    b:\n        c: tRUE\n",
+      "root": "tRUE\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "false",
+      "map_value": "k: \"false\"\n",
+      "map_key": "\"false\": v\n",
+      "seq_item": "- \"false\"\n",
+      "nested": "list:\n    - k: \"false\"\n",
+      "deep": "a:\n    b:\n        c: \"false\"\n",
+      "root": "\"false\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "False",
+      "map_value": "k: \"False\"\n",
+      "map_key": "\"False\": v\n",
+      "seq_item": "- \"False\"\n",
+      "nested": "list:\n    - k: \"False\"\n",
+      "deep": "a:\n    b:\n        c: \"False\"\n",
+      "root": "\"False\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "FALSE",
+      "map_value": "k: \"FALSE\"\n",
+      "map_key": "\"FALSE\": v\n",
+      "seq_item": "- \"FALSE\"\n",
+      "nested": "list:\n    - k: \"FALSE\"\n",
+      "deep": "a:\n    b:\n        c: \"FALSE\"\n",
+      "root": "\"FALSE\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "yes",
+      "map_value": "k: \"yes\"\n",
+      "map_key": "\"yes\": v\n",
+      "seq_item": "- \"yes\"\n",
+      "nested": "list:\n    - k: \"yes\"\n",
+      "deep": "a:\n    b:\n        c: \"yes\"\n",
+      "root": "\"yes\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "Yes",
+      "map_value": "k: \"Yes\"\n",
+      "map_key": "\"Yes\": v\n",
+      "seq_item": "- \"Yes\"\n",
+      "nested": "list:\n    - k: \"Yes\"\n",
+      "deep": "a:\n    b:\n        c: \"Yes\"\n",
+      "root": "\"Yes\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "YES",
+      "map_value": "k: \"YES\"\n",
+      "map_key": "\"YES\": v\n",
+      "seq_item": "- \"YES\"\n",
+      "nested": "list:\n    - k: \"YES\"\n",
+      "deep": "a:\n    b:\n        c: \"YES\"\n",
+      "root": "\"YES\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "no",
+      "map_value": "k: \"no\"\n",
+      "map_key": "\"no\": v\n",
+      "seq_item": "- \"no\"\n",
+      "nested": "list:\n    - k: \"no\"\n",
+      "deep": "a:\n    b:\n        c: \"no\"\n",
+      "root": "\"no\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "No",
+      "map_value": "k: \"No\"\n",
+      "map_key": "\"No\": v\n",
+      "seq_item": "- \"No\"\n",
+      "nested": "list:\n    - k: \"No\"\n",
+      "deep": "a:\n    b:\n        c: \"No\"\n",
+      "root": "\"No\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "NO",
+      "map_value": "k: \"NO\"\n",
+      "map_key": "\"NO\": v\n",
+      "seq_item": "- \"NO\"\n",
+      "nested": "list:\n    - k: \"NO\"\n",
+      "deep": "a:\n    b:\n        c: \"NO\"\n",
+      "root": "\"NO\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "on",
+      "map_value": "k: \"on\"\n",
+      "map_key": "\"on\": v\n",
+      "seq_item": "- \"on\"\n",
+      "nested": "list:\n    - k: \"on\"\n",
+      "deep": "a:\n    b:\n        c: \"on\"\n",
+      "root": "\"on\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "On",
+      "map_value": "k: \"On\"\n",
+      "map_key": "\"On\": v\n",
+      "seq_item": "- \"On\"\n",
+      "nested": "list:\n    - k: \"On\"\n",
+      "deep": "a:\n    b:\n        c: \"On\"\n",
+      "root": "\"On\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "ON",
+      "map_value": "k: \"ON\"\n",
+      "map_key": "\"ON\": v\n",
+      "seq_item": "- \"ON\"\n",
+      "nested": "list:\n    - k: \"ON\"\n",
+      "deep": "a:\n    b:\n        c: \"ON\"\n",
+      "root": "\"ON\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "off",
+      "map_value": "k: \"off\"\n",
+      "map_key": "\"off\": v\n",
+      "seq_item": "- \"off\"\n",
+      "nested": "list:\n    - k: \"off\"\n",
+      "deep": "a:\n    b:\n        c: \"off\"\n",
+      "root": "\"off\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "Off",
+      "map_value": "k: \"Off\"\n",
+      "map_key": "\"Off\": v\n",
+      "seq_item": "- \"Off\"\n",
+      "nested": "list:\n    - k: \"Off\"\n",
+      "deep": "a:\n    b:\n        c: \"Off\"\n",
+      "root": "\"Off\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "OFF",
+      "map_value": "k: \"OFF\"\n",
+      "map_key": "\"OFF\": v\n",
+      "seq_item": "- \"OFF\"\n",
+      "nested": "list:\n    - k: \"OFF\"\n",
+      "deep": "a:\n    b:\n        c: \"OFF\"\n",
+      "root": "\"OFF\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "y",
+      "map_value": "k: \"y\"\n",
+      "map_key": "\"y\": v\n",
+      "seq_item": "- \"y\"\n",
+      "nested": "list:\n    - k: \"y\"\n",
+      "deep": "a:\n    b:\n        c: \"y\"\n",
+      "root": "\"y\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "Y",
+      "map_value": "k: \"Y\"\n",
+      "map_key": "\"Y\": v\n",
+      "seq_item": "- \"Y\"\n",
+      "nested": "list:\n    - k: \"Y\"\n",
+      "deep": "a:\n    b:\n        c: \"Y\"\n",
+      "root": "\"Y\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "n",
+      "map_value": "k: \"n\"\n",
+      "map_key": "\"n\": v\n",
+      "seq_item": "- \"n\"\n",
+      "nested": "list:\n    - k: \"n\"\n",
+      "deep": "a:\n    b:\n        c: \"n\"\n",
+      "root": "\"n\"\n"
+    },
+    {
+      "name": "bool-like",
+      "value": "N",
+      "map_value": "k: \"N\"\n",
+      "map_key": "\"N\": v\n",
+      "seq_item": "- \"N\"\n",
+      "nested": "list:\n    - k: \"N\"\n",
+      "deep": "a:\n    b:\n        c: \"N\"\n",
+      "root": "\"N\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "12",
+      "map_value": "k: \"12\"\n",
+      "map_key": "\"12\": v\n",
+      "seq_item": "- \"12\"\n",
+      "nested": "list:\n    - k: \"12\"\n",
+      "deep": "a:\n    b:\n        c: \"12\"\n",
+      "root": "\"12\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "-12",
+      "map_value": "k: \"-12\"\n",
+      "map_key": "\"-12\": v\n",
+      "seq_item": "- \"-12\"\n",
+      "nested": "list:\n    - k: \"-12\"\n",
+      "deep": "a:\n    b:\n        c: \"-12\"\n",
+      "root": "\"-12\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "+12",
+      "map_value": "k: \"+12\"\n",
+      "map_key": "\"+12\": v\n",
+      "seq_item": "- \"+12\"\n",
+      "nested": "list:\n    - k: \"+12\"\n",
+      "deep": "a:\n    b:\n        c: \"+12\"\n",
+      "root": "\"+12\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "012",
+      "map_value": "k: \"012\"\n",
+      "map_key": "\"012\": v\n",
+      "seq_item": "- \"012\"\n",
+      "nested": "list:\n    - k: \"012\"\n",
+      "deep": "a:\n    b:\n        c: \"012\"\n",
+      "root": "\"012\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "08",
+      "map_value": "k: \"08\"\n",
+      "map_key": "\"08\": v\n",
+      "seq_item": "- \"08\"\n",
+      "nested": "list:\n    - k: \"08\"\n",
+      "deep": "a:\n    b:\n        c: \"08\"\n",
+      "root": "\"08\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0x1f",
+      "map_value": "k: \"0x1f\"\n",
+      "map_key": "\"0x1f\": v\n",
+      "seq_item": "- \"0x1f\"\n",
+      "nested": "list:\n    - k: \"0x1f\"\n",
+      "deep": "a:\n    b:\n        c: \"0x1f\"\n",
+      "root": "\"0x1f\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0X1F",
+      "map_value": "k: \"0X1F\"\n",
+      "map_key": "\"0X1F\": v\n",
+      "seq_item": "- \"0X1F\"\n",
+      "nested": "list:\n    - k: \"0X1F\"\n",
+      "deep": "a:\n    b:\n        c: \"0X1F\"\n",
+      "root": "\"0X1F\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0o17",
+      "map_value": "k: \"0o17\"\n",
+      "map_key": "\"0o17\": v\n",
+      "seq_item": "- \"0o17\"\n",
+      "nested": "list:\n    - k: \"0o17\"\n",
+      "deep": "a:\n    b:\n        c: \"0o17\"\n",
+      "root": "\"0o17\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0O17",
+      "map_value": "k: \"0O17\"\n",
+      "map_key": "\"0O17\": v\n",
+      "seq_item": "- \"0O17\"\n",
+      "nested": "list:\n    - k: \"0O17\"\n",
+      "deep": "a:\n    b:\n        c: \"0O17\"\n",
+      "root": "\"0O17\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0b101",
+      "map_value": "k: \"0b101\"\n",
+      "map_key": "\"0b101\": v\n",
+      "seq_item": "- \"0b101\"\n",
+      "nested": "list:\n    - k: \"0b101\"\n",
+      "deep": "a:\n    b:\n        c: \"0b101\"\n",
+      "root": "\"0b101\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0B11",
+      "map_value": "k: \"0B11\"\n",
+      "map_key": "\"0B11\": v\n",
+      "seq_item": "- \"0B11\"\n",
+      "nested": "list:\n    - k: \"0B11\"\n",
+      "deep": "a:\n    b:\n        c: \"0B11\"\n",
+      "root": "\"0B11\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "-0b11",
+      "map_value": "k: \"-0b11\"\n",
+      "map_key": "\"-0b11\": v\n",
+      "seq_item": "- \"-0b11\"\n",
+      "nested": "list:\n    - k: \"-0b11\"\n",
+      "deep": "a:\n    b:\n        c: \"-0b11\"\n",
+      "root": "\"-0b11\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1_000",
+      "map_value": "k: \"1_000\"\n",
+      "map_key": "\"1_000\": v\n",
+      "seq_item": "- \"1_000\"\n",
+      "nested": "list:\n    - k: \"1_000\"\n",
+      "deep": "a:\n    b:\n        c: \"1_000\"\n",
+      "root": "\"1_000\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "_1",
+      "map_value": "k: _1\n",
+      "map_key": "_1: v\n",
+      "seq_item": "- _1\n",
+      "nested": "list:\n    - k: _1\n",
+      "deep": "a:\n    b:\n        c: _1\n",
+      "root": "_1\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1__0",
+      "map_value": "k: \"1__0\"\n",
+      "map_key": "\"1__0\": v\n",
+      "seq_item": "- \"1__0\"\n",
+      "nested": "list:\n    - k: \"1__0\"\n",
+      "deep": "a:\n    b:\n        c: \"1__0\"\n",
+      "root": "\"1__0\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "9223372036854775807",
+      "map_value": "k: \"9223372036854775807\"\n",
+      "map_key": "\"9223372036854775807\": v\n",
+      "seq_item": "- \"9223372036854775807\"\n",
+      "nested": "list:\n    - k: \"9223372036854775807\"\n",
+      "deep": "a:\n    b:\n        c: \"9223372036854775807\"\n",
+      "root": "\"9223372036854775807\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "9223372036854775808",
+      "map_value": "k: \"9223372036854775808\"\n",
+      "map_key": "\"9223372036854775808\": v\n",
+      "seq_item": "- \"9223372036854775808\"\n",
+      "nested": "list:\n    - k: \"9223372036854775808\"\n",
+      "deep": "a:\n    b:\n        c: \"9223372036854775808\"\n",
+      "root": "\"9223372036854775808\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "18446744073709551615",
+      "map_value": "k: \"18446744073709551615\"\n",
+      "map_key": "\"18446744073709551615\": v\n",
+      "seq_item": "- \"18446744073709551615\"\n",
+      "nested": "list:\n    - k: \"18446744073709551615\"\n",
+      "deep": "a:\n    b:\n        c: \"18446744073709551615\"\n",
+      "root": "\"18446744073709551615\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "18446744073709551616",
+      "map_value": "k: \"18446744073709551616\"\n",
+      "map_key": "\"18446744073709551616\": v\n",
+      "seq_item": "- \"18446744073709551616\"\n",
+      "nested": "list:\n    - k: \"18446744073709551616\"\n",
+      "deep": "a:\n    b:\n        c: \"18446744073709551616\"\n",
+      "root": "\"18446744073709551616\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "-9223372036854775808",
+      "map_value": "k: \"-9223372036854775808\"\n",
+      "map_key": "\"-9223372036854775808\": v\n",
+      "seq_item": "- \"-9223372036854775808\"\n",
+      "nested": "list:\n    - k: \"-9223372036854775808\"\n",
+      "deep": "a:\n    b:\n        c: \"-9223372036854775808\"\n",
+      "root": "\"-9223372036854775808\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "-9223372036854775809",
+      "map_value": "k: \"-9223372036854775809\"\n",
+      "map_key": "\"-9223372036854775809\": v\n",
+      "seq_item": "- \"-9223372036854775809\"\n",
+      "nested": "list:\n    - k: \"-9223372036854775809\"\n",
+      "deep": "a:\n    b:\n        c: \"-9223372036854775809\"\n",
+      "root": "\"-9223372036854775809\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1.5",
+      "map_value": "k: \"1.5\"\n",
+      "map_key": "\"1.5\": v\n",
+      "seq_item": "- \"1.5\"\n",
+      "nested": "list:\n    - k: \"1.5\"\n",
+      "deep": "a:\n    b:\n        c: \"1.5\"\n",
+      "root": "\"1.5\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1.",
+      "map_value": "k: \"1.\"\n",
+      "map_key": "\"1.\": v\n",
+      "seq_item": "- \"1.\"\n",
+      "nested": "list:\n    - k: \"1.\"\n",
+      "deep": "a:\n    b:\n        c: \"1.\"\n",
+      "root": "\"1.\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".5",
+      "map_value": "k: \".5\"\n",
+      "map_key": "\".5\": v\n",
+      "seq_item": "- \".5\"\n",
+      "nested": "list:\n    - k: \".5\"\n",
+      "deep": "a:\n    b:\n        c: \".5\"\n",
+      "root": "\".5\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "-.5",
+      "map_value": "k: \"-.5\"\n",
+      "map_key": "\"-.5\": v\n",
+      "seq_item": "- \"-.5\"\n",
+      "nested": "list:\n    - k: \"-.5\"\n",
+      "deep": "a:\n    b:\n        c: \"-.5\"\n",
+      "root": "\"-.5\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "+.5",
+      "map_value": "k: \"+.5\"\n",
+      "map_key": "\"+.5\": v\n",
+      "seq_item": "- \"+.5\"\n",
+      "nested": "list:\n    - k: \"+.5\"\n",
+      "deep": "a:\n    b:\n        c: \"+.5\"\n",
+      "root": "\"+.5\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1e3",
+      "map_value": "k: \"1e3\"\n",
+      "map_key": "\"1e3\": v\n",
+      "seq_item": "- \"1e3\"\n",
+      "nested": "list:\n    - k: \"1e3\"\n",
+      "deep": "a:\n    b:\n        c: \"1e3\"\n",
+      "root": "\"1e3\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1E3",
+      "map_value": "k: \"1E3\"\n",
+      "map_key": "\"1E3\": v\n",
+      "seq_item": "- \"1E3\"\n",
+      "nested": "list:\n    - k: \"1E3\"\n",
+      "deep": "a:\n    b:\n        c: \"1E3\"\n",
+      "root": "\"1E3\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1e+3",
+      "map_value": "k: \"1e+3\"\n",
+      "map_key": "\"1e+3\": v\n",
+      "seq_item": "- \"1e+3\"\n",
+      "nested": "list:\n    - k: \"1e+3\"\n",
+      "deep": "a:\n    b:\n        c: \"1e+3\"\n",
+      "root": "\"1e+3\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "e3",
+      "map_value": "k: e3\n",
+      "map_key": "e3: v\n",
+      "seq_item": "- e3\n",
+      "nested": "list:\n    - k: e3\n",
+      "deep": "a:\n    b:\n        c: e3\n",
+      "root": "e3\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1.5e",
+      "map_value": "k: 1.5e\n",
+      "map_key": "1.5e: v\n",
+      "seq_item": "- 1.5e\n",
+      "nested": "list:\n    - k: 1.5e\n",
+      "deep": "a:\n    b:\n        c: 1.5e\n",
+      "root": "1.5e\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1_0.5",
+      "map_value": "k: \"1_0.5\"\n",
+      "map_key": "\"1_0.5\": v\n",
+      "seq_item": "- \"1_0.5\"\n",
+      "nested": "list:\n    - k: \"1_0.5\"\n",
+      "deep": "a:\n    b:\n        c: \"1_0.5\"\n",
+      "root": "\"1_0.5\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1:30",
+      "map_value": "k: \"1:30\"\n",
+      "map_key": "\"1:30\": v\n",
+      "seq_item": "- \"1:30\"\n",
+      "nested": "list:\n    - k: \"1:30\"\n",
+      "deep": "a:\n    b:\n        c: \"1:30\"\n",
+      "root": "\"1:30\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1:30:00",
+      "map_value": "k: \"1:30:00\"\n",
+      "map_key": "\"1:30:00\": v\n",
+      "seq_item": "- \"1:30:00\"\n",
+      "nested": "list:\n    - k: \"1:30:00\"\n",
+      "deep": "a:\n    b:\n        c: \"1:30:00\"\n",
+      "root": "\"1:30:00\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "190:20:30.15",
+      "map_value": "k: \"190:20:30.15\"\n",
+      "map_key": "\"190:20:30.15\": v\n",
+      "seq_item": "- \"190:20:30.15\"\n",
+      "nested": "list:\n    - k: \"190:20:30.15\"\n",
+      "deep": "a:\n    b:\n        c: \"190:20:30.15\"\n",
+      "root": "\"190:20:30.15\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1:60",
+      "map_value": "k: 1:60\n",
+      "map_key": "1:60: v\n",
+      "seq_item": "- 1:60\n",
+      "nested": "list:\n    - k: 1:60\n",
+      "deep": "a:\n    b:\n        c: 1:60\n",
+      "root": "1:60\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0x",
+      "map_value": "k: 0x\n",
+      "map_key": "0x: v\n",
+      "seq_item": "- 0x\n",
+      "nested": "list:\n    - k: 0x\n",
+      "deep": "a:\n    b:\n        c: 0x\n",
+      "root": "0x\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0b",
+      "map_value": "k: 0b\n",
+      "map_key": "0b: v\n",
+      "seq_item": "- 0b\n",
+      "nested": "list:\n    - k: 0b\n",
+      "deep": "a:\n    b:\n        c: 0b\n",
+      "root": "0b\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0o",
+      "map_value": "k: 0o\n",
+      "map_key": "0o: v\n",
+      "seq_item": "- 0o\n",
+      "nested": "list:\n    - k: 0o\n",
+      "deep": "a:\n    b:\n        c: 0o\n",
+      "root": "0o\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0xg",
+      "map_value": "k: 0xg\n",
+      "map_key": "0xg: v\n",
+      "seq_item": "- 0xg\n",
+      "nested": "list:\n    - k: 0xg\n",
+      "deep": "a:\n    b:\n        c: 0xg\n",
+      "root": "0xg\n"
+    },
+    {
+      "name": "numbers",
+      "value": "-",
+      "map_value": "k: '-'\n",
+      "map_key": "'-': v\n",
+      "seq_item": "- '-'\n",
+      "nested": "list:\n    - k: '-'\n",
+      "deep": "a:\n    b:\n        c: '-'\n",
+      "root": "'-'\n"
+    },
+    {
+      "name": "numbers",
+      "value": "+",
+      "map_value": "k: +\n",
+      "map_key": "+: v\n",
+      "seq_item": "- +\n",
+      "nested": "list:\n    - k: +\n",
+      "deep": "a:\n    b:\n        c: +\n",
+      "root": "+\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".",
+      "map_value": "k: .\n",
+      "map_key": ".: v\n",
+      "seq_item": "- .\n",
+      "nested": "list:\n    - k: .\n",
+      "deep": "a:\n    b:\n        c: .\n",
+      "root": ".\n"
+    },
+    {
+      "name": "numbers",
+      "value": "..",
+      "map_value": "k: ..\n",
+      "map_key": "..: v\n",
+      "seq_item": "- ..\n",
+      "nested": "list:\n    - k: ..\n",
+      "deep": "a:\n    b:\n        c: ..\n",
+      "root": "..\n"
+    },
+    {
+      "name": "numbers",
+      "value": "-0",
+      "map_value": "k: \"-0\"\n",
+      "map_key": "\"-0\": v\n",
+      "seq_item": "- \"-0\"\n",
+      "nested": "list:\n    - k: \"-0\"\n",
+      "deep": "a:\n    b:\n        c: \"-0\"\n",
+      "root": "\"-0\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "+0",
+      "map_value": "k: \"+0\"\n",
+      "map_key": "\"+0\": v\n",
+      "seq_item": "- \"+0\"\n",
+      "nested": "list:\n    - k: \"+0\"\n",
+      "deep": "a:\n    b:\n        c: \"+0\"\n",
+      "root": "\"+0\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0",
+      "map_value": "k: \"0\"\n",
+      "map_key": "\"0\": v\n",
+      "seq_item": "- \"0\"\n",
+      "nested": "list:\n    - k: \"0\"\n",
+      "deep": "a:\n    b:\n        c: \"0\"\n",
+      "root": "\"0\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "00",
+      "map_value": "k: \"00\"\n",
+      "map_key": "\"00\": v\n",
+      "seq_item": "- \"00\"\n",
+      "nested": "list:\n    - k: \"00\"\n",
+      "deep": "a:\n    b:\n        c: \"00\"\n",
+      "root": "\"00\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1 2",
+      "map_value": "k: 1 2\n",
+      "map_key": "1 2: v\n",
+      "seq_item": "- 1 2\n",
+      "nested": "list:\n    - k: 1 2\n",
+      "deep": "a:\n    b:\n        c: 1 2\n",
+      "root": "1 2\n"
+    },
+    {
+      "name": "numbers",
+      "value": "1e1000",
+      "map_value": "k: 1e1000\n",
+      "map_key": "1e1000: v\n",
+      "seq_item": "- 1e1000\n",
+      "nested": "list:\n    - k: 1e1000\n",
+      "deep": "a:\n    b:\n        c: 1e1000\n",
+      "root": "1e1000\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0e0",
+      "map_value": "k: \"0e0\"\n",
+      "map_key": "\"0e0\": v\n",
+      "seq_item": "- \"0e0\"\n",
+      "nested": "list:\n    - k: \"0e0\"\n",
+      "deep": "a:\n    b:\n        c: \"0e0\"\n",
+      "root": "\"0e0\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "0.1.2",
+      "map_value": "k: 0.1.2\n",
+      "map_key": "0.1.2: v\n",
+      "seq_item": "- 0.1.2\n",
+      "nested": "list:\n    - k: 0.1.2\n",
+      "deep": "a:\n    b:\n        c: 0.1.2\n",
+      "root": "0.1.2\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".inf",
+      "map_value": "k: \".inf\"\n",
+      "map_key": "\".inf\": v\n",
+      "seq_item": "- \".inf\"\n",
+      "nested": "list:\n    - k: \".inf\"\n",
+      "deep": "a:\n    b:\n        c: \".inf\"\n",
+      "root": "\".inf\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".Inf",
+      "map_value": "k: \".Inf\"\n",
+      "map_key": "\".Inf\": v\n",
+      "seq_item": "- \".Inf\"\n",
+      "nested": "list:\n    - k: \".Inf\"\n",
+      "deep": "a:\n    b:\n        c: \".Inf\"\n",
+      "root": "\".Inf\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".INF",
+      "map_value": "k: \".INF\"\n",
+      "map_key": "\".INF\": v\n",
+      "seq_item": "- \".INF\"\n",
+      "nested": "list:\n    - k: \".INF\"\n",
+      "deep": "a:\n    b:\n        c: \".INF\"\n",
+      "root": "\".INF\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "+.inf",
+      "map_value": "k: \"+.inf\"\n",
+      "map_key": "\"+.inf\": v\n",
+      "seq_item": "- \"+.inf\"\n",
+      "nested": "list:\n    - k: \"+.inf\"\n",
+      "deep": "a:\n    b:\n        c: \"+.inf\"\n",
+      "root": "\"+.inf\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": "-.inf",
+      "map_value": "k: \"-.inf\"\n",
+      "map_key": "\"-.inf\": v\n",
+      "seq_item": "- \"-.inf\"\n",
+      "nested": "list:\n    - k: \"-.inf\"\n",
+      "deep": "a:\n    b:\n        c: \"-.inf\"\n",
+      "root": "\"-.inf\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".nan",
+      "map_value": "k: \".nan\"\n",
+      "map_key": "\".nan\": v\n",
+      "seq_item": "- \".nan\"\n",
+      "nested": "list:\n    - k: \".nan\"\n",
+      "deep": "a:\n    b:\n        c: \".nan\"\n",
+      "root": "\".nan\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".NaN",
+      "map_value": "k: \".NaN\"\n",
+      "map_key": "\".NaN\": v\n",
+      "seq_item": "- \".NaN\"\n",
+      "nested": "list:\n    - k: \".NaN\"\n",
+      "deep": "a:\n    b:\n        c: \".NaN\"\n",
+      "root": "\".NaN\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".NAN",
+      "map_value": "k: \".NAN\"\n",
+      "map_key": "\".NAN\": v\n",
+      "seq_item": "- \".NAN\"\n",
+      "nested": "list:\n    - k: \".NAN\"\n",
+      "deep": "a:\n    b:\n        c: \".NAN\"\n",
+      "root": "\".NAN\"\n"
+    },
+    {
+      "name": "numbers",
+      "value": ".nAn",
+      "map_value": "k: .nAn\n",
+      "map_key": ".nAn: v\n",
+      "seq_item": "- .nAn\n",
+      "nested": "list:\n    - k: .nAn\n",
+      "deep": "a:\n    b:\n        c: .nAn\n",
+      "root": ".nAn\n"
+    },
+    {
+      "name": "numbers",
+      "value": "<<",
+      "map_value": "k: <<\n",
+      "map_key": "<<: v\n",
+      "seq_item": "- <<\n",
+      "nested": "list:\n    - k: <<\n",
+      "deep": "a:\n    b:\n        c: <<\n",
+      "root": "<<\n"
+    },
+    {
+      "name": "numbers",
+      "value": "<",
+      "map_value": "k: <\n",
+      "map_key": "<: v\n",
+      "seq_item": "- <\n",
+      "nested": "list:\n    - k: <\n",
+      "deep": "a:\n    b:\n        c: <\n",
+      "root": "<\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31",
+      "map_value": "k: \"2026-10-31\"\n",
+      "map_key": "\"2026-10-31\": v\n",
+      "seq_item": "- \"2026-10-31\"\n",
+      "nested": "list:\n    - k: \"2026-10-31\"\n",
+      "deep": "a:\n    b:\n        c: \"2026-10-31\"\n",
+      "root": "\"2026-10-31\"\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-1-2",
+      "map_value": "k: \"2026-1-2\"\n",
+      "map_key": "\"2026-1-2\": v\n",
+      "seq_item": "- \"2026-1-2\"\n",
+      "nested": "list:\n    - k: \"2026-1-2\"\n",
+      "deep": "a:\n    b:\n        c: \"2026-1-2\"\n",
+      "root": "\"2026-1-2\"\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-13-01",
+      "map_value": "k: 2026-13-01\n",
+      "map_key": "2026-13-01: v\n",
+      "seq_item": "- 2026-13-01\n",
+      "nested": "list:\n    - k: 2026-13-01\n",
+      "deep": "a:\n    b:\n        c: 2026-13-01\n",
+      "root": "2026-13-01\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-02-30",
+      "map_value": "k: 2026-02-30\n",
+      "map_key": "2026-02-30: v\n",
+      "seq_item": "- 2026-02-30\n",
+      "nested": "list:\n    - k: 2026-02-30\n",
+      "deep": "a:\n    b:\n        c: 2026-02-30\n",
+      "root": "2026-02-30\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31T10:00:00Z",
+      "map_value": "k: \"2026-10-31T10:00:00Z\"\n",
+      "map_key": "\"2026-10-31T10:00:00Z\": v\n",
+      "seq_item": "- \"2026-10-31T10:00:00Z\"\n",
+      "nested": "list:\n    - k: \"2026-10-31T10:00:00Z\"\n",
+      "deep": "a:\n    b:\n        c: \"2026-10-31T10:00:00Z\"\n",
+      "root": "\"2026-10-31T10:00:00Z\"\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31t10:00:00Z",
+      "map_value": "k: \"2026-10-31t10:00:00Z\"\n",
+      "map_key": "\"2026-10-31t10:00:00Z\": v\n",
+      "seq_item": "- \"2026-10-31t10:00:00Z\"\n",
+      "nested": "list:\n    - k: \"2026-10-31t10:00:00Z\"\n",
+      "deep": "a:\n    b:\n        c: \"2026-10-31t10:00:00Z\"\n",
+      "root": "\"2026-10-31t10:00:00Z\"\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31 10:00:00",
+      "map_value": "k: \"2026-10-31 10:00:00\"\n",
+      "map_key": "\"2026-10-31 10:00:00\": v\n",
+      "seq_item": "- \"2026-10-31 10:00:00\"\n",
+      "nested": "list:\n    - k: \"2026-10-31 10:00:00\"\n",
+      "deep": "a:\n    b:\n        c: \"2026-10-31 10:00:00\"\n",
+      "root": "\"2026-10-31 10:00:00\"\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31 10:00",
+      "map_value": "k: 2026-10-31 10:00\n",
+      "map_key": "2026-10-31 10:00: v\n",
+      "seq_item": "- 2026-10-31 10:00\n",
+      "nested": "list:\n    - k: 2026-10-31 10:00\n",
+      "deep": "a:\n    b:\n        c: 2026-10-31 10:00\n",
+      "root": "2026-10-31 10:00\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31T10:00:00",
+      "map_value": "k: 2026-10-31T10:00:00\n",
+      "map_key": "2026-10-31T10:00:00: v\n",
+      "seq_item": "- 2026-10-31T10:00:00\n",
+      "nested": "list:\n    - k: 2026-10-31T10:00:00\n",
+      "deep": "a:\n    b:\n        c: 2026-10-31T10:00:00\n",
+      "root": "2026-10-31T10:00:00\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31T10:00:00+02:00",
+      "map_value": "k: \"2026-10-31T10:00:00+02:00\"\n",
+      "map_key": "\"2026-10-31T10:00:00+02:00\": v\n",
+      "seq_item": "- \"2026-10-31T10:00:00+02:00\"\n",
+      "nested": "list:\n    - k: \"2026-10-31T10:00:00+02:00\"\n",
+      "deep": "a:\n    b:\n        c: \"2026-10-31T10:00:00+02:00\"\n",
+      "root": "\"2026-10-31T10:00:00+02:00\"\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31T10:00:00.123456789Z",
+      "map_value": "k: \"2026-10-31T10:00:00.123456789Z\"\n",
+      "map_key": "\"2026-10-31T10:00:00.123456789Z\": v\n",
+      "seq_item": "- \"2026-10-31T10:00:00.123456789Z\"\n",
+      "nested": "list:\n    - k: \"2026-10-31T10:00:00.123456789Z\"\n",
+      "deep": "a:\n    b:\n        c: \"2026-10-31T10:00:00.123456789Z\"\n",
+      "root": "\"2026-10-31T10:00:00.123456789Z\"\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31T25:00:00Z",
+      "map_value": "k: 2026-10-31T25:00:00Z\n",
+      "map_key": "2026-10-31T25:00:00Z: v\n",
+      "seq_item": "- 2026-10-31T25:00:00Z\n",
+      "nested": "list:\n    - k: 2026-10-31T25:00:00Z\n",
+      "deep": "a:\n    b:\n        c: 2026-10-31T25:00:00Z\n",
+      "root": "2026-10-31T25:00:00Z\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31T1:2:3Z",
+      "map_value": "k: \"2026-10-31T1:2:3Z\"\n",
+      "map_key": "\"2026-10-31T1:2:3Z\": v\n",
+      "seq_item": "- \"2026-10-31T1:2:3Z\"\n",
+      "nested": "list:\n    - k: \"2026-10-31T1:2:3Z\"\n",
+      "deep": "a:\n    b:\n        c: \"2026-10-31T1:2:3Z\"\n",
+      "root": "\"2026-10-31T1:2:3Z\"\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "20261031",
+      "map_value": "k: \"20261031\"\n",
+      "map_key": "\"20261031\": v\n",
+      "seq_item": "- \"20261031\"\n",
+      "nested": "list:\n    - k: \"20261031\"\n",
+      "deep": "a:\n    b:\n        c: \"20261031\"\n",
+      "root": "\"20261031\"\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "10000-01-01",
+      "map_value": "k: 10000-01-01\n",
+      "map_key": "10000-01-01: v\n",
+      "seq_item": "- 10000-01-01\n",
+      "nested": "list:\n    - k: 10000-01-01\n",
+      "deep": "a:\n    b:\n        c: 10000-01-01\n",
+      "root": "10000-01-01\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "0000-01-01",
+      "map_value": "k: \"0000-01-01\"\n",
+      "map_key": "\"0000-01-01\": v\n",
+      "seq_item": "- \"0000-01-01\"\n",
+      "nested": "list:\n    - k: \"0000-01-01\"\n",
+      "deep": "a:\n    b:\n        c: \"0000-01-01\"\n",
+      "root": "\"0000-01-01\"\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31x",
+      "map_value": "k: 2026-10-31x\n",
+      "map_key": "2026-10-31x: v\n",
+      "seq_item": "- 2026-10-31x\n",
+      "nested": "list:\n    - k: 2026-10-31x\n",
+      "deep": "a:\n    b:\n        c: 2026-10-31x\n",
+      "root": "2026-10-31x\n"
+    },
+    {
+      "name": "timestamps",
+      "value": "2026-10-31 ",
+      "map_value": "k: '2026-10-31 '\n",
+      "map_key": "'2026-10-31 ': v\n",
+      "seq_item": "- '2026-10-31 '\n",
+      "nested": "list:\n    - k: '2026-10-31 '\n",
+      "deep": "a:\n    b:\n        c: '2026-10-31 '\n",
+      "root": "'2026-10-31 '\n"
+    },
+    {
+      "name": "indicators",
+      "value": "a: b",
+      "map_value": "k: 'a: b'\n",
+      "map_key": "'a: b': v\n",
+      "seq_item": "- 'a: b'\n",
+      "nested": "list:\n    - k: 'a: b'\n",
+      "deep": "a:\n    b:\n        c: 'a: b'\n",
+      "root": "'a: b'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "a:",
+      "map_value": "k: 'a:'\n",
+      "map_key": "'a:': v\n",
+      "seq_item": "- 'a:'\n",
+      "nested": "list:\n    - k: 'a:'\n",
+      "deep": "a:\n    b:\n        c: 'a:'\n",
+      "root": "'a:'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "a:b",
+      "map_value": "k: a:b\n",
+      "map_key": "a:b: v\n",
+      "seq_item": "- a:b\n",
+      "nested": "list:\n    - k: a:b\n",
+      "deep": "a:\n    b:\n        c: a:b\n",
+      "root": "a:b\n"
+    },
+    {
+      "name": "indicators",
+      "value": ":",
+      "map_value": "k: ':'\n",
+      "map_key": "':': v\n",
+      "seq_item": "- ':'\n",
+      "nested": "list:\n    - k: ':'\n",
+      "deep": "a:\n    b:\n        c: ':'\n",
+      "root": "':'\n"
+    },
+    {
+      "name": "indicators",
+      "value": ": a",
+      "map_value": "k: ': a'\n",
+      "map_key": "': a': v\n",
+      "seq_item": "- ': a'\n",
+      "nested": "list:\n    - k: ': a'\n",
+      "deep": "a:\n    b:\n        c: ': a'\n",
+      "root": "': a'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "? a",
+      "map_value": "k: '? a'\n",
+      "map_key": "'? a': v\n",
+      "seq_item": "- '? a'\n",
+      "nested": "list:\n    - k: '? a'\n",
+      "deep": "a:\n    b:\n        c: '? a'\n",
+      "root": "'? a'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "?",
+      "map_value": "k: '?'\n",
+      "map_key": "'?': v\n",
+      "seq_item": "- '?'\n",
+      "nested": "list:\n    - k: '?'\n",
+      "deep": "a:\n    b:\n        c: '?'\n",
+      "root": "'?'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "- a",
+      "map_value": "k: '- a'\n",
+      "map_key": "'- a': v\n",
+      "seq_item": "- '- a'\n",
+      "nested": "list:\n    - k: '- a'\n",
+      "deep": "a:\n    b:\n        c: '- a'\n",
+      "root": "'- a'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "-a",
+      "map_value": "k: -a\n",
+      "map_key": "-a: v\n",
+      "seq_item": "- -a\n",
+      "nested": "list:\n    - k: -a\n",
+      "deep": "a:\n    b:\n        c: -a\n",
+      "root": "-a\n"
+    },
+    {
+      "name": "indicators",
+      "value": "- ",
+      "map_value": "k: '- '\n",
+      "map_key": "'- ': v\n",
+      "seq_item": "- '- '\n",
+      "nested": "list:\n    - k: '- '\n",
+      "deep": "a:\n    b:\n        c: '- '\n",
+      "root": "'- '\n"
+    },
+    {
+      "name": "indicators",
+      "value": "---",
+      "map_value": "k: '---'\n",
+      "map_key": "'---': v\n",
+      "seq_item": "- '---'\n",
+      "nested": "list:\n    - k: '---'\n",
+      "deep": "a:\n    b:\n        c: '---'\n",
+      "root": "'---'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "--- x",
+      "map_value": "k: '--- x'\n",
+      "map_key": "'--- x': v\n",
+      "seq_item": "- '--- x'\n",
+      "nested": "list:\n    - k: '--- x'\n",
+      "deep": "a:\n    b:\n        c: '--- x'\n",
+      "root": "'--- x'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "...",
+      "map_value": "k: '...'\n",
+      "map_key": "'...': v\n",
+      "seq_item": "- '...'\n",
+      "nested": "list:\n    - k: '...'\n",
+      "deep": "a:\n    b:\n        c: '...'\n",
+      "root": "'...'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "... x",
+      "map_value": "k: '... x'\n",
+      "map_key": "'... x': v\n",
+      "seq_item": "- '... x'\n",
+      "nested": "list:\n    - k: '... x'\n",
+      "deep": "a:\n    b:\n        c: '... x'\n",
+      "root": "'... x'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "-- ",
+      "map_value": "k: '-- '\n",
+      "map_key": "'-- ': v\n",
+      "seq_item": "- '-- '\n",
+      "nested": "list:\n    - k: '-- '\n",
+      "deep": "a:\n    b:\n        c: '-- '\n",
+      "root": "'-- '\n"
+    },
+    {
+      "name": "indicators",
+      "value": "#c",
+      "map_value": "k: '#c'\n",
+      "map_key": "'#c': v\n",
+      "seq_item": "- '#c'\n",
+      "nested": "list:\n    - k: '#c'\n",
+      "deep": "a:\n    b:\n        c: '#c'\n",
+      "root": "'#c'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "a #b",
+      "map_value": "k: 'a #b'\n",
+      "map_key": "'a #b': v\n",
+      "seq_item": "- 'a #b'\n",
+      "nested": "list:\n    - k: 'a #b'\n",
+      "deep": "a:\n    b:\n        c: 'a #b'\n",
+      "root": "'a #b'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "a#b",
+      "map_value": "k: a#b\n",
+      "map_key": "a#b: v\n",
+      "seq_item": "- a#b\n",
+      "nested": "list:\n    - k: a#b\n",
+      "deep": "a:\n    b:\n        c: a#b\n",
+      "root": "a#b\n"
+    },
+    {
+      "name": "indicators",
+      "value": "!tag",
+      "map_value": "k: '!tag'\n",
+      "map_key": "'!tag': v\n",
+      "seq_item": "- '!tag'\n",
+      "nested": "list:\n    - k: '!tag'\n",
+      "deep": "a:\n    b:\n        c: '!tag'\n",
+      "root": "'!tag'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "&a",
+      "map_value": "k: '&a'\n",
+      "map_key": "'&a': v\n",
+      "seq_item": "- '&a'\n",
+      "nested": "list:\n    - k: '&a'\n",
+      "deep": "a:\n    b:\n        c: '&a'\n",
+      "root": "'&a'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "*a",
+      "map_value": "k: '*a'\n",
+      "map_key": "'*a': v\n",
+      "seq_item": "- '*a'\n",
+      "nested": "list:\n    - k: '*a'\n",
+      "deep": "a:\n    b:\n        c: '*a'\n",
+      "root": "'*a'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "|",
+      "map_value": "k: '|'\n",
+      "map_key": "'|': v\n",
+      "seq_item": "- '|'\n",
+      "nested": "list:\n    - k: '|'\n",
+      "deep": "a:\n    b:\n        c: '|'\n",
+      "root": "'|'\n"
+    },
+    {
+      "name": "indicators",
+      "value": ">",
+      "map_value": "k: '>'\n",
+      "map_key": "'>': v\n",
+      "seq_item": "- '>'\n",
+      "nested": "list:\n    - k: '>'\n",
+      "deep": "a:\n    b:\n        c: '>'\n",
+      "root": "'>'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "%",
+      "map_value": "k: '%'\n",
+      "map_key": "'%': v\n",
+      "seq_item": "- '%'\n",
+      "nested": "list:\n    - k: '%'\n",
+      "deep": "a:\n    b:\n        c: '%'\n",
+      "root": "'%'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "@",
+      "map_value": "k: '@'\n",
+      "map_key": "'@': v\n",
+      "seq_item": "- '@'\n",
+      "nested": "list:\n    - k: '@'\n",
+      "deep": "a:\n    b:\n        c: '@'\n",
+      "root": "'@'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "`",
+      "map_value": "k: '`'\n",
+      "map_key": "'`': v\n",
+      "seq_item": "- '`'\n",
+      "nested": "list:\n    - k: '`'\n",
+      "deep": "a:\n    b:\n        c: '`'\n",
+      "root": "'`'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "'",
+      "map_value": "k: ''''\n",
+      "map_key": "'''': v\n",
+      "seq_item": "- ''''\n",
+      "nested": "list:\n    - k: ''''\n",
+      "deep": "a:\n    b:\n        c: ''''\n",
+      "root": "''''\n"
+    },
+    {
+      "name": "indicators",
+      "value": "\"",
+      "map_value": "k: '\"'\n",
+      "map_key": "'\"': v\n",
+      "seq_item": "- '\"'\n",
+      "nested": "list:\n    - k: '\"'\n",
+      "deep": "a:\n    b:\n        c: '\"'\n",
+      "root": "'\"'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "[",
+      "map_value": "k: '['\n",
+      "map_key": "'[': v\n",
+      "seq_item": "- '['\n",
+      "nested": "list:\n    - k: '['\n",
+      "deep": "a:\n    b:\n        c: '['\n",
+      "root": "'['\n"
+    },
+    {
+      "name": "indicators",
+      "value": "]",
+      "map_value": "k: ']'\n",
+      "map_key": "']': v\n",
+      "seq_item": "- ']'\n",
+      "nested": "list:\n    - k: ']'\n",
+      "deep": "a:\n    b:\n        c: ']'\n",
+      "root": "']'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "{",
+      "map_value": "k: '{'\n",
+      "map_key": "'{': v\n",
+      "seq_item": "- '{'\n",
+      "nested": "list:\n    - k: '{'\n",
+      "deep": "a:\n    b:\n        c: '{'\n",
+      "root": "'{'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "}",
+      "map_value": "k: '}'\n",
+      "map_key": "'}': v\n",
+      "seq_item": "- '}'\n",
+      "nested": "list:\n    - k: '}'\n",
+      "deep": "a:\n    b:\n        c: '}'\n",
+      "root": "'}'\n"
+    },
+    {
+      "name": "indicators",
+      "value": ",",
+      "map_value": "k: ','\n",
+      "map_key": "',': v\n",
+      "seq_item": "- ','\n",
+      "nested": "list:\n    - k: ','\n",
+      "deep": "a:\n    b:\n        c: ','\n",
+      "root": "','\n"
+    },
+    {
+      "name": "indicators",
+      "value": "a,b",
+      "map_value": "k: a,b\n",
+      "map_key": "a,b: v\n",
+      "seq_item": "- a,b\n",
+      "nested": "list:\n    - k: a,b\n",
+      "deep": "a:\n    b:\n        c: a,b\n",
+      "root": "a,b\n"
+    },
+    {
+      "name": "indicators",
+      "value": "[a]",
+      "map_value": "k: '[a]'\n",
+      "map_key": "'[a]': v\n",
+      "seq_item": "- '[a]'\n",
+      "nested": "list:\n    - k: '[a]'\n",
+      "deep": "a:\n    b:\n        c: '[a]'\n",
+      "root": "'[a]'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "{a}",
+      "map_value": "k: '{a}'\n",
+      "map_key": "'{a}': v\n",
+      "seq_item": "- '{a}'\n",
+      "nested": "list:\n    - k: '{a}'\n",
+      "deep": "a:\n    b:\n        c: '{a}'\n",
+      "root": "'{a}'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "a'b",
+      "map_value": "k: a'b\n",
+      "map_key": "a'b: v\n",
+      "seq_item": "- a'b\n",
+      "nested": "list:\n    - k: a'b\n",
+      "deep": "a:\n    b:\n        c: a'b\n",
+      "root": "a'b\n"
+    },
+    {
+      "name": "indicators",
+      "value": "a\"b",
+      "map_value": "k: a\"b\n",
+      "map_key": "a\"b: v\n",
+      "seq_item": "- a\"b\n",
+      "nested": "list:\n    - k: a\"b\n",
+      "deep": "a:\n    b:\n        c: a\"b\n",
+      "root": "a\"b\n"
+    },
+    {
+      "name": "indicators",
+      "value": "a\\b",
+      "map_value": "k: a\\b\n",
+      "map_key": "a\\b: v\n",
+      "seq_item": "- a\\b\n",
+      "nested": "list:\n    - k: a\\b\n",
+      "deep": "a:\n    b:\n        c: a\\b\n",
+      "root": "a\\b\n"
+    },
+    {
+      "name": "indicators",
+      "value": "\\",
+      "map_value": "k: \\\n",
+      "map_key": "\\: v\n",
+      "seq_item": "- \\\n",
+      "nested": "list:\n    - k: \\\n",
+      "deep": "a:\n    b:\n        c: \\\n",
+      "root": "\\\n"
+    },
+    {
+      "name": "indicators",
+      "value": "key: value",
+      "map_value": "k: 'key: value'\n",
+      "map_key": "'key: value': v\n",
+      "seq_item": "- 'key: value'\n",
+      "nested": "list:\n    - k: 'key: value'\n",
+      "deep": "a:\n    b:\n        c: 'key: value'\n",
+      "root": "'key: value'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "it's: x",
+      "map_value": "k: 'it''s: x'\n",
+      "map_key": "'it''s: x': v\n",
+      "seq_item": "- 'it''s: x'\n",
+      "nested": "list:\n    - k: 'it''s: x'\n",
+      "deep": "a:\n    b:\n        c: 'it''s: x'\n",
+      "root": "'it''s: x'\n"
+    },
+    {
+      "name": "indicators",
+      "value": "x: 'y'",
+      "map_value": "k: 'x: ''y'''\n",
+      "map_key": "'x: ''y''': v\n",
+      "seq_item": "- 'x: ''y'''\n",
+      "nested": "list:\n    - k: 'x: ''y'''\n",
+      "deep": "a:\n    b:\n        c: 'x: ''y'''\n",
+      "root": "'x: ''y'''\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": " ",
+      "map_value": "k: ' '\n",
+      "map_key": "' ': v\n",
+      "seq_item": "- ' '\n",
+      "nested": "list:\n    - k: ' '\n",
+      "deep": "a:\n    b:\n        c: ' '\n",
+      "root": "' '\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": "  ",
+      "map_value": "k: '  '\n",
+      "map_key": "'  ': v\n",
+      "seq_item": "- '  '\n",
+      "nested": "list:\n    - k: '  '\n",
+      "deep": "a:\n    b:\n        c: '  '\n",
+      "root": "'  '\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": "a ",
+      "map_value": "k: 'a '\n",
+      "map_key": "'a ': v\n",
+      "seq_item": "- 'a '\n",
+      "nested": "list:\n    - k: 'a '\n",
+      "deep": "a:\n    b:\n        c: 'a '\n",
+      "root": "'a '\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": " a",
+      "map_value": "k: ' a'\n",
+      "map_key": "' a': v\n",
+      "seq_item": "- ' a'\n",
+      "nested": "list:\n    - k: ' a'\n",
+      "deep": "a:\n    b:\n        c: ' a'\n",
+      "root": "' a'\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": " a ",
+      "map_value": "k: ' a '\n",
+      "map_key": "' a ': v\n",
+      "seq_item": "- ' a '\n",
+      "nested": "list:\n    - k: ' a '\n",
+      "deep": "a:\n    b:\n        c: ' a '\n",
+      "root": "' a '\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": "a  b",
+      "map_value": "k: a  b\n",
+      "map_key": "a  b: v\n",
+      "seq_item": "- a  b\n",
+      "nested": "list:\n    - k: a  b\n",
+      "deep": "a:\n    b:\n        c: a  b\n",
+      "root": "a  b\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": "\t",
+      "map_value": "k: \"\\t\"\n",
+      "map_key": "\"\\t\": v\n",
+      "seq_item": "- \"\\t\"\n",
+      "nested": "list:\n    - k: \"\\t\"\n",
+      "deep": "a:\n    b:\n        c: \"\\t\"\n",
+      "root": "\"\\t\"\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": "a\tb",
+      "map_value": "k: \"a\\tb\"\n",
+      "map_key": "\"a\\tb\": v\n",
+      "seq_item": "- \"a\\tb\"\n",
+      "nested": "list:\n    - k: \"a\\tb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\tb\"\n",
+      "root": "\"a\\tb\"\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": "\ta",
+      "map_value": "k: \"\\ta\"\n",
+      "map_key": "\"\\ta\": v\n",
+      "seq_item": "- \"\\ta\"\n",
+      "nested": "list:\n    - k: \"\\ta\"\n",
+      "deep": "a:\n    b:\n        c: \"\\ta\"\n",
+      "root": "\"\\ta\"\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": "a\t",
+      "map_value": "k: \"a\\t\"\n",
+      "map_key": "\"a\\t\": v\n",
+      "seq_item": "- \"a\\t\"\n",
+      "nested": "list:\n    - k: \"a\\t\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\t\"\n",
+      "root": "\"a\\t\"\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": " \t",
+      "map_value": "k: \" \\t\"\n",
+      "map_key": "\" \\t\": v\n",
+      "seq_item": "- \" \\t\"\n",
+      "nested": "list:\n    - k: \" \\t\"\n",
+      "deep": "a:\n    b:\n        c: \" \\t\"\n",
+      "root": "\" \\t\"\n"
+    },
+    {
+      "name": "spaces-and-tabs",
+      "value": "a \t b",
+      "map_value": "k: \"a \\t b\"\n",
+      "map_key": "\"a \\t b\": v\n",
+      "seq_item": "- \"a \\t b\"\n",
+      "nested": "list:\n    - k: \"a \\t b\"\n",
+      "deep": "a:\n    b:\n        c: \"a \\t b\"\n",
+      "root": "\"a \\t b\"\n"
+    },
+    {
+      "name": "newlines",
+      "value": "\n",
+      "map_value": "k: |4+\n",
+      "map_key": "? |4+\n: v\n",
+      "seq_item": "- |4+\n",
+      "nested": "list:\n    - k: |4+\n",
+      "deep": "a:\n    b:\n        c: |4+\n",
+      "root": "|4+\n"
+    },
+    {
+      "name": "newlines",
+      "value": "\n\n",
+      "map_value": "k: |4+\n\n",
+      "map_key": "? |4+\n\n: v\n",
+      "seq_item": "- |4+\n\n",
+      "nested": "list:\n    - k: |4+\n\n",
+      "deep": "a:\n    b:\n        c: |4+\n\n",
+      "root": "|4+\n\n"
+    },
+    {
+      "name": "newlines",
+      "value": "\n\n\n",
+      "map_value": "k: |4+\n\n\n",
+      "map_key": "? |4+\n\n\n: v\n",
+      "seq_item": "- |4+\n\n\n",
+      "nested": "list:\n    - k: |4+\n\n\n",
+      "deep": "a:\n    b:\n        c: |4+\n\n\n",
+      "root": "|4+\n\n\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\n",
+      "map_value": "k: |\n    a\n",
+      "map_key": "? |\n    a\n: v\n",
+      "seq_item": "- |\n  a\n",
+      "nested": "list:\n    - k: |\n        a\n",
+      "deep": "a:\n    b:\n        c: |\n            a\n",
+      "root": "|\n    a\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\n\n",
+      "map_value": "k: |+\n    a\n\n",
+      "map_key": "? |+\n    a\n\n: v\n",
+      "seq_item": "- |+\n  a\n\n",
+      "nested": "list:\n    - k: |+\n        a\n\n",
+      "deep": "a:\n    b:\n        c: |+\n            a\n\n",
+      "root": "|+\n    a\n\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\n\n\n",
+      "map_value": "k: |+\n    a\n\n\n",
+      "map_key": "? |+\n    a\n\n\n: v\n",
+      "seq_item": "- |+\n  a\n\n\n",
+      "nested": "list:\n    - k: |+\n        a\n\n\n",
+      "deep": "a:\n    b:\n        c: |+\n            a\n\n\n",
+      "root": "|+\n    a\n\n\n"
+    },
+    {
+      "name": "newlines",
+      "value": "\na",
+      "map_value": "k: |4-\n    a\n",
+      "map_key": "? |4-\n    a\n: v\n",
+      "seq_item": "- |4-\n  a\n",
+      "nested": "list:\n    - k: |4-\n        a\n",
+      "deep": "a:\n    b:\n        c: |4-\n            a\n",
+      "root": "|4-\n    a\n"
+    },
+    {
+      "name": "newlines",
+      "value": "\n\na",
+      "map_value": "k: |4-\n\n    a\n",
+      "map_key": "? |4-\n\n    a\n: v\n",
+      "seq_item": "- |4-\n\n  a\n",
+      "nested": "list:\n    - k: |4-\n\n        a\n",
+      "deep": "a:\n    b:\n        c: |4-\n\n            a\n",
+      "root": "|4-\n\n    a\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\nb",
+      "map_value": "k: |-\n    a\n    b\n",
+      "map_key": "? |-\n    a\n    b\n: v\n",
+      "seq_item": "- |-\n  a\n  b\n",
+      "nested": "list:\n    - k: |-\n        a\n        b\n",
+      "deep": "a:\n    b:\n        c: |-\n            a\n            b\n",
+      "root": "|-\n    a\n    b\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\n\nb",
+      "map_value": "k: |-\n    a\n\n    b\n",
+      "map_key": "? |-\n    a\n\n    b\n: v\n",
+      "seq_item": "- |-\n  a\n\n  b\n",
+      "nested": "list:\n    - k: |-\n        a\n\n        b\n",
+      "deep": "a:\n    b:\n        c: |-\n            a\n\n            b\n",
+      "root": "|-\n    a\n\n    b\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\nb\n",
+      "map_value": "k: |\n    a\n    b\n",
+      "map_key": "? |\n    a\n    b\n: v\n",
+      "seq_item": "- |\n  a\n  b\n",
+      "nested": "list:\n    - k: |\n        a\n        b\n",
+      "deep": "a:\n    b:\n        c: |\n            a\n            b\n",
+      "root": "|\n    a\n    b\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\nb\n\n",
+      "map_value": "k: |+\n    a\n    b\n\n",
+      "map_key": "? |+\n    a\n    b\n\n: v\n",
+      "seq_item": "- |+\n  a\n  b\n\n",
+      "nested": "list:\n    - k: |+\n        a\n        b\n\n",
+      "deep": "a:\n    b:\n        c: |+\n            a\n            b\n\n",
+      "root": "|+\n    a\n    b\n\n"
+    },
+    {
+      "name": "newlines",
+      "value": " a\nb",
+      "map_value": "k: |4-\n     a\n    b\n",
+      "map_key": "? |4-\n     a\n    b\n: v\n",
+      "seq_item": "- |4-\n   a\n  b\n",
+      "nested": "list:\n    - k: |4-\n         a\n        b\n",
+      "deep": "a:\n    b:\n        c: |4-\n             a\n            b\n",
+      "root": "|4-\n     a\n    b\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\n b",
+      "map_value": "k: |-\n    a\n     b\n",
+      "map_key": "? |-\n    a\n     b\n: v\n",
+      "seq_item": "- |-\n  a\n   b\n",
+      "nested": "list:\n    - k: |-\n        a\n         b\n",
+      "deep": "a:\n    b:\n        c: |-\n            a\n             b\n",
+      "root": "|-\n    a\n     b\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a \nb",
+      "map_value": "k: \"a \\nb\"\n",
+      "map_key": "? \"a \\nb\"\n: v\n",
+      "seq_item": "- \"a \\nb\"\n",
+      "nested": "list:\n    - k: \"a \\nb\"\n",
+      "deep": "a:\n    b:\n        c: \"a \\nb\"\n",
+      "root": "\"a \\nb\"\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\n  b\n",
+      "map_value": "k: |\n    a\n      b\n",
+      "map_key": "? |\n    a\n      b\n: v\n",
+      "seq_item": "- |\n  a\n    b\n",
+      "nested": "list:\n    - k: |\n        a\n          b\n",
+      "deep": "a:\n    b:\n        c: |\n            a\n              b\n",
+      "root": "|\n    a\n      b\n"
+    },
+    {
+      "name": "newlines",
+      "value": "\n a",
+      "map_value": "k: |4-\n     a\n",
+      "map_key": "? |4-\n     a\n: v\n",
+      "seq_item": "- |4-\n   a\n",
+      "nested": "list:\n    - k: |4-\n         a\n",
+      "deep": "a:\n    b:\n        c: |4-\n             a\n",
+      "root": "|4-\n     a\n"
+    },
+    {
+      "name": "newlines",
+      "value": "\n\n a\n",
+      "map_value": "k: |4\n\n     a\n",
+      "map_key": "? |4\n\n     a\n: v\n",
+      "seq_item": "- |4\n\n   a\n",
+      "nested": "list:\n    - k: |4\n\n         a\n",
+      "deep": "a:\n    b:\n        c: |4\n\n             a\n",
+      "root": "|4\n\n     a\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\tb\nc",
+      "map_value": "k: |-\n    a\tb\n    c\n",
+      "map_key": "? |-\n    a\tb\n    c\n: v\n",
+      "seq_item": "- |-\n  a\tb\n  c\n",
+      "nested": "list:\n    - k: |-\n        a\tb\n        c\n",
+      "deep": "a:\n    b:\n        c: |-\n            a\tb\n            c\n",
+      "root": "|-\n    a\tb\n    c\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\r\nb",
+      "map_value": "k: \"a\\r\\nb\"\n",
+      "map_key": "? \"a\\r\\nb\"\n: v\n",
+      "seq_item": "- \"a\\r\\nb\"\n",
+      "nested": "list:\n    - k: \"a\\r\\nb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\r\\nb\"\n",
+      "root": "\"a\\r\\nb\"\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\rb",
+      "map_value": "k: \"a\\rb\"\n",
+      "map_key": "? \"a\\rb\"\n: v\n",
+      "seq_item": "- \"a\\rb\"\n",
+      "nested": "list:\n    - k: \"a\\rb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\rb\"\n",
+      "root": "\"a\\rb\"\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\r",
+      "map_value": "k: \"a\\r\"\n",
+      "map_key": "? \"a\\r\"\n: v\n",
+      "seq_item": "- \"a\\r\"\n",
+      "nested": "list:\n    - k: \"a\\r\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\r\"\n",
+      "root": "\"a\\r\"\n"
+    },
+    {
+      "name": "newlines",
+      "value": "\r",
+      "map_value": "k: \"\\r\"\n",
+      "map_key": "? \"\\r\"\n: v\n",
+      "seq_item": "- \"\\r\"\n",
+      "nested": "list:\n    - k: \"\\r\"\n",
+      "deep": "a:\n    b:\n        c: \"\\r\"\n",
+      "root": "\"\\r\"\n"
+    },
+    {
+      "name": "newlines",
+      "value": "\r\n",
+      "map_value": "k: \"\\r\\n\"\n",
+      "map_key": "? \"\\r\\n\"\n: v\n",
+      "seq_item": "- \"\\r\\n\"\n",
+      "nested": "list:\n    - k: \"\\r\\n\"\n",
+      "deep": "a:\n    b:\n        c: \"\\r\\n\"\n",
+      "root": "\"\\r\\n\"\n"
+    },
+    {
+      "name": "newlines",
+      "value": "line1\nline2\n",
+      "map_value": "k: |\n    line1\n    line2\n",
+      "map_key": "? |\n    line1\n    line2\n: v\n",
+      "seq_item": "- |\n  line1\n  line2\n",
+      "nested": "list:\n    - k: |\n        line1\n        line2\n",
+      "deep": "a:\n    b:\n        c: |\n            line1\n            line2\n",
+      "root": "|\n    line1\n    line2\n"
+    },
+    {
+      "name": "newlines",
+      "value": "line1\n\nline2\n\nline3",
+      "map_value": "k: |-\n    line1\n\n    line2\n\n    line3\n",
+      "map_key": "? |-\n    line1\n\n    line2\n\n    line3\n: v\n",
+      "seq_item": "- |-\n  line1\n\n  line2\n\n  line3\n",
+      "nested": "list:\n    - k: |-\n        line1\n\n        line2\n\n        line3\n",
+      "deep": "a:\n    b:\n        c: |-\n            line1\n\n            line2\n\n            line3\n",
+      "root": "|-\n    line1\n\n    line2\n\n    line3\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\n\n",
+      "map_value": "k: |+\n    a\n\n",
+      "map_key": "? |+\n    a\n\n: v\n",
+      "seq_item": "- |+\n  a\n\n",
+      "nested": "list:\n    - k: |+\n        a\n\n",
+      "deep": "a:\n    b:\n        c: |+\n            a\n\n",
+      "root": "|+\n    a\n\n"
+    },
+    {
+      "name": "newlines",
+      "value": " \n",
+      "map_value": "k: \" \\n\"\n",
+      "map_key": "? \" \\n\"\n: v\n",
+      "seq_item": "- \" \\n\"\n",
+      "nested": "list:\n    - k: \" \\n\"\n",
+      "deep": "a:\n    b:\n        c: \" \\n\"\n",
+      "root": "\" \\n\"\n"
+    },
+    {
+      "name": "newlines",
+      "value": "\n ",
+      "map_value": "k: \"\\n \"\n",
+      "map_key": "? \"\\n \"\n: v\n",
+      "seq_item": "- \"\\n \"\n",
+      "nested": "list:\n    - k: \"\\n \"\n",
+      "deep": "a:\n    b:\n        c: \"\\n \"\n",
+      "root": "\"\\n \"\n"
+    },
+    {
+      "name": "newlines",
+      "value": "a\n \nb",
+      "map_value": "k: \"a\\n \\nb\"\n",
+      "map_key": "? \"a\\n \\nb\"\n: v\n",
+      "seq_item": "- \"a\\n \\nb\"\n",
+      "nested": "list:\n    - k: \"a\\n \\nb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\n \\nb\"\n",
+      "root": "\"a\\n \\nb\"\n"
+    },
+    {
+      "name": "newlines",
+      "value": "text:\n- not a list\n",
+      "map_value": "k: |\n    text:\n    - not a list\n",
+      "map_key": "? |\n    text:\n    - not a list\n: v\n",
+      "seq_item": "- |\n  text:\n  - not a list\n",
+      "nested": "list:\n    - k: |\n        text:\n        - not a list\n",
+      "deep": "a:\n    b:\n        c: |\n            text:\n            - not a list\n",
+      "root": "|\n    text:\n    - not a list\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0001b",
+      "map_value": "k: \"a\\x01b\"\n",
+      "map_key": "\"a\\x01b\": v\n",
+      "seq_item": "- \"a\\x01b\"\n",
+      "nested": "list:\n    - k: \"a\\x01b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x01b\"\n",
+      "root": "\"a\\x01b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0002b",
+      "map_value": "k: \"a\\x02b\"\n",
+      "map_key": "\"a\\x02b\": v\n",
+      "seq_item": "- \"a\\x02b\"\n",
+      "nested": "list:\n    - k: \"a\\x02b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x02b\"\n",
+      "root": "\"a\\x02b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0003b",
+      "map_value": "k: \"a\\x03b\"\n",
+      "map_key": "\"a\\x03b\": v\n",
+      "seq_item": "- \"a\\x03b\"\n",
+      "nested": "list:\n    - k: \"a\\x03b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x03b\"\n",
+      "root": "\"a\\x03b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0004b",
+      "map_value": "k: \"a\\x04b\"\n",
+      "map_key": "\"a\\x04b\": v\n",
+      "seq_item": "- \"a\\x04b\"\n",
+      "nested": "list:\n    - k: \"a\\x04b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x04b\"\n",
+      "root": "\"a\\x04b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0005b",
+      "map_value": "k: \"a\\x05b\"\n",
+      "map_key": "\"a\\x05b\": v\n",
+      "seq_item": "- \"a\\x05b\"\n",
+      "nested": "list:\n    - k: \"a\\x05b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x05b\"\n",
+      "root": "\"a\\x05b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0006b",
+      "map_value": "k: \"a\\x06b\"\n",
+      "map_key": "\"a\\x06b\": v\n",
+      "seq_item": "- \"a\\x06b\"\n",
+      "nested": "list:\n    - k: \"a\\x06b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x06b\"\n",
+      "root": "\"a\\x06b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0007b",
+      "map_value": "k: \"a\\ab\"\n",
+      "map_key": "\"a\\ab\": v\n",
+      "seq_item": "- \"a\\ab\"\n",
+      "nested": "list:\n    - k: \"a\\ab\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\ab\"\n",
+      "root": "\"a\\ab\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\bb",
+      "map_value": "k: \"a\\bb\"\n",
+      "map_key": "\"a\\bb\": v\n",
+      "seq_item": "- \"a\\bb\"\n",
+      "nested": "list:\n    - k: \"a\\bb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\bb\"\n",
+      "root": "\"a\\bb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\tb",
+      "map_value": "k: \"a\\tb\"\n",
+      "map_key": "\"a\\tb\": v\n",
+      "seq_item": "- \"a\\tb\"\n",
+      "nested": "list:\n    - k: \"a\\tb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\tb\"\n",
+      "root": "\"a\\tb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\nb",
+      "map_value": "k: |-\n    a\n    b\n",
+      "map_key": "? |-\n    a\n    b\n: v\n",
+      "seq_item": "- |-\n  a\n  b\n",
+      "nested": "list:\n    - k: |-\n        a\n        b\n",
+      "deep": "a:\n    b:\n        c: |-\n            a\n            b\n",
+      "root": "|-\n    a\n    b\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u000bb",
+      "map_value": "k: \"a\\vb\"\n",
+      "map_key": "\"a\\vb\": v\n",
+      "seq_item": "- \"a\\vb\"\n",
+      "nested": "list:\n    - k: \"a\\vb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\vb\"\n",
+      "root": "\"a\\vb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\fb",
+      "map_value": "k: \"a\\fb\"\n",
+      "map_key": "\"a\\fb\": v\n",
+      "seq_item": "- \"a\\fb\"\n",
+      "nested": "list:\n    - k: \"a\\fb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\fb\"\n",
+      "root": "\"a\\fb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\rb",
+      "map_value": "k: \"a\\rb\"\n",
+      "map_key": "? \"a\\rb\"\n: v\n",
+      "seq_item": "- \"a\\rb\"\n",
+      "nested": "list:\n    - k: \"a\\rb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\rb\"\n",
+      "root": "\"a\\rb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u000eb",
+      "map_value": "k: \"a\\x0Eb\"\n",
+      "map_key": "\"a\\x0Eb\": v\n",
+      "seq_item": "- \"a\\x0Eb\"\n",
+      "nested": "list:\n    - k: \"a\\x0Eb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x0Eb\"\n",
+      "root": "\"a\\x0Eb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u000fb",
+      "map_value": "k: \"a\\x0Fb\"\n",
+      "map_key": "\"a\\x0Fb\": v\n",
+      "seq_item": "- \"a\\x0Fb\"\n",
+      "nested": "list:\n    - k: \"a\\x0Fb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x0Fb\"\n",
+      "root": "\"a\\x0Fb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0010b",
+      "map_value": "k: \"a\\x10b\"\n",
+      "map_key": "\"a\\x10b\": v\n",
+      "seq_item": "- \"a\\x10b\"\n",
+      "nested": "list:\n    - k: \"a\\x10b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x10b\"\n",
+      "root": "\"a\\x10b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0011b",
+      "map_value": "k: \"a\\x11b\"\n",
+      "map_key": "\"a\\x11b\": v\n",
+      "seq_item": "- \"a\\x11b\"\n",
+      "nested": "list:\n    - k: \"a\\x11b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x11b\"\n",
+      "root": "\"a\\x11b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0012b",
+      "map_value": "k: \"a\\x12b\"\n",
+      "map_key": "\"a\\x12b\": v\n",
+      "seq_item": "- \"a\\x12b\"\n",
+      "nested": "list:\n    - k: \"a\\x12b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x12b\"\n",
+      "root": "\"a\\x12b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0013b",
+      "map_value": "k: \"a\\x13b\"\n",
+      "map_key": "\"a\\x13b\": v\n",
+      "seq_item": "- \"a\\x13b\"\n",
+      "nested": "list:\n    - k: \"a\\x13b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x13b\"\n",
+      "root": "\"a\\x13b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0014b",
+      "map_value": "k: \"a\\x14b\"\n",
+      "map_key": "\"a\\x14b\": v\n",
+      "seq_item": "- \"a\\x14b\"\n",
+      "nested": "list:\n    - k: \"a\\x14b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x14b\"\n",
+      "root": "\"a\\x14b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0015b",
+      "map_value": "k: \"a\\x15b\"\n",
+      "map_key": "\"a\\x15b\": v\n",
+      "seq_item": "- \"a\\x15b\"\n",
+      "nested": "list:\n    - k: \"a\\x15b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x15b\"\n",
+      "root": "\"a\\x15b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0016b",
+      "map_value": "k: \"a\\x16b\"\n",
+      "map_key": "\"a\\x16b\": v\n",
+      "seq_item": "- \"a\\x16b\"\n",
+      "nested": "list:\n    - k: \"a\\x16b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x16b\"\n",
+      "root": "\"a\\x16b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0017b",
+      "map_value": "k: \"a\\x17b\"\n",
+      "map_key": "\"a\\x17b\": v\n",
+      "seq_item": "- \"a\\x17b\"\n",
+      "nested": "list:\n    - k: \"a\\x17b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x17b\"\n",
+      "root": "\"a\\x17b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0018b",
+      "map_value": "k: \"a\\x18b\"\n",
+      "map_key": "\"a\\x18b\": v\n",
+      "seq_item": "- \"a\\x18b\"\n",
+      "nested": "list:\n    - k: \"a\\x18b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x18b\"\n",
+      "root": "\"a\\x18b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0019b",
+      "map_value": "k: \"a\\x19b\"\n",
+      "map_key": "\"a\\x19b\": v\n",
+      "seq_item": "- \"a\\x19b\"\n",
+      "nested": "list:\n    - k: \"a\\x19b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x19b\"\n",
+      "root": "\"a\\x19b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u001ab",
+      "map_value": "k: \"a\\x1Ab\"\n",
+      "map_key": "\"a\\x1Ab\": v\n",
+      "seq_item": "- \"a\\x1Ab\"\n",
+      "nested": "list:\n    - k: \"a\\x1Ab\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x1Ab\"\n",
+      "root": "\"a\\x1Ab\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u001bb",
+      "map_value": "k: \"a\\eb\"\n",
+      "map_key": "\"a\\eb\": v\n",
+      "seq_item": "- \"a\\eb\"\n",
+      "nested": "list:\n    - k: \"a\\eb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\eb\"\n",
+      "root": "\"a\\eb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u001cb",
+      "map_value": "k: \"a\\x1Cb\"\n",
+      "map_key": "\"a\\x1Cb\": v\n",
+      "seq_item": "- \"a\\x1Cb\"\n",
+      "nested": "list:\n    - k: \"a\\x1Cb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x1Cb\"\n",
+      "root": "\"a\\x1Cb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u001db",
+      "map_value": "k: \"a\\x1Db\"\n",
+      "map_key": "\"a\\x1Db\": v\n",
+      "seq_item": "- \"a\\x1Db\"\n",
+      "nested": "list:\n    - k: \"a\\x1Db\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x1Db\"\n",
+      "root": "\"a\\x1Db\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u001eb",
+      "map_value": "k: \"a\\x1Eb\"\n",
+      "map_key": "\"a\\x1Eb\": v\n",
+      "seq_item": "- \"a\\x1Eb\"\n",
+      "nested": "list:\n    - k: \"a\\x1Eb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x1Eb\"\n",
+      "root": "\"a\\x1Eb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u001fb",
+      "map_value": "k: \"a\\x1Fb\"\n",
+      "map_key": "\"a\\x1Fb\": v\n",
+      "seq_item": "- \"a\\x1Fb\"\n",
+      "nested": "list:\n    - k: \"a\\x1Fb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x1Fb\"\n",
+      "root": "\"a\\x1Fb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "ab",
+      "map_value": "k: \"a\\x7Fb\"\n",
+      "map_key": "\"a\\x7Fb\": v\n",
+      "seq_item": "- \"a\\x7Fb\"\n",
+      "nested": "list:\n    - k: \"a\\x7Fb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x7Fb\"\n",
+      "root": "\"a\\x7Fb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "\u0000",
+      "map_value": "k: \"\\0\"\n",
+      "map_key": "\"\\0\": v\n",
+      "seq_item": "- \"\\0\"\n",
+      "nested": "list:\n    - k: \"\\0\"\n",
+      "deep": "a:\n    b:\n        c: \"\\0\"\n",
+      "root": "\"\\0\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a\u0000b",
+      "map_value": "k: \"a\\0b\"\n",
+      "map_key": "\"a\\0b\": v\n",
+      "seq_item": "- \"a\\0b\"\n",
+      "nested": "list:\n    - k: \"a\\0b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\0b\"\n",
+      "root": "\"a\\0b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "ab",
+      "map_value": "k: \"a\\x80b\"\n",
+      "map_key": "\"a\\x80b\": v\n",
+      "seq_item": "- \"a\\x80b\"\n",
+      "nested": "list:\n    - k: \"a\\x80b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x80b\"\n",
+      "root": "\"a\\x80b\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "ab",
+      "map_value": "k: \"a\\Nb\"\n",
+      "map_key": "? \"a\\Nb\"\n: v\n",
+      "seq_item": "- \"a\\Nb\"\n",
+      "nested": "list:\n    - k: \"a\\Nb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\Nb\"\n",
+      "root": "\"a\\Nb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "ab",
+      "map_value": "k: \"a\\x9Fb\"\n",
+      "map_key": "\"a\\x9Fb\": v\n",
+      "seq_item": "- \"a\\x9Fb\"\n",
+      "nested": "list:\n    - k: \"a\\x9Fb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\x9Fb\"\n",
+      "root": "\"a\\x9Fb\"\n"
+    },
+    {
+      "name": "controls",
+      "value": "a b",
+      "map_value": "k: a b\n",
+      "map_key": "a b: v\n",
+      "seq_item": "- a b\n",
+      "nested": "list:\n    - k: a b\n",
+      "deep": "a:\n    b:\n        c: a b\n",
+      "root": "a b\n"
+    },
+    {
+      "name": "controls",
+      "value": " ",
+      "map_value": "k:  \n",
+      "map_key": " : v\n",
+      "seq_item": "-  \n",
+      "nested": "list:\n    - k:  \n",
+      "deep": "a:\n    b:\n        c:  \n",
+      "root": " \n"
+    },
+    {
+      "name": "controls",
+      "value": "a­b",
+      "map_value": "k: a­b\n",
+      "map_key": "a­b: v\n",
+      "seq_item": "- a­b\n",
+      "nested": "list:\n    - k: a­b\n",
+      "deep": "a:\n    b:\n        c: a­b\n",
+      "root": "a­b\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "a\u2028b",
+      "map_value": "k: 'a\u2028    b'\n",
+      "map_key": "? 'a\u2028    b'\n: v\n",
+      "seq_item": "- 'a\u2028  b'\n",
+      "nested": "list:\n    - k: 'a\u2028        b'\n",
+      "deep": "a:\n    b:\n        c: 'a\u2028            b'\n",
+      "root": "'a\u2028    b'\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "a\u2029b",
+      "map_value": "k: 'a\u2029    b'\n",
+      "map_key": "? 'a\u2029    b'\n: v\n",
+      "seq_item": "- 'a\u2029  b'\n",
+      "nested": "list:\n    - k: 'a\u2029        b'\n",
+      "deep": "a:\n    b:\n        c: 'a\u2029            b'\n",
+      "root": "'a\u2029    b'\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "\u2028",
+      "map_value": "k: '\u2028'\n",
+      "map_key": "? '\u2028'\n: v\n",
+      "seq_item": "- '\u2028'\n",
+      "nested": "list:\n    - k: '\u2028'\n",
+      "deep": "a:\n    b:\n        c: '\u2028'\n",
+      "root": "'\u2028'\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "\u2029",
+      "map_value": "k: '\u2029'\n",
+      "map_key": "? '\u2029'\n: v\n",
+      "seq_item": "- '\u2029'\n",
+      "nested": "list:\n    - k: '\u2029'\n",
+      "deep": "a:\n    b:\n        c: '\u2029'\n",
+      "root": "'\u2029'\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "ab",
+      "map_value": "k: \"a\\Nb\"\n",
+      "map_key": "? \"a\\Nb\"\n: v\n",
+      "seq_item": "- \"a\\Nb\"\n",
+      "nested": "list:\n    - k: \"a\\Nb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\Nb\"\n",
+      "root": "\"a\\Nb\"\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "",
+      "map_value": "k: \"\\N\"\n",
+      "map_key": "? \"\\N\"\n: v\n",
+      "seq_item": "- \"\\N\"\n",
+      "nested": "list:\n    - k: \"\\N\"\n",
+      "deep": "a:\n    b:\n        c: \"\\N\"\n",
+      "root": "\"\\N\"\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "a\u2028",
+      "map_value": "k: 'a\u2028'\n",
+      "map_key": "? 'a\u2028'\n: v\n",
+      "seq_item": "- 'a\u2028'\n",
+      "nested": "list:\n    - k: 'a\u2028'\n",
+      "deep": "a:\n    b:\n        c: 'a\u2028'\n",
+      "root": "'a\u2028'\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "\u2028a",
+      "map_value": "k: '\u2028    a'\n",
+      "map_key": "? '\u2028    a'\n: v\n",
+      "seq_item": "- '\u2028  a'\n",
+      "nested": "list:\n    - k: '\u2028        a'\n",
+      "deep": "a:\n    b:\n        c: '\u2028            a'\n",
+      "root": "'\u2028    a'\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "a\u2028\nb",
+      "map_value": "k: |-\n    a\u2028\n    b\n",
+      "map_key": "? |-\n    a\u2028\n    b\n: v\n",
+      "seq_item": "- |-\n  a\u2028\n  b\n",
+      "nested": "list:\n    - k: |-\n        a\u2028\n        b\n",
+      "deep": "a:\n    b:\n        c: |-\n            a\u2028\n            b\n",
+      "root": "|-\n    a\u2028\n    b\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "a\nb\u2028c",
+      "map_value": "k: |-\n    a\n    b\u2028    c\n",
+      "map_key": "? |-\n    a\n    b\u2028    c\n: v\n",
+      "seq_item": "- |-\n  a\n  b\u2028  c\n",
+      "nested": "list:\n    - k: |-\n        a\n        b\u2028        c\n",
+      "deep": "a:\n    b:\n        c: |-\n            a\n            b\u2028            c\n",
+      "root": "|-\n    a\n    b\u2028    c\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "a \u2028b",
+      "map_value": "k: \"a \\Lb\"\n",
+      "map_key": "? \"a \\Lb\"\n: v\n",
+      "seq_item": "- \"a \\Lb\"\n",
+      "nested": "list:\n    - k: \"a \\Lb\"\n",
+      "deep": "a:\n    b:\n        c: \"a \\Lb\"\n",
+      "root": "\"a \\Lb\"\n"
+    },
+    {
+      "name": "unicode-breaks",
+      "value": "a\u2028 b",
+      "map_value": "k: \"a\\L b\"\n",
+      "map_key": "? \"a\\L b\"\n: v\n",
+      "seq_item": "- \"a\\L b\"\n",
+      "nested": "list:\n    - k: \"a\\L b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\L b\"\n",
+      "root": "\"a\\L b\"\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "﻿",
+      "map_value": "k: \"\\uFEFF\"\n",
+      "map_key": "\"\\uFEFF\": v\n",
+      "seq_item": "- \"\\uFEFF\"\n",
+      "nested": "list:\n    - k: \"\\uFEFF\"\n",
+      "deep": "a:\n    b:\n        c: \"\\uFEFF\"\n",
+      "root": "\"\\uFEFF\"\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "﻿bom",
+      "map_value": "k: \"\\uFEFF\\x62\\x6F\\x6D\"\n",
+      "map_key": "\"\\uFEFF\\x62\\x6F\\x6D\": v\n",
+      "seq_item": "- \"\\uFEFF\\x62\\x6F\\x6D\"\n",
+      "nested": "list:\n    - k: \"\\uFEFF\\x62\\x6F\\x6D\"\n",
+      "deep": "a:\n    b:\n        c: \"\\uFEFF\\x62\\x6F\\x6D\"\n",
+      "root": "\"\\uFEFF\\x62\\x6F\\x6D\"\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "bom﻿",
+      "map_value": "k: \"bom\\uFEFF\"\n",
+      "map_key": "\"bom\\uFEFF\": v\n",
+      "seq_item": "- \"bom\\uFEFF\"\n",
+      "nested": "list:\n    - k: \"bom\\uFEFF\"\n",
+      "deep": "a:\n    b:\n        c: \"bom\\uFEFF\"\n",
+      "root": "\"bom\\uFEFF\"\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "a﻿b",
+      "map_value": "k: \"a\\uFEFFb\"\n",
+      "map_key": "\"a\\uFEFFb\": v\n",
+      "seq_item": "- \"a\\uFEFFb\"\n",
+      "nested": "list:\n    - k: \"a\\uFEFFb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\uFEFFb\"\n",
+      "root": "\"a\\uFEFFb\"\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "￾",
+      "map_value": "k: \"\\uFFFE\"\n",
+      "map_key": "\"\\uFFFE\": v\n",
+      "seq_item": "- \"\\uFFFE\"\n",
+      "nested": "list:\n    - k: \"\\uFFFE\"\n",
+      "deep": "a:\n    b:\n        c: \"\\uFFFE\"\n",
+      "root": "\"\\uFFFE\"\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "￿",
+      "map_value": "k: \"\\uFFFF\"\n",
+      "map_key": "\"\\uFFFF\": v\n",
+      "seq_item": "- \"\\uFFFF\"\n",
+      "nested": "list:\n    - k: \"\\uFFFF\"\n",
+      "deep": "a:\n    b:\n        c: \"\\uFFFF\"\n",
+      "root": "\"\\uFFFF\"\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "a￾b",
+      "map_value": "k: \"a\\uFFFEb\"\n",
+      "map_key": "\"a\\uFFFEb\": v\n",
+      "seq_item": "- \"a\\uFFFEb\"\n",
+      "nested": "list:\n    - k: \"a\\uFFFEb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\uFFFEb\"\n",
+      "root": "\"a\\uFFFEb\"\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "�",
+      "map_value": "k: �\n",
+      "map_key": "�: v\n",
+      "seq_item": "- �\n",
+      "nested": "list:\n    - k: �\n",
+      "deep": "a:\n    b:\n        c: �\n",
+      "root": "�\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "a�b",
+      "map_value": "k: a�b\n",
+      "map_key": "a�b: v\n",
+      "seq_item": "- a�b\n",
+      "nested": "list:\n    - k: a�b\n",
+      "deep": "a:\n    b:\n        c: a�b\n",
+      "root": "a�b\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "퟿",
+      "map_value": "k: ퟿\n",
+      "map_key": "퟿: v\n",
+      "seq_item": "- ퟿\n",
+      "nested": "list:\n    - k: ퟿\n",
+      "deep": "a:\n    b:\n        c: ퟿\n",
+      "root": "퟿\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "",
+      "map_value": "k: \n",
+      "map_key": ": v\n",
+      "seq_item": "- \n",
+      "nested": "list:\n    - k: \n",
+      "deep": "a:\n    b:\n        c: \n",
+      "root": "\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "ab",
+      "map_value": "k: ab\n",
+      "map_key": "ab: v\n",
+      "seq_item": "- ab\n",
+      "nested": "list:\n    - k: ab\n",
+      "deep": "a:\n    b:\n        c: ab\n",
+      "root": "ab\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "ÿ",
+      "map_value": "k: ÿ\n",
+      "map_key": "ÿ: v\n",
+      "seq_item": "- ÿ\n",
+      "nested": "list:\n    - k: ÿ\n",
+      "deep": "a:\n    b:\n        c: ÿ\n",
+      "root": "ÿ\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "é",
+      "map_value": "k: é\n",
+      "map_key": "é: v\n",
+      "seq_item": "- é\n",
+      "nested": "list:\n    - k: é\n",
+      "deep": "a:\n    b:\n        c: é\n",
+      "root": "é\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "ü ö",
+      "map_value": "k: ü ö\n",
+      "map_key": "ü ö: v\n",
+      "seq_item": "- ü ö\n",
+      "nested": "list:\n    - k: ü ö\n",
+      "deep": "a:\n    b:\n        c: ü ö\n",
+      "root": "ü ö\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "日本語",
+      "map_value": "k: 日本語\n",
+      "map_key": "日本語: v\n",
+      "seq_item": "- 日本語\n",
+      "nested": "list:\n    - k: 日本語\n",
+      "deep": "a:\n    b:\n        c: 日本語\n",
+      "root": "日本語\n"
+    },
+    {
+      "name": "bom-and-specials",
+      "value": "a é b",
+      "map_value": "k: a é b\n",
+      "map_key": "a é b: v\n",
+      "seq_item": "- a é b\n",
+      "nested": "list:\n    - k: a é b\n",
+      "deep": "a:\n    b:\n        c: a é b\n",
+      "root": "a é b\n"
+    },
+    {
+      "name": "astral",
+      "value": "😀",
+      "map_value": "k: \"\\U0001F600\"\n",
+      "map_key": "\"\\U0001F600\": v\n",
+      "seq_item": "- \"\\U0001F600\"\n",
+      "nested": "list:\n    - k: \"\\U0001F600\"\n",
+      "deep": "a:\n    b:\n        c: \"\\U0001F600\"\n",
+      "root": "\"\\U0001F600\"\n"
+    },
+    {
+      "name": "astral",
+      "value": "a😀b",
+      "map_value": "k: \"a\\U0001F600b\"\n",
+      "map_key": "\"a\\U0001F600b\": v\n",
+      "seq_item": "- \"a\\U0001F600b\"\n",
+      "nested": "list:\n    - k: \"a\\U0001F600b\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\U0001F600b\"\n",
+      "root": "\"a\\U0001F600b\"\n"
+    },
+    {
+      "name": "astral",
+      "value": "😀😀",
+      "map_value": "k: \"\\U0001F600\\U0001F600\"\n",
+      "map_key": "\"\\U0001F600\\U0001F600\": v\n",
+      "seq_item": "- \"\\U0001F600\\U0001F600\"\n",
+      "nested": "list:\n    - k: \"\\U0001F600\\U0001F600\"\n",
+      "deep": "a:\n    b:\n        c: \"\\U0001F600\\U0001F600\"\n",
+      "root": "\"\\U0001F600\\U0001F600\"\n"
+    },
+    {
+      "name": "astral",
+      "value": "emoji 😀 end",
+      "map_value": "k: \"emoji \\U0001F600 end\"\n",
+      "map_key": "\"emoji \\U0001F600 end\": v\n",
+      "seq_item": "- \"emoji \\U0001F600 end\"\n",
+      "nested": "list:\n    - k: \"emoji \\U0001F600 end\"\n",
+      "deep": "a:\n    b:\n        c: \"emoji \\U0001F600 end\"\n",
+      "root": "\"emoji \\U0001F600 end\"\n"
+    },
+    {
+      "name": "astral",
+      "value": "𐀀",
+      "map_value": "k: \"\\U00010000\"\n",
+      "map_key": "\"\\U00010000\": v\n",
+      "seq_item": "- \"\\U00010000\"\n",
+      "nested": "list:\n    - k: \"\\U00010000\"\n",
+      "deep": "a:\n    b:\n        c: \"\\U00010000\"\n",
+      "root": "\"\\U00010000\"\n"
+    },
+    {
+      "name": "astral",
+      "value": "􏿿",
+      "map_value": "k: \"\\U0010FFFF\"\n",
+      "map_key": "\"\\U0010FFFF\": v\n",
+      "seq_item": "- \"\\U0010FFFF\"\n",
+      "nested": "list:\n    - k: \"\\U0010FFFF\"\n",
+      "deep": "a:\n    b:\n        c: \"\\U0010FFFF\"\n",
+      "root": "\"\\U0010FFFF\"\n"
+    },
+    {
+      "name": "astral",
+      "value": "a😀\nb",
+      "map_value": "k: \"a\\U0001F600\\nb\"\n",
+      "map_key": "? \"a\\U0001F600\\nb\"\n: v\n",
+      "seq_item": "- \"a\\U0001F600\\nb\"\n",
+      "nested": "list:\n    - k: \"a\\U0001F600\\nb\"\n",
+      "deep": "a:\n    b:\n        c: \"a\\U0001F600\\nb\"\n",
+      "root": "\"a\\U0001F600\\nb\"\n"
+    },
+    {
+      "name": "astral",
+      "value": "😀: x",
+      "map_value": "k: \"\\U0001F600: x\"\n",
+      "map_key": "\"\\U0001F600: x\": v\n",
+      "seq_item": "- \"\\U0001F600: x\"\n",
+      "nested": "list:\n    - k: \"\\U0001F600: x\"\n",
+      "deep": "a:\n    b:\n        c: \"\\U0001F600: x\"\n",
+      "root": "\"\\U0001F600: x\"\n"
+    },
+    {
+      "name": "long",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "map_value": "k: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+      "map_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: v\n",
+      "seq_item": "- aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+      "nested": "list:\n    - k: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+      "deep": "a:\n    b:\n        c: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+      "root": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+    },
+    {
+      "name": "long",
+      "value": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word ",
+      "map_value": "k: 'word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word '\n",
+      "map_key": "? 'word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word '\n: v\n",
+      "seq_item": "- 'word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word '\n",
+      "nested": "list:\n    - k: 'word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word '\n",
+      "deep": "a:\n    b:\n        c: 'word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word '\n",
+      "root": "'word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word '\n"
+    },
+    {
+      "name": "long",
+      "value": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "map_value": "k: kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\n",
+      "map_key": "? kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\n: v\n",
+      "seq_item": "- kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\n",
+      "nested": "list:\n    - k: kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\n",
+      "deep": "a:\n    b:\n        c: kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\n",
+      "root": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\n"
+    },
+    {
+      "name": "long",
+      "value": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé: x",
+      "map_value": "k: 'éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé: x'\n",
+      "map_key": "? 'éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé: x'\n: v\n",
+      "seq_item": "- 'éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé: x'\n",
+      "nested": "list:\n    - k: 'éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé: x'\n",
+      "deep": "a:\n    b:\n        c: 'éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé: x'\n",
+      "root": "'éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé: x'\n"
+    },
+    {
+      "name": "long",
+      "value": "line\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\n",
+      "map_value": "k: |\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n",
+      "map_key": "? |\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n: v\n",
+      "seq_item": "- |\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n",
+      "nested": "list:\n    - k: |\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n        line\n",
+      "deep": "a:\n    b:\n        c: |\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n            line\n",
+      "root": "|\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n    line\n"
+    },
+    {
+      "name": "plain",
+      "value": "a",
+      "map_value": "k: a\n",
+      "map_key": "a: v\n",
+      "seq_item": "- a\n",
+      "nested": "list:\n    - k: a\n",
+      "deep": "a:\n    b:\n        c: a\n",
+      "root": "a\n"
+    },
+    {
+      "name": "plain",
+      "value": "abc",
+      "map_value": "k: abc\n",
+      "map_key": "abc: v\n",
+      "seq_item": "- abc\n",
+      "nested": "list:\n    - k: abc\n",
+      "deep": "a:\n    b:\n        c: abc\n",
+      "root": "abc\n"
+    },
+    {
+      "name": "plain",
+      "value": "Val-Alpha-001",
+      "map_value": "k: Val-Alpha-001\n",
+      "map_key": "Val-Alpha-001: v\n",
+      "seq_item": "- Val-Alpha-001\n",
+      "nested": "list:\n    - k: Val-Alpha-001\n",
+      "deep": "a:\n    b:\n        c: Val-Alpha-001\n",
+      "root": "Val-Alpha-001\n"
+    },
+    {
+      "name": "plain",
+      "value": "https://example.test",
+      "map_value": "k: https://example.test\n",
+      "map_key": "https://example.test: v\n",
+      "seq_item": "- https://example.test\n",
+      "nested": "list:\n    - k: https://example.test\n",
+      "deep": "a:\n    b:\n        c: https://example.test\n",
+      "root": "https://example.test\n"
+    },
+    {
+      "name": "plain",
+      "value": "a,b",
+      "map_value": "k: a,b\n",
+      "map_key": "a,b: v\n",
+      "seq_item": "- a,b\n",
+      "nested": "list:\n    - k: a,b\n",
+      "deep": "a:\n    b:\n        c: a,b\n",
+      "root": "a,b\n"
+    },
+    {
+      "name": "plain",
+      "value": "a/b",
+      "map_value": "k: a/b\n",
+      "map_key": "a/b: v\n",
+      "seq_item": "- a/b\n",
+      "nested": "list:\n    - k: a/b\n",
+      "deep": "a:\n    b:\n        c: a/b\n",
+      "root": "a/b\n"
+    },
+    {
+      "name": "plain",
+      "value": "path/to/x",
+      "map_value": "k: path/to/x\n",
+      "map_key": "path/to/x: v\n",
+      "seq_item": "- path/to/x\n",
+      "nested": "list:\n    - k: path/to/x\n",
+      "deep": "a:\n    b:\n        c: path/to/x\n",
+      "root": "path/to/x\n"
+    },
+    {
+      "name": "plain",
+      "value": "x y z",
+      "map_value": "k: x y z\n",
+      "map_key": "x y z: v\n",
+      "seq_item": "- x y z\n",
+      "nested": "list:\n    - k: x y z\n",
+      "deep": "a:\n    b:\n        c: x y z\n",
+      "root": "x y z\n"
+    },
+    {
+      "name": "plain",
+      "value": "tru",
+      "map_value": "k: tru\n",
+      "map_key": "tru: v\n",
+      "seq_item": "- tru\n",
+      "nested": "list:\n    - k: tru\n",
+      "deep": "a:\n    b:\n        c: tru\n",
+      "root": "tru\n"
+    },
+    {
+      "name": "plain",
+      "value": "nul",
+      "map_value": "k: nul\n",
+      "map_key": "nul: v\n",
+      "seq_item": "- nul\n",
+      "nested": "list:\n    - k: nul\n",
+      "deep": "a:\n    b:\n        c: nul\n",
+      "root": "nul\n"
+    },
+    {
+      "name": "plain",
+      "value": "Yes!",
+      "map_value": "k: Yes!\n",
+      "map_key": "Yes!: v\n",
+      "seq_item": "- Yes!\n",
+      "nested": "list:\n    - k: Yes!\n",
+      "deep": "a:\n    b:\n        c: Yes!\n",
+      "root": "Yes!\n"
+    },
+    {
+      "name": "plain",
+      "value": "a-b",
+      "map_value": "k: a-b\n",
+      "map_key": "a-b: v\n",
+      "seq_item": "- a-b\n",
+      "nested": "list:\n    - k: a-b\n",
+      "deep": "a:\n    b:\n        c: a-b\n",
+      "root": "a-b\n"
+    },
+    {
+      "name": "plain",
+      "value": "a.b",
+      "map_value": "k: a.b\n",
+      "map_key": "a.b: v\n",
+      "seq_item": "- a.b\n",
+      "nested": "list:\n    - k: a.b\n",
+      "deep": "a:\n    b:\n        c: a.b\n",
+      "root": "a.b\n"
+    },
+    {
+      "name": "plain",
+      "value": "a_b",
+      "map_value": "k: a_b\n",
+      "map_key": "a_b: v\n",
+      "seq_item": "- a_b\n",
+      "nested": "list:\n    - k: a_b\n",
+      "deep": "a:\n    b:\n        c: a_b\n",
+      "root": "a_b\n"
+    },
+    {
+      "name": "plain",
+      "value": "1a",
+      "map_value": "k: 1a\n",
+      "map_key": "1a: v\n",
+      "seq_item": "- 1a\n",
+      "nested": "list:\n    - k: 1a\n",
+      "deep": "a:\n    b:\n        c: 1a\n",
+      "root": "1a\n"
+    },
+    {
+      "name": "plain",
+      "value": "a1",
+      "map_value": "k: a1\n",
+      "map_key": "a1: v\n",
+      "seq_item": "- a1\n",
+      "nested": "list:\n    - k: a1\n",
+      "deep": "a:\n    b:\n        c: a1\n",
+      "root": "a1\n"
+    },
+    {
+      "name": "plain",
+      "value": "0.1.2.3",
+      "map_value": "k: 0.1.2.3\n",
+      "map_key": "0.1.2.3: v\n",
+      "seq_item": "- 0.1.2.3\n",
+      "nested": "list:\n    - k: 0.1.2.3\n",
+      "deep": "a:\n    b:\n        c: 0.1.2.3\n",
+      "root": "0.1.2.3\n"
+    },
+    {
+      "name": "plain",
+      "value": "v1.2.3",
+      "map_value": "k: v1.2.3\n",
+      "map_key": "v1.2.3: v\n",
+      "seq_item": "- v1.2.3\n",
+      "nested": "list:\n    - k: v1.2.3\n",
+      "deep": "a:\n    b:\n        c: v1.2.3\n",
+      "root": "v1.2.3\n"
+    },
+    {
+      "name": "plain",
+      "value": "10:20",
+      "map_value": "k: \"10:20\"\n",
+      "map_key": "\"10:20\": v\n",
+      "seq_item": "- \"10:20\"\n",
+      "nested": "list:\n    - k: \"10:20\"\n",
+      "deep": "a:\n    b:\n        c: \"10:20\"\n",
+      "root": "\"10:20\"\n"
+    },
+    {
+      "name": "plain",
+      "value": "a: ",
+      "map_value": "k: 'a: '\n",
+      "map_key": "'a: ': v\n",
+      "seq_item": "- 'a: '\n",
+      "nested": "list:\n    - k: 'a: '\n",
+      "deep": "a:\n    b:\n        c: 'a: '\n",
+      "root": "'a: '\n"
+    },
+    {
+      "name": "plain",
+      "value": "a:  b",
+      "map_value": "k: 'a:  b'\n",
+      "map_key": "'a:  b': v\n",
+      "seq_item": "- 'a:  b'\n",
+      "nested": "list:\n    - k: 'a:  b'\n",
+      "deep": "a:\n    b:\n        c: 'a:  b'\n",
+      "root": "'a:  b'\n"
+    }
+  ]
+}
