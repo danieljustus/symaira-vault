@@ -37,12 +37,30 @@ pub const ASK_SYSTEM_PROMPT: &str = "You are a helpful AI assistant. Answer the 
 pub const ASK_CONTEXT_SYSTEM_PROMPT: &str = "You are a helpful AI assistant with access to the user's vault entries as context. Use the provided vault context to answer the user's question. If the vault context is insufficient, supplement with your own knowledge and cite sources. Provide citations for your answers where applicable.";
 
 /// Go's `config.PerplexityConfig` as the runtime consumes it.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct PerplexityRuntimeConfig {
     pub api_key: String,
     pub base_url: String,
     pub rate_limit_per_min: i64,
     pub allow_private: bool,
+}
+
+impl std::fmt::Debug for PerplexityRuntimeConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PerplexityRuntimeConfig")
+            .field(
+                "api_key",
+                &if self.api_key.is_empty() {
+                    ""
+                } else {
+                    "[redacted]"
+                },
+            )
+            .field("base_url", &self.base_url)
+            .field("rate_limit_per_min", &self.rate_limit_per_min)
+            .field("allow_private", &self.allow_private)
+            .finish()
+    }
 }
 
 #[derive(Deserialize, Default)]

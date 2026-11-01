@@ -2758,7 +2758,7 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         } else if name == "execute_api_request" {
             self.execute_api_request(arguments, context)
         } else if name == "prepare_payment" {
-            self.prepare_payment(arguments)
+            self.prepare_payment(arguments, context)
         } else if name == "perplexity_search" {
             self.perplexity_search(arguments, context)
         } else if name == "perplexity_ask" {
@@ -2899,7 +2899,17 @@ impl StoreReadOnlyRuntime {
     /// `requireApproval` for `Intent{Action: "prepare_payment"}`. Critical
     /// risk is never remembered, so no approval cache is consulted or filled.
     /// The error text is what Go wraps as `payment denied: <err>`.
-    fn require_payment_approval(&self, path: &str, summary: &str) -> Result<(), String> {
+    fn require_payment_approval(
+        &self,
+        path: &str,
+        summary: &str,
+        context: &crate::RequestContext,
+    ) -> Result<(), String> {
+        // `requireApproval` returns `ctx.Err()` first: a cancelled or expired
+        // call never reaches the prompt or the autotype.
+        if let Some(error) = context.go_err() {
+            return Err(error.into());
+        }
         let mode = if self.approval_mode.is_empty() {
             if self.require_approval {
                 "prompt"
@@ -2968,7 +2978,11 @@ impl StoreReadOnlyRuntime {
         Ok(())
     }
 
-    fn prepare_payment(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+    fn prepare_payment(
+        &self,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
         use crate::call::required_string;
         let path = match required_string(arguments, "entry_path") {
             Ok(path) => path,
@@ -3050,7 +3064,7 @@ impl StoreReadOnlyRuntime {
             return Ok(ToolCallResult::error(error));
         }
 
-        if let Err(error) = self.require_payment_approval(path, &summary) {
+        if let Err(error) = self.require_payment_approval(path, &summary, context) {
             self.append_audit("payment.denied", path, false);
             return Err(format!("payment denied: {error}"));
         }

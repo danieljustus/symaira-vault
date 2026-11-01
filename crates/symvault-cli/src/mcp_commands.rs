@@ -837,15 +837,9 @@ pub fn build_handler_for_contract_test(
     )
 }
 
+/// Go's `autotype.DefaultAutotype()`: macOS, Linux and Windows type natively.
 fn autotype_backend() -> Option<Arc<dyn symvault_core::platform::Autotype>> {
-    #[cfg(target_os = "macos")]
-    {
-        Some(Arc::new(symvault_platform::MacOsPlatform))
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        None
-    }
+    Some(symvault_platform::native_autotype())
 }
 
 fn clipboard_backend() -> Arc<dyn Clipboard> {
