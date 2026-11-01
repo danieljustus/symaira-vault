@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-generate ffi-fixtures-check ffi-differential
 
 # Variables
 BINARY_NAME := symvault
@@ -819,6 +819,42 @@ audit-differential: audit-fixtures-check
 	$(CARGO) run -p symvault-store --example audit-emit --locked -- target/audit/rust-output.jsonl >/dev/null
 	@test -s target/audit/rust-output.jsonl
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
+
+# FFI-001: the Rust replacement for the gomobile pkg/mobilebind bridge.
+#
+#   ffi-fixtures-generate  re-record testdata/port/ffi/mobilebind.json from the
+#                          real Go functions (explicit; never part of a check)
+#   ffi-fixtures-check     re-run Go and fail on any byte of drift
+#   ffi-differential       Go --check, then the Rust tests (fixture replay,
+#                          Go<->Rust interoperability against the live Go
+#                          driver, C ABI), then on macOS the Swift package test
+#                          against the release-grade staticlib. Off macOS the
+#                          Swift part prints a visible SKIP.
+SWIFT ?= swift
+FFI_TARGET_ABS := $(abspath $(CARGO_TARGET_DIR))
+FFI_DRIVER := $(FFI_TARGET_ABS)/ffi-driver/mobilebindgen
+ffi-fixtures-generate ffi-fixtures-check ffi-differential: export SYMVAULT_TEST_KEYRING := memory
+
+ffi-fixtures-generate:
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mobilebindgen \
+		--output testdata/port/ffi/mobilebind.json
+
+ffi-fixtures-check:
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mobilebindgen \
+		--check --output testdata/port/ffi/mobilebind.json
+
+ffi-differential: ffi-fixtures-check
+	@mkdir -p $(dir $(FFI_DRIVER))
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -o $(FFI_DRIVER) ./scripts/rust-port/cmd/mobilebindgen
+	SYMVAULT_FFI_GO_DRIVER=$(FFI_DRIVER) $(CARGO) test -p symvault-ffi --locked
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		set -eu; \
+		$(CARGO) build -p symvault-ffi --profile ffi --locked; \
+		cd crates/symvault-ffi/swift && \
+		SYMVAULT_FFI_LIB_DIR=$(FFI_TARGET_ABS)/ffi $(SWIFT) test --scratch-path $(FFI_TARGET_ABS)/ffi-swift; \
+	else \
+		echo "SKIP ffi-differential: Swift package test needs macOS (host: $$(uname -s)); Go check and Rust tests passed"; \
+	fi
 
 # Split from `rust-gates` so CI can run the interpreter-heavy Miri pass in its
 # own parallel job: Miri accounts for roughly two thirds of the aggregate gate

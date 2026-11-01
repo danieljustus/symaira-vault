@@ -502,10 +502,10 @@ fn check_exact(
             ));
         }
     }
-    if let Some(expected) = want["bytes_b64"].as_str() {
-        if outcome.bytes.as_deref() != Some(b64(expected).as_slice()) {
-            return Err("bytes differ".to_owned());
-        }
+    if let Some(expected) = want["bytes_b64"].as_str()
+        && outcome.bytes.as_deref() != Some(b64(expected).as_slice())
+    {
+        return Err("bytes differ".to_owned());
     }
     if let Some(length) = want["bytes_len"].as_u64() {
         let data = outcome.bytes.as_deref().unwrap_or(&[]);
@@ -515,10 +515,10 @@ fn check_exact(
             return Err("large bytes differ (length or sha256)".to_owned());
         }
     }
-    if let Some(expected) = want["bool"].as_bool() {
-        if outcome.flag != Some(expected) {
-            return Err(format!("bool {:?}, want {expected}", outcome.flag));
-        }
+    if let Some(expected) = want["bool"].as_bool()
+        && outcome.flag != Some(expected)
+    {
+        return Err(format!("bool {:?}, want {expected}", outcome.flag));
     }
     Ok(())
 }
@@ -719,17 +719,34 @@ fn collect(base: &Path, dir: &Path, out: &mut Vec<String>) {
     }
 }
 
-/// Recorded Go behavior the Rust side deliberately does not reproduce yet. Each
-/// entry names its owner; the replay fails if the entry stops being needed.
-pub const KNOWN_DIVERGENCES: &[(&str, &str)] = &[(
-    "OpenVaultWithPassphrase/config-type-mismatch",
-    "symvault-core config loader words a non-mapping YAML document differently from yaml.v3 (CFG rows, not FFI-001)",
-)];
+/// Recorded Go behavior the Rust side deliberately does not reproduce yet
+/// (`testdata/port/ffi/known-divergences.json`, shared with the Swift test).
+/// The replay fails if an entry stops being needed.
+fn known_divergences() -> Vec<(String, String)> {
+    let text = fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/port/ffi/known-divergences.json"
+    ))
+    .expect("read known-divergences.json");
+    let document: Value = serde_json::from_str(&text).expect("known-divergences JSON");
+    document["cases"]
+        .as_array()
+        .expect("cases")
+        .iter()
+        .map(|entry| {
+            (
+                entry["id"].as_str().expect("id").to_owned(),
+                entry["reason"].as_str().expect("reason").to_owned(),
+            )
+        })
+        .collect()
+}
 
 /// Replays every case; returns per-function step counts and all mismatches.
 pub fn replay(fixture: &Value) -> (std::collections::BTreeMap<String, usize>, Vec<String>) {
     let mut counts = std::collections::BTreeMap::new();
     let mut failures = Vec::new();
+    let divergences = known_divergences();
     let seed = &fixture["seed"];
     let files = seed["vault"]["files"]
         .as_array()
@@ -750,7 +767,7 @@ pub fn replay(fixture: &Value) -> (std::collections::BTreeMap<String, usize>, Ve
             let function = step["function"].as_str().expect("function").to_owned();
             *counts.entry(function).or_insert(0) += 1;
             let result = run_step(step, seed, &root);
-            if let Some((_, why)) = KNOWN_DIVERGENCES.iter().find(|(case, _)| *case == id) {
+            if let Some((_, why)) = divergences.iter().find(|(case, _)| case == id) {
                 match result {
                     Err(reason) => eprintln!("KNOWN DIVERGENCE {id}: {why}\n  {reason}"),
                     Ok(()) => failures.push(format!(

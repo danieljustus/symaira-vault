@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "comment": "Recorded Go behavior the Rust bridge deliberately does not reproduce yet. Rust and Swift replays expect these cases to still differ and fail when one starts matching, so an entry cannot outlive its cause.",
+  "cases": [
+    {
+      "id": "OpenVaultWithPassphrase/config-type-mismatch",
+      "owner": "symvault-core config loader (CFG rows)",
+      "reason": "A non-mapping YAML document is worded 'parse config: top-level YAML document must be a mapping' instead of yaml.v3's 'yaml: unmarshal errors: ... cannot unmarshal !!int `5` into config.VaultConfig'."
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 //!
 //! * [`api`] holds the thirteen functions with Go-identical results and error
 //!   texts, built on `symvault-crypto` and `symvault-store`.
-//! * [`abi`] exposes them as a narrow C ABI (`include/symvault_ffi.h`) with
+//! * [`abi`] exposes them as a narrow C ABI (`swift/Sources/CSymvaultFFI/include/symvault_ffi.h`) with
 //!   caller-freed buffers, an explicit error out-parameter and no unwinding
 //!   across the boundary.
 //!

@@ -498,15 +498,14 @@ pub(crate) fn list_entries_json(dir: &str, prefix: &str, id_text: &str) -> R<Str
             .collect();
         symvault_gojson::to_string(&selected).map_err(|error| format!("marshal list: {error}"))
     };
-    let pseudonymized;
-    match fs::read(&cfg) {
+    let pseudonymized = match fs::read(&cfg) {
         Ok(bytes) => {
             let config = Config::load_from_bytes(&bytes)
                 .map_err(|error| format!("list entries: load vault config: {error}"))?;
-            pseudonymized = config
+            config
                 .vault
                 .as_ref()
-                .is_some_and(|vault| vault.pseudonymize_paths);
+                .is_some_and(|vault| vault.pseudonymize_paths)
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             // Go treats a missing config as defaults and walks the directory.
@@ -522,7 +521,7 @@ pub(crate) fn list_entries_json(dir: &str, prefix: &str, id_text: &str) -> R<Str
                 path_error("open", &cfg.display().to_string(), &error)
             ));
         }
-    }
+    };
     let store = Store::open(dir, &identity)
         .map_err(|error| format!("list entries: {}", map_store_error(&error)))?;
     if prefix.is_empty() && !pseudonymized {

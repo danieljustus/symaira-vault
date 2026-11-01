@@ -546,16 +546,16 @@ fn decode_write_record(
             ) {
                 record.field = text;
             }
-        } else if field_matches(key, "action") {
-            if let Some(text) = decode_string(
+        } else if field_matches(key, "action")
+            && let Some(text) = decode_string(
                 decoder,
                 value,
                 "WriteRecord",
                 &format!("{prefix}.action"),
                 "string",
-            ) {
-                record.action = text;
-            }
+            )
+        {
+            record.action = text;
         }
     }
     Ok(record)
@@ -692,16 +692,16 @@ fn decode_secret_metadata(
                                     ) {
                                         attachment.size = size;
                                     }
-                                } else if field_matches(field, "sha256") {
-                                    if let Some(text) = decode_string(
+                                } else if field_matches(field, "sha256")
+                                    && let Some(text) = decode_string(
                                         decoder,
                                         entry,
                                         "AttachmentInfo",
                                         &format!("{path}.sha256"),
                                         "string",
-                                    ) {
-                                        attachment.sha256 = text;
-                                    }
+                                    )
+                                {
+                                    attachment.sha256 = text;
                                 }
                             }
                         } else if !matches!(info, Node::Null) {
@@ -786,10 +786,10 @@ pub(crate) fn decode_entry(text: &str) -> Result<Entry, String> {
                             ),
                         }
                     }
-                } else if field_matches(key, "canary") {
-                    if let Some(flag) = decode_bool(&mut decoder, value, "alias", "canary") {
-                        entry.canary = flag;
-                    }
+                } else if field_matches(key, "canary")
+                    && let Some(flag) = decode_bool(&mut decoder, value, "alias", "canary")
+                {
+                    entry.canary = flag;
                 }
             }
         }

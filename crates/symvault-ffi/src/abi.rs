@@ -1,6 +1,6 @@
 //! Narrow C ABI over [`crate::api`].
 //!
-//! Contract (see `include/symvault_ffi.h`):
+//! Contract (see `swift/Sources/CSymvaultFFI/include/symvault_ffi.h`):
 //!
 //! * Inputs are `(pointer, length)` byte pairs; a null pointer is accepted only
 //!   with length zero. Text arguments must be UTF-8.
@@ -150,7 +150,7 @@ pub unsafe extern "C" fn symvault_buf_free(buf: SvBuf) {
         return;
     }
     // SAFETY: `from_vec` produced exactly this boxed slice.
-    let mut owned = unsafe { Box::from_raw(slice::from_raw_parts_mut(buf.ptr, buf.len)) };
+    let mut owned = unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(buf.ptr, buf.len)) };
     owned.zeroize();
 }
 
