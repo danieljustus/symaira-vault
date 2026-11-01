@@ -4771,7 +4771,7 @@ fn run_migrate_kdf(
         println!("The previous identity.age was backed up to identity.age.bak.");
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled(result)
 }
 
 /// Which `mcp` service action to run.

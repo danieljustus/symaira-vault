@@ -73,36 +73,6 @@
     {
       "expected_rust": {
         "exit_code": 1,
-        "stderr": "Error: read vault identity (__ROOT__/xdg-data/symaira-vault/identity.age): file not found\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_migrate_kdf_dd1",
-      "reason": "missing identity.age is worded `file not found`, once; Go prints the `open <path>` error twice",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "Error: read vault identity (__ROOT__/xdg-data/symaira-vault/identity.age): file not found\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_migrate_kdf_x1",
-      "reason": "missing identity.age is worded `file not found`, once; Go prints the `open <path>` error twice",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "Error: read vault identity (__ROOT__/xdg-data/symaira-vault/identity.age): file not found\n",
-        "stdout": ""
-      },
-      "name": "extra_uninitialized_migrate_kdf_x2",
-      "reason": "missing identity.age is worded `file not found`, once; Go prints the `open <path>` error twice",
-      "state": "uninitialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
         "stderr": "error: unrecognized subcommand 'setup'\n\n  tip: a similar subcommand exists: 'set'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
         "stdout": ""
       },
