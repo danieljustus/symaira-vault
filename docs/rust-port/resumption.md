@@ -47,7 +47,9 @@ Review fixes, 2026-11-01 (independent review of `a2feae44`: REQUEST_CHANGES, F1-
   `1e-0` into invalid `1e-0.0` for every store reader; now only a leading `-0`, copy zeroized. Low: entry data
   scrubbed on every return path (drop guard), `c_abi` skips under llvm-cov. Both fixes red before (victim
   overwritten; `1e-0.0`), green after.
-- Pending: re-review of those fixes.
+- Re-review of `9166d365..3f8389b0`: APPROVE (one low note: the `c_abi` skip does not see a plain `cargo test
+  --target <triple>`; only the host triple works there). Merged into `local/rust-port` as `4176fc8b`; the local gate
+  on the merged SHA is the integration evidence.
 
 iOS slices, 2026-11-01 (branch `local/ffi-001`, after `a2feae44`):
 - `make ffi-xcframework` (`scripts/rust-port/build-ffi-xcframework.sh`, exit 0): `ffi` profile for `aarch64-apple-darwin`,
