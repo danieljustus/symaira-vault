@@ -1,5 +1,77 @@
 # Rust migration handover — 2026-09-09
 
+## CLI-005c review fixes: unlock order and failed passphrase prompts, 2026-11-01
+
+Independent review of `58460a10..d7c01a1c` (REQUEST_CHANGES) found two defects that the
+corpus could not see: every earlier scenario ran with the environment passphrase, so no
+prompt ever reached EOF, and no scenario started from a vault with only one of
+`config.yaml` / `identity.age`. The corpus now has an `unlock_states` section
+(`errtaxgen/unlockstates.go`, 60 Go-recorded scenarios, oracle `0cc78062`) and the native CLI
+follows Go's `UnlockVault` order (`internal/cli/unlock.go`).
+
+| Finding | Before | Now |
+|---|---|---|
+| `device pair` with only one vault file (`device.rs`) | either file missing was taken as proof that the identity is absent: with an identity but no `config.yaml` it reported `open vault: read identity file: ...`; with a `config.yaml` that disables the environment passphrase and no identity it used the passphrase from the environment | resolves the real `config.yaml` (missing = default), obtains the passphrase under its policy, then reads `identity.age`, then loads `config.yaml`: `open vault: load config: open <path>: no such file or directory` for an identity without a config, `open vault: read identity file: ...` for a config without an identity |
+| EOF at the passphrase prompt (`migrate pseudonymize`, and every command that unlocks) | printed once, exit 1 | `Error: read passphrase: read Passphrase: EOF` twice, the locked hint (the Touch ID flavour for `unlock`), exit 4 (`report_failed_passphrase_read`, called by every `finish_*` function and by `intake`) |
+| Interactive unlock with `security.disable_env_passphrase` and `SYMVAULT_PASSPHRASE` set (`device_input.rs`) | error `environment passphrase is disabled; ...`, exit 1 | warning `SYMVAULT_PASSPHRASE is set but ignored: ...`, then the prompt, like `resolveUnlockPassphrase` |
+
+Scenarios per state (`UNLOCK_STATES` in `tests/error_taxonomy.rs`): `locked` 18 (settled vault,
+no `SYMVAULT_PASSPHRASE`: `device pair`, `list`, `find`, `add`, `delete`, `edit`, `verify`,
+`unlock`, `migrate pseudonymize` with and without `--yes`, `recipients add|remove`, `run`,
+`file use`, `import review list|promote`, `intake`), and 7 each (`device pair` with and without a
+positional, `list`, `verify`, `unlock`, `migrate pseudonymize` with and without `--yes`) for
+`identity_only`, `config_only`, `identity_only_locked`, `config_only_locked`,
+`config_only_env_disabled` and `env_disabled`. Native output before the fix, same fixture: 27 of
+the 60 differed (`locked` 16, `identity_only` 2, `config_only_env_disabled` 2,
+`env_disabled` 7); after: 0.
+
+**Not covered, still different from Go (found while sweeping every runnable command in the
+`locked` state):** `get` (Go takes the non-interactive path: `vault locked: this build cannot
+share ...`; Rust prompts), `set` (Go asks for the username first), `file get|add`
+(missing-flag errors), and a `config.yaml` that fails to parse (Go: exit 6,
+`configuration is invalid`, interactive editor offer; Rust: `load config: ...`, exit 1).
+These predate this branch and are not claimed.
+
+## CLI-005c: 18 of the 28 pinned body divergences closed, 2026-11-01
+
+Branch `local/cli-005c` (base `ee263740`), one commit per class, each removing its
+pins from `KNOWN_BODY_DIVERGENCES` and re-recording
+`error-taxonomy-known-divergences.json` with the ignored `record_known_divergences`
+(the 10 remaining entries are byte-identical to the previous file). Every closed scenario
+now matches the Go oracle `0cc78062` byte for byte (exit code, stdout, stderr).
+
+| Class (scenarios) | Rust change |
+|---|---|
+| `auth rotate-passphrase` (2) | `read_passphrase` keeps the prompt label: `read Current passphrase: EOF` (Go's `ReadHiddenInput`) |
+| `unlock` without OS keyring (2) | `session cache is memory-only` is printed by cobra and `ExecuteRoot`, followed by the unlock flavour of the locked hint (Touch ID) |
+| `migrate pseudonymize` (2) | unlocks (env-passphrase warning, prompt) before the `(y/N)` confirmation; a failed confirmation read is reported twice |
+| `device pair` (3) | no initialization gate: prompt `Passphrase: `, ExitLocked `read passphrase: read Passphrase: EOF` twice + `Unlock with ...` hint, exit 4; an initialized vault is unchanged |
+| `agent list` (3) | `load config: open <path>: no such file or directory` (new `go_load_config_error`) |
+| `migrate v4` (3) | same wording, reported twice (`finish_vault_result_doubled`) |
+| `migrate kdf` (3) | `read vault identity (<path>): open <path>: no such file or directory`, reported twice |
+
+Side effects of the label fix: the unlock prompt (device and session paths) is now
+`Passphrase: ` like Go's `resolveUnlockPassphrase` instead of `Enter passphrase: `, and the
+`read passphrase:` wrapper of a failed prompt read matches Go's ExitLocked error.
+
+**Still open (10 scenarios): `dynamic generate` (5) and `setup` (5).** Both are not native
+subcommands (only their help pages are frozen). Matching the corpus needs only the clap
+argument errors (`required flag(s) "engine", "role" not set`) and the non-TTY guard of
+`setup` (`setup needs a TTY; ...`), but a command that fails correctly in the corpus and
+then does nothing on a TTY (`setup` wizard) or with both flags (`dynamic generate`
+engines `postgres` and `aws-sts`, leases) would claim a port that does not exist, so the
+pins stay until the commands are ported.
+
+Evidence (local gate at `ad3d35a4`, clean tree, `MAKE_PREFIX=dev-external`, receipts in
+`builds/symaira-vault/local-gate-cli005c/receipts.jsonl`): `macos` exit 0 (1581 tests, 0
+failed; includes `config-cli-differential`, hence the `agent_list`, `auth`, `migrate kdf`
+Go differentials), `linux` exit 0 (1569 tests; `port-contract` incl.
+`error-taxonomy-cli-differential`). The first `linux` receipt for the same SHA is exit 2:
+the Docker VM ran out of disk (`No space left on device` while compiling); the obsolete
+shared volume `symvault-gate-target` (44.6 GB, unused since the per-worktree volumes)
+was removed and `linux` rerun, which overwrote that log (exit 0). Local-only evidence;
+`PASS (local)` is not claimed for the CLI-005 row, which stays TODO.
+
 ## CLI-005b: host tools in the error-taxonomy corpus, 2026-11-01
 
 Branch `local/cli-005b` (base `18f7cd20`). Two defects of the extra-positional corpus:

@@ -96,6 +96,7 @@ type extraSections struct {
 	hostDependent    []hostDependence
 	serviceManager   []string
 	runFileUse       []scenarioCase
+	unlockStates     []scenarioCase
 }
 
 // Seams for tests of main; production always uses the defaults.
@@ -549,9 +550,9 @@ func recordScenarios(goBinary string, seed []seedFile, inputs []scenarioInput) (
 	var out []scenarioCase
 	var problems []string
 	for _, in := range inputs {
-		spec := runSpec{initialized: in.state == stateInitialized}
-		if spec.initialized {
-			spec.seed = seed
+		spec, err := specForState(in.state, seed)
+		if err != nil {
+			return nil, fmt.Errorf("scenario %s: %w", in.name, err)
 		}
 		var recorded []observation
 		var calls [][]string
@@ -625,8 +626,12 @@ func buildExtraSections(goBinary, output string, newSeed bool) (extraSections, e
 	if err != nil {
 		return extraSections{}, err
 	}
+	unlock, err := recordScenarios(goBinary, seed, unlockStateInputs())
+	if err != nil {
+		return extraSections{}, err
+	}
 	sort.SliceStable(inventory, func(i, j int) bool { return inventory[i].Path < inventory[j].Path })
-	return extraSections{nilArgs: inventory, seed: seed, extraPositionals: extra, exclusions: scenarioExclusions, hostDependent: scenarioHostDependence, serviceManager: serviceManagerCommands, runFileUse: forwarded}, nil
+	return extraSections{nilArgs: inventory, seed: seed, extraPositionals: extra, exclusions: scenarioExclusions, hostDependent: scenarioHostDependence, serviceManager: serviceManagerCommands, runFileUse: forwarded, unlockStates: unlock}, nil
 }
 
 // firstDifference names the first line that differs between two observations.

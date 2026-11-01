@@ -93,7 +93,7 @@ struct NilArgsEntry {
     runnable: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct SeedFile {
     path: String,
     kind: String,
@@ -167,6 +167,7 @@ struct Fixture {
     host_dependent_commands: Vec<HostDependence>,
     service_manager_commands: Vec<String>,
     run_file_use_argv: Vec<ScenarioCase>,
+    unlock_states: Vec<ScenarioCase>,
 }
 
 const USAGE_CASES: usize = 105;
@@ -181,8 +182,22 @@ const EXTRA_POSITIONAL_EXCLUSIONS: usize = 7;
 const EXTRA_POSITIONALS_UNINITIALIZED: usize = 138;
 const EXTRA_POSITIONALS_INITIALIZED: usize = 82;
 const RUN_FILE_USE_ARGV_PER_STATE: usize = 82;
-const KNOWN_DIVERGENT_UNINITIALIZED: usize = 18;
-const KNOWN_DIVERGENT_INITIALIZED: usize = 10;
+/// The unlock-state section: commands that unlock the vault, in the settled vault
+/// without the environment passphrase (`locked`, EOF at the prompt) and in the
+/// vault shapes that miss `config.yaml` or `identity.age`.
+const UNLOCK_STATES: [(&str, usize); 7] = [
+    ("locked", 18),
+    ("identity_only", 7),
+    ("config_only", 7),
+    ("identity_only_locked", 7),
+    ("config_only_locked", 7),
+    ("config_only_env_disabled", 7),
+    ("env_disabled", 7),
+];
+/// Appended to the seeded `config.yaml` of the `*env_disabled` states.
+const ENV_DISABLED_CONFIG_SUFFIX: &str = "security:\n    disable_env_passphrase: true\n";
+const KNOWN_DIVERGENT_UNINITIALIZED: usize = 6;
+const KNOWN_DIVERGENT_INITIALIZED: usize = 4;
 /// Scenarios of the host-dependent commands (`mcp|serve install|status`, three
 /// variants uninitialized and two initialized each), skipped off darwin.
 const DARWIN_ONLY_UNINITIALIZED: usize = 12;
@@ -235,26 +250,6 @@ fn expected_skips(darwin_only: usize) -> usize {
 /// behind an entry.
 const KNOWN_BODY_DIVERGENCES: &[(&str, &str, &str)] = &[
     (
-        "agent_list",
-        "uninitialized",
-        "missing config.yaml is worded `read config: No such file or directory (os error 2)`; Go prints `open <path>: no such file or directory`, twice",
-    ),
-    (
-        "device_pair",
-        "uninitialized",
-        "Go asks for the passphrase before it checks the vault (exit 4); the native command reports `vault is not initialized` (exit 1)",
-    ),
-    (
-        "migrate_kdf",
-        "uninitialized",
-        "missing identity.age is worded `file not found`, once; Go prints the `open <path>` error twice",
-    ),
-    (
-        "migrate_v4",
-        "uninitialized",
-        "missing config.yaml is worded `read config: ...`, once; Go prints the `open <path>` error twice",
-    ),
-    (
         "dynamic_generate",
         "uninitialized",
         "`dynamic` is not a native subcommand yet (only its help page is frozen)",
@@ -273,21 +268,6 @@ const KNOWN_BODY_DIVERGENCES: &[(&str, &str, &str)] = &[
         "setup",
         "initialized",
         "`setup` is not a native subcommand yet (only its help page is frozen)",
-    ),
-    (
-        "auth_rotate-passphrase",
-        "initialized",
-        "the prompt-read failure says `read passphrase: EOF`; Go keeps the prompt label (`read Current passphrase: EOF`)",
-    ),
-    (
-        "migrate_pseudonymize",
-        "initialized",
-        "Go prints the SYMVAULT_PASSPHRASE warning before the prompt and the failure twice; the native command prints neither the warning nor the second line",
-    ),
-    (
-        "unlock",
-        "initialized",
-        "with no OS keyring Go prints the memory-only session error twice and a Touch ID hint; the native command prints it once without the hint",
     ),
 ];
 
@@ -535,9 +515,11 @@ fn run_scenario_full(
     }
     #[cfg(unix)]
     command.env("PATH", sandbox_path(&root));
+    if !seed.is_empty() {
+        command.env("TZ", "UTC");
+    }
     if initialized {
         command
-            .env("TZ", "UTC")
             .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
             .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1");
     }
@@ -681,14 +663,58 @@ fn record_difference(
     }
 }
 
+/// How a scenario state shapes its sandbox: whether the frozen vault is
+/// written, which of its files stay out and whether the environment passphrase
+/// is set. Mirrors `specForState` in `errtaxgen/unlockstates.go`.
+fn state_shape(state: &str) -> (bool, &'static [&'static str], bool) {
+    match state {
+        "uninitialized" => (false, &[], false),
+        "initialized" => (true, &[], true),
+        "locked" => (true, &[], false),
+        "identity_only" => (true, &["config.yaml"], true),
+        "config_only" => (true, &["identity.age"], true),
+        "identity_only_locked" => (true, &["config.yaml"], false),
+        "config_only_locked" => (true, &["identity.age"], false),
+        "config_only_env_disabled" => (true, &["identity.age"], true),
+        "env_disabled" => (true, &[], true),
+        other => panic!("unknown scenario state {other}"),
+    }
+}
+
+/// The seed entries of regular files whose base name is not in `omit`.
+fn seed_without(seed: &[SeedFile], omit: &[&str]) -> Vec<SeedFile> {
+    seed.iter()
+        .filter(|entry| {
+            !(entry.kind == "file"
+                && omit.contains(&entry.path.rsplit('/').next().unwrap_or(&entry.path)))
+        })
+        .cloned()
+        .collect()
+}
+
 /// Runs one recorded scenario in a fresh sandbox, with its normalizers applied.
 fn run_case_full(case: &ScenarioCase, seed: &[SeedFile]) -> RunOutput {
-    let initialized = case.state == "initialized";
+    let (with_seed, omit, passphrase_env) = state_shape(&case.state);
+    let mut seed = if with_seed {
+        seed_without(seed, omit)
+    } else {
+        Vec::new()
+    };
+    if matches!(
+        case.state.as_str(),
+        "config_only_env_disabled" | "env_disabled"
+    ) {
+        for entry in &mut seed {
+            if entry.kind == "file" && entry.path.ends_with("/config.yaml") {
+                entry.data.push_str(ENV_DISABLED_CONFIG_SUFFIX);
+            }
+        }
+    }
     let mut run = run_scenario_full(
         &case.observation.args,
         &BTreeMap::new(),
-        if initialized { seed } else { &[] },
-        initialized,
+        &seed,
+        passphrase_env,
     );
     apply_normalizers(&case.normalize, &mut run.stdout, &mut run.stderr);
     run
@@ -1187,6 +1213,81 @@ fn native_cli_matches_go_run_file_use_argv_initialized() {
         }
     );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The unlock-state section: Go resolves `config.yaml` (a missing file is the
+/// default configuration), obtains the passphrase under that policy and only then
+/// opens the vault (reads `identity.age`, loads `config.yaml`); a prompt that reads
+/// EOF is an `ExitLocked` error (exit 4 and the locked hint).
+#[cfg(unix)]
+#[test]
+fn native_cli_matches_go_unlock_states() {
+    let fixture = fixture();
+    let mut summary = Vec::new();
+    let mut details = Vec::new();
+    for (state, count) in UNLOCK_STATES {
+        let mut failures = Vec::new();
+        let replay = replay_scenarios(&fixture, &fixture.unlock_states, state, &mut failures);
+        assert_eq!(
+            replay,
+            Replay {
+                replayed: count,
+                skipped: 0
+            },
+            "{state}"
+        );
+        summary.push(format!("{state}: {} of {count} differ", failures.len()));
+        details.extend(failures);
+    }
+    assert!(
+        details.is_empty(),
+        "{}\n{}",
+        summary.join("; "),
+        details.join("\n")
+    );
+}
+
+/// The partial vault shapes really miss their file, and the scenarios only name
+/// states the section knows (a typo would silently replay an empty sandbox).
+#[test]
+fn unlock_state_shapes_drop_exactly_their_file() {
+    let fixture = fixture();
+    let names: Vec<&str> = fixture
+        .vault_seed
+        .iter()
+        .map(|entry| entry.path.rsplit('/').next().unwrap_or(&entry.path))
+        .collect();
+    for file in ["config.yaml", "identity.age"] {
+        assert_eq!(
+            names.iter().filter(|name| **name == file).count(),
+            1,
+            "{file}"
+        );
+    }
+    let count_of = |omit: &[&str]| seed_without(&fixture.vault_seed, omit).len();
+    assert_eq!(count_of(&[]), fixture.vault_seed.len());
+    assert_eq!(count_of(&["config.yaml"]), fixture.vault_seed.len() - 1);
+    assert_eq!(count_of(&["identity.age"]), fixture.vault_seed.len() - 1);
+    let known: Vec<&str> = UNLOCK_STATES.iter().map(|(state, _)| *state).collect();
+    for case in &fixture.unlock_states {
+        assert!(known.contains(&case.state.as_str()), "{}", case.name);
+        assert!(case.name.starts_with(&format!("unlock_{}_", case.state)));
+    }
+    let total: usize = UNLOCK_STATES.iter().map(|(_, count)| count).sum();
+    assert_eq!(fixture.unlock_states.len(), total);
+    // The locked shapes record the locked exit class, not a plain failure.
+    for case in fixture
+        .unlock_states
+        .iter()
+        .filter(|case| case.state == "locked" && case.name.ends_with("_migrate_pseudonymize"))
+    {
+        assert_eq!(case.observation.exit_code, 4, "{}", case.name);
+        assert!(
+            case.observation
+                .stderr
+                .contains("Unlock with 'symvault unlock'")
+        );
+    }
 }
 
 /// The scenarios of the host-dependent commands, and only those, carry the platform
