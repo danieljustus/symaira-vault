@@ -25,7 +25,7 @@ Evidence (branch `local/ffi-001`, base `22c51834`):
 
 Differences from Go left open (all asserted with the exact Rust text, none silent): rust-age's random `*-grease` stanza
 lengthens X25519 ciphertexts by 8–200 bytes; non-mapping `config.yaml` wording (`known-divergences.json`, CFG owner);
-`symvault-store` `prepare_entry` keeps `Entry.path` (bridge clears it); **D-SYMLINK** (24 cases, needs owner approval):
+`symvault-store` `prepare_entry` keeps `Entry.path` (bridge clears it); **D-SYMLINK** (24 cases, approved by the owner 2026-11-01):
 Rust refuses a symlink anywhere inside the vault tree where Go follows it (ADR 0031).
 
 Review fixes, 2026-11-01 (independent review of `a2feae44`: REQUEST_CHANGES, F1-F8), on `local/ffi-001` after `4a04546c`:
@@ -40,7 +40,14 @@ Review fixes, 2026-11-01 (independent review of `a2feae44`: REQUEST_CHANGES, F1-
   fmt, gofmt/go vet on `mobilebindgen`, `cargo test -p symvault-store`.
 - `tests/c_abi.rs` builds the staticlib itself: `cargo test` never writes `libsymvault_ffi.a`, so an archive left from an
   earlier `cargo build` could be stale (first Linux run failed for exactly that reason).
-- Pending: independent delta review of these fixes; owner decision on D-SYMLINK.
+- Delta review of `4a04546c..9166d365`: REQUEST_CHANGES. Blocking: the legacy-mode config rewrite went through
+  `Config::save_to`, which wrote a fixed `config.yaml.tmp` following symlinks (a planted link overwrote a file
+  outside the vault); fixed in `symvault-core` for every caller (unique `create_new` temporary, as Go's
+  `fsutil.AtomicWriteFile`) and the rewrite skips a symlinked `config.yaml`. Medium: `keep_negative_zero` turned
+  `1e-0` into invalid `1e-0.0` for every store reader; now only a leading `-0`, copy zeroized. Low: entry data
+  scrubbed on every return path (drop guard), `c_abi` skips under llvm-cov. Both fixes red before (victim
+  overwritten; `1e-0.0`), green after.
+- Pending: re-review of those fixes.
 
 iOS slices, 2026-11-01 (branch `local/ffi-001`, after `a2feae44`):
 - `make ffi-xcframework` (`scripts/rust-port/build-ffi-xcframework.sh`, exit 0): `ffi` profile for `aarch64-apple-darwin`,

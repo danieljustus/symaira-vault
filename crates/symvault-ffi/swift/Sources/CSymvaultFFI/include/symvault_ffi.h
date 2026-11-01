@@ -26,8 +26,10 @@
  *    which zeroizes it first. Do not free one twice, do not free a copy of the
  *    struct after freeing the original, and never free a buffer with free().
  *  - The library keeps no copy of identities, passphrases or plaintexts after
- *    the call returns. Copies the caller makes (for example Swift Strings and
- *    Data built from a result) are outside the library's control.
+ *    the call returns and zeroizes the intermediates it controls (entry data,
+ *    key material, result buffers). Not covered: reallocation leftovers inside
+ *    Rust collections or serde_json, entry metadata strings, and copies the
+ *    caller makes (for example Swift Strings and Data built from a result).
  *  - Calls are thread-safe; vault operations on one directory serialize on the
  *    store's own locks.
  */

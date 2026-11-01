@@ -879,7 +879,9 @@ pub(crate) fn decode_entry(text: &str) -> Result<Entry, String> {
     };
     let root = builder.node();
     let mut decoder = Decoder { saved: None };
-    let mut entry = Entry::default();
+    // Scrubbed on every exit, including the `?` returns below.
+    let mut guard = ScrubbedEntry(Entry::default());
+    let entry = &mut guard.0;
     match &root {
         Node::Null => {}
         Node::Object(members) => {
@@ -896,7 +898,11 @@ pub(crate) fn decode_entry(text: &str) -> Result<Entry, String> {
                         Node::Object(items) => {
                             for (name, item) in items {
                                 let decoded = any_value(&mut decoder, item, "data", 1);
-                                entry.data.insert(name.clone(), decoded);
+                                // A duplicate key replaces the earlier value, as in Go.
+                                if let Some(mut replaced) = entry.data.insert(name.clone(), decoded)
+                                {
+                                    scrub_value(&mut replaced);
+                                }
                             }
                         }
                         other => decoder.mismatch(
@@ -943,11 +949,18 @@ pub(crate) fn decode_entry(text: &str) -> Result<Entry, String> {
         }
     }
     match decoder.saved {
-        Some(message) => {
-            scrub_entry(&mut entry);
-            Err(message)
-        }
-        None => Ok(entry),
+        Some(message) => Err(message),
+        None => Ok(std::mem::take(&mut guard.0)),
+    }
+}
+
+/// An entry whose data is scrubbed when it goes out of scope, so no return path
+/// (error or success) leaves decoded plaintext behind.
+pub(crate) struct ScrubbedEntry(pub(crate) Entry);
+
+impl Drop for ScrubbedEntry {
+    fn drop(&mut self) {
+        scrub_entry(&mut self.0);
     }
 }
 

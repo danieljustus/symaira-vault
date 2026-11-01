@@ -54,6 +54,16 @@ fn static_library() -> PathBuf {
 
 #[test]
 fn c_program_built_from_the_header_runs_against_the_library() {
+    // The nested build and `cc` link assume a plain host build: under
+    // `cargo llvm-cov` the staticlib would be instrumented without the profiler
+    // runtime on the C link line, and `--target` moves the archive.
+    if std::env::var_os("LLVM_PROFILE_FILE").is_some()
+        || std::env::var_os("CARGO_LLVM_COV").is_some()
+        || std::env::var_os("CARGO_BUILD_TARGET").is_some()
+    {
+        eprintln!("SKIP c_abi: coverage instrumentation or an explicit --target is active");
+        return;
+    }
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let include = manifest.join("swift/Sources/CSymvaultFFI/include");
     let source = manifest.join("tests/c/abi_check.c");

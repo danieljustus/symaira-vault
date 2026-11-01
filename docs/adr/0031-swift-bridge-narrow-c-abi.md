@@ -134,7 +134,7 @@ Use the narrow C ABI.
      returns the config loader's wording instead of yaml.v3's
      `unmarshal errors` text (`config-type-mismatch`; owner: the
      `symvault-core` config loader, CFG rows).
-  3. **D-SYMLINK, needs owner approval.** `symvault-store` never follows a
+  3. **D-SYMLINK, approved by the owner 2026-11-01.** `symvault-store` never follows a
      symlink inside the vault tree (`O_NOFOLLOW` traversal, STORE hardening);
      Go follows them. 24 recorded cases (`symlink-hardening`: symlinked
      `identity.age`, `config.yaml`, `manifest.age`, an entry, the `entries`
@@ -143,9 +143,12 @@ Use the narrow C ABI.
      a different text. Rust's refusal is deliberately stricter: a symlink
      planted in a vault directory can redirect a read or an atomic write to a
      file outside it. This is a security choice made by the STORE rows, not an
-     FFI decision; Go-compatible following would have to be an explicit owner
-     decision. **Needs owner approval** (accept the stricter behaviour, or
-     reopen STORE hardening for the mobile bridge).
+     FFI decision. The owner accepted the stricter behaviour on 2026-11-01;
+     the mobile bridge keeps the STORE hardening. The legacy-mode config
+     rewrite in `OpenVaultWithPassphrase` leaves a symlinked `config.yaml`
+     untouched so the refusal still happens, and `Config::save_to` writes
+     through a unique, exclusively created temporary file, so a planted
+     symlink cannot redirect that write either.
   4. `symvault-store`'s `prepare_entry` keeps an `Entry.path` that Go's
      `cloneEntry` drops; the bridge clears it before writing so stored and
      returned JSON match Go. The store still differs for other callers.
@@ -172,11 +175,15 @@ Use the narrow C ABI.
     (`entries/a/b.age`), not `entries/entries/a/b.age`.
   - **Writes.** Temporary names in the atomic write are unique per call, so
     concurrent writers to one target cannot collide (unit test with threads).
-- **Secrets.** Rust-side intermediates holding secret material (bech32 5-bit
-  groups, the identity key, the entry parse tree, result payloads, including
-  one the caller ignores) are zeroized. The caller owns every returned
-  `SvBuf` and frees each exactly once. This does not cover copies on the Swift
-  side (`String`, `Data`) or in the host app.
+- **Secrets.** The intermediates the library controls are zeroized: bech32
+  5-bit groups, the identity key, the entry parse tree, decoded entry data on
+  every return path (a drop guard, including values replaced by a duplicate
+  key), the store's `-0` rewrite copy, and result payloads, including one the
+  caller ignores. Not covered: reallocation leftovers inside Rust collections
+  and `serde_json`, entry metadata strings, and copies on the Swift side
+  (`String`, `Data`) or in the host app. The caller owns every returned
+  `SvBuf` and frees each exactly once.
+
 - **C check.** `tests/c_abi.rs` compiles `tests/c/abi_check.c` with the system
   C compiler against the public header and runs it against the static library:
   struct layout, argument order and widths, buffer ownership, and passphrases

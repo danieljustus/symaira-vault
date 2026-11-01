@@ -12,12 +12,12 @@ use symvault_crypto::{
     decrypt_identity, detect_envelope, encrypt_identity_argon2id, generate_identity,
     identity_string, recover_zero_key_identity,
 };
-use symvault_store::{Entry, Store, StoreError};
+use symvault_store::{Store, StoreError};
 use zeroize::Zeroizing;
 
 use crate::gotext::agehdr::{self, Identity as AgeIdentity};
 use crate::gotext::bech32::{validate_identity, validate_recipient};
-use crate::gotext::entryjson::{decode_entry, scrub_entry};
+use crate::gotext::entryjson::{ScrubbedEntry, decode_entry};
 use crate::gotext::timefmt::now_rfc3339_nano;
 use crate::gotext::{errno_text, path_error, trim_space};
 use crate::marshal::marshal_entry;
@@ -364,6 +364,12 @@ fn detect_legacy_mode(dir: &str, mut config: Config) -> R<()> {
     {
         return Ok(());
     }
+    // A symlinked config.yaml is refused by the store open that follows
+    // (D-SYMLINK); rewriting first would replace the link with a regular file
+    // and turn that refusal into a success, so leave it untouched.
+    if fs::symlink_metadata(config_path(dir)).is_ok_and(|meta| meta.file_type().is_symlink()) {
+        return Ok(());
+    }
     let legacy = has_legacy_top_level_age_files(dir)
         .map_err(|reason| format!("detect legacy mode: {reason}"))?;
     match config.vault.as_mut() {
@@ -550,11 +556,12 @@ pub(crate) fn read_entry_json(dir: &str, path: &str, id_text: &str) -> R<Zeroizi
 pub(crate) fn write_entry_json(dir: &str, path: &str, json: &str, id_text: &str) -> R<()> {
     let identity =
         validate_identity(id_text).map_err(|reason| format!("validate identity: {reason}"))?;
-    let mut entry: Entry =
-        decode_entry(json).map_err(|reason| format!("unmarshal entry: {reason}"))?;
+    // Scrubbed on drop, so every early return below leaves no plaintext.
+    let mut entry =
+        ScrubbedEntry(decode_entry(json).map_err(|reason| format!("unmarshal entry: {reason}"))?);
     // Go's `cloneEntry` does not copy `Path`; only a pseudonymized vault sets
     // it again (the store does that in `prepare_entry`).
-    entry.path.clear();
+    entry.0.path.clear();
     validate_entry_path(path)?;
     if dir.is_empty() {
         return Err(
@@ -568,11 +575,9 @@ pub(crate) fn write_entry_json(dir: &str, path: &str, json: &str, id_text: &str)
     go_mkdir_all(&absolute, 0o700)
         .map_err(|reason| format!("create vault directory for lock: {reason}"))?;
     let store = Store::open_lenient(dir, &identity).map_err(|error| map_store_error(&error))?;
-    let written = store
-        .write_entry_at(path, &entry, &identity, &now_rfc3339_nano(), false, None)
-        .map_err(|error| map_store_error(&error));
-    scrub_entry(&mut entry);
-    written
+    store
+        .write_entry_at(path, &entry.0, &identity, &now_rfc3339_nano(), false, None)
+        .map_err(|error| map_store_error(&error))
 }
 
 pub(crate) fn list_entries_json(dir: &str, prefix: &str, id_text: &str) -> R<String> {
