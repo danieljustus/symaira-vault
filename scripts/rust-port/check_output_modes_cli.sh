@@ -56,5 +56,7 @@ if [ "${SYMVAULT_OUTPUT_MODES_REGENERATE:-}" = 1 ]; then
 fi
 "${GO:-go}" run ./scripts/rust-port/cmd/outputmodegen \
     --check --go-binary "$oracle_binary"
-"${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
+# The live Touch ID comparison runs against the same verified oracle binary.
+SYMVAULT_OUTPUT_MODES_GO_BINARY="$oracle_binary" "${CARGO:-cargo}" test \
+    --manifest-path "$repo_root/Cargo.toml" \
     -p symvault-cli --test output_modes --locked -- --nocapture

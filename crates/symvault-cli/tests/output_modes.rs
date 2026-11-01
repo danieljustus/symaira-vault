@@ -15,28 +15,54 @@
 //! exit status, the file-system diff of the sandbox and the follow-up `post`
 //! commands are compared byte for byte.
 //!
-//! Documented normalization (identical to the generator, never a dropped
-//! field; anything else stays a visible difference):
+//! Documented normalization. This is the ONE numbered list: the generator
+//! (`scripts/rust-port/cmd/outputmodegen/main.go`) lists the same ids in the same
+//! order in its header and writes them into the fixture notes, this replay
+//! implements them, and `normalization_rules_are_listed_once_and_consistently`
+//! fails when any of the four disagrees. Anything not listed is compared byte
+//! for byte and stays a visible difference.
 //!
-//! 1. `$ROOT`: the sandbox root and its symlink-resolved form, in stdout,
-//!    stderr, tree paths and observed text files.
-//! 2. `$BIN`: the absolute path of the executed binary (`update apply/info`).
-//! 3. Dated random ids `tok|intake|import-YYYYMMDD-<8 hex>` with a valid date
-//!    become `<prefix>-<DATE>-<RAND>`.
-//! 4. `gen-pw:N`: exactly one delimited run of N alphanumerics in stdout is the
-//!    generated password and becomes `<PW>`.
-//! 5. `pair-token`: the 32-character token of `device pair` (found in stdout or,
-//!    for `--quiet`, in the invitation file name) becomes `<TOKEN>`, its first
-//!    six characters `<TOKEN6>`.
-//! 6. `.age.tmp-<digits>` becomes `.age.tmp-<N>`.
-//! 7. `now-ts`: an RFC 3339 timestamp within one hour of the run becomes
-//!    `<NOW>`; timestamps frozen in a seed stay visible. This rule does not pin
-//!    the fractional-second spelling of a run-time stamp.
+//! 1. `root`: the sandbox root and its symlink-resolved form become `$ROOT` in
+//!    stdout, stderr, tree paths, observed text files, archive members and the
+//!    text files of a seed.
+//! 2. `bin`: the absolute path of the executed binary becomes `$BIN`
+//!    (`update apply/info`).
+//! 3. `dated-id`: `tok|intake|import-YYYYMMDD-<8 hex>` with a valid date becomes
+//!    `<prefix>-<DATE>-<RAND>`.
+//! 4. `tmp-suffix`: `.age.tmp-<digits>` becomes `.age.tmp-<N>`.
+//! 5. `touch-id`: `Touch ID available: true|false` and
+//!    `"touchIDAvailable":true|false` of `auth status` become `<BOOL>`: the value
+//!    is a property of the Mac's sensor. `touch_id_availability_matches_go_in_the_same_sandbox`
+//!    compares the live Go and Rust values on darwin instead.
+//! 6. `gen-pw`: a case declaring `gen-pw:N` must print exactly one delimited run
+//!    of N alphanumerics, which becomes `<PW>`.
+//! 7. `pair-token`: a case declaring it has the 32-character token of `device
+//!    pair` (found in stdout or, for `--quiet`, in the invitation file name)
+//!    replaced by `<TOKEN>`, its first six characters by `<TOKEN6>`.
+//! 8. `now-ts`: a case declaring it has every RFC 3339 timestamp within one hour
+//!    of the run replaced by `<NOW>`; seed timestamps stay visible. The
+//!    fractional-second spelling of a run-time stamp is not pinned.
+//! 9. `man-date`: a case declaring it has the date field of a roff `.TH` header
+//!    (`Nov 2026`) replaced by `<MAN-DATE>`.
+//! 10. `opaque`: tree paths below a case-declared prefix are recorded by presence
+//!    only (invitation file of `device pair`, token store of `doctor`).
+//! 11. `encrypted-store`: the vault's encrypted store (entries, manifest,
+//!    identity, lock, search index, .git) is not part of the tree diff; `post`
+//!    commands pin the resulting vault.
+//! 12. `audit-fields`: an audit log (`audit-*.log`) is compared as the decoded
+//!    stable fields of every line (agent, action, path, field, ok, `argv_hash`
+//!    length, signed), never as bytes.
+//! 13. `archive-members`: files below a case-declared `archives` prefix are
+//!    compared as decompressed `.tar.gz` members (name, type, mode, sha256 of the
+//!    normalized content), sorted by name because Go writes them in map order;
+//!    header times, owners and gzip bytes are not compared.
+//! 14. `managed-fields`: inside an archive member, a line `managed_hash:
+//!    sha256:<64 hex>` has its digits replaced by `<HASH>` (the digest of a body
+//!    that embeds the install clock) and a line `managed_installed_at:
+//!    "<RFC 3339 UTC>"` its stamp by `<NOW>`; both are install-time values.
 //!
-//! Tree entries (`added`/`removed`/`changed`) cover every path of the sandbox
-//! root except the encrypted vault store (entries, manifest, identity, lock,
-//! .git, search index), whose bytes carry fresh randomness; audit logs and
-//! case-declared `opaque` prefixes are compared by presence only.
+//! Every tree entry also records the permission bits of files and directories
+//! (`mode`, compared as is); the binary runs under umask 022 in both harnesses.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -54,6 +80,23 @@ const PASSPHRASE: &str = "correct horse battery staple";
 const EXPECTED_CASES: usize = 464;
 const EXPECTED_PATHS: usize = 47;
 const EXPECTED_SEEDS: usize = 6;
+/// The normalization rules, in the order of the numbered list above.
+const RULES: [&str; 14] = [
+    "root",
+    "bin",
+    "dated-id",
+    "tmp-suffix",
+    "touch-id",
+    "gen-pw",
+    "pair-token",
+    "now-ts",
+    "man-date",
+    "opaque",
+    "encrypted-store",
+    "audit-fields",
+    "archive-members",
+    "managed-fields",
+];
 const FIXTURE: &str = "../../testdata/port/cli/output-modes.json";
 const GATE_FIXTURE: &str = "../../testdata/port/cli/error-taxonomy.json";
 
@@ -138,6 +181,17 @@ struct AuditLine {
     signed: bool,
 }
 
+/// One member of a case-declared `.tar.gz` (see `Sandbox::decode_archive`).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+struct ArchiveMember {
+    name: String,
+    #[serde(rename = "type")]
+    kind: String,
+    mode: i64,
+    #[serde(default)]
+    sha256: String,
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 struct TreeEntry {
     path: String,
@@ -145,6 +199,10 @@ struct TreeEntry {
     kind: String,
     #[serde(default)]
     sha256: String,
+    #[serde(default)]
+    mode: u32,
+    #[serde(default)]
+    members: Vec<ArchiveMember>,
     #[serde(default)]
     audit: Vec<AuditLine>,
 }
@@ -168,6 +226,8 @@ struct Case {
     rules: Vec<String>,
     #[serde(default)]
     opaque: Vec<String>,
+    #[serde(default)]
+    archives: Vec<String>,
     argv: Vec<String>,
     exit: i32,
     stdout: String,
@@ -194,6 +254,8 @@ struct Residual {
 struct Fixture {
     schema_version: u32,
     oracle: Oracle,
+    #[serde(default)]
+    notes: Vec<String>,
     seeds: Vec<Seed>,
     residuals: Vec<Residual>,
     cases: Vec<Case>,
@@ -633,6 +695,10 @@ struct Sandbox {
 struct TreeNode {
     kind: &'static str,
     content: Option<Vec<u8>>,
+    /// Permission bits of a file or directory (zero for a symlink).
+    mode: u32,
+    /// Decoded members of a case-declared archive.
+    members: Option<Vec<ArchiveMember>>,
     /// Decoded lines of a presence-only audit log.
     audit: Option<Vec<AuditLine>>,
 }
@@ -728,9 +794,30 @@ impl Sandbox {
     }
 
     fn run(&self, args: &[String], extra: &BTreeMap<String, String>, stdin: &str) -> Observed {
+        let output = self.run_raw(&self.binary, args, extra, stdin);
+        Observed {
+            exit: output.status.code().unwrap_or(-1),
+            stdout: self.normalize(&output.stdout),
+            stderr: self.normalize(&output.stderr),
+        }
+    }
+
+    /// Runs `binary` in this sandbox under umask 022 and returns its raw output.
+    fn run_raw(
+        &self,
+        binary: &Path,
+        args: &[String],
+        extra: &BTreeMap<String, String>,
+        stdin: &str,
+    ) -> Output {
         let root = self.root_text();
-        let mut command = Command::new(&self.binary);
+        let mut command = Command::new("/bin/sh");
         command
+            .args([
+                "-c",
+                "umask 022; exec \"$0\" \"$@\"",
+                &binary.to_string_lossy(),
+            ])
             .args(self.expand(args))
             .current_dir(&self.work)
             .env_clear()
@@ -770,11 +857,7 @@ impl Sandbox {
                 .expect("write stdin");
             child.wait_with_output().expect("wait symvault")
         };
-        Observed {
-            exit: output.status.code().unwrap_or(-1),
-            stdout: self.normalize(&output.stdout),
-            stderr: self.normalize(&output.stderr),
-        }
+        output
     }
 
     fn forms(path: &Path) -> Vec<String> {
@@ -799,13 +882,48 @@ impl Sandbox {
         normalize_touch_id(&normalize_dated_ids(&normalize_temp_suffixes(&text)))
     }
 
-    fn snapshot(&self) -> BTreeMap<String, TreeNode> {
+    fn snapshot(&self, archives: &[String]) -> BTreeMap<String, TreeNode> {
         let mut out = BTreeMap::new();
-        self.walk(&self.root, &mut out);
+        self.walk(&self.root, archives, &mut out);
         out
     }
 
-    fn walk(&self, dir: &Path, out: &mut BTreeMap<String, TreeNode>) {
+    /// Rule 13: a path below a case-declared archive prefix.
+    #[allow(clippy::unused_self)]
+    fn is_archive(&self, rel: &str, archives: &[String]) -> bool {
+        archives.iter().any(|prefix| rel.starts_with(prefix))
+    }
+
+    /// Rule 13: lists a gzip-compressed tar as name, type, mode and the sha256 of
+    /// every regular member's normalized content.
+    fn decode_archive(&self, data: &[u8]) -> Vec<ArchiveMember> {
+        let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(data));
+        let mut members: Vec<ArchiveMember> = archive
+            .entries()
+            .expect("archive entries")
+            .map(|entry| {
+                let mut entry = entry.expect("archive entry");
+                let byte = entry.header().entry_type().as_byte();
+                let byte = if byte == 0 { b'0' } else { byte };
+                let mut member = ArchiveMember {
+                    name: String::from_utf8_lossy(&entry.path_bytes()).into_owned(),
+                    kind: char::from(byte).to_string(),
+                    mode: i64::from(entry.header().mode().expect("member mode")),
+                    sha256: String::new(),
+                };
+                if byte == b'0' {
+                    let mut content = Vec::new();
+                    std::io::Read::read_to_end(&mut entry, &mut content).expect("member bytes");
+                    member.sha256 = sha_hex(&normalize_managed_fields(&self.normalize(&content)));
+                }
+                member
+            })
+            .collect();
+        members.sort_by(|left, right| left.name.cmp(&right.name));
+        members
+    }
+
+    fn walk(&self, dir: &Path, archives: &[String], out: &mut BTreeMap<String, TreeNode>) {
         let mut entries: Vec<_> = std::fs::read_dir(dir)
             .expect("read sandbox dir")
             .map(|entry| entry.expect("sandbox entry"))
@@ -822,12 +940,22 @@ impl Sandbox {
             let mut node = TreeNode {
                 kind: "file",
                 content: None,
+                mode: 0,
+                members: None,
                 audit: None,
             };
+            #[cfg(unix)]
+            if !file_type.is_symlink() {
+                use std::os::unix::fs::PermissionsExt;
+                node.mode = entry.metadata().expect("metadata").permissions().mode() & 0o777;
+            }
             if file_type.is_symlink() {
                 node.kind = "symlink";
             } else if file_type.is_dir() {
                 node.kind = "dir";
+            } else if self.is_archive(&rel, archives) {
+                node.members =
+                    Some(self.decode_archive(&std::fs::read(&path).expect("read archive")));
             } else if presence_only(&rel) {
                 node.audit = Some(decode_audit_lines(
                     &std::fs::read(&path).expect("read observed audit log"),
@@ -837,7 +965,7 @@ impl Sandbox {
             }
             out.insert(rel, node);
             if file_type.is_dir() && !file_type.is_symlink() {
-                self.walk(&path, out);
+                self.walk(&path, archives, out);
             }
         }
     }
@@ -886,6 +1014,46 @@ fn decode_audit_lines(data: &[u8]) -> Vec<AuditLine> {
         .collect()
 }
 
+/// Rule 14: the two install-time lines of a managed skill file, matched at the
+/// start of a line with exactly the recorded shape.
+fn normalize_managed_fields(text: &[u8]) -> Vec<u8> {
+    const HASH: &[u8] = b"managed_hash: sha256:";
+    const STAMP: &[u8] = b"managed_installed_at: \"";
+    let mut out = Vec::with_capacity(text.len());
+    for line in text.split_inclusive(|byte| *byte == b'\n') {
+        let body_len = line.strip_suffix(b"\n").map_or(line.len(), <[u8]>::len);
+        let (body, ending) = line.split_at(body_len);
+        if let Some(digits) = body.strip_prefix(HASH)
+            && digits.len() == 64
+            && all_lower_hex(digits)
+        {
+            out.extend_from_slice(HASH);
+            out.extend_from_slice(b"<HASH>");
+            out.extend_from_slice(ending);
+        } else if let Some(stamp) = body
+            .strip_prefix(STAMP)
+            .and_then(|rest| rest.strip_suffix(b"\""))
+            && is_utc_stamp(stamp)
+        {
+            out.extend_from_slice(STAMP);
+            out.extend_from_slice(b"<NOW>\"");
+            out.extend_from_slice(ending);
+        } else {
+            out.extend_from_slice(line);
+        }
+    }
+    out
+}
+
+/// `YYYY-MM-DDTHH:MM:SSZ`, the spelling Go's `time.RFC3339` gives a UTC instant.
+fn is_utc_stamp(stamp: &[u8]) -> bool {
+    std::str::from_utf8(stamp).is_ok_and(|text| {
+        text.len() == 20
+            && OffsetDateTime::parse(text, &Rfc3339).is_ok_and(|parsed| parsed.offset().is_utc())
+            && text.ends_with('Z')
+    })
+}
+
 fn pair_token_from_tree(after: &BTreeMap<String, TreeNode>) -> Option<String> {
     const DIR: &str = "home/vault/.symvault/pairing/";
     const EXT: &str = ".json";
@@ -920,6 +1088,8 @@ fn diff_trees(
             change: change.to_owned(),
             kind: node.kind.to_owned(),
             sha256: sha,
+            mode: node.mode,
+            members: node.members.clone().unwrap_or_default(),
             audit: node.audit.clone().unwrap_or_default(),
         });
     }
@@ -930,6 +1100,8 @@ fn diff_trees(
                 change: "removed".to_owned(),
                 kind: node.kind.to_owned(),
                 sha256: String::new(),
+                mode: node.mode,
+                members: Vec::new(),
                 audit: Vec::new(),
             });
         }
@@ -968,7 +1140,7 @@ fn run_case(binary: &Path, seeds: &BTreeMap<&str, &Seed>, case: &Case) -> Vec<St
         .unwrap_or_else(|| panic!("case {}: unknown seed {}", case.id, case.seed));
     sandbox.materialize_seed(&seed.files);
     sandbox.materialize_files(&case.files);
-    let before = sandbox.snapshot();
+    let before = sandbox.snapshot(&case.archives);
     let output = sandbox.run(&case.argv, &case.env, &case.stdin);
     let mut volatile = Volatile::new(case);
     let stdout = match volatile.discover(output.stdout) {
@@ -982,9 +1154,19 @@ fn run_case(binary: &Path, seeds: &BTreeMap<&str, &Seed>, case: &Case) -> Vec<St
     if output.exit != case.exit {
         problems.push(format!("exit: want {} got {}", case.exit, output.exit));
     }
-    compare("stdout", &expected_bytes(&case.stdout, &case.stdout_b64), &stdout, &mut problems);
-    compare("stderr", &expected_bytes(&case.stderr, &case.stderr_b64), &stderr, &mut problems);
-    let after = sandbox.snapshot();
+    compare(
+        "stdout",
+        &expected_bytes(&case.stdout, &case.stdout_b64),
+        &stdout,
+        &mut problems,
+    );
+    compare(
+        "stderr",
+        &expected_bytes(&case.stderr, &case.stderr_b64),
+        &stderr,
+        &mut problems,
+    );
+    let after = sandbox.snapshot(&case.archives);
     if volatile.has("pair-token") && volatile.token.is_none() {
         volatile.token = pair_token_from_tree(&after);
     }
@@ -1288,9 +1470,8 @@ fn volatile_rules_are_narrow() {
     );
 }
 
-#[test]
-fn tree_normalization_hides_nothing_beyond_the_rules() {
-    let case = Case {
+fn blank_case() -> Case {
+    Case {
         id: "x.text".into(),
         path: "x".into(),
         scenario: "x".into(),
@@ -1302,6 +1483,7 @@ fn tree_normalization_hides_nothing_beyond_the_rules() {
         files: Vec::new(),
         rules: vec!["pair-token".into()],
         opaque: vec!["home/vault/.symvault/pairing/".into()],
+        archives: Vec::new(),
         argv: Vec::new(),
         exit: 0,
         stdout: String::new(),
@@ -1310,32 +1492,392 @@ fn tree_normalization_hides_nothing_beyond_the_rules() {
         stderr_b64: String::new(),
         tree: Vec::new(),
         post: Vec::new(),
-    };
+    }
+}
+
+fn file_node(content: &[u8], mode: u32) -> TreeNode {
+    TreeNode {
+        kind: "file",
+        content: Some(content.to_vec()),
+        mode,
+        members: None,
+        audit: None,
+    }
+}
+
+/// Rules 10 and 11 and the tree mode: an opaque path is recorded by presence
+/// only, an undeclared path is not, the encrypted store never appears, and a
+/// permission change is a difference.
+#[test]
+fn tree_normalization_hides_nothing_beyond_the_rules() {
+    let case = blank_case();
     let mut volatile = Volatile::new(&case);
     let token = "6SJJ1P42PH2291TQJNRG4TTTFLOR2A90";
+    let opaque_path = format!("home/vault/.symvault/pairing/{token}.json");
     let mut after = BTreeMap::new();
-    let path = format!("home/vault/.symvault/pairing/{token}.json");
+    after.insert(opaque_path.clone(), file_node(b"{}", 0o600));
+    after.insert("work/other.txt".to_owned(), file_node(b"one", 0o644));
     after.insert(
-        path.clone(),
-        TreeNode {
-            kind: "file",
-            content: Some(b"{}".to_vec()),
-            audit: None,
-        },
+        "home/vault/entries/a.age".to_owned(),
+        file_node(b"x", 0o600),
     );
     volatile.token = pair_token_from_tree(&after);
     assert_eq!(volatile.token.as_deref(), Some(token));
     let tree = diff_trees(&BTreeMap::new(), &after, &volatile);
     assert_eq!(
-        tree,
-        vec![TreeEntry {
-            path: "home/vault/.symvault/pairing/<TOKEN>.json".into(),
-            change: "added".into(),
-            kind: "file".into(),
-            sha256: String::new(),
-            audit: Vec::new(),
-        }],
+        tree.iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "home/vault/.symvault/pairing/<TOKEN>.json",
+            "work/other.txt"
+        ],
+        "the encrypted store is not observed"
+    );
+    assert_eq!(
+        tree[0].sha256, "",
         "opaque files are recorded by presence only"
+    );
+    assert_eq!(tree[0].mode, 0o600, "…but their permission bits are");
+    assert_eq!(
+        tree[1].sha256,
+        sha_hex(b"one"),
+        "undeclared paths keep their bytes"
+    );
+    assert_eq!(tree[1].mode, 0o644);
+
+    let mut changed = after.clone();
+    changed.insert(opaque_path, file_node(b"completely different", 0o600));
+    let same_opaque = diff_trees(&BTreeMap::new(), &changed, &volatile);
+    assert_eq!(
+        tree[0], same_opaque[0],
+        "the opaque entry does not see the content"
+    );
+    changed.insert("work/other.txt".to_owned(), file_node(b"two", 0o644));
+    assert_ne!(
+        tree[1],
+        diff_trees(&BTreeMap::new(), &changed, &volatile)[1],
+        "an undeclared path still compares its bytes"
+    );
+    let before = BTreeMap::from([("work/other.txt".to_owned(), file_node(b"one", 0o644))]);
+    let chmodded = BTreeMap::from([("work/other.txt".to_owned(), file_node(b"one", 0o600))]);
+    let diff = diff_trees(&before, &chmodded, &volatile);
+    assert_eq!(diff.len(), 1, "a permission change alone is a difference");
+    assert_eq!((diff[0].change.as_str(), diff[0].mode), ("changed", 0o600));
+}
+
+fn tar_gz(members: &[(&str, &[u8], u32, u64)]) -> Vec<u8> {
+    let mut builder = tar::Builder::new(Vec::new());
+    for (name, content, mode, mtime) in members {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(*mode);
+        header.set_mtime(*mtime);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, name, *content)
+            .expect("append member");
+    }
+    let tarball = builder.into_inner().expect("tar bytes");
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    std::io::Write::write_all(&mut encoder, &tarball).expect("gzip");
+    encoder.finish().expect("gzip bytes")
+}
+
+/// Rule 13: header times and compression are not compared; names, modes, types
+/// and bytes are (and a sandbox path inside a member is rule 1).
+#[test]
+fn archive_members_are_compared_by_name_mode_and_bytes() {
+    let sandbox = Sandbox::new(Path::new("/opt/symvault-test-binary"));
+    let base = sandbox.decode_archive(&tar_gz(&[
+        ("a/SKILL.md", b"hello", 0o644, 1),
+        ("a/run.sh", b"#!/bin/sh\n", 0o755, 2),
+    ]));
+    assert_eq!(base.len(), 2);
+    assert_eq!(
+        (base[0].name.as_str(), base[0].kind.as_str(), base[0].mode),
+        ("a/SKILL.md", "0", 0o644)
+    );
+    assert_eq!(base[0].sha256, sha_hex(b"hello"));
+    assert_eq!(
+        base,
+        sandbox.decode_archive(&tar_gz(&[
+            ("a/SKILL.md", b"hello", 0o644, 99),
+            ("a/run.sh", b"#!/bin/sh\n", 0o755, 98),
+        ])),
+        "mtime is not compared"
+    );
+    for (label, other) in [
+        (
+            "content",
+            [
+                ("a/SKILL.md", &b"hellp"[..], 0o644),
+                ("a/run.sh", b"#!/bin/sh\n", 0o755),
+            ],
+        ),
+        (
+            "mode",
+            [
+                ("a/SKILL.md", b"hello", 0o600),
+                ("a/run.sh", b"#!/bin/sh\n", 0o755),
+            ],
+        ),
+        (
+            "name",
+            [
+                ("a/SKILL.mdx", b"hello", 0o644),
+                ("a/run.sh", b"#!/bin/sh\n", 0o755),
+            ],
+        ),
+    ] {
+        let members: Vec<_> = other.iter().map(|(n, c, m)| (*n, *c, *m, 1)).collect();
+        assert_ne!(
+            base,
+            sandbox.decode_archive(&tar_gz(&members)),
+            "{label} is compared"
+        );
+    }
+    assert_eq!(
+        base,
+        sandbox.decode_archive(&tar_gz(&[
+            ("a/run.sh", b"#!/bin/sh\n", 0o755, 1),
+            ("a/SKILL.md", b"hello", 0o644, 1),
+        ])),
+        "member order is not compared (Go writes map order)"
+    );
+    // Rule 14: only the two install-time lines, and only with the recorded shape.
+    let hash = "a".repeat(64);
+    let file = |hash: &str, stamp: &str| {
+        format!("x\nmanaged_hash: sha256:{hash}\nmanaged_installed_at: \"{stamp}\"\ny\n")
+    };
+    let member = |text: &str| sandbox.decode_archive(&tar_gz(&[("m", text.as_bytes(), 0o644, 1)]));
+    let stamp = "2026-11-01T01:27:19Z";
+    assert_eq!(
+        member(&file(&hash, stamp)),
+        member(&file(&"b".repeat(64), "2030-01-01T00:00:00Z")),
+        "neither the digest nor the stamp is compared"
+    );
+    assert_eq!(
+        normalize_managed_fields(file(&hash, stamp).as_bytes()),
+        file("<HASH>", "<NOW>").into_bytes()
+    );
+    // Near misses keep their bytes: wrong digit count or case, a non-UTC or
+    // non-date stamp, an indented line, another key.
+    for kept in [
+        format!("managed_hash: sha256:{}\n", "a".repeat(63)),
+        format!("managed_hash: sha256:{}\n", "A".repeat(64)),
+        format!("managed_hash: sha256:{}\n", "a".repeat(65)),
+        format!("  managed_hash: sha256:{hash}\n"),
+        format!("hash: sha256:{hash}\n"),
+        "managed_installed_at: \"2026-11-01T01:27:19+01:00\"\n".to_owned(),
+        "managed_installed_at: \"yesterday\"\n".to_owned(),
+        "managed_installed_at: 2026-11-01T01:27:19Z\n".to_owned(),
+    ] {
+        assert_eq!(
+            normalize_managed_fields(kept.as_bytes()),
+            kept.clone().into_bytes(),
+            "{kept}"
+        );
+    }
+    assert_ne!(
+        member(&file(&hash, stamp)),
+        member("x\nmanaged_hash: sha256:\ny\n"),
+        "the surrounding bytes are compared"
+    );
+    assert_ne!(
+        base,
+        sandbox.decode_archive(&tar_gz(&[("a/SKILL.md", b"hello", 0o644, 1)])),
+        "a missing member is compared"
+    );
+    let root = sandbox.root_text();
+    let rooted = sandbox.decode_archive(&tar_gz(&[(
+        "a/x",
+        format!("at {root}/work").as_bytes(),
+        0o644,
+        1,
+    )]));
+    assert_eq!(
+        rooted[0].sha256,
+        sha_hex(b"at $ROOT/work"),
+        "rule 1 applies inside members"
+    );
+}
+
+/// Rules 1, 2 and 5 on the sandbox normalizer, with near misses that must stay.
+#[test]
+fn sandbox_normalizer_rewrites_only_root_bin_and_touch_id() {
+    let text = |bytes: Vec<u8>| String::from_utf8(bytes).expect("utf8");
+    let sandbox = Sandbox::new(Path::new("/opt/symvault-test-binary"));
+    let root = sandbox.root_text();
+    assert_eq!(
+        text(sandbox.normalize(format!("a {root}/work b").as_bytes())),
+        "a $ROOT/work b"
+    );
+    assert_eq!(
+        text(sandbox.normalize(b"/not-the-sandbox/work")),
+        "/not-the-sandbox/work",
+        "another path is kept"
+    );
+    assert_eq!(
+        text(sandbox.normalize(b"run /opt/symvault-test-binary now")),
+        "run $BIN now"
+    );
+    assert_eq!(
+        text(sandbox.normalize(b"run /opt/symvault-other now")),
+        "run /opt/symvault-other now",
+        "another binary is kept"
+    );
+    assert_eq!(
+        text(normalize_touch_id(
+            b"Touch ID available: true\n{\"touchIDAvailable\":false}"
+        )),
+        "Touch ID available: <BOOL>\n{\"touchIDAvailable\":<BOOL>}"
+    );
+    for kept in [
+        "Touch ID available: maybe",
+        "{\"touchIDAvailable\":null}",
+        "Touch ID: true",
+        "touchIDAvailable:true",
+    ] {
+        assert_eq!(text(normalize_touch_id(kept.as_bytes())), kept, "{kept}");
+    }
+}
+
+/// Rules 11 and 12 by path.
+#[test]
+fn store_and_audit_paths_are_classified_narrowly() {
+    for hidden in [
+        "home/vault/entries",
+        "home/vault/entries/a/first.age",
+        "home/vault/manifest.age",
+        "home/vault/identity.age",
+        "home/vault/.lock",
+        "home/vault/.git/HEAD",
+        "home/vault/.search-index",
+    ] {
+        assert!(encrypted_store(hidden), "{hidden}");
+    }
+    for visible in [
+        "home/vault/config.yaml",
+        "home/vault/mcp-shares.json",
+        "home/.symvault/config.yaml",
+        "home/vault/entriesx",
+        "work/entries/x",
+    ] {
+        assert!(!encrypted_store(visible), "{visible}");
+    }
+    assert!(presence_only("home/vault/audit-symvault.log"));
+    assert!(!presence_only("home/vault/audit.txt"));
+    assert!(!presence_only("home/vault/audit-symvault.json"));
+}
+
+/// The numbered rules are listed once and consistently: the header of this file,
+/// the header of the generator, the notes the generator wrote into the fixture
+/// and `RULES` (what the replay implements) carry the same ids in the same order.
+#[test]
+fn normalization_rules_are_listed_once_and_consistently() {
+    fn header_rule_ids(source: &str, comment: &str) -> Vec<String> {
+        source
+            .lines()
+            .take(100)
+            .filter_map(|line| {
+                let rest = line.strip_prefix(comment)?.trim_start();
+                let (number, rest) = rest.split_once(". `")?;
+                number.parse::<usize>().ok()?;
+                Some(rest.split_once('`')?.0.to_owned())
+            })
+            .collect()
+    }
+    let rules: Vec<String> = RULES.iter().map(|id| (*id).to_owned()).collect();
+    assert_eq!(
+        header_rule_ids(include_str!("output_modes.rs"), "//!"),
+        rules,
+        "tests/output_modes.rs header"
+    );
+    let generator = std::fs::read_to_string(manifest_path(
+        "../../scripts/rust-port/cmd/outputmodegen/main.go",
+    ))
+    .expect("read generator");
+    assert_eq!(
+        header_rule_ids(&generator, "//"),
+        rules,
+        "outputmodegen main.go header"
+    );
+    let notes: Vec<String> = load_fixture()
+        .notes
+        .iter()
+        .filter_map(|note| note.strip_prefix("Normalization rule "))
+        .enumerate()
+        .map(|(index, rest)| {
+            let (number, rest) = rest.split_once(" (").expect("rule note shape");
+            assert_eq!(
+                number,
+                (index + 1).to_string(),
+                "rule numbers are contiguous"
+            );
+            rest.split_once("):").expect("rule note id").0.to_owned()
+        })
+        .collect();
+    assert_eq!(notes, rules, "fixture notes");
+    for case in &load_fixture().cases {
+        for rule in &case.rules {
+            let id = rule.split(':').next().unwrap_or(rule);
+            assert!(
+                RULES.contains(&id),
+                "case {} declares unknown rule {rule}",
+                case.id
+            );
+        }
+    }
+}
+
+/// The Touch ID probe is normalized to `<BOOL>` (rule 5), so it is checked live:
+/// on darwin, with the pinned Go oracle at `SYMVAULT_OUTPUT_MODES_GO_BINARY`
+/// (set by `check_output_modes_cli.sh`), `auth status --json` of Rust and Go in
+/// the same sandbox reports the same `touchIDAvailable`.
+#[test]
+fn touch_id_availability_matches_go_in_the_same_sandbox() {
+    if recording_goos() != "darwin" {
+        eprintln!(
+            "SKIP touch-id live comparison: darwin only (running on {})",
+            recording_goos()
+        );
+        return;
+    }
+    let Some(go) = std::env::var_os("SYMVAULT_OUTPUT_MODES_GO_BINARY")
+        .map(PathBuf::from)
+        .filter(|path| path.is_file())
+    else {
+        eprintln!(
+            "SKIP touch-id live comparison: no Go oracle (SYMVAULT_OUTPUT_MODES_GO_BINARY unset or missing; make output-modes-cli-differential sets it)"
+        );
+        return;
+    };
+    let fixture = load_fixture();
+    let seed = fixture
+        .seeds
+        .iter()
+        .find(|seed| seed.name == "entries")
+        .expect("entries seed");
+    let rust = PathBuf::from(
+        std::env::var_os("SYMVAULT_OUTPUT_MODES_BINARY")
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_symvault").into()),
+    );
+    let sandbox = Sandbox::new(&rust);
+    sandbox.materialize_seed(&seed.files);
+    let args = ["auth".to_owned(), "status".to_owned(), "--json".to_owned()];
+    let probe = |binary: &Path| -> bool {
+        let output = sandbox.run_raw(binary, &args, &BTreeMap::new(), "");
+        let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .unwrap_or_else(|error| panic!("auth status --json is JSON: {error}"));
+        value["touchIDAvailable"]
+            .as_bool()
+            .unwrap_or_else(|| panic!("touchIDAvailable in {value}"))
+    };
+    assert_eq!(
+        probe(&rust),
+        probe(&go),
+        "Touch ID availability differs between Rust and the Go oracle on this host"
     );
 }
 

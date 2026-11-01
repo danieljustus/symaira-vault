@@ -15,39 +15,74 @@
 // age identity, entry timestamps and audit lines are deterministic and the
 // native replay needs no Go toolchain and no secret randomness.
 //
-// Documented normalization (applied identically by the Rust replay in
-// crates/symvault-cli/tests/output_modes.rs; anything else stays a diff):
+// Documented normalization. This is the ONE numbered list: the same ids, in the
+// same order, are generated into the fixture notes from normalizationRules, listed
+// in the header of crates/symvault-cli/tests/output_modes.rs and implemented by
+// its replay; that test fails when any of the four disagrees. Anything not
+// listed here stays a byte-for-byte difference.
 //
-//  1. Sandbox root. The sandbox root and its symlink-resolved form become
-//     "$ROOT" in stdout, stderr, observed text files and in the text files of a
-//     seed (re-expanded when the seed is materialised).
-//  2. Binary path. The absolute path of the executed binary becomes "$BIN"
-//     (update apply/info print the running executable).
-//  3. Dated random ids. "<prefix>-YYYYMMDD-<8 lowercase hex>" for the prefixes
-//     tok, intake and import, with a valid calendar date, becomes
+//  1. `root`: the sandbox root and its symlink-resolved form become "$ROOT" in
+//     stdout, stderr, tree paths, observed text files, archive members and the
+//     text files of a seed (re-expanded when the seed is materialised).
+//  2. `bin`: the absolute path of the executed binary (and its symlink-resolved
+//     form) becomes "$BIN" (update apply/info print the running executable).
+//  3. `dated-id`: "<prefix>-YYYYMMDD-<8 lowercase hex>" for the prefixes tok,
+//     intake and import, with a valid calendar date, becomes
 //     "<prefix>-<DATE>-<RAND>".
-//  4. Generated password. A case that declares the `gen-pw:N` rule must print
-//     exactly one run of N characters from [A-Za-z0-9] delimited by a line
-//     boundary, space or quote; it becomes "<PW>". The shape is verified by the
-//     generator, so a command that stops generating is a failure, not a pass.
-//  5. Pairing token. A case that declares `pair-token` has its 32-character
-//     upper-case base32 token (and the 6-character prefix repeated in the join
-//     instructions) replaced by "<TOKEN>"/"<TOKEN6>".
-//  6. Failed-write temporary suffix ".age.tmp-<digits>" becomes ".age.tmp-<N>".
-//  7. Touch ID probe. "Touch ID available: true|false" and
+//  4. `tmp-suffix`: a failed write's temporary suffix ".age.tmp-<digits>" becomes
+//     ".age.tmp-<N>".
+//  5. `touch-id`: "Touch ID available: true|false" and
 //     "\"touchIDAvailable\":true|false" of `auth status` become "<BOOL>": the
-//     value depends on the Mac's sensor, not on the command.
+//     value depends on the Mac's sensor, not on the command. On darwin the Rust
+//     replay also compares the live Go and Rust values in the same sandbox
+//     (SYMVAULT_OUTPUT_MODES_GO_BINARY), so a wrong probe is not hidden.
+//  6. `gen-pw`: a case that declares `gen-pw:N` must print exactly one run of N
+//     characters from [A-Za-z0-9] delimited by a line boundary, space or quote;
+//     it becomes "<PW>". The shape is verified by the generator, so a command
+//     that stops generating is a failure, not a pass.
+//  7. `pair-token`: a case that declares it has its 32-character upper-case
+//     base32 token (and the 6-character prefix repeated in the join
+//     instructions) replaced by "<TOKEN>"/"<TOKEN6>".
+//  8. `now-ts`: a case that declares it has every RFC 3339 timestamp within one
+//     hour of the run replaced by "<NOW>"; timestamps frozen in a seed are far
+//     from it and stay visible. It does not pin the fractional-second spelling
+//     of a run-time stamp.
+//  9. `man-date`: a case that declares it has the date field of a roff `.TH`
+//     header ("Nov 2026", the month of the run) replaced by "<MAN-DATE>".
+//  10. `opaque`: a case that declares path prefixes has those tree paths recorded
+//     by presence only (their bytes are random or clock values: the invitation
+//     file of `device pair`, the token store `doctor` creates).
+//  11. `encrypted-store`: the vault's encrypted store (entries, manifest,
+//     identity, lock, search index, .git) is not part of the tree diff: its
+//     bytes carry fresh randomness. `post` commands pin the resulting vault.
+//  12. `audit-fields`: an audit log (audit-*.log) is recorded as the decoded
+//     stable fields of every line (agent, action, path, field, ok, argv_hash
+//     length, signed), never as bytes: ts, kid, hmac and the hash are volatile.
+//  13. `archive-members`: a case that declares `archives` path prefixes has every
+//     file below them decoded as .tar.gz and recorded as its members (name,
+//     type, mode, sha256 of the normalized content), sorted by name because Go
+//     writes them in map iteration order; header times, owners and the
+//     compression bytes are not compared.
+//  14. `managed-fields`: inside an archive member, a line "managed_hash:
+//     sha256:<64 hex>" has its digits replaced by "<HASH>" (the digest of a body
+//     that embeds the install clock) and a line `managed_installed_at:
+//     "<RFC 3339 UTC>"` its stamp by "<NOW>"; both are install-time values.
+//
+// Every tree entry also records the permission bits of files and directories
+// (`mode`, compared as is). The generator and the replay both execute the binary
+// under umask 022 so the bits do not depend on the invoking shell.
 //
 // Sandbox: TZ=UTC, NO_COLOR=1, CI=1, SYMVAULT_PASSPHRASE with
 // SYMVAULT_ALLOW_ENV_PASSPHRASE=1, stdin is /dev/null unless a case supplies
 // text. The `$ROOT`-relative file tree after a case is recorded for every path
-// outside the vault's encrypted store (entries, manifest, identity, lock, .git)
-// as path + kind + sha256 of the normalized text; encrypted files are recorded
-// by presence only because their bytes carry fresh randomness.
+// outside the encrypted store (rule 11) as path + kind + mode + sha256 of the
+// normalized text (or the audit fields / archive members of rules 12 and 13).
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"debug/buildinfo"
@@ -57,6 +92,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -159,9 +195,23 @@ type treeEntry struct {
 	Change string `json:"change"` // added | removed | changed
 	Kind   string `json:"kind"`
 	SHA256 string `json:"sha256,omitempty"`
+	// Mode is the permission bits of a file or directory (zero for a symlink).
+	Mode uint32 `json:"mode,omitempty"`
+	// Members is the decoded content of a case-declared archive.
+	Members []archiveMember `json:"members,omitempty"`
 	// Audit is the decoded stable fields of every line of a presence-only audit
 	// log (the bytes carry clock values and HMACs, the fields below do not).
 	Audit []auditLine `json:"audit,omitempty"`
+}
+
+// archiveMember is one entry of a case-declared .tar.gz: its name, tar type
+// flag, permission bits and the sha256 of the normalized content (regular files
+// only). Header times, owners and the compression bytes are volatile.
+type archiveMember struct {
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	Mode   int64  `json:"mode"`
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 // auditLine is the stable part of one audit log line: who (agent, which Go
@@ -176,6 +226,73 @@ type auditLine struct {
 	OK          bool   `json:"ok"`
 	ArgvHashLen int    `json:"argv_hash_len"`
 	Signed      bool   `json:"signed"`
+}
+
+// isArchive reports a path below a case-declared archive prefix (rule 13).
+func (s *sandbox) isArchive(rel string) bool {
+	for _, prefix := range s.archives {
+		if strings.HasPrefix(rel, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// decodeArchive lists a gzip-compressed tar with the sha256 of every regular
+// member's normalized content.
+func (s *sandbox) decodeArchive(data []byte) ([]archiveMember, error) {
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	reader := tar.NewReader(gz)
+	members := []archiveMember{}
+	for {
+		header, err := reader.Next()
+		if errors.Is(err, io.EOF) {
+			sort.Slice(members, func(i, j int) bool { return members[i].Name < members[j].Name })
+			return members, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		member := archiveMember{Name: header.Name, Type: string(rune(header.Typeflag)), Mode: header.Mode}
+		if header.Typeflag == tar.TypeReg {
+			content, err := io.ReadAll(reader)
+			if err != nil {
+				return nil, err
+			}
+			sum := sha256.Sum256([]byte(normalizeManagedFields(s.normalize(string(content)))))
+			member.SHA256 = hex.EncodeToString(sum[:])
+		}
+		members = append(members, member)
+	}
+}
+
+// normalizeManagedFields is rule 14: the two install-time lines of a managed
+// skill file, matched at the start of a line with exactly the recorded shape.
+func normalizeManagedFields(text string) string {
+	const (
+		hashPrefix  = "managed_hash: sha256:"
+		stampPrefix = `managed_installed_at: "`
+	)
+	lines := strings.SplitAfter(text, "\n")
+	for i, line := range lines {
+		body := strings.TrimSuffix(line, "\n")
+		ending := line[len(body):]
+		switch {
+		case strings.HasPrefix(body, hashPrefix):
+			if digits := strings.TrimPrefix(body, hashPrefix); len(digits) == 64 && allLowerHex(digits) {
+				lines[i] = hashPrefix + "<HASH>" + ending
+			}
+		case strings.HasPrefix(body, stampPrefix) && strings.HasSuffix(body, `"`):
+			stamp := strings.TrimSuffix(strings.TrimPrefix(body, stampPrefix), `"`)
+			if parsed, err := time.Parse(time.RFC3339, stamp); err == nil && parsed.UTC().Format(time.RFC3339) == stamp {
+				lines[i] = stampPrefix + "<NOW>\"" + ending
+			}
+		}
+	}
+	return strings.Join(lines, "")
 }
 
 // decodeAuditLines parses a presence-only audit log into its stable fields. A
@@ -219,6 +336,7 @@ type caseResult struct {
 	Files    []workFile        `json:"files,omitempty"`
 	Rules    []string          `json:"rules,omitempty"`
 	Opaque   []string          `json:"opaque,omitempty"`
+	Archives []string          `json:"archives,omitempty"`
 	Argv     []string          `json:"argv"`
 	Exit     int               `json:"exit"`
 	Stdout   string            `json:"stdout"`
@@ -257,6 +375,9 @@ type gateRow struct {
 
 type sandbox struct {
 	root, home, work, vault, bin string
+	// archives are the root-relative path prefixes of the running case whose
+	// files are decoded as .tar.gz (rule 13).
+	archives []string
 }
 
 func newSandbox(bin string) (*sandbox, error) {
@@ -332,7 +453,9 @@ func (s *sandbox) run(args []string, extraEnv map[string]string, stdin string) (
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	defer cancel()
 	// #nosec G204 -- validateGoBinary checked the pinned, clean oracle before this command.
-	cmd := exec.CommandContext(ctx, s.bin, s.expand(args)...)
+	// The binary runs under umask 022 (exec replaces the shell) so the recorded
+	// permission bits do not depend on the invoking shell.
+	cmd := exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", `umask 022; exec "$0" "$@"`, s.bin}, s.expand(args)...)...)
 	cmd.Dir = s.work
 	cmd.Env = s.env(extraEnv)
 	cmd.WaitDelay = time.Second
@@ -730,6 +853,10 @@ type treeNode struct {
 	hasData bool
 	// audit is the canonical JSON of the decoded lines of an audit log.
 	audit string
+	// members is the canonical JSON of a decoded archive.
+	members string
+	// mode is the permission bits of a file or directory.
+	mode uint32
 }
 
 // snapshot walks the sandbox root (not the work/bin or sysbin plumbing) and
@@ -749,6 +876,9 @@ func (s *sandbox) snapshot() (map[string]treeNode, error) {
 			return nil
 		}
 		node := treeNode{kind: "file"}
+		if info, err := entry.Info(); err == nil && entry.Type()&fs.ModeSymlink == 0 {
+			node.mode = uint32(info.Mode().Perm())
+		}
 		switch {
 		case entry.Type()&fs.ModeSymlink != 0:
 			node.kind = "symlink"
@@ -761,6 +891,18 @@ func (s *sandbox) snapshot() (map[string]treeNode, error) {
 			data, err := os.ReadFile(path) // #nosec G304 -- sandbox path
 			if err != nil {
 				return err
+			}
+			if s.isArchive(rel) {
+				members, err := s.decodeArchive(data)
+				if err != nil {
+					return fmt.Errorf("%s: %w", rel, err)
+				}
+				encoded, err := json.Marshal(members)
+				if err != nil {
+					return err
+				}
+				node.members = string(encoded)
+				break
 			}
 			if presenceOnly(rel) {
 				lines, err := decodeAuditLines(data)
@@ -797,16 +939,25 @@ func diffTrees(before, after map[string]treeNode, v *volatile) []treeEntry {
 				panic(err) // node.audit was produced by json.Marshal above
 			}
 		}
+		var members []archiveMember
+		if node.members != "" {
+			if err := json.Unmarshal([]byte(node.members), &members); err != nil {
+				panic(err) // node.members was produced by json.Marshal above
+			}
+		}
+		entry := treeEntry{Path: v.apply(path), Kind: node.kind, SHA256: sha, Mode: node.mode, Members: members, Audit: lines}
 		switch {
 		case !existed:
-			out = append(out, treeEntry{Path: v.apply(path), Change: "added", Kind: node.kind, SHA256: sha, Audit: lines})
+			entry.Change = "added"
+			out = append(out, entry)
 		case old != node:
-			out = append(out, treeEntry{Path: v.apply(path), Change: "changed", Kind: node.kind, SHA256: sha, Audit: lines})
+			entry.Change = "changed"
+			out = append(out, entry)
 		}
 	}
 	for path, node := range before {
 		if _, ok := after[path]; !ok {
-			out = append(out, treeEntry{Path: v.apply(path), Change: "removed", Kind: node.kind})
+			out = append(out, treeEntry{Path: v.apply(path), Change: "removed", Kind: node.kind, Mode: node.mode})
 		}
 	}
 	// The encrypted store and the work/bin plumbing are not observed.
@@ -1043,6 +1194,7 @@ func runCase(goBinary string, seeds map[string]seedResult, spec caseSpec, mode s
 		return caseResult{}, err
 	}
 	defer box.remove()
+	box.archives = spec.archives
 	if err := box.materialize(seed.Files); err != nil {
 		return caseResult{}, fmt.Errorf("case %s: %w", spec.id, err)
 	}
@@ -1065,7 +1217,7 @@ func runCase(goBinary string, seeds map[string]seedResult, spec caseSpec, mode s
 	}
 	result := caseResult{
 		ID: spec.id + "." + mode, Path: spec.path, Scenario: spec.id, Mode: mode, Desc: spec.desc,
-		Seed: spec.seed, Env: spec.env, Stdin: spec.stdin, Files: spec.files, Rules: spec.rules, Opaque: spec.opaque,
+		Seed: spec.seed, Env: spec.env, Stdin: spec.stdin, Files: spec.files, Rules: spec.rules, Opaque: spec.opaque, Archives: spec.archives,
 		Argv: argv, Exit: got.exit,
 		Stdout: stdout, Stderr: vol.apply(box.normalize(got.stderr)),
 	}
@@ -1354,15 +1506,41 @@ func main() {
 	fmt.Printf("WROTE %s (%s)\n", *output, summary)
 }
 
+// normalizationRule is one entry of the numbered list in the file header.
+type normalizationRule struct{ id, text string }
+
+// normalizationRules mirrors the header list; fixtureNotes turns it into the
+// notes of the fixture, and the Rust replay checks the ids and their order.
+var normalizationRules = []normalizationRule{
+	{"root", "sandbox root and its symlink-resolved form become $ROOT (stdout, stderr, tree paths, text files, archive members, seed text files)"},
+	{"bin", "the absolute path of the executed binary becomes $BIN"},
+	{"dated-id", "tok-/intake-/import-YYYYMMDD-<8 hex> with a valid date becomes <prefix>-<DATE>-<RAND>"},
+	{"tmp-suffix", ".age.tmp-<digits> becomes .age.tmp-<N>"},
+	{"touch-id", "the boolean after 'Touch ID available: ' and in \"touchIDAvailable\": becomes <BOOL> (sensor property); on darwin the replay also compares the live Go and Rust values"},
+	{"gen-pw", "case-declared gen-pw:N: exactly one delimited run of N alphanumerics becomes <PW> (shape verified)"},
+	{"pair-token", "case-declared: the 32-character base32 pairing token becomes <TOKEN>, its first six characters <TOKEN6>"},
+	{"now-ts", "case-declared: RFC 3339 timestamps within one hour of the run become <NOW>; seed timestamps stay"},
+	{"man-date", "case-declared: the date field of a roff .TH header ('Mon YYYY') becomes <MAN-DATE>"},
+	{"opaque", "case-declared tree path prefixes are recorded by presence only (device-pair invitation file, doctor token store)"},
+	{"encrypted-store", "the vault's encrypted store (entries, manifest, identity, lock, search index, .git) is not in the tree diff"},
+	{"audit-fields", "audit-*.log files are recorded as decoded fields (agent, action, path, field, ok, argv_hash length, signed), not bytes"},
+	{"archive-members", "case-declared archive path prefixes: every file below is recorded as decompressed .tar.gz members, sorted by name (Go writes them in map order): name, type, mode, sha256 of normalized content"},
+	{"managed-fields", "inside archive members the digits of a 'managed_hash: sha256:' line become <HASH> and the stamp of a 'managed_installed_at: \"…\"' line becomes <NOW> (install-time values)"},
+}
+
 func fixtureNotes() []string {
-	return []string{
+	notes := []string{
 		"Positive output matrix of the CLI-006 output-format gate: for every command path that accepts --json and/or --output, the accepted modes (text, --json, --output yaml, --output json, --quiet) are run against the pinned Go oracle. Refused modes are byte-pinned by testdata/port/cli/error-taxonomy.json and not repeated here.",
 		"Every case ran in a disposable HOME/XDG/cwd sandbox seeded from a frozen vault tree (seeds[]); the seed commands are recorded and --check refuses a generator whose commands differ from the recorded ones.",
 		"Sandbox environment: TZ=UTC, NO_COLOR=1, CI=1, SYMVAULT_PASSPHRASE with SYMVAULT_ALLOW_ENV_PASSPHRASE=1, stdin /dev/null unless a case supplies stdin.",
-		"Normalization (documented in cmd/outputmodegen/main.go): $ROOT sandbox path, $BIN executed binary path, dated random ids (tok-/intake-/import-), generated password <PW> (rule gen-pw:N), pairing token <TOKEN>/<TOKEN6> (rule pair-token), .age.tmp-<N>.",
-		"tree[] is the file-system diff of the sandbox root after the case, excluding the encrypted vault store; post[] pins the resulting vault state with follow-up commands (stdout and exit only).",
+		"Normalization is the numbered list 'Normalization rule N (id): ...' below (cmd/outputmodegen/main.go header, tests/output_modes.rs header and replay agree on it; a test fails when they differ); anything not listed is compared byte for byte. Every tree entry also records the permission bits (umask 022).",
+		"tree[] is the file-system diff of the sandbox root after the case, excluding the encrypted vault store (rule 11); post[] pins the resulting vault state with follow-up commands (stdout and exit only).",
 		"Some commands define a local --output flag that shadows the global one (agent profile export, agent skill export, audit export, export, template generate): there `--output yaml` names an output file; the recorded tree pins that side effect.",
 	}
+	for index, rule := range normalizationRules {
+		notes = append(notes, fmt.Sprintf("Normalization rule %d (%s): %s", index+1, rule.id, rule.text))
+	}
+	return notes
 }
 
 func validateGoBinary(path string) error {

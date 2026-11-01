@@ -19,7 +19,10 @@ type caseSpec struct {
 	rules []string
 	// opaque lists tree path prefixes recorded by presence only.
 	opaque []string
-	post   [][]string
+	// archives lists tree path prefixes whose files are decoded as .tar.gz and
+	// recorded as their members.
+	archives []string
+	post     [][]string
 }
 
 func argv(args ...string) seedStep { return seedStep{Argv: args} }
@@ -184,7 +187,7 @@ func allCaseSpecs() []caseSpec {
 	add(caseSpec{id: "agent-profile-show-missing", path: "agent profile show", desc: "show an unknown profile", seed: "entries", argv: flags("agent", "profile", "show", "nope")})
 	add(caseSpec{id: "agent-profile-export", path: "agent profile export", desc: "export a profile to stdout", seed: "entries", argv: flags("agent", "profile", "export", "hermes")})
 	add(caseSpec{id: "agent-profile-export-file", path: "agent profile export", desc: "export a profile to a file", seed: "entries", argv: flags("agent", "profile", "export", "hermes", "-o", "hermes.yaml"), modes: []string{"text", "quiet"}})
-	add(caseSpec{id: "agent-skill-export", path: "agent skill export", desc: "export a skill archive", seed: "entries", argv: flags("agent", "skill", "export", "hermes"), opaque: []string{"work/"}})
+	add(caseSpec{id: "agent-skill-export", path: "agent skill export", desc: "export a skill archive", seed: "entries", argv: flags("agent", "skill", "export", "hermes"), archives: []string{"work/"}})
 	add(caseSpec{id: "agent-whoami", path: "agent whoami", desc: "whoami with an agent context", seed: "entries", argv: flags("agent", "whoami"), env: map[string]string{"SYMVAULT_AGENT": "hermes"}})
 	add(caseSpec{id: "agent-whoami-unset", path: "agent whoami", desc: "whoami without an agent context", seed: "entries", argv: flags("agent", "whoami")})
 
