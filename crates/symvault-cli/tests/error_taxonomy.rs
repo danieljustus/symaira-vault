@@ -196,8 +196,8 @@ const UNLOCK_STATES: [(&str, usize); 7] = [
 ];
 /// Appended to the seeded `config.yaml` of the `*env_disabled` states.
 const ENV_DISABLED_CONFIG_SUFFIX: &str = "security:\n    disable_env_passphrase: true\n";
-const KNOWN_DIVERGENT_UNINITIALIZED: usize = 6;
-const KNOWN_DIVERGENT_INITIALIZED: usize = 4;
+const KNOWN_DIVERGENT_UNINITIALIZED: usize = 3;
+const KNOWN_DIVERGENT_INITIALIZED: usize = 2;
 /// Scenarios of the host-dependent commands (`mcp|serve install|status`, three
 /// variants uninitialized and two initialized each), skipped off darwin.
 const DARWIN_ONLY_UNINITIALIZED: usize = 12;
@@ -249,16 +249,6 @@ fn expected_skips(darwin_only: usize) -> usize {
 /// A different exit code, lost output or a parser regression therefore cannot hide
 /// behind an entry.
 const KNOWN_BODY_DIVERGENCES: &[(&str, &str, &str)] = &[
-    (
-        "dynamic_generate",
-        "uninitialized",
-        "`dynamic` is not a native subcommand yet (only its help page is frozen)",
-    ),
-    (
-        "dynamic_generate",
-        "initialized",
-        "`dynamic` is not a native subcommand yet (only its help page is frozen)",
-    ),
     (
         "setup",
         "uninitialized",
