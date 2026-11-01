@@ -33,7 +33,12 @@ pub fn inspect_identity(root: &Path) -> Result<MigrationResult, String> {
     let path = root.join("identity.age");
     let raw = safeio::read(&path)
         .map_err(|error| format!("read vault identity ({}): {error}", path.display()))?
-        .ok_or_else(|| format!("read vault identity ({}): file not found", path.display()))?;
+        .ok_or_else(|| {
+            let missing = std::io::Error::from(std::io::ErrorKind::NotFound);
+            let cause = crate::config::go_path_error(&path, &missing, false)
+                .unwrap_or_else(|| missing.to_string());
+            format!("read vault identity ({}): {cause}", path.display())
+        })?;
     Ok(match symvault_crypto::detect_envelope(&raw) {
         EnvelopeFormat::Argon2id => {
             let needs_header =
