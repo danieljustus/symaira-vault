@@ -99,7 +99,7 @@
       "scripts/rust-port/cmd/mobilebindgen/exec.go",
       "scripts/rust-port/cmd/mobilebindgen/main.go"
     ],
-    "generator_digest": "8f9a17d35192c8cf2fc7a12e4a6d5550c0a4b75d4f29abcac854411b9eac46cb"
+    "generator_digest": "73f6bb3f75220dcbb38137df2c348a5dc0c6b2bfee718ecd34555841cd4803fb"
   },
   "functions": [
     "GenerateIdentity",

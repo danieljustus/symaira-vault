@@ -257,7 +257,9 @@ func normalizePaths(s, root string) string {
 	if root == "" {
 		return s
 	}
-	for _, r := range []string{root, "/private" + root} {
+	// Longest spelling first: replacing root first would turn the macOS
+	// "/private" + root form into "/private$ROOT" (root is its suffix).
+	for _, r := range []string{"/private" + root, root} {
 		s = strings.ReplaceAll(s, r, "$ROOT")
 	}
 	return s
