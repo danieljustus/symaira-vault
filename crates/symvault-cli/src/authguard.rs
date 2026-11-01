@@ -160,3 +160,72 @@ mod tests {
         assert!(!challenger.available());
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+mod macos_backend_tests {
+    use std::path::Path;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use symvault_core::{
+        keychain_status::{BiometricItemStore, KeyringBiometricItems},
+        platform::{PlatformError, TouchId},
+        session::{MemoryKeyring, SessionManager},
+    };
+    use symvault_mcp::authguard::AuthMethodBackend;
+    use symvault_platform::FallbackKeyring;
+
+    struct Available(bool);
+
+    impl TouchId for Available {
+        fn is_available(&self) -> bool {
+            self.0
+        }
+        fn authenticate(&self, _: &str, _: Duration) -> Result<(), PlatformError> {
+            unreachable!("the backend never prompts")
+        }
+    }
+
+    /// Runs against the in-memory fallback only: never the real Keychain.
+    #[test]
+    fn session_backend_round_trips_through_the_fallback_keyring() {
+        let keyring = FallbackKeyring::new(Arc::new(MemoryKeyring::new()), true);
+        let backend =
+            super::macos::SessionAuthBackend::new(Arc::new(Available(true)), keyring.clone());
+        assert!(backend.biometric_available());
+        assert!(backend.load_session_passphrase("/vault").is_none());
+
+        SessionManager::with_system_clock(keyring.clone())
+            .save_passphrase(
+                "/vault",
+                b"hunter2",
+                Duration::from_secs(900),
+                Duration::from_secs(3600),
+            )
+            .expect("seed session");
+        assert_eq!(
+            &**backend
+                .load_session_passphrase("/vault")
+                .expect("session passphrase"),
+            b"hunter2"
+        );
+
+        let items = KeyringBiometricItems(&*keyring);
+        backend
+            .save_biometric_passphrase(Path::new("/vault"), b"hunter2")
+            .expect("save item");
+        assert!(items.exists("/vault").unwrap());
+        backend
+            .clear_biometric_passphrase(Path::new("/vault"))
+            .expect("clear item");
+        assert!(!items.exists("/vault").unwrap());
+        backend
+            .clear_biometric_passphrase(Path::new("/vault"))
+            .expect("an absent item is success");
+        let closed = super::macos::SessionAuthBackend::new(
+            Arc::new(Available(false)),
+            FallbackKeyring::new(Arc::new(MemoryKeyring::new()), true),
+        );
+        assert!(!closed.biometric_available());
+    }
+}
