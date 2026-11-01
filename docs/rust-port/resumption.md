@@ -1,5 +1,103 @@
 # Rust migration handover — 2026-09-09
 
+## Coordination note, 2026-11-01 23:57 (read first)
+
+`local/rust-port` is integrated by ONE coordinator chat at a time. Since 23:57 the owner is the Hermes chat that
+started at 22:28 ("vollständige /go-to-rust-migration ... alles lokal"). Another chat committed `62fa4449` with the
+message "handoff, local/cli-005c review fixes gated, re-review pending" while this owner's merge of
+`local/dynamic-generate` was staged; that commit IS the dynamic merge (parents `29436f42`, `321acd6c`) plus its doc
+edit. Actual state at `62fa4449`:
+
+- `local/cli-005c` is merged (`29436f42`, via `local/cli-005c-fix`): the delta review of `d7c01a1c..c936dd00`
+  returned REQUEST_CHANGES (`auth set touchid` became exit 4 instead of Go's exit 1; the cached-passphrase unlock
+  branch skipped the missing-`config.yaml` check). Both fixed in `3743f0ad` (8/8 Go probes byte-identical,
+  symvault-cli nextest 648/648). Its gate receipts `2c5ad3ee` are at `c936dd00`, not at the merge.
+- `local/dynamic-generate` (`023217df`, `321acd6c`) is merged: native `dynamic generate`; review REQUEST_CHANGES
+  (repeated flags) fixed. Error-taxonomy pins now 3 uninitialized / 2 initialized (`setup` only).
+- Do not merge, rebase or push `local/rust-port` from another chat. No push at all until the closing step (user
+  instruction in the owner chat: everything local, no GitHub).
+
+## CLI-005c review fixes: unlock order and failed passphrase prompts, 2026-11-01
+
+Independent review of `58460a10..d7c01a1c` (REQUEST_CHANGES) found two defects that the
+corpus could not see: every earlier scenario ran with the environment passphrase, so no
+prompt ever reached EOF, and no scenario started from a vault with only one of
+`config.yaml` / `identity.age`. The corpus now has an `unlock_states` section
+(`errtaxgen/unlockstates.go`, 60 Go-recorded scenarios, oracle `0cc78062`) and the native CLI
+follows Go's `UnlockVault` order (`internal/cli/unlock.go`).
+
+| Finding | Before | Now |
+|---|---|---|
+| `device pair` with only one vault file (`device.rs`) | either file missing was taken as proof that the identity is absent: with an identity but no `config.yaml` it reported `open vault: read identity file: ...`; with a `config.yaml` that disables the environment passphrase and no identity it used the passphrase from the environment | resolves the real `config.yaml` (missing = default), obtains the passphrase under its policy, then reads `identity.age`, then loads `config.yaml`: `open vault: load config: open <path>: no such file or directory` for an identity without a config, `open vault: read identity file: ...` for a config without an identity |
+| EOF at the passphrase prompt (`migrate pseudonymize`, and every command that unlocks) | printed once, exit 1 | `Error: read passphrase: read Passphrase: EOF` twice, the locked hint (the Touch ID flavour for `unlock`), exit 4 (`report_failed_passphrase_read`, called by every `finish_*` function and by `intake`) |
+| Interactive unlock with `security.disable_env_passphrase` and `SYMVAULT_PASSPHRASE` set (`device_input.rs`) | error `environment passphrase is disabled; ...`, exit 1 | warning `SYMVAULT_PASSPHRASE is set but ignored: ...`, then the prompt, like `resolveUnlockPassphrase` |
+
+Scenarios per state (`UNLOCK_STATES` in `tests/error_taxonomy.rs`): `locked` 18 (settled vault,
+no `SYMVAULT_PASSPHRASE`: `device pair`, `list`, `find`, `add`, `delete`, `edit`, `verify`,
+`unlock`, `migrate pseudonymize` with and without `--yes`, `recipients add|remove`, `run`,
+`file use`, `import review list|promote`, `intake`), and 7 each (`device pair` with and without a
+positional, `list`, `verify`, `unlock`, `migrate pseudonymize` with and without `--yes`) for
+`identity_only`, `config_only`, `identity_only_locked`, `config_only_locked`,
+`config_only_env_disabled` and `env_disabled`. Native output before the fix, same fixture: 27 of
+the 60 differed (`locked` 16, `identity_only` 2, `config_only_env_disabled` 2,
+`env_disabled` 7); after: 0.
+
+**Not covered, still different from Go (found while sweeping every runnable command in the
+`locked` state):** `get` (Go takes the non-interactive path: `vault locked: this build cannot
+share ...`; Rust prompts), `set` (Go asks for the username first), `file get|add`
+(missing-flag errors), and a `config.yaml` that fails to parse (Go: exit 6,
+`configuration is invalid`, interactive editor offer; Rust: `load config: ...`, exit 1).
+These predate this branch and are not claimed.
+
+Evidence (local gate at `c936dd00`, clean tree, `MAKE_PREFIX=dev-external`, receipts in
+`builds/symaira-vault/local-gate-cli005c/receipts.jsonl`): `macos` exit 0 (1583 tests, 0
+failed), `linux` exit 0 (1571 tests; `error-taxonomy-cli-differential` prints `PASS error
+taxonomy fixture (... 60 unlock-state scenarios ...)`). Targeted runs before the receipts:
+`go test ./scripts/rust-port/cmd/errtaxgen/` ok, `errtaxgen --check` PASS, `cargo clippy -p
+symvault-cli --all-targets --locked -- -D warnings` clean, `cargo fmt --all --check` clean,
+`cargo nextest run -p symvault-cli` 648 passed. Local-only evidence; `PASS (local)` is not
+claimed for the CLI-005 row, which stays TODO.
+
+## CLI-005c: 18 of the 28 pinned body divergences closed, 2026-11-01
+
+Branch `local/cli-005c` (base `ee263740`), one commit per class, each removing its
+pins from `KNOWN_BODY_DIVERGENCES` and re-recording
+`error-taxonomy-known-divergences.json` with the ignored `record_known_divergences`
+(the 10 remaining entries are byte-identical to the previous file). Every closed scenario
+now matches the Go oracle `0cc78062` byte for byte (exit code, stdout, stderr).
+
+| Class (scenarios) | Rust change |
+|---|---|
+| `auth rotate-passphrase` (2) | `read_passphrase` keeps the prompt label: `read Current passphrase: EOF` (Go's `ReadHiddenInput`) |
+| `unlock` without OS keyring (2) | `session cache is memory-only` is printed by cobra and `ExecuteRoot`, followed by the unlock flavour of the locked hint (Touch ID) |
+| `migrate pseudonymize` (2) | unlocks (env-passphrase warning, prompt) before the `(y/N)` confirmation; a failed confirmation read is reported twice |
+| `device pair` (3) | no initialization gate: prompt `Passphrase: `, ExitLocked `read passphrase: read Passphrase: EOF` twice + `Unlock with ...` hint, exit 4; an initialized vault is unchanged |
+| `agent list` (3) | `load config: open <path>: no such file or directory` (new `go_load_config_error`) |
+| `migrate v4` (3) | same wording, reported twice (`finish_vault_result_doubled`) |
+| `migrate kdf` (3) | `read vault identity (<path>): open <path>: no such file or directory`, reported twice |
+
+Side effects of the label fix: the unlock prompt (device and session paths) is now
+`Passphrase: ` like Go's `resolveUnlockPassphrase` instead of `Enter passphrase: `, and the
+`read passphrase:` wrapper of a failed prompt read matches Go's ExitLocked error.
+
+**Still open (10 scenarios): `dynamic generate` (5) and `setup` (5).** Both are not native
+subcommands (only their help pages are frozen). Matching the corpus needs only the clap
+argument errors (`required flag(s) "engine", "role" not set`) and the non-TTY guard of
+`setup` (`setup needs a TTY; ...`), but a command that fails correctly in the corpus and
+then does nothing on a TTY (`setup` wizard) or with both flags (`dynamic generate`
+engines `postgres` and `aws-sts`, leases) would claim a port that does not exist, so the
+pins stay until the commands are ported.
+
+Evidence (local gate at `ad3d35a4`, clean tree, `MAKE_PREFIX=dev-external`, receipts in
+`builds/symaira-vault/local-gate-cli005c/receipts.jsonl`): `macos` exit 0 (1581 tests, 0
+failed; includes `config-cli-differential`, hence the `agent_list`, `auth`, `migrate kdf`
+Go differentials), `linux` exit 0 (1569 tests; `port-contract` incl.
+`error-taxonomy-cli-differential`). The first `linux` receipt for the same SHA is exit 2:
+the Docker VM ran out of disk (`No space left on device` while compiling); the obsolete
+shared volume `symvault-gate-target` (44.6 GB, unused since the per-worktree volumes)
+was removed and `linux` rerun, which overwrote that log (exit 0). Local-only evidence;
+`PASS (local)` is not claimed for the CLI-005 row, which stays TODO.
+
 ## CLI-005b: host tools in the error-taxonomy corpus, 2026-11-01
 
 Branch `local/cli-005b` (base `18f7cd20`). Two defects of the extra-positional corpus:
@@ -264,14 +362,16 @@ pointed into another worktree. `ec61f76e` names the volume after the worktree pa
 cold build). Gate `ec61f76e`: macos exit 0, linux exit 0 (receipts in `builds/symaira-vault/local-gate/receipts.jsonl`);
 no `symvault` LaunchAgent loaded afterwards. CLI-005 stays open: 28 pinned body divergences remain.
 
-Open at session end (2026-11-01, not merged): branch `local/cli-005c` (worktree `local-cli005c`, `d7c01a1c`) closes 18 of
-the 28 body divergences (374/384 scenarios match; `dynamic generate` and `setup` stay pinned until ported); gate
-`ad3d35a4` macos and linux exit 0. Review REQUEST_CHANGES: (1) `crates/symvault-cli/src/device.rs:96-109` reports a
-missing identity for any partial vault (identity without config, config without identity) and skips the config's auth
-policy; Go loads the config and opens the real identity (`internal/cli/unlock.go:45-77`); (2) `migrate pseudonymize`
-unlock failures go through `finish_vault_result` (exit 1, single line) instead of Go's `ExitLocked` (exit 4, locked
-hint; `internal/cli/unlock.go:209-212`); a probe also shows `verify x` without a session exits 1 where Go exits 4.
-Both need Go-recorded partial-vault and passphrase-EOF cases, then re-review, merge and gate. Gate disk: each
+Open at session end (2026-11-01, not merged): branch `local/cli-005c` (worktree `local-cli005c`, `2c5ad3ee`, backed up
+on `origin`) closes 18 of the 28 body divergences (374/384 scenarios match; `dynamic generate` and `setup` stay pinned
+until ported) and, in `cc479acb`/`25a0cf13`, both findings of the review of `d7c01a1c`: Go's unlock order for partial
+vaults (`device pair`, identity without config / config without identity) and Go's exit 4 plus locked hint for a failed
+passphrase read (`migrate pseudonymize`, `verify`, `list`, `run`, ...); new `unlock_states` corpus, 60 scenarios, 27
+differed before, 0 after. Gate `c936dd00` macos and linux exit 0 (receipts in
+`builds/symaira-vault/local-gate-cli005c/receipts.jsonl`). Next: independent re-review of `d7c01a1c..2c5ad3ee`, then
+fast-forward into `local/rust-port` and gate. Known, not fixed (older than the branch): locked `get` (Go non-interactive
+`vault locked: this build cannot share ...`, Rust prompts), `set` (Go asks for the username first), `file get`/`file add`
+missing-flag errors, unparsable `config.yaml` (Go exit 6 `configuration is invalid`, Rust exit 1). Gate disk: each
 per-worktree `symvault-gate-target-*` Docker volume holds about 45 GB; volumes of removed worktrees are not cleaned up
 yet (planned: let `local-gate.sh` remove orphans).
 

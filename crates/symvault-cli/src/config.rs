@@ -77,6 +77,25 @@ pub(crate) fn go_path_error(path: &Path, error: &io::Error, read: bool) -> Optio
     Some(format!("{verb} {}: {reason}", path.display()))
 }
 
+/// `load config: <cause>` as Go's `config.Load` callers word it: a missing or
+/// unreadable file is the `open <path>: <errno text>` error of `os.ReadFile`,
+/// every other failure keeps the loader's own text.
+pub(crate) fn go_load_config_error(
+    path: &Path,
+    error: &symvault_core::config::ConfigError,
+) -> String {
+    if let symvault_core::config::ConfigError::Read(io_error) = error
+        && let Some(path_error) = go_path_error(
+            &crate::agent_list_commands::clean_path(path),
+            io_error,
+            true,
+        )
+    {
+        return format!("load config: {path_error}");
+    }
+    format!("load config: {error}")
+}
+
 /// Go's wording of a failed read of the config file: `os.ReadFile` fails with
 /// `open <path>: <cause>` (or `read <path>: is a directory`). `config get|set`
 /// wrap it in `cannot read config file: …`, `config list` does not; the root

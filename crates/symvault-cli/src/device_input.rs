@@ -19,14 +19,15 @@ pub(crate) fn set_quiet(quiet: bool) {
 pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String> {
     eprint!("{prompt}");
     io::stderr().flush().map_err(|e| format!("prompt: {e}"))?;
+    // Go's `ReadHiddenInput` words its failures `read <label>: <cause>` with the
+    // prompt minus its trailing `: `.
+    let label = prompt.trim_end().trim_end_matches(':').trim();
     if io::stdin().is_terminal() {
         // Secure input failure must never fall back to an echoing read.
-        let line = Zeroizing::new(
-            rpassword::read_password().map_err(|e| format!("read passphrase: {e}"))?,
-        );
+        let line =
+            Zeroizing::new(rpassword::read_password().map_err(|e| format!("read {label}: {e}"))?);
         return Ok(Zeroizing::new(line.trim().to_owned()));
     }
-    let label = prompt.trim_end().trim_end_matches(':').trim();
     if !PIPE_WARNING_EMITTED.swap(true, Ordering::Relaxed)
         && env::var("SYMVAULT_NO_PIPE_WARNING")
             .map(|v| v.is_empty() || v == "0")
@@ -40,10 +41,10 @@ pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String>
     if io::stdin()
         .lock()
         .read_line(&mut line)
-        .map_err(|e| format!("read passphrase: {e}"))?
+        .map_err(|e| format!("read {label}: {e}"))?
         == 0
     {
-        return Err("read passphrase: EOF".to_owned());
+        return Err(format!("read {label}: EOF"));
     }
     Ok(Zeroizing::new(line.trim().to_owned()))
 }
@@ -109,11 +110,20 @@ fn unlock_passphrase_with_mode(
             if policy.disable_env_passphrase
                 || !(policy.allow_env_passphrase || matches!(opt_in.as_str(), "1" | "true" | "yes"))
             {
-                return Err(if interactive {
-                    "environment passphrase is disabled; opt in with security.allow_env_passphrase or SYMVAULT_ALLOW_ENV_PASSPHRASE=1"
-                } else {
-                    "vault locked: SYMVAULT_PASSPHRASE is set but env passphrase unlock is disabled"
-                }.to_owned());
+                if !interactive {
+                    return Err(
+                        "vault locked: SYMVAULT_PASSPHRASE is set but env passphrase unlock is disabled"
+                            .to_owned(),
+                    );
+                }
+                // Go warns and falls through to the prompt (`resolveUnlockPassphrase`).
+                if !QUIET.load(Ordering::Relaxed) {
+                    eprintln!(
+                        "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it."
+                    );
+                }
+                return read_passphrase("Passphrase: ")
+                    .map_err(|error| format!("read passphrase: {error}"));
             }
             if !QUIET.load(Ordering::Relaxed)
                 && !std::env::var("SYMVAULT_NO_ENV_WARNING")
@@ -132,5 +142,6 @@ fn unlock_passphrase_with_mode(
         }
         return Err("vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1".to_owned());
     }
-    read_passphrase("Enter passphrase: ")
+    // `resolveUnlockPassphrase` prompts `Passphrase: ` and wraps a failed read.
+    read_passphrase("Passphrase: ").map_err(|error| format!("read passphrase: {error}"))
 }

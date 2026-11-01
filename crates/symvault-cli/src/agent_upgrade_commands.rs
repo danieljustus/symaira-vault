@@ -9,6 +9,7 @@ use std::io::{BufRead, Write};
 use std::path::Path;
 
 use symvault_core::config::{AgentProfile, Config};
+use symvault_mcp::authguard::{Challenger, OperationType};
 use symvault_store::token_registry::{self, NewToken};
 use time::OffsetDateTime;
 
@@ -171,18 +172,42 @@ fn print_tier_diff(stderr: &mut dyn Write, diffs: &[TierDiff]) {
 // Biometric gate and confirmation.
 // ---------------------------------------------------------------------------
 
-/// Go `requireBiometricForUpgrade` on a platform without a challenger.
+/// Go `requireBiometricForUpgrade`.
 ///
-/// ponytail: the Rust port has no `authguard` challenger (TouchID prompt),
-/// so this is permanently the unavailable-platform branch — byte-identical to
-/// Go wherever no biometric hardware answers (all CI runners, headless
-/// machines). On a TouchID Mac Go would prompt while the port warns and
-/// proceeds; documented divergence, upgrade path: port the challenger.
-fn require_biometric_for_upgrade(yes: bool) -> Result<(), String> {
-    if yes {
-        return Err("biometric verification is required for non-interactive tier upgrades on this platform.\nRe-run with --no-biometric to bypass (not recommended)".to_owned());
+/// Without an available authenticator (every CI runner and headless machine,
+/// and the gated production default) `--yes` fails and the interactive path
+/// warns and continues. With one, the user is challenged and any failure maps
+/// to Go's `biometric verification required for tier upgrade: <challenge
+/// error>` (`authguard.Challenge` + the darwin `errTouchID*` texts).
+fn require_biometric_for_upgrade(
+    challenger: &Challenger,
+    agent_name: &str,
+    target_tier: &str,
+    yes: bool,
+    stderr: &mut dyn Write,
+) -> Result<(), String> {
+    if !challenger.available() {
+        if yes {
+            return Err("biometric verification is required for non-interactive tier upgrades on this platform.\nRe-run with --no-biometric to bypass (not recommended)".to_owned());
+        }
+        let _ = writeln!(
+            stderr,
+            "⚠ Biometric verification is not available on this platform."
+        );
+        let _ = writeln!(
+            stderr,
+            "   The upgrade will proceed after interactive confirmation."
+        );
+        return Ok(());
     }
-    Ok(())
+    let reason = format!(
+        "Upgrade Symaira Vault agent {} to {} tier",
+        symvault_core::go_quote(agent_name),
+        symvault_core::go_quote(target_tier)
+    );
+    challenger
+        .challenge(&OperationType::TIER_UPGRADE, &reason)
+        .map_err(|error| format!("biometric verification required for tier upgrade: {error}"))
 }
 
 /// Go `confirmUpgrade`: piped stdin is never a terminal, so tests and scripts
@@ -211,12 +236,32 @@ fn confirm_upgrade(
 // Command.
 // ---------------------------------------------------------------------------
 
-/// Go `newAgentUpgradeCmd().RunE`.
-#[allow(clippy::too_many_arguments)]
+/// Go `newAgentUpgradeCmd().RunE` with the production (gated) challenger.
 pub(crate) fn run(
     vault: &Path,
     args: &[String],
     flags: &UpgradeFlags,
+    stdin: &mut dyn BufRead,
+    stderr: &mut dyn Write,
+) -> Result<(), String> {
+    run_with_challenger(
+        vault,
+        args,
+        flags,
+        &crate::authguard::default_challenger(),
+        stdin,
+        stderr,
+    )
+}
+
+/// `run` over an injected challenger; tests use a fake so no Touch ID prompt
+/// can ever appear.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_with_challenger(
+    vault: &Path,
+    args: &[String],
+    flags: &UpgradeFlags,
+    challenger: &Challenger,
     stdin: &mut dyn BufRead,
     stderr: &mut dyn Write,
 ) -> Result<(), String> {
@@ -283,17 +328,7 @@ pub(crate) fn run(
     }
 
     if !flags.no_biometric {
-        require_biometric_for_upgrade(flags.yes)?;
-        // Go's unavailable-platform branch warns and proceeds after
-        // interactive confirmation.
-        let _ = writeln!(
-            stderr,
-            "⚠ Biometric verification is not available on this platform."
-        );
-        let _ = writeln!(
-            stderr,
-            "   The upgrade will proceed after interactive confirmation."
-        );
+        require_biometric_for_upgrade(challenger, agent_name, target_tier, flags.yes, stderr)?;
     }
 
     if !flags.yes && !confirm_upgrade(agent_name, target_tier, stdin, stderr) {
@@ -362,4 +397,189 @@ pub(crate) fn run(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use symvault_core::platform::{PlatformError, PlatformErrorKind, TouchId};
+
+    /// Never a real prompt: the decision, availability and the reason text the
+    /// system dialog would have shown are all scripted.
+    struct FakeTouchId {
+        available: bool,
+        outcome: Result<(), PlatformErrorKind>,
+        prompts: AtomicUsize,
+        reasons: Mutex<Vec<String>>,
+    }
+
+    impl FakeTouchId {
+        fn new(available: bool, outcome: Result<(), PlatformErrorKind>) -> Arc<Self> {
+            Arc::new(Self {
+                available,
+                outcome,
+                prompts: AtomicUsize::new(0),
+                reasons: Mutex::new(Vec::new()),
+            })
+        }
+    }
+
+    impl TouchId for FakeTouchId {
+        fn is_available(&self) -> bool {
+            self.available
+        }
+        fn authenticate(&self, reason: &str, _: Duration) -> Result<(), PlatformError> {
+            self.prompts.fetch_add(1, Ordering::SeqCst);
+            self.reasons.lock().unwrap().push(reason.to_owned());
+            self.outcome.map_err(|kind| PlatformError {
+                kind,
+                message: "adapter detail must not reach the user".into(),
+            })
+        }
+    }
+
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    fn seeded_vault() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("temp vault");
+        std::fs::write(
+            dir.path().join("config.yaml"),
+            "defaultAgent: hermes\nagents:\n  hermes:\n    tier: standard\n",
+        )
+        .expect("seed config");
+        dir
+    }
+
+    fn flags(yes: bool, no_biometric: bool) -> UpgradeFlags {
+        UpgradeFlags {
+            tier: "admin".into(),
+            dry_run: false,
+            yes,
+            reason: if yes {
+                "unit test".into()
+            } else {
+                String::new()
+            },
+            rotate_token: false,
+            no_biometric,
+        }
+    }
+
+    fn upgrade(
+        dir: &tempfile::TempDir,
+        fake: &Arc<FakeTouchId>,
+        flags: &UpgradeFlags,
+    ) -> (Result<(), String>, String) {
+        let mut stderr = Vec::new();
+        let result = run_with_challenger(
+            dir.path(),
+            &["hermes".to_owned()],
+            flags,
+            &Challenger::new(fake.clone()),
+            &mut std::io::empty(),
+            &mut stderr,
+        );
+        (result, String::from_utf8(stderr).expect("utf-8 stderr"))
+    }
+
+    fn tier_on_disk(dir: &tempfile::TempDir) -> String {
+        Config::load(dir.path().join("config.yaml"))
+            .expect("config loads")
+            .agents["hermes"]
+            .tier
+            .clone()
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn approved_challenge_upgrades_with_go_reason_text() {
+        let dir = seeded_vault();
+        let fake = FakeTouchId::new(true, Ok(()));
+        let (result, stderr) = upgrade(&dir, &fake, &flags(true, false));
+        assert_eq!(result, Ok(()));
+        assert_eq!(fake.prompts.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            *fake.reasons.lock().unwrap(),
+            ["Upgrade Symaira Vault agent \"hermes\" to \"admin\" tier"]
+        );
+        assert_eq!(tier_on_disk(&dir), "admin");
+        assert!(stderr.contains("✓ Profile for \"hermes\" upgraded to \"admin\""));
+        assert!(!stderr.contains("Biometric verification is not available"));
+    }
+
+    #[test]
+    fn rejected_challenge_fails_with_go_chain_and_leaves_config_untouched() {
+        for kind in [
+            PlatformErrorKind::Canceled,
+            PlatformErrorKind::Failed,
+            PlatformErrorKind::TimedOut,
+        ] {
+            let dir = seeded_vault();
+            let fake = FakeTouchId::new(true, Err(kind));
+            let (result, _) = upgrade(&dir, &fake, &flags(true, false));
+            assert_eq!(
+                result.unwrap_err(),
+                "biometric verification required for tier upgrade: biometric verification for agent tier upgrade failed: touch id authentication failed"
+            );
+            assert_eq!(fake.prompts.load(Ordering::SeqCst), 1);
+            assert_eq!(tier_on_disk(&dir), "standard");
+        }
+    }
+
+    #[test]
+    fn authenticator_lost_between_probe_and_prompt_maps_to_not_available() {
+        let dir = seeded_vault();
+        let fake = FakeTouchId::new(true, Err(PlatformErrorKind::Unavailable));
+        let (result, _) = upgrade(&dir, &fake, &flags(true, false));
+        assert_eq!(
+            result.unwrap_err(),
+            "biometric verification required for tier upgrade: biometric verification for agent tier upgrade failed: touch id not available"
+        );
+        assert_eq!(tier_on_disk(&dir), "standard");
+    }
+
+    #[test]
+    fn unavailable_with_yes_keeps_go_non_interactive_error_without_prompting() {
+        let dir = seeded_vault();
+        let fake = FakeTouchId::new(false, Ok(()));
+        let (result, _) = upgrade(&dir, &fake, &flags(true, false));
+        assert_eq!(
+            result.unwrap_err(),
+            "biometric verification is required for non-interactive tier upgrades on this platform.\nRe-run with --no-biometric to bypass (not recommended)"
+        );
+        assert_eq!(fake.prompts.load(Ordering::SeqCst), 0);
+        assert_eq!(tier_on_disk(&dir), "standard");
+    }
+
+    #[test]
+    fn unavailable_interactive_warns_then_proceeds_to_confirmation() {
+        let mut stderr = Vec::new();
+        let fake = FakeTouchId::new(false, Ok(()));
+        let result = require_biometric_for_upgrade(
+            &Challenger::new(fake.clone()),
+            "hermes",
+            "admin",
+            false,
+            &mut stderr,
+        );
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            String::from_utf8(stderr).unwrap(),
+            "⚠ Biometric verification is not available on this platform.\n   The upgrade will proceed after interactive confirmation.\n"
+        );
+        assert_eq!(fake.prompts.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn no_biometric_flag_skips_the_challenge_entirely() {
+        let dir = seeded_vault();
+        let fake = FakeTouchId::new(true, Err(PlatformErrorKind::Failed));
+        let (result, _) = upgrade(&dir, &fake, &flags(true, true));
+        assert_eq!(result, Ok(()));
+        assert_eq!(fake.prompts.load(Ordering::SeqCst), 0);
+        assert_eq!(tier_on_disk(&dir), "admin");
+    }
 }

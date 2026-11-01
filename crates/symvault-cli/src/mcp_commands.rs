@@ -38,6 +38,26 @@ use symvault_mcp::{
 };
 use symvault_platform::approval::is_tty_present;
 
+/// Biometric seams for the MCP runtimes this process builds: the Touch ID
+/// authenticator behind Go's `authguard.Challenger` (`require_biometry`
+/// policies, `set_auth_method`) and the session/keychain side of
+/// `set_auth_method`. Installed once by the dispatcher; when nothing is
+/// installed (library-style callers, contract tests) every runtime keeps its
+/// fail-closed defaults: no authenticator, no Touch ID store.
+#[derive(Clone)]
+pub struct AuthGuardSeams {
+    pub touch_id: Arc<dyn symvault_core::platform::TouchId>,
+    pub backend: Arc<dyn symvault_mcp::authguard::AuthMethodBackend>,
+}
+
+static AUTH_GUARD: std::sync::OnceLock<AuthGuardSeams> = std::sync::OnceLock::new();
+
+/// Installs the process-wide biometric seams (first call wins).
+#[allow(dead_code)] // The contract-test harness includes this file without a dispatcher.
+pub fn install_auth_guard(seams: AuthGuardSeams) {
+    let _ = AUTH_GUARD.set(seams);
+}
+
 /// Go's locked stdio bootstrap owns no vault runtime. Keep protocol input
 /// intact and deny every tool call through the existing locked handler.
 pub fn run_locked_stdio() -> Result<(), String> {
@@ -783,7 +803,14 @@ fn build_handler(
             .with_grant_signing_key(signing_key)
             .with_command_executor(command_executor)
             .with_clipboard_auto_clear_duration(clipboard_auto_clear_duration);
-    let mut runtime = runtime.with_clipboard(clipboard);
+    let mut runtime = runtime
+        .with_clipboard(clipboard)
+        .with_can_manage_config(profile.can_manage_config);
+    if let Some(seams) = AUTH_GUARD.get() {
+        runtime = runtime
+            .with_touch_id(seams.touch_id.clone())
+            .with_auth_method_backend(seams.backend.clone());
+    }
     if let Some(queue) = approval_queue {
         runtime = runtime.with_approval_queue(queue);
     }

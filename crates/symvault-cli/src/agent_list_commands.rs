@@ -96,8 +96,9 @@ pub(crate) fn list(
     quiet: bool,
     output: &mut impl Write,
 ) -> Result<(), String> {
-    let config =
-        Config::load(root.join("config.yaml")).map_err(|error| format!("load config: {error}"))?;
+    let config_path = root.join("config.yaml");
+    let config = Config::load(&config_path)
+        .map_err(|error| crate::config::go_load_config_error(&config_path, &error))?;
     let tokens = load_tokens(root)?;
     let mut names: Vec<_> = config.agents.keys().cloned().collect();
     names.sort();

@@ -66,16 +66,23 @@ const INT_FLAGS: &[(&str, &str)] = &[("generate", "length")];
 
 /// Flags Go declares as `time.Duration` whose value pflag parses with
 /// `time.ParseDuration` before the command runs (so a malformed value is a usage
-/// error even in an uninitialized vault). The commands here are the ones that
-/// forward a child command line (`run`, `file use`).
-const DURATION_FLAGS: &[(&str, &str)] = &[("run", "timeout"), ("file use", "timeout")];
+/// error even in an uninitialized vault): the child timeout of `run` and
+/// `file use` and the lease TTL of `dynamic generate`.
+const DURATION_FLAGS: &[(&str, &str)] = &[
+    ("run", "timeout"),
+    ("file use", "timeout"),
+    ("dynamic generate", "ttl"),
+];
 
 /// Flags cobra's `MarkFlagRequired` makes mandatory, by command path. Cobra
 /// reports the unset ones after the argument validator and the root
 /// `PersistentPreRunE` (the output-format gate) and before the command body, as
 /// `required flag(s) "a", "b" not set`, in flag registration order.
-const REQUIRED_FLAGS: &[(&str, &[&str])] =
-    &[("export", &["format"]), ("template generate", &["type"])];
+const REQUIRED_FLAGS: &[(&str, &[&str])] = &[
+    ("dynamic generate", &["engine", "role"]),
+    ("export", &["format"]),
+    ("template generate", &["type"]),
+];
 
 /// Local bool flags of commands the native CLI parses by hand (no clap
 /// definition, so the tree cannot type them). pflag parses them before cobra
