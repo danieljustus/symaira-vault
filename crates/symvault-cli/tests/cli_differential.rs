@@ -2263,23 +2263,6 @@ fn builtin_templates_match_go_cli() {
         "Rust template file",
     );
     assert_eq!(fs::read(&output).unwrap(), expected);
-    let custom = home.join(".config/symvault/templates");
-    fs::create_dir_all(&custom).unwrap();
-    fs::write(custom.join("env.tmpl"), "custom override").unwrap();
-    let rejected = run(
-        &rust_binary,
-        &[
-            "template",
-            "generate",
-            "--type",
-            "env",
-            "TOKEN=work/item.password",
-        ],
-        &root,
-        &home,
-    );
-    assert!(!rejected.status.success());
-    assert!(String::from_utf8_lossy(&rejected.stderr).contains("custom Go templates"));
     fs::remove_dir_all(root).unwrap();
     fs::remove_dir_all(home).unwrap();
 }

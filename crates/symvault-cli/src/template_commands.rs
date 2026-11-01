@@ -1,9 +1,13 @@
-//! Built-in template CLI; custom Go text/template execution remains unavailable.
+//! `template generate`: built-in and custom (`~/.config/symvault/templates`)
+//! templates, executed by the Go `text/template`-compatible interpreter.
 use std::{collections::BTreeMap, path::Path};
+use symvault_core::go_quote;
 use symvault_crypto::Identity;
 use symvault_store::ReadSession;
+use symvault_sync::template::{CustomTemplates, render_source, template_source};
 
-pub fn generate(
+/// The rendered template bytes, exactly as Go's `engine.Render` returns them.
+pub fn generate_bytes(
     root: &Path,
     identity: &Identity,
     kind: &str,
@@ -11,7 +15,7 @@ pub fn generate(
     prefix: &str,
     args: &[String],
     dry_run: bool,
-) -> Result<String, String> {
+) -> Result<Vec<u8>, String> {
     let store = symvault_store::Store::open_with_legacy_migration(root, identity)
         .map_err(|error| error.to_string())?;
     let reader = store.read_session(identity);
@@ -23,7 +27,7 @@ pub fn generate(
             }
             let entry = reader
                 .get(&path)
-                .map_err(|error| format!("read entry {path:?}: {error}"))?;
+                .map_err(|error| format!("read entry {}: {error}", go_quote(&path)))?;
             for field in entry.data.keys() {
                 let basename = path.rsplit('/').next().unwrap_or(&path);
                 refs.insert(format!("{basename}.{field}"), format!("{path}.{field}"));
@@ -31,11 +35,14 @@ pub fn generate(
         }
     }
     for arg in args {
-        let (key, value) = arg
-            .split_once('=')
-            .ok_or_else(|| format!("invalid ref format: {arg:?} (expected KEY=path[.field])"))?;
+        let (key, value) = arg.split_once('=').ok_or_else(|| {
+            format!(
+                "invalid ref format: {} (expected KEY=path[.field])",
+                go_quote(arg)
+            )
+        })?;
         if key.is_empty() || value.is_empty() {
-            return Err(format!("empty key or ref in: {arg:?}"));
+            return Err(format!("empty key or ref in: {}", go_quote(arg)));
         }
         refs.insert(key.to_owned(), value.to_owned());
     }
@@ -45,31 +52,23 @@ pub fn generate(
                 .to_owned(),
         );
     }
-    // Do not silently substitute a built-in when the user configured an override.
-    if let Some(home) = std::env::var_os("HOME") {
-        let custom = Path::new(&home).join(".config/symvault/templates");
-        if std::fs::read_dir(custom).is_ok_and(|entries| {
-            entries
-                .flatten()
-                .any(|entry| entry.file_name().to_str() == Some(&format!("{kind}.tmpl")))
-        }) {
-            return Err("custom Go templates are not yet supported by the Rust runtime".to_owned());
-        }
-    }
-    // Match Go's template lookup before resolving secret references.
-    symvault_sync::template::render_builtin(kind, name, &BTreeMap::new())
-        .map_err(|error| format!("render template: {error}"))?;
+    // Go loads $HOME/.config/symvault/templates (ignoring any load error) and
+    // looks the template up before resolving a single reference.
+    let custom = CustomTemplates::load_default();
+    let src =
+        template_source(kind, &custom).map_err(|error| format!("render template: {error}"))?;
     let mut values = BTreeMap::new();
-    for (alias, reference) in refs {
+    for (alias, reference) in &refs {
         let value = if dry_run {
             "***".to_owned()
         } else {
-            resolve(&reader, &reference)
-                .map_err(|error| format!("render template: resolve ref {alias:?}: {error}"))?
+            resolve(&reader, reference).map_err(|error| {
+                format!("render template: resolve ref {}: {error}", go_quote(alias))
+            })?
         };
-        values.insert(alias, value);
+        values.insert(alias.clone(), value);
     }
-    symvault_sync::template::render_builtin(kind, name, &values)
+    render_source(kind, &src, name, &refs, &values)
         .map_err(|error| format!("render template: {error}"))
 }
 
@@ -87,17 +86,21 @@ fn resolve(reader: &ReadSession<'_>, reference: &str) -> Result<String, String> 
     };
     let entry = reader
         .get(path)
-        .map_err(|error| format!("resolve ref {reference:?}: {error}"))?;
-    let value = entry
-        .data
-        .get(field)
-        .ok_or_else(|| format!("resolve ref {reference:?}: field {field:?} not found"))?;
+        .map_err(|error| format!("resolve ref {}: {error}", go_quote(reference)))?;
+    let value = entry.data.get(field).ok_or_else(|| {
+        format!(
+            "resolve ref {}: field {} not found",
+            go_quote(reference),
+            go_quote(field)
+        )
+    })?;
     match value {
         serde_json::Value::Null => Err("resolved value is nil".to_owned()),
         serde_json::Value::String(value) => Ok(value.clone()),
-        // Complex fmt.Sprintf("%v") values need their own parity contract.
-        _ => Err(
-            "non-string template references are not yet supported by the Rust runtime".to_owned(),
+        // fmt.Sprintf("%v", v) of the JSON-decoded value.
+        other => Ok(
+            String::from_utf8_lossy(&symvault_sync::gotemplate::sprint_json_value(other))
+                .into_owned(),
         ),
     }
 }
@@ -139,8 +142,8 @@ mod tests {
             .unwrap();
         let args: Vec<_> = (0..14).map(|i| format!("KEY_{i:02}=control.one")).collect();
         let error =
-            generate(temp.path(), &identity, "env", "fixture", "", &args, false).unwrap_err();
+            generate_bytes(temp.path(), &identity, "env", "fixture", "", &args, false).unwrap_err();
         assert!(error.contains("vault resource limit exceeded"), "{error}");
-        generate(temp.path(), &identity, "env", "fixture", "", &args, true).unwrap();
+        generate_bytes(temp.path(), &identity, "env", "fixture", "", &args, true).unwrap();
     }
 }

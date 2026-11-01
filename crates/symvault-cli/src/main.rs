@@ -2667,12 +2667,16 @@ fn run_cli() -> ExitCode {
                 let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 require_initialized(&vault)?;
                 let identity = device::unlock_vault(&vault)?;
-                let rendered = template_commands::generate(
+                // Go returns these from RunE, so cobra and ExecuteRoot each
+                // print the identical `Error:` line.
+                let rendered = template_commands::generate_bytes(
                     &vault, &identity, &kind, &name, &prefix, &refs, dry_run,
-                )?;
+                )
+                .map_err(|error| reported(1, &error, None))?;
                 if let Some(path) = output {
-                    symvault_sync::safeio::write_atomic(Path::new(&path), rendered.as_bytes())
-                        .map_err(|error| format!("write output file: {error}"))?;
+                    symvault_sync::safeio::write_atomic(Path::new(&path), &rendered).map_err(
+                        |error| reported(1, &format!("write output file: {error}"), None),
+                    )?;
                     // `--output` is this command's own file flag, so it never
                     // selects the JSON report; only the persistent `--json` does.
                     if cli.json {
@@ -2684,7 +2688,10 @@ fn run_cli() -> ExitCode {
                         println!("Template written to: {path}");
                     }
                 } else {
-                    println!("{rendered}");
+                    // Bytes, not text: a template may emit invalid UTF-8.
+                    let mut stdout = io::stdout().lock();
+                    let _ = stdout.write_all(&rendered);
+                    let _ = stdout.write_all(b"\n");
                 }
                 Ok::<(), String>(())
             })();
