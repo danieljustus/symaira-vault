@@ -110,7 +110,7 @@
       "scripts/rust-port/cmd/outputmodegen/cases.go",
       "scripts/rust-port/cmd/outputmodegen/main.go"
     ],
-    "generator_digest": "fd90db6528e75ee0881879c38372ad1124d46a7b419c46398b2ae1551f031978",
+    "generator_digest": "d0d44b47ae885098123e4db4e3d8ee866d9c57320db960b5e64a1a554e6034de",
     "gate_digest": "c2536c1ffaf681feaa8fa8824f7e302e9633b2c2711c9ecd98531283064e51f1",
     "goos": "darwin"
   },
@@ -14410,6 +14410,225 @@
       "tree": []
     },
     {
+      "id": "config-get-notdir-file.text",
+      "path": "config get",
+      "scenario": "config-get-notdir-file",
+      "mode": "text",
+      "desc": "get from a config path below a regular file",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "plain.txt",
+          "text": "x: 1\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "get",
+        "x",
+        "--file",
+        "$ROOT/work/plain.txt/sub.yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: cannot read config file: open $ROOT/work/plain.txt/sub.yaml: not a directory: cannot read config file: open $ROOT/work/plain.txt/sub.yaml: not a directory\nError: cannot load config: cannot read config file: open $ROOT/work/plain.txt/sub.yaml: not a directory: cannot read config file: open $ROOT/work/plain.txt/sub.yaml: not a directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-list-notdir-file.text",
+      "path": "config list",
+      "scenario": "config-list-notdir-file",
+      "mode": "text",
+      "desc": "list a config path below a regular file",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "plain.txt",
+          "text": "x: 1\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "list",
+        "--file",
+        "$ROOT/work/plain.txt/sub.yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: open $ROOT/work/plain.txt/sub.yaml: not a directory: open $ROOT/work/plain.txt/sub.yaml: not a directory\nError: cannot load config: open $ROOT/work/plain.txt/sub.yaml: not a directory: open $ROOT/work/plain.txt/sub.yaml: not a directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-set-notdir-file.text",
+      "path": "config set",
+      "scenario": "config-set-notdir-file",
+      "mode": "text",
+      "desc": "set in a config path below a regular file",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "plain.txt",
+          "text": "x: 1\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "x",
+        "1",
+        "--file",
+        "$ROOT/work/plain.txt/sub.yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: cannot read config file: open $ROOT/work/plain.txt/sub.yaml: not a directory: cannot read config file: open $ROOT/work/plain.txt/sub.yaml: not a directory\nError: cannot load config: cannot read config file: open $ROOT/work/plain.txt/sub.yaml: not a directory: cannot read config file: open $ROOT/work/plain.txt/sub.yaml: not a directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-get-toolong-file.text",
+      "path": "config get",
+      "scenario": "config-get-toolong-file",
+      "mode": "text",
+      "desc": "get from a config path with a name longer than NAME_MAX",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "get",
+        "x",
+        "--file",
+        "$ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: cannot read config file: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long: cannot read config file: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long\nError: cannot load config: cannot read config file: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long: cannot read config file: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-list-toolong-file.text",
+      "path": "config list",
+      "scenario": "config-list-toolong-file",
+      "mode": "text",
+      "desc": "list a config path with a name longer than NAME_MAX",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "list",
+        "--file",
+        "$ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long\nError: cannot load config: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-set-toolong-file.text",
+      "path": "config set",
+      "scenario": "config-set-toolong-file",
+      "mode": "text",
+      "desc": "set in a config path with a name longer than NAME_MAX",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "x",
+        "1",
+        "--file",
+        "$ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: cannot read config file: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long: cannot read config file: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long\nError: cannot load config: cannot read config file: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long: cannot read config file: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-get-loop-file.text",
+      "path": "config get",
+      "scenario": "config-get-loop-file",
+      "mode": "text",
+      "desc": "get from a config path through a symbolic link loop",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "loop-a",
+          "link": "$ROOT/work/loop-b"
+        },
+        {
+          "name": "loop-b",
+          "link": "$ROOT/work/loop-a"
+        }
+      ],
+      "argv": [
+        "config",
+        "get",
+        "x",
+        "--file",
+        "$ROOT/work/loop-a"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: cannot read config file: open $ROOT/work/loop-a: too many levels of symbolic links: cannot read config file: open $ROOT/work/loop-a: too many levels of symbolic links\nError: cannot load config: cannot read config file: open $ROOT/work/loop-a: too many levels of symbolic links: cannot read config file: open $ROOT/work/loop-a: too many levels of symbolic links\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-list-loop-file.text",
+      "path": "config list",
+      "scenario": "config-list-loop-file",
+      "mode": "text",
+      "desc": "list a config path through a symbolic link loop",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "loop-a",
+          "link": "$ROOT/work/loop-b"
+        },
+        {
+          "name": "loop-b",
+          "link": "$ROOT/work/loop-a"
+        }
+      ],
+      "argv": [
+        "config",
+        "list",
+        "--file",
+        "$ROOT/work/loop-a"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: open $ROOT/work/loop-a: too many levels of symbolic links: open $ROOT/work/loop-a: too many levels of symbolic links\nError: cannot load config: open $ROOT/work/loop-a: too many levels of symbolic links: open $ROOT/work/loop-a: too many levels of symbolic links\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-set-loop-file.text",
+      "path": "config set",
+      "scenario": "config-set-loop-file",
+      "mode": "text",
+      "desc": "set in a config path through a symbolic link loop",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "loop-a",
+          "link": "$ROOT/work/loop-b"
+        },
+        {
+          "name": "loop-b",
+          "link": "$ROOT/work/loop-a"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "x",
+        "1",
+        "--file",
+        "$ROOT/work/loop-a"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: cannot read config file: open $ROOT/work/loop-a: too many levels of symbolic links: cannot read config file: open $ROOT/work/loop-a: too many levels of symbolic links\nError: cannot load config: cannot read config file: open $ROOT/work/loop-a: too many levels of symbolic links: cannot read config file: open $ROOT/work/loop-a: too many levels of symbolic links\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
       "id": "config-validate.text",
       "path": "config validate",
       "scenario": "config-validate",
@@ -15831,6 +16050,181 @@
           "mode": 420
         }
       ]
+    },
+    {
+      "id": "agent-profile-export-directory.text",
+      "path": "agent profile export",
+      "scenario": "agent-profile-export-directory",
+      "mode": "text",
+      "desc": "export a profile to a directory",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "outdir",
+          "dir": true
+        }
+      ],
+      "argv": [
+        "agent",
+        "profile",
+        "export",
+        "hermes",
+        "-o",
+        "$ROOT/work/outdir"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: create output file: open $ROOT/work/outdir: is a directory\nError: create output file: open $ROOT/work/outdir: is a directory\n",
+      "tree": []
+    },
+    {
+      "id": "agent-profile-export-directory-slash.text",
+      "path": "agent profile export",
+      "scenario": "agent-profile-export-directory-slash",
+      "mode": "text",
+      "desc": "export a profile to a directory with a trailing slash",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "outdir",
+          "dir": true
+        }
+      ],
+      "argv": [
+        "agent",
+        "profile",
+        "export",
+        "hermes",
+        "-o",
+        "$ROOT/work/outdir/"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: create output file: open $ROOT/work/outdir: is a directory\nError: create output file: open $ROOT/work/outdir: is a directory\n",
+      "tree": []
+    },
+    {
+      "id": "agent-profile-export-missing-dir.text",
+      "path": "agent profile export",
+      "scenario": "agent-profile-export-missing-dir",
+      "mode": "text",
+      "desc": "export a profile to a file below a missing directory",
+      "seed": "entries",
+      "argv": [
+        "agent",
+        "profile",
+        "export",
+        "hermes",
+        "-o",
+        "$ROOT/work/nodir/out.yaml"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: create output file: open $ROOT/work/nodir/out.yaml: no such file or directory\nError: create output file: open $ROOT/work/nodir/out.yaml: no such file or directory\n",
+      "tree": []
+    },
+    {
+      "id": "agent-profile-export-notdir.text",
+      "path": "agent profile export",
+      "scenario": "agent-profile-export-notdir",
+      "mode": "text",
+      "desc": "export a profile to a file below a regular file",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "plain.txt",
+          "text": "x: 1\n"
+        }
+      ],
+      "argv": [
+        "agent",
+        "profile",
+        "export",
+        "hermes",
+        "-o",
+        "$ROOT/work/plain.txt/out.yaml"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: create output file: open $ROOT/work/plain.txt/out.yaml: not a directory\nError: create output file: open $ROOT/work/plain.txt/out.yaml: not a directory\n",
+      "tree": []
+    },
+    {
+      "id": "agent-profile-export-readonly.text",
+      "path": "agent profile export",
+      "scenario": "agent-profile-export-readonly",
+      "mode": "text",
+      "desc": "export a profile to a read-only file",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "ro.yaml",
+          "text": "old\n",
+          "mode": "444"
+        }
+      ],
+      "argv": [
+        "agent",
+        "profile",
+        "export",
+        "hermes",
+        "-o",
+        "$ROOT/work/ro.yaml"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: create output file: open $ROOT/work/ro.yaml: permission denied\nError: create output file: open $ROOT/work/ro.yaml: permission denied\n",
+      "tree": []
+    },
+    {
+      "id": "agent-profile-export-toolong.text",
+      "path": "agent profile export",
+      "scenario": "agent-profile-export-toolong",
+      "mode": "text",
+      "desc": "export a profile to a name longer than NAME_MAX",
+      "seed": "entries",
+      "argv": [
+        "agent",
+        "profile",
+        "export",
+        "hermes",
+        "-o",
+        "$ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: create output file: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long\nError: create output file: open $ROOT/work/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: file name too long\n",
+      "tree": []
+    },
+    {
+      "id": "agent-profile-export-loop.text",
+      "path": "agent profile export",
+      "scenario": "agent-profile-export-loop",
+      "mode": "text",
+      "desc": "export a profile to a symbolic link loop",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "loop-a",
+          "link": "$ROOT/work/loop-b"
+        },
+        {
+          "name": "loop-b",
+          "link": "$ROOT/work/loop-a"
+        }
+      ],
+      "argv": [
+        "agent",
+        "profile",
+        "export",
+        "hermes",
+        "-o",
+        "$ROOT/work/loop-a"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: create output file: open $ROOT/work/loop-a: too many levels of symbolic links\nError: create output file: open $ROOT/work/loop-a: too many levels of symbolic links\n",
+      "tree": []
     },
     {
       "id": "agent-skill-export.text",

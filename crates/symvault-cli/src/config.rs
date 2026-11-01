@@ -42,27 +42,54 @@ fn go_syntax_gate(bytes: &[u8]) -> Result<(), ConfigFailure> {
     }
 }
 
+/// The `syscall.Errno` text Go prints for the failures of opening a file; other
+/// causes keep Rust's generic wording until they are probed against the oracle.
+fn go_errno_text(error: &io::Error) -> Option<&'static str> {
+    match error.kind() {
+        io::ErrorKind::NotFound => return Some("no such file or directory"),
+        io::ErrorKind::PermissionDenied => return Some("permission denied"),
+        io::ErrorKind::IsADirectory => return Some("is a directory"),
+        _ => {}
+    }
+    #[cfg(unix)]
+    match error.raw_os_error()? {
+        libc::ENOTDIR => Some("not a directory"),
+        libc::ELOOP => Some("too many levels of symbolic links"),
+        libc::ENAMETOOLONG => Some("file name too long"),
+        _ => None,
+    }
+    #[cfg(not(unix))]
+    None
+}
+
+/// Go's `*fs.PathError` text, `open <path>: <cause>`. `os.ReadFile` of a
+/// directory opens it fine and fails on the read, so `read` names that verb.
+pub(crate) fn go_path_error(path: &Path, error: &io::Error, read: bool) -> Option<String> {
+    let reason = go_errno_text(error)?;
+    let verb = if read && error.kind() == io::ErrorKind::IsADirectory {
+        "read"
+    } else {
+        "open"
+    };
+    Some(format!("{verb} {}: {reason}", path.display()))
+}
+
 /// Go's wording of a failed read of the config file: `os.ReadFile` fails with
-/// `open <path>: no such file or directory` (or `permission denied`) or, for a
-/// directory, `read <path>: is a directory`. `config get|set` wrap it in
-/// `cannot read config file: …`, `config list` does not; the root handler repeats
-/// the cause and prints the doctor hint (exit 6). Other causes keep the generic
-/// text until they are probed against the oracle.
+/// `open <path>: <cause>` (or `read <path>: is a directory`). `config get|set`
+/// wrap it in `cannot read config file: …`, `config list` does not; the root
+/// handler repeats the cause and prints the doctor hint (exit 6).
 fn read_config_file(path: &Path, wrapped: bool) -> Result<Vec<u8>, ConfigFailure> {
     let clean = crate::agent_list_commands::clean_path(path);
     fs::read(&clean).map_err(|error| {
-        let (verb, reason) = match error.kind() {
-            io::ErrorKind::NotFound => ("open", "no such file or directory"),
-            io::ErrorKind::PermissionDenied => ("open", "permission denied"),
-            io::ErrorKind::IsADirectory => ("read", "is a directory"),
-            _ => return ConfigFailure::Plain(format!("cannot load config: {error}")),
+        let Some(path_error) = go_path_error(&clean, &error, true) else {
+            return ConfigFailure::Plain(format!("cannot load config: {error}"));
         };
         let prefix = if wrapped {
             "cannot read config file: "
         } else {
             ""
         };
-        let cause = format!("{prefix}{verb} {}: {reason}", clean.display());
+        let cause = format!("{prefix}{path_error}");
         ConfigFailure::GoConfigError(format!("cannot load config: {cause}: {cause}"))
     })
 }

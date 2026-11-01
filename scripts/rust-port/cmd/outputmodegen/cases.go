@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // seedPlan is a named starting state built once by the oracle.
 type seedPlan struct {
 	name  string
@@ -218,6 +220,22 @@ func allCaseSpecs() []caseSpec {
 		files: []workFile{{Name: "cfgdir", Dir: true}}})
 	add(caseSpec{id: "config-list-directory-file", path: "config list", desc: "list a config path that is a directory", seed: "entries", modes: text, argv: flags("config", "list", "--file", "$ROOT/work/cfgdir"),
 		files: []workFile{{Name: "cfgdir", Dir: true}}})
+	// Opening fails with other errnos too; Go prints each as `open <path>: <cause>`.
+	plain := workFile{Name: "plain.txt", Text: "x: 1\n"}
+	loops := []workFile{{Name: "loop-a", Link: "$ROOT/work/loop-b"}, {Name: "loop-b", Link: "$ROOT/work/loop-a"}}
+	tooLong := "$ROOT/work/" + strings.Repeat("x", 300)
+	for _, bad := range []struct {
+		id, desc, file string
+		files          []workFile
+	}{
+		{"notdir", "below a regular file", "$ROOT/work/plain.txt/sub.yaml", []workFile{plain}},
+		{"toolong", "with a name longer than NAME_MAX", tooLong, nil},
+		{"loop", "through a symbolic link loop", "$ROOT/work/loop-a", loops},
+	} {
+		add(caseSpec{id: "config-get-" + bad.id + "-file", path: "config get", desc: "get from a config path " + bad.desc, seed: "entries", modes: text, argv: flags("config", "get", "x", "--file", bad.file), files: bad.files})
+		add(caseSpec{id: "config-list-" + bad.id + "-file", path: "config list", desc: "list a config path " + bad.desc, seed: "entries", modes: text, argv: flags("config", "list", "--file", bad.file), files: bad.files})
+		add(caseSpec{id: "config-set-" + bad.id + "-file", path: "config set", desc: "set in a config path " + bad.desc, seed: "entries", modes: text, argv: flags("config", "set", "x", "1", "--file", bad.file), files: bad.files})
+	}
 	add(caseSpec{id: "config-validate", path: "config validate", desc: "validate a valid config", seed: "entries", argv: flags("config", "validate")})
 	add(caseSpec{id: "config-validate-invalid", path: "config validate", desc: "validate a broken config", seed: "entries", argv: flags("config", "validate"),
 		files: []workFile{{Name: "../home/.symvault/config.yaml", Text: "vault: [unterminated\n"}}})
@@ -246,6 +264,21 @@ func allCaseSpecs() []caseSpec {
 	add(caseSpec{id: "agent-profile-show-missing", path: "agent profile show", desc: "show an unknown profile", seed: "entries", argv: flags("agent", "profile", "show", "nope")})
 	add(caseSpec{id: "agent-profile-export", path: "agent profile export", desc: "export a profile to stdout", seed: "entries", argv: flags("agent", "profile", "export", "hermes")})
 	add(caseSpec{id: "agent-profile-export-file", path: "agent profile export", desc: "export a profile to a file", seed: "entries", argv: flags("agent", "profile", "export", "hermes", "-o", "hermes.yaml"), modes: []string{"text", "quiet"}})
+	// os.Create fails with `create output file: open <path>: <cause>`.
+	for _, bad := range []struct {
+		id, desc, out string
+		files         []workFile
+	}{
+		{"directory", "a directory", "$ROOT/work/outdir", []workFile{{Name: "outdir", Dir: true}}},
+		{"directory-slash", "a directory with a trailing slash", "$ROOT/work/outdir/", []workFile{{Name: "outdir", Dir: true}}},
+		{"missing-dir", "a file below a missing directory", "$ROOT/work/nodir/out.yaml", nil},
+		{"notdir", "a file below a regular file", "$ROOT/work/plain.txt/out.yaml", []workFile{plain}},
+		{"readonly", "a read-only file", "$ROOT/work/ro.yaml", []workFile{{Name: "ro.yaml", Text: "old\n", Mode: "444"}}},
+		{"toolong", "a name longer than NAME_MAX", tooLong, nil},
+		{"loop", "a symbolic link loop", "$ROOT/work/loop-a", loops},
+	} {
+		add(caseSpec{id: "agent-profile-export-" + bad.id, path: "agent profile export", desc: "export a profile to " + bad.desc, seed: "entries", modes: text, argv: flags("agent", "profile", "export", "hermes", "-o", bad.out), files: bad.files})
+	}
 	add(caseSpec{id: "agent-skill-export", path: "agent skill export", desc: "export a skill archive", seed: "entries", argv: flags("agent", "skill", "export", "hermes"), archives: []string{"work/"}})
 	add(caseSpec{id: "agent-whoami", path: "agent whoami", desc: "whoami with an agent context", seed: "entries", argv: flags("agent", "whoami"), env: map[string]string{"SYMVAULT_AGENT": "hermes"}})
 	add(caseSpec{id: "agent-whoami-unset", path: "agent whoami", desc: "whoami without an agent context", seed: "entries", argv: flags("agent", "whoami")})

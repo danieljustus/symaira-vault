@@ -65,8 +65,12 @@ pub(crate) fn export(
         show(vault, name, None, &mut rendered)?;
         // Go: `os.Create(filepath.Clean(path))` truncates in place and creates
         // with 0666 &^ umask, not the 0600 of the atomic writer.
-        let mut file = fs::File::create(crate::agent_list_commands::clean_path(output_path))
-            .map_err(|error| format!("create output file: {error}"))?;
+        let clean = crate::agent_list_commands::clean_path(output_path);
+        let mut file = fs::File::create(&clean).map_err(|error| {
+            let cause = crate::config::go_path_error(&clean, &error, false)
+                .unwrap_or_else(|| error.to_string());
+            format!("create output file: {cause}")
+        })?;
         file.write_all(&rendered)
             .map_err(|error| format!("create output file: {error}"))?;
         return Ok(());

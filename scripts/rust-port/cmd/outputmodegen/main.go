@@ -184,6 +184,8 @@ type workFile struct {
 	Text string `json:"text,omitempty"`
 	Mode string `json:"mode,omitempty"`
 	Dir  bool   `json:"dir,omitempty"`
+	// Link makes the entry a symbolic link to this target ($ROOT expands).
+	Link string `json:"link,omitempty"`
 }
 
 type step struct {
@@ -1086,6 +1088,12 @@ func (s *sandbox) materializeFiles(files []workFile) error {
 		}
 		if file.Dir {
 			if err := os.MkdirAll(target, 0o700); err != nil {
+				return err
+			}
+			continue
+		}
+		if file.Link != "" {
+			if err := os.Symlink(strings.ReplaceAll(file.Link, rootMarker, s.root), target); err != nil {
 				return err
 			}
 			continue

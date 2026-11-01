@@ -79,7 +79,7 @@ use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
 
 const PASSPHRASE: &str = "correct horse battery staple";
-const EXPECTED_CASES: usize = 508;
+const EXPECTED_CASES: usize = 524;
 const EXPECTED_PATHS: usize = 47;
 const EXPECTED_SEEDS: usize = 6;
 /// The normalization rules, in the order of the numbered list above.
@@ -160,6 +160,8 @@ struct WorkFile {
     mode: String,
     #[serde(default)]
     dir: bool,
+    #[serde(default)]
+    link: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -773,6 +775,12 @@ impl Sandbox {
             }
             if file.dir {
                 std::fs::create_dir_all(&target).expect("work dir");
+                continue;
+            }
+            if !file.link.is_empty() {
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(file.link.replace("$ROOT", &self.root_text()), &target)
+                    .expect("work link");
                 continue;
             }
             std::fs::write(&target, file.text.replace("$ROOT", &self.root_text())).expect("work");
