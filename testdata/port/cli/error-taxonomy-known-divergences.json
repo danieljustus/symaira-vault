@@ -62,26 +62,6 @@
     },
     {
       "expected_rust": {
-        "exit_code": 4,
-        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\n",
-        "stdout": ""
-      },
-      "name": "extra_initialized_unlock_x1",
-      "reason": "with no OS keyring Go prints the memory-only session error twice and a Touch ID hint; the native command prints it once without the hint",
-      "state": "initialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 4,
-        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\n",
-        "stdout": ""
-      },
-      "name": "extra_initialized_unlock_x2",
-      "reason": "with no OS keyring Go prints the memory-only session error twice and a Touch ID hint; the native command prints it once without the hint",
-      "state": "initialized"
-    },
-    {
-      "expected_rust": {
         "exit_code": 1,
         "stderr": "Error: load config: read config: No such file or directory (os error 2)\nError: load config: read config: No such file or directory (os error 2)\n",
         "stdout": ""

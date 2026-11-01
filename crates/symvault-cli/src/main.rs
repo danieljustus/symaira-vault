@@ -5476,13 +5476,20 @@ fn finish_session_result(
                 write_not_initialized(&error);
                 return ExitCode::from(3);
             }
+            if locked_error && error.starts_with("session cache is memory-only") {
+                // Cobra reports the ExitLocked error, then `ExecuteRoot` does and
+                // adds the `unlock` flavour of the locked hint.
+                print_error_like_go(&error);
+                let _ = writeln!(
+                    io::stderr(),
+                    "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored."
+                );
+                return ExitCode::from(4);
+            }
             let _ = writeln!(io::stderr(), "Error: {error}");
             if error.contains("vault not initialized") {
                 ExitCode::from(not_initialized_code)
-            } else if locked_error
-                && (error == "no active session"
-                    || error.starts_with("session cache is memory-only"))
-            {
+            } else if locked_error && error == "no active session" {
                 ExitCode::from(4)
             } else {
                 ExitCode::from(1)
