@@ -810,14 +810,25 @@ pub fn format_float(v: f64, fmt: u8, prec: i64) -> Bytes {
         }
         digs
     } else {
+        // Rust's formatter takes the precision as u16 and panics above 65535;
+        // Go accepts up to 1e6. An f64 has at most 1074 fractional and 767
+        // significant decimal digits, so digits past EXACT_DIGITS are zero and
+        // fmt_e/fmt_f pad them.
+        const EXACT_DIGITS: i64 = 1100;
         match fmt {
-            b'e' | b'E' => digits_from_exp(&format!("{:.*e}", prec as usize, abs)),
-            b'f' => digits_from_fixed(&format!("{:.*}", prec as usize, abs)),
+            b'e' | b'E' => {
+                digits_from_exp(&format!("{:.*e}", prec.min(EXACT_DIGITS) as usize, abs))
+            }
+            b'f' => digits_from_fixed(&format!("{:.*}", prec.min(EXACT_DIGITS) as usize, abs)),
             _ => {
                 if prec == 0 {
                     prec = 1;
                 }
-                digits_from_exp(&format!("{:.*e}", (prec - 1) as usize, abs))
+                digits_from_exp(&format!(
+                    "{:.*e}",
+                    (prec - 1).min(EXACT_DIGITS) as usize,
+                    abs
+                ))
             }
         }
     };
