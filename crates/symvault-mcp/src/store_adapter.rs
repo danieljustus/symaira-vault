@@ -2553,7 +2553,8 @@ impl StoreReadOnlyRuntime {
     /// Parity notes: the in-memory Go config is replaced by a fresh load of
     /// `config.yaml` (Go would write back its startup snapshot); when no
     /// biometric challenger is available the change proceeds unchallenged, as
-    /// in Go (the touchid branch already requires an available store).
+    /// in Go (the touchid branch already requires an available store). The
+    /// Touch ID item is written only after the challenge (Go writes it first).
     fn set_auth_method(&self, arguments: &Value) -> Result<ToolCallResult, String> {
         if !self.can_manage_config {
             self.append_audit("auth_config_denied", "<config>", false);
@@ -2571,6 +2572,12 @@ impl StoreReadOnlyRuntime {
             Err(message) => return Ok(ToolCallResult::error(message)),
         };
 
+        // Go checks availability and the session, saves the Touch ID item and
+        // only then challenges, so a rejected challenge leaves an unverified
+        // item behind. The Rust port keeps Go's error order but saves after
+        // a successful challenge (deliberately stricter: no keychain write
+        // without user verification).
+        let mut touch_id_passphrase = None;
         if method == "touchid" {
             if !self.auth_backend.biometric_available() {
                 return Ok(ToolCallResult::error(
@@ -2586,9 +2593,7 @@ impl StoreReadOnlyRuntime {
                     "Touch ID setup requires an active Symaira Vault session; run symvault unlock first",
                 ));
             };
-            self.auth_backend
-                .save_biometric_passphrase(Path::new(&self.vault_dir), &passphrase)
-                .map_err(|error| format!("save Touch ID unlock item: {error}"))?;
+            touch_id_passphrase = Some(passphrase);
         }
 
         if self.challenger.available() {
@@ -2602,6 +2607,12 @@ impl StoreReadOnlyRuntime {
                     "biometric verification required: {error}"
                 )));
             }
+        }
+
+        if let Some(passphrase) = touch_id_passphrase {
+            self.auth_backend
+                .save_biometric_passphrase(Path::new(&self.vault_dir), &passphrase)
+                .map_err(|error| format!("save Touch ID unlock item: {error}"))?;
         }
 
         if method != "touchid" {

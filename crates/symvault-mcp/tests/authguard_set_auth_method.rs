@@ -344,8 +344,9 @@ fn rejected_challenge_keeps_config_and_audits_failure() {
             false
         )]
     );
-    // Go saves the unlock item before it challenges; the order is preserved.
-    assert_eq!(backend.saved.lock().unwrap().len(), 1);
+    // Go saves the unlock item before it challenges and leaves it behind on a
+    // rejection; the port saves only after a successful challenge.
+    assert!(backend.saved.lock().unwrap().is_empty());
 }
 
 #[test]
