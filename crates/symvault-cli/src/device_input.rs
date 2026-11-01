@@ -19,14 +19,15 @@ pub(crate) fn set_quiet(quiet: bool) {
 pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String> {
     eprint!("{prompt}");
     io::stderr().flush().map_err(|e| format!("prompt: {e}"))?;
+    // Go's `ReadHiddenInput` words its failures `read <label>: <cause>` with the
+    // prompt minus its trailing `: `.
+    let label = prompt.trim_end().trim_end_matches(':').trim();
     if io::stdin().is_terminal() {
         // Secure input failure must never fall back to an echoing read.
-        let line = Zeroizing::new(
-            rpassword::read_password().map_err(|e| format!("read passphrase: {e}"))?,
-        );
+        let line =
+            Zeroizing::new(rpassword::read_password().map_err(|e| format!("read {label}: {e}"))?);
         return Ok(Zeroizing::new(line.trim().to_owned()));
     }
-    let label = prompt.trim_end().trim_end_matches(':').trim();
     if !PIPE_WARNING_EMITTED.swap(true, Ordering::Relaxed)
         && env::var("SYMVAULT_NO_PIPE_WARNING")
             .map(|v| v.is_empty() || v == "0")
@@ -40,10 +41,10 @@ pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String>
     if io::stdin()
         .lock()
         .read_line(&mut line)
-        .map_err(|e| format!("read passphrase: {e}"))?
+        .map_err(|e| format!("read {label}: {e}"))?
         == 0
     {
-        return Err("read passphrase: EOF".to_owned());
+        return Err(format!("read {label}: EOF"));
     }
     Ok(Zeroizing::new(line.trim().to_owned()))
 }

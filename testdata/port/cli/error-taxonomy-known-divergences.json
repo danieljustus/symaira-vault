@@ -3,26 +3,6 @@
     {
       "expected_rust": {
         "exit_code": 1,
-        "stderr": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: cannot read current passphrase: read passphrase: EOF\nError: cannot read current passphrase: read passphrase: EOF\n",
-        "stdout": ""
-      },
-      "name": "extra_initialized_auth_rotate-passphrase_x1",
-      "reason": "the prompt-read failure says `read passphrase: EOF`; Go keeps the prompt label (`read Current passphrase: EOF`)",
-      "state": "initialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
-        "stderr": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: cannot read current passphrase: read passphrase: EOF\nError: cannot read current passphrase: read passphrase: EOF\n",
-        "stdout": ""
-      },
-      "name": "extra_initialized_auth_rotate-passphrase_x2",
-      "reason": "the prompt-read failure says `read passphrase: EOF`; Go keeps the prompt label (`read Current passphrase: EOF`)",
-      "state": "initialized"
-    },
-    {
-      "expected_rust": {
-        "exit_code": 1,
         "stderr": "error: unrecognized subcommand 'dynamic'\n\nUsage: symvault [OPTIONS] [COMMAND]\n\nFor more information, try '--help'.\n",
         "stdout": ""
       },
