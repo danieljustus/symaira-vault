@@ -2,6 +2,7 @@
 //! (`internal/ui/wizard/step.go`, `passphrase_meter.go`).
 
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
 
 pub(super) const SYNC_GIT: &str = "git";
 pub(super) const SYNC_LOCAL: &str = "local";
@@ -21,13 +22,35 @@ pub(crate) struct AgentSelection {
     pub read_only: bool,
 }
 
+/// The vault passphrase while the wizard holds it. Go zeroes
+/// `state.Passphrase` once the vault is initialized; here the bytes are wiped
+/// whenever the value is dropped or replaced, and `Debug` never prints them.
+#[derive(Clone, Eq, PartialEq)]
+pub(crate) struct Passphrase(Zeroizing<Vec<u8>>);
+
+impl Passphrase {
+    pub(crate) fn new(bytes: Zeroizing<Vec<u8>>) -> Self {
+        Self(bytes)
+    }
+
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for Passphrase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Passphrase(<redacted>)")
+    }
+}
+
 /// Everything the user chose, `WizardState` in Go.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct WizardState {
     pub vault_dir: String,
     pub existing_vault: bool,
     /// Cleared after the vault is initialized. `None` is Go's nil slice.
-    pub passphrase: Option<Vec<u8>>,
+    pub passphrase: Option<Passphrase>,
     pub auth_method: String,
     pub sync_mode: String,
     pub git_remote_url: String,
@@ -164,5 +187,19 @@ mod tests {
         assert_eq!(PassphraseStrength::Fair.bar(), "[▓▓░░] fair");
         assert_eq!(PassphraseStrength::Good.bar(), "[▓▓▓░] good");
         assert_eq!(PassphraseStrength::Strong.bar(), "[▓▓▓▓] strong");
+    }
+
+    #[test]
+    fn debug_output_never_contains_the_passphrase() {
+        let state = WizardState {
+            passphrase: Some(Passphrase::new(Zeroizing::new(
+                b"correct horse battery staple".to_vec(),
+            ))),
+            ..WizardState::default()
+        };
+        let shown = format!("{state:?}");
+        assert!(!shown.contains("correct horse"), "{shown}");
+        assert!(!shown.contains("99, 111"), "no byte dump either: {shown}");
+        assert!(shown.contains("redacted"));
     }
 }

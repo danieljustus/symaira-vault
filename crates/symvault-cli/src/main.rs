@@ -3649,10 +3649,12 @@ fn run_setup(
         .to_string_lossy()
         .into_owned();
     let environment = setup_wizard::Environment {
-        // Like the unlock path, never probe or use Touch ID under CI/headless
-        // runs: the probe shells out to JXA and a later save would touch the
-        // login keychain.
-        touch_id_available: !is_test_or_ci() && touch_id_available(),
+        // Go asks `session.BiometricAvailable()` with no CI gate. The only
+        // exception is the explicit test hook `SYMVAULT_TEST_TOUCH_ID=unavailable`:
+        // it lets the differential tests compare against a no-cgo Go oracle,
+        // which can never see Touch ID, without reaching the host's biometrics.
+        touch_id_available: std::env::var("SYMVAULT_TEST_TOUCH_ID").as_deref() != Ok("unavailable")
+            && touch_id_available(),
         save_touch_id: Box::new(|vault, passphrase| {
             #[cfg(target_os = "macos")]
             {

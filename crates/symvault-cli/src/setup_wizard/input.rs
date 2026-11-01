@@ -6,6 +6,7 @@
 //! logic reads like the Go it was ported from.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use zeroize::{Zeroize, Zeroizing};
 
 /// A key press named the way bubbletea names it.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -117,10 +118,11 @@ fn sanitize(text: &str) -> Vec<char> {
 pub(crate) const CURSOR_ON: &str = "\u{1b}[7m";
 pub(crate) const CURSOR_OFF: &str = "\u{1b}[27m";
 
-/// `bubbles/textinput` with the default key map.
-#[derive(Clone, Debug)]
+/// `bubbles/textinput` with the default key map. The buffer is wiped when the
+/// input is dropped or cleared, and `Debug` hides it for password inputs.
+#[derive(Clone)]
 pub(crate) struct TextInput {
-    value: Vec<char>,
+    value: Zeroizing<Vec<char>>,
     pos: usize,
     placeholder: String,
     password: bool,
@@ -128,10 +130,29 @@ pub(crate) struct TextInput {
     focused: bool,
 }
 
+impl std::fmt::Debug for TextInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut shown = f.debug_struct("TextInput");
+        if self.password {
+            shown.field("value", &"<redacted>");
+        } else {
+            shown.field("value", &self.value());
+        }
+        shown
+            .field("pos", &self.pos)
+            .field("password", &self.password)
+            .field("focused", &self.focused)
+            .finish()
+    }
+}
+
 impl TextInput {
     pub(crate) fn new(placeholder: &str, password: bool, char_limit: usize) -> Self {
+        // A password buffer is allocated once at its limit so typing never
+        // reallocates and leaves a copy of the passphrase behind.
+        let capacity = if password { char_limit } else { 0 };
         Self {
-            value: Vec::new(),
+            value: Zeroizing::new(Vec::with_capacity(capacity)),
             pos: 0,
             placeholder: placeholder.to_owned(),
             password,
@@ -144,14 +165,20 @@ impl TextInput {
         self.value.iter().collect()
     }
 
+    /// The value in a buffer that is wiped on drop.
+    pub(crate) fn secret_value(&self) -> Zeroizing<String> {
+        Zeroizing::new(self.value.iter().collect())
+    }
+
     /// `SetValue`: truncates to the character limit and moves the cursor to
     /// the end.
     pub(crate) fn set_value(&mut self, text: &str) {
-        let mut runes = sanitize(text);
+        let mut runes = Zeroizing::new(sanitize(text));
         if self.char_limit > 0 {
             runes.truncate(self.char_limit);
         }
-        self.value = runes;
+        self.value.zeroize();
+        self.value.extend(runes.iter().copied());
         self.pos = self.value.len();
     }
 
@@ -203,13 +230,13 @@ impl TextInput {
     }
 
     fn insert(&mut self, text: &str) {
-        let mut runes = sanitize(text);
+        let mut runes = Zeroizing::new(sanitize(text));
         if self.char_limit > 0 {
             let room = self.char_limit.saturating_sub(self.value.len());
             runes.truncate(room);
         }
         let count = runes.len();
-        self.value.splice(self.pos..self.pos, runes);
+        self.value.splice(self.pos..self.pos, runes.iter().copied());
         self.pos += count;
     }
 
@@ -265,7 +292,7 @@ impl TextInput {
         let shown: Vec<char> = if self.password {
             vec!['*'; self.value.len()]
         } else {
-            self.value.clone()
+            self.value.to_vec()
         };
         let before: String = shown[..self.pos].iter().collect();
         if !self.focused {
@@ -286,6 +313,10 @@ impl TextInput {
 
 /// `bubbles/textarea`, reduced to the editing keys the recipients step can
 /// receive. `Enter` inserts a newline, exactly as the Go widget does.
+///
+/// Like `textarea.New()` the widget starts blurred and ignores every key until
+/// `focus()` is called. Go's `NewRecipientsStep` never focuses it, so the
+/// recipients step cannot receive text; the port keeps that behavior.
 #[derive(Clone, Debug)]
 pub(crate) struct TextArea {
     lines: Vec<Vec<char>>,
@@ -294,6 +325,7 @@ pub(crate) struct TextArea {
     placeholder: String,
     width: usize,
     height: usize,
+    focused: bool,
 }
 
 impl TextArea {
@@ -305,7 +337,14 @@ impl TextArea {
             placeholder: placeholder.to_owned(),
             width,
             height,
+            focused: false,
         }
+    }
+
+    /// `textarea.Focus()`; Go's recipients step never calls it.
+    #[cfg(test)]
+    pub(crate) fn focus(&mut self) {
+        self.focused = true;
     }
 
     pub(crate) fn value(&self) -> String {
@@ -317,6 +356,9 @@ impl TextArea {
     }
 
     pub(crate) fn update(&mut self, key: &Key) {
+        if !self.focused {
+            return;
+        }
         match key.as_str() {
             "enter" | "ctrl+m" => {
                 let tail = self.lines[self.row].split_off(self.col);
@@ -484,6 +526,7 @@ mod tests {
     #[test]
     fn text_area_enter_splits_lines() {
         let mut area = TextArea::new("", 60, 5);
+        area.focus();
         for c in "age1x".chars() {
             area.update(&Key::new(c.to_string()));
         }
@@ -493,5 +536,31 @@ mod tests {
         area.update(&key("backspace"));
         area.update(&key("backspace"));
         assert_eq!(area.value(), "age1x");
+    }
+
+    #[test]
+    fn a_blurred_text_area_ignores_every_key() {
+        let mut area = TextArea::new("", 60, 5);
+        for name in ["a", "enter", "backspace", "ctrl+u", "left"] {
+            area.update(&key(name));
+        }
+        for c in "age1x".chars() {
+            area.update(&Key::new(c.to_string()));
+        }
+        assert_eq!(area.value(), "");
+    }
+
+    #[test]
+    fn password_input_debug_is_redacted_and_secret_value_matches() {
+        let mut input = TextInput::new("", true, 64);
+        input.focus();
+        for c in "hunter2hunter2".chars() {
+            input.update(&Key::new(c.to_string()));
+        }
+        assert!(!format!("{input:?}").contains("hunter2"));
+        assert_eq!(&*input.secret_value(), "hunter2hunter2");
+        let mut plain = TextInput::new("", false, 64);
+        plain.set_value("visible");
+        assert!(format!("{plain:?}").contains("visible"));
     }
 }

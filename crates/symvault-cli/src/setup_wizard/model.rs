@@ -8,7 +8,7 @@ use super::{
     apply::{self, Environment, GitOutcome},
     input::Key,
     persist,
-    state::{DEFAULT_PROFILE, SYNC_GIT, WizardState},
+    state::{DEFAULT_PROFILE, Passphrase, SYNC_GIT, WizardState},
     steps::{
         AgentsStep, AuthStep, MultiDeviceStep, NextStepsStep, PairingQrStep, PassphraseStep,
         ProfileStep, RecipientsStep, Step, StepOutcome, SummaryStep, SyncStep, VaultPathStep,
@@ -173,7 +173,9 @@ impl WizardModel {
         match &self.steps[index] {
             Step::Welcome(step) => self.state.existing_vault = step.is_existing_vault(),
             Step::VaultPath(step) => self.state.vault_dir = step.value(),
-            Step::Passphrase(step) => self.state.passphrase = Some(step.passphrase()),
+            Step::Passphrase(step) => {
+                self.state.passphrase = Some(Passphrase::new(step.passphrase()))
+            }
             Step::Auth(step) => self.state.auth_method = step.selected_method().to_owned(),
             Step::Sync(step) => {
                 self.state.sync_mode = step.mode().to_owned();
@@ -422,6 +424,7 @@ fn progress_bar(pos: usize, total: usize) -> String {
 mod tests {
     use super::*;
     use std::{fs, path::PathBuf};
+    use zeroize::Zeroizing;
 
     fn key(name: &str) -> Key {
         Key::new(name)
@@ -532,7 +535,9 @@ mod tests {
             let _ = fs::remove_dir_all(&vault);
             let mut model =
                 WizardModel::new(&vault_dir, keep, true, Environment::passphrase_only());
-            model.state.passphrase = Some(b"correct horse battery staple".to_vec());
+            model.state.passphrase = Some(Passphrase::new(Zeroizing::new(
+                b"correct horse battery staple".to_vec(),
+            )));
             model.state.selected_agents = vec![crate::setup_wizard::state::AgentSelection {
                 agent_type: "codex".into(),
                 transport: "stdio".into(),
@@ -568,7 +573,9 @@ mod tests {
         let vault = dir.join("vault");
         let vault_dir = vault.to_string_lossy().into_owned();
         let mut model = WizardModel::new(&vault_dir, false, true, Environment::passphrase_only());
-        model.state.passphrase = Some(b"correct horse battery staple".to_vec());
+        model.state.passphrase = Some(Passphrase::new(Zeroizing::new(
+            b"correct horse battery staple".to_vec(),
+        )));
         model.state.sync_mode = "git".into();
         model.state.git_remote_url = "https://example.invalid/v.git".into();
         model.current = model.steps.len() - 1;

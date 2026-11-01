@@ -15,11 +15,12 @@ use super::{
     input::{Key, TextArea, TextInput},
     persist, recipient,
     state::{
-        AgentSelection, DEFAULT_PROFILE, MIN_PASSPHRASE_LEN, SYNC_GIT, SYNC_LOCAL, WizardState,
-        measure_strength,
+        AgentSelection, DEFAULT_PROFILE, MIN_PASSPHRASE_LEN, Passphrase, SYNC_GIT, SYNC_LOCAL,
+        WizardState, measure_strength,
     },
     theme,
 };
+use zeroize::Zeroizing;
 
 const EFF_WORDLIST: &str = include_str!("eff_large_wordlist.txt");
 
@@ -457,8 +458,10 @@ impl PassphraseStep {
         }
     }
 
-    pub(super) fn passphrase(&self) -> Vec<u8> {
-        self.pass.value().into_bytes()
+    /// The typed passphrase, in a buffer that is wiped on drop.
+    pub(super) fn passphrase(&self) -> Zeroizing<Vec<u8>> {
+        let text = self.pass.secret_value();
+        Zeroizing::new(text.as_bytes().to_vec())
     }
 
     fn focus_active(&mut self) {
@@ -519,11 +522,11 @@ impl PassphraseStep {
 
     /// `PassphraseStep.validate`: byte length, then equality.
     pub(super) fn validate(&self) -> Result<(), String> {
-        validate_passphrase_pair(&self.pass.value(), &self.confirm.value())
+        validate_passphrase_pair(&self.pass.secret_value(), &self.confirm.secret_value())
     }
 
     fn view(&self) -> String {
-        let strength = measure_strength(&self.pass.value());
+        let strength = measure_strength(&self.pass.secret_value());
         let strength_line = format!("{}{}", theme::dim("Strength: "), strength_color(strength));
         let mut lines = vec![
             theme::title("Set vault passphrase"),
@@ -885,6 +888,7 @@ pub(super) struct RecipientsStep {
 impl RecipientsStep {
     pub(super) fn new() -> Self {
         Self {
+            // Never focused, exactly like Go's `NewRecipientsStep`.
             input: TextArea::new("age1... (one per line)", 60, 5),
             err: String::new(),
             line_errors: std::collections::BTreeMap::new(),
@@ -1302,8 +1306,12 @@ impl SummaryStep {
             row("Vault", &st.vault_dir),
         ];
         if !st.existing_vault {
-            let passphrase =
-                String::from_utf8_lossy(st.passphrase.as_deref().unwrap_or(&[])).into_owned();
+            let passphrase = Zeroizing::new(
+                String::from_utf8_lossy(
+                    st.passphrase.as_ref().map_or(&[][..], Passphrase::as_bytes),
+                )
+                .into_owned(),
+            );
             let meter = measure_strength(&passphrase);
             lines.push(row(
                 "Passphrase",
@@ -1659,7 +1667,7 @@ mod tests {
     fn typing_g_regenerates_the_passphrase() {
         let mut step = PassphraseStep::new();
         step.update(&Key::new("g"));
-        let phrase = String::from_utf8(step.passphrase()).unwrap();
+        let phrase = String::from_utf8(step.passphrase().to_vec()).unwrap();
         assert_eq!(phrase.split(' ').count(), 6);
         assert!(step.validate().is_ok());
     }
@@ -1755,13 +1763,36 @@ mod tests {
         }
     }
 
+    /// Go's `NewRecipientsStep` never focuses its `textarea`, which then drops
+    /// every key: the typed text is lost, the field stays blank and Enter saves
+    /// immediately. The port reproduces that (differential scenario
+    /// `existing_git_recipients_typed`).
     #[test]
-    fn recipients_enter_inserts_a_newline_unless_blank() {
+    fn recipients_textarea_is_never_focused_so_typing_is_dropped() {
         let mut step = RecipientsStep::new();
-        // Blank + Enter finishes with no recipients.
+        for c in "age1bad".chars() {
+            assert!(matches!(
+                step.update(&Key::new(c.to_string())),
+                StepOutcome::Stay
+            ));
+        }
+        assert!(step.recipients().is_empty());
+        assert!(step.line_errors.is_empty());
+        // Blank + Enter finishes with no recipients, and so does Ctrl+S.
         assert!(matches!(step.update(&Key::new("enter")), StepOutcome::Done));
-        // Non-blank + Enter keeps editing; only Ctrl+S saves.
+        assert!(matches!(
+            step.update(&Key::new("ctrl+s")),
+            StepOutcome::Done
+        ));
+        assert!(step.recipients().is_empty());
+    }
+
+    /// With a focused widget (not reachable in the shipped wizard) Enter would
+    /// keep editing while the text is non-blank, as in the Go `Update`.
+    #[test]
+    fn recipients_enter_inserts_a_newline_unless_blank_when_focused() {
         let mut step = RecipientsStep::new();
+        step.input.focus();
         for c in "age1bad".chars() {
             step.update(&Key::new(c.to_string()));
         }

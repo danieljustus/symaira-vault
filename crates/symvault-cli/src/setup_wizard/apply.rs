@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use symvault_core::config::{Config, Profile};
+use symvault_core::config::{AuthMethod, Config, Profile};
 use symvault_crypto::{SecretBytes, encrypt_identity_scrypt, generate_identity, recipient_string};
 use symvault_store::token_registry::{self, NewToken};
 use symvault_sync::{GitRepository, recipients::RecipientsFile, safeio};
@@ -20,7 +20,7 @@ use zeroize::Zeroizing;
 
 use super::{
     persist,
-    state::{AgentSelection, DEFAULT_PROFILE, SYNC_GIT, WizardState},
+    state::{AgentSelection, DEFAULT_PROFILE, Passphrase, SYNC_GIT, WizardState},
     steps::AGENT_DEFINITIONS,
 };
 
@@ -76,32 +76,33 @@ pub(super) fn rollback_init(state: &WizardState) {
 }
 
 /// The vault `config.yaml` bytes `vault.InitWithPassphrase` writes: the
-/// marshalled `config.Default()` with `vaultDir` and `authMethod` replaced.
-/// An empty `authMethod` (the Auth step was skipped, so nothing set it) is
-/// omitted by Go's `omitempty`.
+/// marshalled `config.Default()` with `vaultDir` and `authMethod` set.
+///
+/// Go's `AuthMethod` is an untyped string and `omitempty`: an empty value (the
+/// Auth step was skipped, so nothing set it) is left out of the file. The typed
+/// `AuthMethod` cannot be empty, so that case renders the default and drops its
+/// closing `authMethod` line, which `to_yaml_bytes` always emits last.
 pub(super) fn vault_config_bytes(vault_dir: &str, auth_method: &str) -> Result<Vec<u8>, String> {
-    let config = Config {
+    let mut config = Config {
         vault_dir: vault_dir.to_owned(),
         ..Config::default()
     };
+    if !auth_method.is_empty() {
+        config.auth_method = AuthMethod::parse(auth_method).map_err(|error| error.to_string())?;
+    }
     let rendered = config
         .to_yaml_bytes()
         .map_err(|error| format!("marshal config: {error}"))?;
-    let text = String::from_utf8(rendered).map_err(|error| error.to_string())?;
-    let replacement = if auth_method.is_empty() {
-        String::new()
-    } else {
-        format!("authMethod: {}\n", yaml_plain_or_quoted(auth_method))
-    };
-    Ok(text
-        .replacen("authMethod: passphrase\n", &replacement, 1)
-        .into_bytes())
-}
-
-fn yaml_plain_or_quoted(value: &str) -> String {
-    serde_yaml_ng::to_string(&serde_yaml_ng::Value::String(value.to_owned()))
-        .map(|text| text.trim_end().to_owned())
-        .unwrap_or_else(|_| format!("{value:?}"))
+    let mut text = String::from_utf8(rendered).map_err(|error| error.to_string())?;
+    if auth_method.is_empty() {
+        let line = format!("authMethod: {}\n", config.auth_method.as_str());
+        let kept = text
+            .strip_suffix(&line)
+            .ok_or_else(|| "marshal config: authMethod is not the last key".to_owned())?
+            .len();
+        text.truncate(kept);
+    }
+    Ok(text.into_bytes())
 }
 
 /// `vault.InitWithPassphrase` with the wizard's configuration. Returns the
@@ -140,13 +141,16 @@ pub(super) fn apply_vault_init(
     if state.existing_vault {
         return Ok(());
     }
-    let passphrase = Zeroizing::new(state.passphrase.clone().unwrap_or_default());
-    let public_key = init_vault(&state.vault_dir, &passphrase, &state.auth_method)
+    let passphrase = state
+        .passphrase
+        .as_ref()
+        .map_or(&[][..], Passphrase::as_bytes);
+    let public_key = init_vault(&state.vault_dir, passphrase, &state.auth_method)
         .map_err(|error| format!("vault init: {error}"))?;
     state.vault_public_key = public_key;
     if state.auth_method == "touchid"
         && env.touch_id_available
-        && let Err(error) = (env.save_touch_id)(Path::new(&state.vault_dir), &passphrase)
+        && let Err(error) = (env.save_touch_id)(Path::new(&state.vault_dir), passphrase)
     {
         errors.push(format!("Touch ID setup: {error}"));
     }
