@@ -110,7 +110,7 @@
       "scripts/rust-port/cmd/outputmodegen/cases.go",
       "scripts/rust-port/cmd/outputmodegen/main.go"
     ],
-    "generator_digest": "70ee184f2dd3f52a2d33ab075a2ad825c6e8878d43db954bb5a18494a0260816",
+    "generator_digest": "7d570e782f3cd00cfa19e1fb4fec865a34e6f0d09c6a70a885a837146d390c0b",
     "gate_digest": "c2536c1ffaf681feaa8fa8824f7e302e9633b2c2711c9ecd98531283064e51f1",
     "goos": "darwin"
   },
@@ -13060,6 +13060,138 @@
           "stdout": "yes\n"
         }
       ]
+    },
+    {
+      "id": "config-get-missing-file.text",
+      "path": "config get",
+      "scenario": "config-get-missing-file",
+      "mode": "text",
+      "desc": "get from a config file that does not exist",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "get",
+        "x",
+        "--file",
+        "$ROOT/work/missing.yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: cannot read config file: open $ROOT/work/missing.yaml: no such file or directory: cannot read config file: open $ROOT/work/missing.yaml: no such file or directory\nError: cannot load config: cannot read config file: open $ROOT/work/missing.yaml: no such file or directory: cannot read config file: open $ROOT/work/missing.yaml: no such file or directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-list-missing-file.text",
+      "path": "config list",
+      "scenario": "config-list-missing-file",
+      "mode": "text",
+      "desc": "list a config file that does not exist",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "list",
+        "--file",
+        "$ROOT/work/missing.yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: open $ROOT/work/missing.yaml: no such file or directory: open $ROOT/work/missing.yaml: no such file or directory\nError: cannot load config: open $ROOT/work/missing.yaml: no such file or directory: open $ROOT/work/missing.yaml: no such file or directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-set-missing-file.text",
+      "path": "config set",
+      "scenario": "config-set-missing-file",
+      "mode": "text",
+      "desc": "set in a config file that does not exist",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "x",
+        "1",
+        "--file",
+        "$ROOT/work/missing.yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: cannot read config file: open $ROOT/work/missing.yaml: no such file or directory: cannot read config file: open $ROOT/work/missing.yaml: no such file or directory\nError: cannot load config: cannot read config file: open $ROOT/work/missing.yaml: no such file or directory: cannot read config file: open $ROOT/work/missing.yaml: no such file or directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-get-unreadable-file.text",
+      "path": "config get",
+      "scenario": "config-get-unreadable-file",
+      "mode": "text",
+      "desc": "get from a config file without read permission",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "locked.yaml",
+          "text": "x: 1\n",
+          "mode": "000"
+        }
+      ],
+      "argv": [
+        "config",
+        "get",
+        "x",
+        "--file",
+        "$ROOT/work/locked.yaml"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: cannot read config file: open $ROOT/work/locked.yaml: permission denied: cannot read config file: open $ROOT/work/locked.yaml: permission denied\nError: cannot load config: cannot read config file: open $ROOT/work/locked.yaml: permission denied: cannot read config file: open $ROOT/work/locked.yaml: permission denied\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-get-directory-file.text",
+      "path": "config get",
+      "scenario": "config-get-directory-file",
+      "mode": "text",
+      "desc": "get from a config path that is a directory",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "cfgdir",
+          "dir": true
+        }
+      ],
+      "argv": [
+        "config",
+        "get",
+        "x",
+        "--file",
+        "$ROOT/work/cfgdir"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: cannot read config file: read $ROOT/work/cfgdir: is a directory: cannot read config file: read $ROOT/work/cfgdir: is a directory\nError: cannot load config: cannot read config file: read $ROOT/work/cfgdir: is a directory: cannot read config file: read $ROOT/work/cfgdir: is a directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
+    },
+    {
+      "id": "config-list-directory-file.text",
+      "path": "config list",
+      "scenario": "config-list-directory-file",
+      "mode": "text",
+      "desc": "list a config path that is a directory",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "cfgdir",
+          "dir": true
+        }
+      ],
+      "argv": [
+        "config",
+        "list",
+        "--file",
+        "$ROOT/work/cfgdir"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: cannot load config: read $ROOT/work/cfgdir: is a directory: read $ROOT/work/cfgdir: is a directory\nError: cannot load config: read $ROOT/work/cfgdir: is a directory: read $ROOT/work/cfgdir: is a directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": []
     },
     {
       "id": "config-validate.text",

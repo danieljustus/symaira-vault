@@ -69,8 +69,10 @@
 //     "<RFC 3339 UTC>"` its stamp by "<NOW>"; both are install-time values.
 //
 // Every tree entry also records the permission bits of files and directories
-// (`mode`, compared as is). The generator and the replay both execute the binary
-// under umask 022 so the bits do not depend on the invoking shell.
+// (`mode`, compared as is); a file the case made unreadable (mode 000) has no
+// content to hash and is recorded by kind and mode only. The generator and the
+// replay both execute the binary under umask 022 so the bits do not depend on the
+// invoking shell.
 //
 // Sandbox: TZ=UTC, NO_COLOR=1, CI=1, SYMVAULT_PASSPHRASE with
 // SYMVAULT_ALLOW_ENV_PASSPHRASE=1, stdin is /dev/null unless a case supplies
@@ -889,6 +891,9 @@ func (s *sandbox) snapshot() (map[string]treeNode, error) {
 				break
 			}
 			data, err := os.ReadFile(path) // #nosec G304 -- sandbox path
+			if errors.Is(err, fs.ErrPermission) {
+				break // a file the case made unreadable: kind and mode only
+			}
 			if err != nil {
 				return err
 			}

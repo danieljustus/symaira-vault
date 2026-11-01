@@ -159,6 +159,18 @@ func allCaseSpecs() []caseSpec {
 		add(caseSpec{id: "config-set-" + bad.id, path: "config set", desc: "set " + bad.desc, seed: "entries", argv: flags("config", "set", bad.key, bad.value)})
 	}
 	add(caseSpec{id: "config-set-yes-bool", path: "config set", desc: "set a YAML 1.1 boolean word (accepted for a bool key)", seed: "entries", argv: flags("config", "set", "git.auto_push", "yes"), post: [][]string{{"config", "get", "git.auto_push"}}})
+	// A config file that cannot be read: Go names the failed syscall and repeats
+	// the cause (text mode only; the wording does not depend on the mode flags).
+	text := []string{"text"}
+	add(caseSpec{id: "config-get-missing-file", path: "config get", desc: "get from a config file that does not exist", seed: "entries", modes: text, argv: flags("config", "get", "x", "--file", "$ROOT/work/missing.yaml")})
+	add(caseSpec{id: "config-list-missing-file", path: "config list", desc: "list a config file that does not exist", seed: "entries", modes: text, argv: flags("config", "list", "--file", "$ROOT/work/missing.yaml")})
+	add(caseSpec{id: "config-set-missing-file", path: "config set", desc: "set in a config file that does not exist", seed: "entries", modes: text, argv: flags("config", "set", "x", "1", "--file", "$ROOT/work/missing.yaml")})
+	add(caseSpec{id: "config-get-unreadable-file", path: "config get", desc: "get from a config file without read permission", seed: "entries", modes: text, argv: flags("config", "get", "x", "--file", "$ROOT/work/locked.yaml"),
+		files: []workFile{{Name: "locked.yaml", Text: "x: 1\n", Mode: "000"}}})
+	add(caseSpec{id: "config-get-directory-file", path: "config get", desc: "get from a config path that is a directory", seed: "entries", modes: text, argv: flags("config", "get", "x", "--file", "$ROOT/work/cfgdir"),
+		files: []workFile{{Name: "cfgdir", Dir: true}}})
+	add(caseSpec{id: "config-list-directory-file", path: "config list", desc: "list a config path that is a directory", seed: "entries", modes: text, argv: flags("config", "list", "--file", "$ROOT/work/cfgdir"),
+		files: []workFile{{Name: "cfgdir", Dir: true}}})
 	add(caseSpec{id: "config-validate", path: "config validate", desc: "validate a valid config", seed: "entries", argv: flags("config", "validate")})
 	add(caseSpec{id: "config-validate-invalid", path: "config validate", desc: "validate a broken config", seed: "entries", argv: flags("config", "validate"),
 		files: []workFile{{Name: "../home/.symvault/config.yaml", Text: "vault: [unterminated\n"}}})

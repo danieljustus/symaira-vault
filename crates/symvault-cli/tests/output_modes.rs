@@ -62,7 +62,9 @@
 //!    "<RFC 3339 UTC>"` its stamp by `<NOW>`; both are install-time values.
 //!
 //! Every tree entry also records the permission bits of files and directories
-//! (`mode`, compared as is); the binary runs under umask 022 in both harnesses.
+//! (`mode`, compared as is); a file the case made unreadable (mode 000) has no
+//! content to hash and is recorded by kind and mode only. The binary runs under
+//! umask 022 in both harnesses.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -77,7 +79,7 @@ use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
 
 const PASSPHRASE: &str = "correct horse battery staple";
-const EXPECTED_CASES: usize = 464;
+const EXPECTED_CASES: usize = 470;
 const EXPECTED_PATHS: usize = 47;
 const EXPECTED_SEEDS: usize = 6;
 /// The normalization rules, in the order of the numbered list above.
@@ -961,7 +963,12 @@ impl Sandbox {
                     &std::fs::read(&path).expect("read observed audit log"),
                 ));
             } else if !(encrypted_store(&rel) || rel.ends_with(".age")) {
-                node.content = Some(self.normalize(&std::fs::read(&path).expect("read observed")));
+                match std::fs::read(&path) {
+                    Ok(bytes) => node.content = Some(self.normalize(&bytes)),
+                    // A file the case made unreadable (mode 000): kind and mode only.
+                    Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {}
+                    Err(error) => panic!("read observed {rel}: {error}"),
+                }
             }
             out.insert(rel, node);
             if file_type.is_dir() && !file_type.is_symlink() {

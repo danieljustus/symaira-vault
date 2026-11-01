@@ -2706,9 +2706,7 @@ fn run_cli() -> ExitCode {
                     },
                     cli.quiet,
                 ),
-                ConfigOperation::List => {
-                    config::list(&path, cli.quiet).map_err(config::ConfigFailure::from)
-                }
+                ConfigOperation::List => config::list(&path, cli.quiet),
                 ConfigOperation::Set { key, value } => config::set(&path, &key, &value, cli.quiet),
             };
             match result {

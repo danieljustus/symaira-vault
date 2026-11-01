@@ -42,9 +42,33 @@ fn go_syntax_gate(bytes: &[u8]) -> Result<(), ConfigFailure> {
     }
 }
 
-pub fn list(path: &Path, quiet: bool) -> Result<(), String> {
-    let bytes = fs::read(crate::agent_list_commands::clean_path(path))
-        .map_err(|error| format!("cannot load config: {error}"))?;
+/// Go's wording of a failed read of the config file: `os.ReadFile` fails with
+/// `open <path>: no such file or directory` (or `permission denied`) or, for a
+/// directory, `read <path>: is a directory`. `config get|set` wrap it in
+/// `cannot read config file: …`, `config list` does not; the root handler repeats
+/// the cause and prints the doctor hint (exit 6). Other causes keep the generic
+/// text until they are probed against the oracle.
+fn read_config_file(path: &Path, wrapped: bool) -> Result<Vec<u8>, ConfigFailure> {
+    let clean = crate::agent_list_commands::clean_path(path);
+    fs::read(&clean).map_err(|error| {
+        let (verb, reason) = match error.kind() {
+            io::ErrorKind::NotFound => ("open", "no such file or directory"),
+            io::ErrorKind::PermissionDenied => ("open", "permission denied"),
+            io::ErrorKind::IsADirectory => ("read", "is a directory"),
+            _ => return ConfigFailure::Plain(format!("cannot load config: {error}")),
+        };
+        let prefix = if wrapped {
+            "cannot read config file: "
+        } else {
+            ""
+        };
+        let cause = format!("{prefix}{verb} {}: {reason}", clean.display());
+        ConfigFailure::GoConfigError(format!("cannot load config: {cause}: {cause}"))
+    })
+}
+
+pub fn list(path: &Path, quiet: bool) -> Result<(), ConfigFailure> {
+    let bytes = read_config_file(path, false)?;
     if !quiet {
         let _ = io::stdout().write_all(&bytes);
     }
@@ -52,8 +76,7 @@ pub fn list(path: &Path, quiet: bool) -> Result<(), String> {
 }
 
 pub fn get(path: &Path, key: &str, output: &str, quiet: bool) -> Result<(), ConfigFailure> {
-    let bytes = fs::read(crate::agent_list_commands::clean_path(path))
-        .map_err(|error| format!("cannot load config: {error}"))?;
+    let bytes = read_config_file(path, true)?;
     go_syntax_gate(&bytes)?;
     let source = std::str::from_utf8(&bytes)
         .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
@@ -84,8 +107,7 @@ pub fn get(path: &Path, key: &str, output: &str, quiet: bool) -> Result<(), Conf
 pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), ConfigFailure> {
     use yaml_edit::path::YamlPath;
 
-    let bytes = fs::read(crate::agent_list_commands::clean_path(path))
-        .map_err(|error| format!("cannot load config: {error}"))?;
+    let bytes = read_config_file(path, true)?;
     go_syntax_gate(&bytes)?;
     let source = std::str::from_utf8(&bytes)
         .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
