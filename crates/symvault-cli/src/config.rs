@@ -1,3 +1,6 @@
+#[path = "config_fix.rs"]
+mod fix;
+
 use std::{
     env, fs,
     io::{self, IsTerminal, Write},
@@ -44,7 +47,7 @@ fn go_syntax_gate(bytes: &[u8]) -> Result<(), ConfigFailure> {
 
 /// The `syscall.Errno` text Go prints for the failures of opening a file; other
 /// causes keep Rust's generic wording until they are probed against the oracle.
-fn go_errno_text(error: &io::Error) -> Option<&'static str> {
+pub(crate) fn go_errno_text(error: &io::Error) -> Option<&'static str> {
     match error.kind() {
         io::ErrorKind::NotFound => return Some("no such file or directory"),
         io::ErrorKind::PermissionDenied => return Some("permission denied"),
@@ -897,12 +900,11 @@ fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
 
 /// Implements `symvault config validate [path]`.
 ///
-/// Mirrors Go's `config validate` for its non-interactive path: load, then
-/// run [`symvault_core::config::Config::validate`], reporting every
-/// violation at once. Go's `--fix` interactive `$EDITOR`/auto-repair flow is
-/// intentionally not ported here (it requires a TTY-driven repair UI outside
-/// this bounded CLI slice); callers asking for that flag get "not supported"
-/// rather than a silent no-op.
+/// Mirrors Go's `config validate`: load, then run
+/// [`symvault_core::config::Config::validate`], reporting every violation at
+/// once. With `--fix` and an interactive stdin the interactive repair flow
+/// (see [`fix`]) runs instead of reporting the failure, exactly as Go's
+/// `configValidateCmd` does; a non-terminal stdin validates as usual.
 pub(crate) fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
     #[cfg(windows)]
     if err.kind() == io::ErrorKind::PermissionDenied
@@ -950,63 +952,34 @@ pub(crate) fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> St
 }
 
 pub fn validate(path: &Path, fix: bool, output: &str, quiet: bool) -> Result<(), String> {
-    // Go only enters its repair flow when stdin is an interactive terminal.
-    // This Rust build does not yet implement that TTY editor/prompt flow, but
-    // `--fix` must remain a no-op for pipes and redirected invocations, where
-    // Go performs ordinary validation.
-    if fix && std::io::stdin().is_terminal() {
-        return Err("config validate --fix is not supported by this build".to_owned());
-    }
     let json = output == "json";
     // The header below prints the RAW argument, exactly like Go's
     // `cannot load config from %s` (cmd/admin/config.go), while config.Load
-    // rejects traversal before os.ReadFile(filepath.Clean(path)) — so the
-    // open attempt (and its error text) sees the cleaned path.
+    // rejects traversal before os.ReadFile(filepath.Clean(path)).
     let path_display = path.display().to_string();
-    let read_path = crate::agent_list_commands::clean_path(path);
 
-    let bytes = if path
-        .components()
-        .any(|component| component == std::path::Component::ParentDir)
-    {
-        Err("config file path escapes expected directory".to_owned())
+    let first = self::fix::load(path);
+    let loaded = if fix && std::io::stdin().is_terminal() {
+        self::fix::fix(path, first, quiet)?
     } else {
-        fs::read(&read_path).map_err(|error| format_go_path_error("open", &read_path, &error))
-    };
-    let bytes = match bytes {
-        Ok(bytes) => bytes,
-        Err(path_err) => {
-            if json {
-                print_json(
-                    &serde_json::json!({ "error": path_err, "valid": false }),
-                    quiet,
-                )?;
-                return Err(format!("config load failed: {path_err}"));
+        match first {
+            Ok(loaded) => loaded,
+            Err(load_error) => {
+                if json {
+                    print_json(
+                        &serde_json::json!({ "error": load_error, "valid": false }),
+                        quiet,
+                    )?;
+                    return Err(format!("config load failed: {load_error}"));
+                }
+                return Err(format!(
+                    "cannot load config from {path_display}: {load_error}: {load_error}"
+                ));
             }
-            return Err(format!(
-                "cannot load config from {path_display}: {path_err}: {path_err}"
-            ));
         }
     };
 
-    let config = match symvault_core::config::Config::load_from_bytes(&bytes) {
-        Ok(config) => config,
-        Err(error) => {
-            let err_msg = error.to_string();
-            if json {
-                print_json(
-                    &serde_json::json!({ "error": err_msg, "valid": false }),
-                    quiet,
-                )?;
-                return Err(format!("config load failed: {err_msg}"));
-            }
-            return Err(format!(
-                "cannot load config from {path_display}: {err_msg}: {err_msg}"
-            ));
-        }
-    };
-
-    let errors = config.validate();
+    let errors = self::fix::validate(&loaded);
     if !errors.is_empty() {
         if json {
             print_json(
