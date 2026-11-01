@@ -1304,7 +1304,9 @@ enum DynamicCommand {
     ///
     /// `cobra_usage` validates the flags first (required `--engine` and
     /// `--role`, Go duration `--ttl`); the body never reads them because the
-    /// oracle registers no engine (`dynamic_commands`).
+    /// oracle registers no engine (`dynamic_commands`). pflag keeps the last
+    /// value of a repeated flag, so repeats must not be a clap error.
+    #[command(args_override_self = true)]
     Generate {
         #[arg(long = "engine", allow_hyphen_values = true)]
         _engine: Option<String>,
@@ -5945,6 +5947,33 @@ mod nil_args_positional_tests {
         let paths = nil_args_paths();
         for name in NOT_NATIVE {
             assert!(paths.iter().any(|(path, _)| path == name), "{name}");
+        }
+    }
+
+    /// pflag keeps the last value of a repeated string/duration flag.
+    #[test]
+    fn dynamic_generate_accepts_repeated_flags_like_pflag() {
+        for args in [
+            &[
+                "symvault", "dynamic", "generate", "--engine", "e", "--engine", "f", "--role", "r",
+            ][..],
+            &[
+                "symvault",
+                "dynamic",
+                "generate",
+                "--engine=e",
+                "--engine=f",
+                "--role=r",
+            ][..],
+            &[
+                "symvault", "dynamic", "generate", "--engine", "e", "--role", "r", "--role", "s",
+            ][..],
+            &[
+                "symvault", "dynamic", "generate", "--engine", "e", "--role", "r", "--ttl", "1m",
+                "--ttl", "2m",
+            ][..],
+        ] {
+            Cli::try_parse_from(args).unwrap_or_else(|error| panic!("{args:?}: {error}"));
         }
     }
 

@@ -36,10 +36,9 @@ pub(crate) fn generate(explicit_vault: Option<&Path>, profile: Option<&str>) -> 
 /// The hint `ExecuteRoot` prints after an `ExitLocked` error.
 const LOCKED_HINT: &str = "Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) \u{2014} the passphrase variable alone is ignored.";
 
-/// The hint of the `ExitLocked` error `resolveUnlockPassphrase` returns when
-/// `SYMVAULT_PASSPHRASE` is set but not allowed.
-const ENV_DISABLED_HINT: &str = "Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow SYMVAULT_PASSPHRASE for non-interactive use.";
-
+/// `cli.WithVault` unlocks interactively, so of Go's `ExitLocked` errors only a
+/// failed passphrase read can occur here (the `vault locked: ...` variants are
+/// non-interactive only).
 fn finish(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -50,28 +49,11 @@ fn finish(result: Result<(), String>) -> ExitCode {
         Err(error) => {
             // cobra and `ExecuteRoot` each print the error.
             crate::print_error_like_go(&error);
-            let locked_hint = if error.starts_with("vault locked:") {
-                Some(
-                    if error.contains(
-                        "SYMVAULT_PASSPHRASE is set but env passphrase unlock is disabled",
-                    ) {
-                        ENV_DISABLED_HINT
-                    } else {
-                        LOCKED_HINT
-                    },
-                )
-            } else if error.starts_with("read passphrase: ") {
-                // A failed passphrase read is an `ExitLocked` error too.
-                Some(LOCKED_HINT)
+            if error.starts_with("read passphrase: ") {
+                let _ = writeln!(io::stderr(), "{LOCKED_HINT}");
+                ExitCode::from(4)
             } else {
-                None
-            };
-            match locked_hint {
-                Some(hint) => {
-                    let _ = writeln!(io::stderr(), "{hint}");
-                    ExitCode::from(4)
-                }
-                None => ExitCode::from(1),
+                ExitCode::from(1)
             }
         }
     }
