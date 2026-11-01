@@ -923,12 +923,14 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                     .filter_map(|(alias, reference)| {
                         reference
                             .as_str()
-                            .map(|_| (alias.clone(), "***".to_owned()))
+                            .map(|reference| (alias.clone(), reference.to_owned()))
                     })
                     .collect::<BTreeMap<_, _>>()
             })
             .unwrap_or_default();
-        let output = match symvault_sync::template::render_builtin(template_type, name, &refs) {
+        // Custom templates under $HOME/.config/symvault/templates shadow the
+        // built-ins exactly as in Go; dry-run masks every value with `***`.
+        let output = match symvault_sync::template::render_masked(template_type, name, &refs) {
             Ok(output) => output,
             Err(error) => {
                 return Ok(ToolCallResult::error(format!("render template: {error}")));
