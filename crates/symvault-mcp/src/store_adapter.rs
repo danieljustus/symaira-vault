@@ -3065,8 +3065,9 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                     .get("path")
                     .and_then(Value::as_str)
                     .unwrap_or("<invalid>");
-                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
-                self.append_audit("generate_totp", path, ok);
+                if let Some((action, ok)) = generate_totp_audit(result.as_ref()) {
+                    self.append_audit(&action, path, ok);
+                }
             }
             "set_entry_field" if !approval_failed => {
                 let path = arguments
@@ -6057,4 +6058,101 @@ mod tests {
     }
 
     include!("api_review_tests.rs");
+}
+
+/// The audit row Go `handleGenerateTOTP` writes for a finished call, or `None`
+/// where Go writes none. Success rows name the destination
+/// (`generate_totp.clipboard|autotype|return`); a missing clipboard/autotype
+/// backend, an invalid destination and `return_code: false` are not audited;
+/// a return-path approval refusal is audited by Go's `requireApproval` as
+/// `approval.generate_totp_return.denied`; every other failure is
+/// `generate_totp` with `ok = false`.
+fn generate_totp_audit(result: Result<&ToolCallResult, &String>) -> Option<(String, bool)> {
+    let Ok(value) = result else {
+        return Some(("generate_totp".into(), false));
+    };
+    let text = value.text.as_str();
+    if value.is_error {
+        if text == "clipboard not available"
+            || text == "autotype not available on this platform"
+            || text.starts_with("invalid destination ")
+            || text.starts_with("return_code must be true")
+        {
+            return None;
+        }
+        if text == "generate_totp_return denied: approval mode is 'deny'"
+            || text == "generate_totp_return requires approval but no TTY or GUI dialog available"
+        {
+            return Some(("approval.generate_totp_return.denied".into(), false));
+        }
+        return Some(("generate_totp".into(), false));
+    }
+    let parsed: Value = serde_json::from_str(text).unwrap_or(Value::Null);
+    let destination = if parsed.get("destination").and_then(Value::as_str) == Some("clipboard") {
+        "clipboard"
+    } else if parsed.get("code").is_some() {
+        "return"
+    } else {
+        "autotype"
+    };
+    Some((format!("generate_totp.{destination}"), true))
+}
+
+#[cfg(test)]
+mod generate_totp_audit_tests {
+    use super::*;
+
+    fn ok(text: &str) -> ToolCallResult {
+        ToolCallResult::text(text)
+    }
+
+    #[test]
+    fn success_rows_name_the_destination_like_go() {
+        let clip = ok(r#"{"clipboard_clears_in":30,"destination":"clipboard","success":true}"#);
+        let ret = ok(r#"{"code":"123456","expires_at":"2026-01-01T00:00:00Z","period":30}"#);
+        let auto = ok(r#"{"success": true}"#);
+        assert_eq!(
+            generate_totp_audit(Ok(&clip)),
+            Some(("generate_totp.clipboard".into(), true))
+        );
+        assert_eq!(
+            generate_totp_audit(Ok(&ret)),
+            Some(("generate_totp.return".into(), true))
+        );
+        assert_eq!(
+            generate_totp_audit(Ok(&auto)),
+            Some(("generate_totp.autotype".into(), true))
+        );
+    }
+
+    #[test]
+    fn failures_follow_go_audit_rules() {
+        for silent in [
+            "clipboard not available",
+            "autotype not available on this platform",
+            "invalid destination \"x\": must be clipboard, autotype, or return",
+            "return_code must be true when destination is \"return\"",
+        ] {
+            assert_eq!(
+                generate_totp_audit(Ok(&ToolCallResult::error(silent))),
+                None,
+                "{silent}"
+            );
+        }
+        assert_eq!(
+            generate_totp_audit(Ok(&ToolCallResult::error(
+                "generate_totp_return denied: approval mode is 'deny'"
+            ))),
+            Some(("approval.generate_totp_return.denied".into(), false))
+        );
+        assert_eq!(
+            generate_totp_audit(Ok(&ToolCallResult::error("clipboard copy failed: boom"))),
+            Some(("generate_totp".into(), false))
+        );
+        let denied = String::from("clipboard operations not permitted for this agent");
+        assert_eq!(
+            generate_totp_audit(Err(&denied)),
+            Some(("generate_totp".into(), false))
+        );
+    }
 }
