@@ -331,13 +331,22 @@ fn migrate_resource_policy_locked(
     }
     .map_err(|e| format!("unlock historical identity: {e}"))?;
     let config_path = root.join("config.yaml");
-    let config_original =
-        safeio::read_bounded(&config_path, 1024 * 1024).map_err(|e| e.to_string())?;
+    // Go's `prepareResourceMigrationConfig` wraps each stage: read, load and
+    // validate the config as "<stage> migration config: %w".
+    let config_original = safeio::read_bounded(&config_path, 1024 * 1024)
+        .map_err(|e| format!("read migration config: {e}"))?;
     let config_replacement = config_original
         .as_ref()
         .map(|raw| {
-            symvault_core::config::Config::load_from_bytes(raw)
-                .map_err(|e| format!("load config: {e}"))?;
+            let loaded = symvault_core::config::Config::load_from_bytes(raw)
+                .map_err(|e| format!("load migration config: {e}"))?;
+            let problems = loaded.validate();
+            if !problems.is_empty() {
+                return Err(format!(
+                    "validate migration config: {}",
+                    problems.join("\n")
+                ));
+            }
             let mut document: serde_yaml_ng::Value =
                 serde_yaml_ng::from_slice(raw).map_err(|e| e.to_string())?;
             if document.is_null() {
@@ -354,7 +363,7 @@ fn migrate_resource_policy_locked(
             }
             let vault = section
                 .as_mapping_mut()
-                .ok_or_else(|| "config vault must be a mapping".to_owned())?;
+                .ok_or_else(|| "migration config vault must be a mapping".to_owned())?;
             for (name, value) in [
                 ("format_version", 2),
                 ("argon2id_time", 3),
