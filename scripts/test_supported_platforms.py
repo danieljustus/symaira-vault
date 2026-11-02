@@ -23,11 +23,16 @@ class SupportedPlatformsTests(unittest.TestCase):
     def test_release_targets_and_publishers(self):
         config = yaml.safe_load((ROOT / ".goreleaser.yml").read_text())
         self.assertNotIn("scoops", config)
-        targets = {(os_name, arch) for build in config["builds"]
-                   for os_name in build["goos"] for arch in build["goarch"]}
+        # Rust builds (D3/D4): triples map to GoReleaser's os/arch pairs.
+        triples = {"aarch64-apple-darwin": ("darwin", "arm64"),
+                   "x86_64-unknown-linux-musl": ("linux", "amd64"),
+                   "aarch64-unknown-linux-musl": ("linux", "arm64")}
+        for build in config["builds"]:
+            self.assertEqual(build["builder"], "rust", build["id"])
+        self.assertEqual({t for b in config["builds"] for t in b["targets"]}, set(triples))
+        targets = {triples[t] for build in config["builds"] for t in build["targets"]}
         self.assertEqual(targets, {("darwin", "arm64"), ("linux", "amd64"),
-                                  ("linux", "arm64"), ("freebsd", "amd64"),
-                                  ("freebsd", "arm64")})
+                                  ("linux", "arm64")})
         release = (ROOT / ".github/workflows/release.yml").read_text()
         self.assertNotIn("darwin_amd64", release)
         self.assertNotIn("SCOOP", release)
