@@ -1358,6 +1358,9 @@ fn main() -> ExitCode {
 }
 
 fn run_cli() -> ExitCode {
+    // D1: the first mutation of a vault without a Rust marker is preceded by a
+    // verified backup; the store refuses to proceed without this guard.
+    symvault_sync::data_safety::install();
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(index) = completion_protocol::request_index(&args) {
         return completion_protocol::run(&args, index);

@@ -208,6 +208,9 @@ fn rewrite_identity(
     identity: &Identity,
     passphrase: &[u8],
 ) -> Result<(), String> {
+    // D1: the heal rewrites identity.age, so a vault without a Rust marker is
+    // backed up (and the backup verified) before the first byte changes.
+    crate::data_safety::ensure_marker(vault).map_err(|error| error.to_string())?;
     let path = vault.join("identity.age");
     let backup = vault.join("identity.age.bak");
     let original = fs::read(&path).map_err(|error| {

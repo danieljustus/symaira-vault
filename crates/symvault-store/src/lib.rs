@@ -25,6 +25,9 @@ use zeroize::{Zeroize, Zeroizing};
 /// Keyed JSONL audit logging, verification, rotation, and export.
 pub mod audit;
 
+/// The Rust-cutover pre-mutation backup gate (D1, RUST-014).
+pub mod data_safety;
+
 /// Go-compatible grant signing key persistence.
 pub mod grant_key;
 
@@ -115,6 +118,8 @@ pub enum StoreError {
     Limit { path: PathBuf, limit: u64 },
     #[error("entry value exceeds the supported structure limits: {0}")]
     ValueLimit(String),
+    #[error("data-safety gate: {0}")]
+    DataSafety(String),
 }
 
 /// Which on-disk entry namespace was observed.
@@ -638,6 +643,14 @@ impl Store {
         }
     }
 
+    /// The D1 gate for writers that publish files without holding the write
+    /// lock (entry writes and deletes, as in Go): called right before the first
+    /// filesystem mutation, after validation, so a rejected request leaves no
+    /// backup behind. A no-op once the vault carries the Rust marker.
+    fn data_safety_gate(&self) -> Result<(), StoreError> {
+        data_safety::ensure_marker(&self.root)
+    }
+
     fn acquire_write_lock(&self) -> Result<fs::File, StoreError> {
         open_root_write_lock(&self.root_cap, &self.root)
     }
@@ -904,6 +917,7 @@ impl Store {
             });
         }
 
+        self.data_safety_gate()?;
         #[cfg(unix)]
         let _entries_cap =
             rooted::directory(&self.root_cap, Path::new(ENTRIES_DIR), &entries_root, false)?;
@@ -2369,6 +2383,13 @@ impl Store {
         }
 
         let entries = self.entry_candidates()?;
+        // Moving legacy entry files into `entries/` rewrites the vault layout
+        // even when it is triggered by a read command, so it is a mutation for
+        // the D1 gate: a vault without a Rust marker is backed up first.
+        // Creating the empty migration marker alone is not.
+        if entries.iter().any(|candidate| !candidate.fresh) {
+            data_safety::ensure_marker(&self.root)?;
+        }
         let fresh_root = self.root.join(ENTRIES_DIR);
         #[cfg(unix)]
         rooted::directory(&self.root_cap, Path::new(ENTRIES_DIR), &fresh_root, true)?;
@@ -2505,6 +2526,7 @@ impl Store {
             return Err(StoreError::ResourceLimit);
         }
         let target = self.configured_entry_path(path, identity)?;
+        self.data_safety_gate()?;
         let parent_cap = self.entry_parent_cap(&target)?;
         publication::replace_entry(&target, &encrypted, &parent_cap)?;
         // Go publishes the primary entry first and intentionally discards
@@ -2635,6 +2657,7 @@ impl Store {
 
     fn delete_entry_at(&self, path: &str, identity: Option<&Identity>) -> Result<(), StoreError> {
         validate_entry_path(path)?;
+        self.data_safety_gate()?;
         let configured = identity.map(|identity| self.configured_entry_path(path, identity));
         #[cfg(unix)]
         {
@@ -3482,7 +3505,13 @@ fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, St
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
         match file.try_lock() {
-            Ok(()) => return Ok(file),
+            Ok(()) => {
+                // The lock is held from here to the caller's unlock: the
+                // pre-migration backup and the marker happen inside it. On
+                // refusal the file drops, which releases the lock.
+                data_safety::ensure_locked(root)?;
+                return Ok(file);
+            }
             Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }

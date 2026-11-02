@@ -248,6 +248,7 @@ pub struct StoreReadOnlyAdapter {
 
 impl StoreReadOnlyAdapter {
     pub fn open(root: impl AsRef<Path>, identity: Identity) -> Result<Self, String> {
+        symvault_sync::data_safety::install();
         let store = Store::open(root, &identity).map_err(store_error)?;
         Ok(Self { store, identity })
     }

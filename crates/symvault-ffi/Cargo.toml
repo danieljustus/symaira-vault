@@ -17,6 +17,8 @@ symvault-core.workspace = true
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
+# D1 data-safety gate: the pre-mutation backup guard lives in symvault-sync.
+symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
 # Diagnostics only: the Go bridge surfaces age's exact error texts, and the
 # shared crypto crate deliberately collapses them into failure classes. This is
 # the same exact pin symvault-crypto uses.

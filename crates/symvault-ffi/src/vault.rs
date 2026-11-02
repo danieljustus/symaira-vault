@@ -169,6 +169,13 @@ pub(crate) fn init_vault(dir: &str, passphrase: &[u8]) -> R<()> {
     if passphrase.is_empty() {
         return Err("passphrase is empty".to_owned());
     }
+    symvault_sync::data_safety::install();
+    // InitVault overwrites identity.age and config.yaml of an existing Go vault:
+    // that is a mutation, so such a vault is backed up (and marked) first.
+    if Path::new(dir).join("identity.age").exists() || config_path(dir).exists() {
+        symvault_store::data_safety::ensure_marker(Path::new(dir))
+            .map_err(|error| error.to_string())?;
+    }
     let identity = generate_identity();
     let entries = Path::new(dir).join("entries");
     go_mkdir_all(&entries, 0o700).map_err(|reason| format!("create vault dir: {reason}"))?;
@@ -195,6 +202,8 @@ pub(crate) fn init_vault(dir: &str, passphrase: &[u8]) -> R<()> {
     .map_err(|error| format!("save identity with argon2id: {error}"))?;
     atomic_write(&Path::new(dir).join("identity.age"), &sealed, 0o600)
         .map_err(|error| format!("save identity with argon2id: {}", errno_text(&error)))?;
+    symvault_store::data_safety::mark_created(Path::new(dir))
+        .map_err(|error| format!("write rust marker: {error}"))?;
     Ok(())
 }
 
@@ -343,6 +352,7 @@ fn open_store(dir: &str, identity: &Identity) -> R<Store> {
     let config =
         Config::load_from_bytes(&bytes).map_err(|error| format!("load config: {error}"))?;
     detect_legacy_mode(dir, config)?;
+    symvault_sync::data_safety::install();
     let store = Store::open_lenient_with_legacy_migration(dir, identity)
         .map_err(|error| map_store_error(&error))?;
     // mobilebind opens through `vault.Open`, whose manifest consistency block
@@ -495,6 +505,7 @@ pub(crate) fn write_entry_json(dir: &str, path: &str, json: &str, id_text: &str)
     let absolute = std::path::absolute(dir).unwrap_or_else(|_| PathBuf::from(dir));
     go_mkdir_all(&absolute, 0o700)
         .map_err(|reason| format!("create vault directory for lock: {reason}"))?;
+    symvault_sync::data_safety::install();
     let store = Store::open_lenient(dir, &identity).map_err(|error| map_store_error(&error))?;
     store
         .write_entry_at(path, &entry.0, &identity, &now_rfc3339_nano(), false, None)
@@ -523,6 +534,7 @@ pub(crate) fn list_entries_json(dir: &str, prefix: &str, id_text: &str) -> R<Str
             return Err(format!("list entries: {}", path_error("open", dir, &error)));
         }
     }
+    symvault_sync::data_safety::install();
     let store = Store::open_lenient(dir, &identity)
         .map_err(|error| format!("list entries: {}", map_store_error(&error)))?;
     if prefix.is_empty() && !pseudonymized {
@@ -576,6 +588,7 @@ pub(crate) fn verify_manifest(dir: &str, id_text: &str) -> R<bool> {
     }
     load_vault_config(dir)
         .map_err(|reason| format!("verify manifest: load vault config: {reason}"))?;
+    symvault_sync::data_safety::install();
     let store = Store::open_lenient(dir, &identity)
         .map_err(|error| format!("verify manifest: {}", map_store_error(&error)))?;
     let result = store

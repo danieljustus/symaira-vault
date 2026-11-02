@@ -4174,6 +4174,7 @@ dependencies = [
  "symvault-crypto",
  "symvault-gojson",
  "symvault-store",
+ "symvault-sync",
  "tempfile",
  "zeroize",
 ]
