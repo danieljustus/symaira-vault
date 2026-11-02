@@ -11,11 +11,10 @@
     "seed": "scripts/rust-port/mcp_process_seed.go.txt",
     "seed_sha256": "d2b0eb2ab8bb3b676525efe328121adc744d5f51ca14fecdbf8b748f0523fea3",
     "generator": "scripts/rust-port/mcp_authz_matrix.py",
-    "generator_sha256": "84e34b494a5695a5b7127fb44d25110096a9c628b8566b99026e241f2b99ed54",
+    "generator_sha256": "4b6ef7d97574b3bb3c6b68fa0e283485aff0d6592094a6586ae113fb799f02a2",
     "compiler": {
       "version": "go1.26.6",
-      "goos": "darwin",
-      "goarch": "arm64"
+      "goos": "darwin"
     }
   },
   "inert_arguments": {},

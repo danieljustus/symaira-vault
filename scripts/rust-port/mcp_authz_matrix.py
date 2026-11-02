@@ -8,13 +8,22 @@ unknown name, with no token, with a token scope excluding the tool and with a
 token scope naming exactly the tool. Arguments are inert (`{}`), so no tool
 reaches a clipboard, autotype, payment, Perplexity, network or child process.
 
-  --generate   write testdata/port/mcp/authz-matrix.json
-  --check      regenerate into memory and require byte equality with the file
+The matrix is recorded per host GOOS (the capability decisions depend on the
+platform: Touch ID, clipboard and autotype backends, secure-input UI):
+
+  testdata/port/mcp/authz-matrix.json          darwin
+  testdata/port/mcp/authz-matrix-linux.json    linux
+
+  --generate   write only the host's fixture
+  --check      regenerate into memory and require byte equality with the host's
+               fixture; a host without a recorded fixture is a failure, never
+               a skip
 """
 import argparse
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import re
 import shutil
@@ -27,7 +36,10 @@ from mcp_oracle import CONTRACT, ORDERED, pinned_go, validate_reference
 import mcp_process_contract as process
 
 ROOT = process.ROOT
-FIXTURE = ROOT / 'testdata/port/mcp/authz-matrix.json'
+FIXTURES = {
+    'darwin': ROOT / 'testdata/port/mcp/authz-matrix.json',
+    'linux': ROOT / 'testdata/port/mcp/authz-matrix-linux.json',
+}
 PROBE = ROOT / 'scripts/rust-port/mcp_authz_probe.go.txt'
 SEED = process.PROBE
 CATALOG = ROOT / 'testdata/port/mcp/tool-list.json'
@@ -41,6 +53,18 @@ MASKS = {
     # normalize() already turned the JSON array text into {'json_text': [...]}.
     'symaira_audit_self': ('audit_rows', lambda text: {'masked': 'audit_rows', 'json_array': isinstance(text, dict) and isinstance(text.get('json_text'), list)}),
 }
+
+
+def host_goos():
+    """Go spelling of the host OS; an unrecorded host fails visibly."""
+    goos = {'Darwin': 'darwin', 'Linux': 'linux'}.get(platform.system())
+    if goos not in FIXTURES:
+        raise SystemExit(f'MCP authz matrix has no fixture for host OS {platform.system()!r}; recorded: {sorted(FIXTURES)}')
+    return goos
+
+
+def fixture_path(goos):
+    return FIXTURES[goos]
 
 
 def sha256(path):
@@ -121,10 +145,11 @@ def record(go, seed, base, tools, receipt):
     return profiles, cases
 
 
-def build_fixture():
+def build_fixture(goos):
     validate_reference(ROOT)
     receipt = {}
     go_compiler, build_env, compiler = pinned_go(os.environ.copy(), ROOT)
+    assert compiler['build_settings']['GOOS'] == goos, ('compiler GOOS differs from the host fixture', compiler['build_settings']['GOOS'], goos)
     tools = tool_names()
     with tempfile.TemporaryDirectory(prefix='symvault-mcp-authz-') as raw:
         base = Path(raw)
@@ -158,8 +183,10 @@ def build_fixture():
             'probe': 'scripts/rust-port/mcp_authz_probe.go.txt', 'probe_sha256': sha256(PROBE),
             'seed': 'scripts/rust-port/mcp_process_seed.go.txt', 'seed_sha256': sha256(SEED),
             'generator': 'scripts/rust-port/mcp_authz_matrix.py', 'generator_sha256': sha256(__file__),
-            'compiler': {'version': compiler['version'], 'goos': compiler['build_settings']['GOOS'],
-                         'goarch': compiler['build_settings']['GOARCH']},
+            # GOARCH is deliberately not pinned: the recorded outcomes carry no
+            # architecture-dependent value, and a pinned arm64 would turn the
+            # x86-64 CI runners into a false 'stale'.
+            'compiler': {'version': compiler['version'], 'goos': compiler['build_settings']['GOOS']},
         },
         'inert_arguments': {},
         'token_modes': {
@@ -181,14 +208,18 @@ def main():
     mode.add_argument('--generate', action='store_true')
     mode.add_argument('--check', action='store_true')
     args = parser.parse_args()
-    content = json.dumps(build_fixture(), indent=2, ensure_ascii=False) + '\n'
+    goos = host_goos()
+    fixture_file = fixture_path(goos)
+    if args.check and not fixture_file.is_file():
+        raise SystemExit(f'MCP authz matrix fixture missing for {goos}: {fixture_file.relative_to(ROOT)}; run --generate on a {goos} host')
+    content = json.dumps(build_fixture(goos), indent=2, ensure_ascii=False) + '\n'
     if args.check:
-        if FIXTURE.read_text(encoding='utf-8') != content:
-            raise SystemExit('MCP authz matrix fixture stale; run --generate and review the diff')
+        if fixture_file.read_text(encoding='utf-8') != content:
+            raise SystemExit(f'MCP authz matrix fixture stale for {goos}; run --generate on a {goos} host and review the diff')
     else:
-        FIXTURE.write_text(content, encoding='utf-8')
+        fixture_file.write_text(content, encoding='utf-8')
     fixture = json.loads(content)
-    print(f"PASS MCP authz matrix oracle: {len(fixture['profiles'])} profiles x {len(fixture['tools'])} tools x "
+    print(f"PASS MCP authz matrix oracle ({goos}): {len(fixture['profiles'])} profiles x {len(fixture['tools'])} tools x "
           f"{len(TOKEN_MODES)} token modes = {len(fixture['cases'])} cases")
 
 
