@@ -306,38 +306,54 @@ Still open:
 | `Touch ID skipped` warning on a host with a GUI session | not printed | not printed; the warning branch is only exercised against the oracle on hosts without one (unit test in the binary on others) |
 | `FlushManifestUpdates`, filesystem-sync reports, git relocation of `Open` | run on open | not part of the Rust open |
 
-## SET-004b fix round: entry-ciphertext header cap and delta-review follow-ups
+## SET-004b/c fix rounds: entry-ciphertext header validation and delta-review follow-ups
 
 Pinned against the non-CGO Go oracle (`set_differential`, `zero_key_differential`, `cli_differential`,
 `auth_differential`, `edit_differential`, `add_form_differential`, `error_taxonomy`, `session_commands`,
-`write_commands`) and, for the frozen manpage corpus, the freshly built pinned oracle
-(`make output-modes-cli-differential`).
+`write_commands`). `output_modes` (the frozen manpage corpus and the live
+`touch_id_availability_matches_go_in_the_same_sandbox`) is **not** pinned against that oracle: it needs the
+CGO-enabled oracle that `make output-modes-cli-differential` builds with a plain `go build` (the non-CGO
+binary cannot report Touch ID), and it SKIPs visibly without `SYMVAULT_OUTPUT_MODES_GO_BINARY`.
 
-- **Entry ciphertext is untrusted; the `age` crate is superlinear in the length of a header line.** A
-  crafted `entries/w/zz-evil.age` (a 64 KiB `-> X25519 zzz…` line; a git pull or rsync can drop one in)
-  made `list` take 53 s in the review and 50-125 s in a debug build here (Go 0.1-1 s; the open-time
-  manifest reconcile and every later `get`/`list` reached the file). Every
-  `age::Decryptor::new` fed bytes the vault did not just produce is now preceded by
-  `symvault_crypto::entry_header_refused` (Go's 2 MiB header cap plus a 1 KiB line cap): `decrypt`,
-  `decrypt_bounded` (entries, manifest, `grant_key`, doctor round trip), `inspect_argon2id_policy`
-  and the two probes of the FFI `agehdr` diagnostic walk. `decrypt_scrypt`, `decrypt_argon2id*` and
-  `recover_zero_key_identity*` keep the stricter identity-only guard (16 KiB header budget, 1 KiB line,
-  1024 stanzas), which a multi-recipient entry would exceed, so entries do not get it. Every line Go
-  writes is far below 1 KiB: `age.Encrypt` emits only X25519 (`-> X25519 <43>`, 53 bytes), scrypt and
-  Symaira's argon2id stanzas (< 100 bytes), body lines are 64 columns and the footer is 48 bytes; age 1.3.2
-  adds no grease stanza outside its plugin client. A 171-recipient entry (header over 16 KiB) still decrypts.
-  Regression tests: `symvault-crypto` `entry_header_line_cap_…` (cap boundary at exactly 1 KiB, wide
-  header accepted) and `oversized_entry_header_line_is_refused_quickly_…` (all five entry points),
-  `symvault-store` `oversized_entry_header_line_never_reaches_the_age_parser` (open + reconcile + list +
-  get + verify + rebuild under 10 s; with the cap removed it fails at 20 s on the single `get`).
-  **How a capped entry fails (Rust-safer deviation):** `list` exits 0 and names the file, as in Go; `get`
+- **Entry ciphertext is untrusted; the `age` crate's header parser is superlinear in line length, stanza count
+  and body lines (SET-004b/c).** A crafted `entries/w/zz-evil.age` (a git pull or rsync can drop one in) made
+  `list` take 53 s in the review and 50-125 s in a debug build here; Go parses every shape below in 0.1-0.4 s.
+  The crate re-parses the whole header after each line it reads, so cost is lines x bytes. Debug-build
+  measurements of the bare crate: 64 KiB line about 60 s; 1000 tiny stanzas (6 KiB) 10.6 s, 2000 (12 KiB) 67 s;
+  one stanza with 200 body lines 21.5 s; 32 x 1 KiB stanzas 14.9 s; a 2 MiB header over 100 s. SET-004b capped
+  only the line length (1 KiB) and the 2 MiB total, which left all but the first shape open.
+  **Fix:** `symvault_crypto::entry_decryptor` (used by `decrypt`, `decrypt_bounded` for entries, manifest,
+  `grant_key`, doctor round trip, and both probes of the FFI `agehdr` walk) first runs the strict, one-pass
+  `entry_header_extent`: exact `age-encryption.org/v1` intro, 1..=1024 stanzas (Go's `maxRecipientStanzas`) of
+  only the types the vault writes (`X25519` with one 43-character argument; `scrypt` with two; `argon2id` with
+  up to four; rust-age's random `*-grease` stanza with at most three body lines), opening lines of at most
+  1 KiB, bodies as 64-column lines closed by a short one, a 43-character `--- ` footer, 2 MiB cap. Anything
+  else is `malformed age envelope` without reaching the crate (Go would skip an unknown stanza type; the vault
+  never writes one). An admitted header is then handed to the crate through `HeaderReader`, whose single
+  `read_until` returns the whole header (found by that scan), so the crate parses it once. The identity-file
+  paths (`decrypt_scrypt`, `decrypt_argon2id*`, `inspect_argon2id_policy`, `recover_zero_key_identity*`) keep
+  their stricter `identity_header_refused` budget and now also read through `HeaderReader` via
+  `linear_decryptor` (a 1000-stanza identity file within the budget used to cost 10-20 s). A 171-recipient entry
+  (17 KiB header) and a 1023-recipient entry still decrypt.
+  Tests: `symvault-crypto` `entry_header_validator_accepts_everything_the_vault_writes`,
+  `rust_age_grease_stanzas_of_every_size_are_admitted`,
+  `hostile_entry_headers_are_refused_in_microseconds_by_every_entry_decrypt` (12 shapes, one per dimension,
+  each under 2 s), `identity_files_get_their_header_in_one_linear_pass`,
+  `header_extent_stops_at_the_footer_and_leaves_the_payload_alone`; `symvault-store`
+  `hostile_entry_headers_never_reach_the_age_parser` (open + reconcile + list + get + verify + rebuild over
+  five shapes under 10 s). With the validator replaced by the SET-004b rule, the store test fails (the crafted
+  header reaches the parser: `decryption failed` instead of `malformed age envelope`).
+  **Measured worst case, end to end (debug Rust binary vs Go oracle, `list` / `get` on one crafted entry):**
+  Rust 0.2-0.4 s for every shape, up to the 2 MiB headers, Go 0.06-0.4 s (one run per shape, wall clock
+  including process start).
+  **How a refused entry fails (Rust-safer deviation):** `list` exits 0 and names the file, as in Go; `get`
   exits 1 in both. Go prints `Error: cannot read entry: cannot read entry w/zz-evil: decryption failed: invalid
   X25519 recipient block: decryption failed: invalid X25519 recipient block` (Go's parser accepts the line and
   rejects the block); Rust prints `Error: cannot read entry: entry ciphertext is invalid: malformed age
   envelope`, the text of every other envelope the crate cannot parse. Exit status matches; the Go wording for
-  an over-long header line is not reproduced (the FFI diagnostic still produces Go's text through its own
-  linear parser, and only its `age`-crate probes are guarded: an otherwise valid header with an over-long
-  extra line reports Go's `malformed header (N bytes)` fallback instead of the key-dependent text).
+  a hostile header is not reproduced (the FFI diagnostic still produces Go's text through its own linear
+  parser, and only its `age`-crate probes are guarded: an otherwise valid header the validator refuses reports
+  Go's `malformed header (N bytes)` fallback instead of the key-dependent text).
 - `atomic_write` in `zero_key.rs` now `fchmod`s the temporary file to the requested mode after creating it,
   like `os.CreateTemp` + `File.Chmod`: under umask 0277 `identity.age` and `identity.age.bak` end up 0600 (they
   were 0400). Pinned by `heal_files_keep_mode_0600_under_a_restrictive_umask_like_go` (fails without the
