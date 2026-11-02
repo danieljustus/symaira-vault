@@ -1047,10 +1047,11 @@ endef
 AREA_KDF_MIGRATION_TESTS := 10
 # The unit-test count of `cargo test -p symvault-mcp --all-targets` (non-Windows)
 # that the HTTP, MCP and API workflows assert exactly. They still hard-code 246,
-# which the tree outgrew (296 at the merge of local/rust-port 6ac34423); the
+# which the tree outgrew (296 at the merge of local/rust-port 6ac34423, 304 at
+# ca0f2300 after the MCP authz-order tests); the
 # gate asserts the real count, so a shrunken run still fails. Raise it together
 # with the new tests (and the workflows' constant when they run again).
-AREA_MCP_TEST_COUNT := 296
+AREA_MCP_TEST_COUNT := 304
 
 .PHONY: area-oracle-runner
 area-oracle-runner:
