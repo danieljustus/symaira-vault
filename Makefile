@@ -1255,18 +1255,25 @@ $(AREA_VENV)/.ready: scripts/rust-port/tui-validation-requirements.txt
 tui-harness-check: $(AREA_VENV)/.ready
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_harness_test.py
 
+# tui_contract.py rebuilds the CLI from source with the acceptance profile
+# below and compares bytes, so the binary under test is built the same way, in
+# its own target dir (it would otherwise rebuild every crate of the shared
+# target dir in a different profile).
+TUI_TARGET := $(AREA_EVIDENCE)/tui-candidate
+TUI_BUILD_ENV := CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
+
 tui-contract: $(AREA_VENV)/.ready
 	@rm -rf "$(AREA_EVIDENCE)/tui" && mkdir -p "$(AREA_EVIDENCE)/tui"
-	$(AREA_BUILD_CLI)
+	CARGO_TARGET_DIR="$(TUI_TARGET)" $(TUI_BUILD_ENV) $(CARGO) build -p symvault-cli --bin symvault --locked
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_harness_test.py
 	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
-		--rust-cli "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json"
+		--rust-cli "$(TUI_TARGET)/debug/symvault" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json"
 	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
-		--rust-cli "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json" --validate-receipt \
+		--rust-cli "$(TUI_TARGET)/debug/symvault" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json" --validate-receipt \
 		--candidate "$$(git rev-parse HEAD)" \
 		--expected-receipt-sha256 "$$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$(AREA_EVIDENCE)/tui/native-tui.json")"
 	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_mutation_test.py \
-		--rust-cli "$(AREA_CLI)" --native-receipt "$(AREA_EVIDENCE)/tui/native-tui.json" \
+		--rust-cli "$(TUI_TARGET)/debug/symvault" --native-receipt "$(AREA_EVIDENCE)/tui/native-tui.json" \
 		--receipt "$(AREA_EVIDENCE)/tui/native-mutation.json"
 
 rust-gates-core: store-differential audit-differential
