@@ -14,6 +14,10 @@
 # must execute exactly that list. Every target runs even after a failure (like
 # `make -k`); the exit status is 1 when any failed or the list did not match.
 #
+# Run with a 1-minute load average below about 16 (`uptime`): the slow-reader and
+# signal contracts are timing-sensitive, and the log carries an `area-load:`
+# line per target.
+#
 # Area targets edit files of a scratch copy only (http-write-contract), but
 # should a signal or a defect ever change tracked files of this tree, the guard
 # below restores them (when the run started clean) and fails the run.
@@ -88,6 +92,9 @@ ran=""
 for target in $targets; do
   started=$SECONDS
   echo "area-target-begin: $target"
+  # Timing-sensitive contracts (http-write slow reader, signal-process) fail
+  # under heavy host load; the load average at start makes such a log readable.
+  echo "area-load: $target $(uptime | sed 's/.*load averages*: *//')"
   # A background job (own process group, see `set -m`) so that a signal reaches
   # the trap while make runs; stdin stays attached (non-interactive background
   # jobs default to /dev/null).
