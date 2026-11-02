@@ -262,6 +262,7 @@ authMethod entries of `config_sections_contract` are gone (the loader matches Go
   `config.yaml passes validation` for `audit.maxSizeMb: 0` where Go warns about `audit.maxFileSize`
   (`config validate` itself agrees; recorded as the open divergence `load_audit_max_size_mb_zero`, which
   replaced the two entries `agents_scalar` and `alias_value_for_string_field` that this change closed).
+  (Closed by CONFIG-RESID: the typed config carries the audit size, so the doctor check agrees.)
 - A typed-decode error whose quoted value is cut inside a multi-byte character is rendered with
   U+FFFD by the loader (`String::from_utf8_lossy`); `config set` still prints Go's raw bytes.
 - A non-string scalar in a string field decodes to its text in Go. (Closed by CONFIG-SECTIONS-001:
@@ -334,7 +335,8 @@ configs; 344 of 4,767 comparisons before).
 
 ### Residuals (probed, not fixed)
 
-- The sweep's 59 remaining differences are all outside the section parsers: 41 inputs Go rejects and
+- (All of the following except `profiles: {p: null}` are closed by CONFIG-RESID, below.) The sweep's 59
+  remaining differences are all outside the section parsers: 41 inputs Go rejects and
   native accepts — `paymentPolicies` (Config.Validate's instrument / limit / agent-reference checks are
   not ported: the native `Config` has no `paymentPolicies` section; open divergences
   `load_payment_policy_without_instrument`, `load_agent_payment_policy_unknown`) and `audit.maxSizeMb:
@@ -357,9 +359,10 @@ configs; 344 of 4,767 comparisons before).
   agent) name, Go attributes the written fields to that other section. The native tree only withholds them
   from the section the alias resolves to (the case Go's own lookup reaches), so a second, real section named
   like the anchor does not inherit them.
-- `agents.*.perToolRedactFields`, `dynamicProviders`, `pre_call_hooks`, `post_call_hooks`, `paymentPolicy`,
+- `agents.*.perToolRedactFields`, `dynamicProviders`, `pre_call_hooks`, `post_call_hooks`,
   `scan_patterns`, `mcp.perplexity` are decoded and type-checked but not carried by the native
-  `AgentProfile`/`McpConfig` (unchanged).
+  `AgentProfile`/`McpConfig` (unchanged; `paymentPolicy` and `paymentPolicies` are carried since
+  CONFIG-RESID).
 - A key written both as an integer and as the same text under a merge (`1: a` own, `"1"` merged) is one
   key here and two in Go's `mergedFields` (interface-typed keys).
 - An explicitly empty or null `vault.authMethod` loads as `""` in Go and `passphrase` in Rust. No command
@@ -373,6 +376,179 @@ configs; 344 of 4,767 comparisons before).
   with key "x"` (exit 1) where Go loads it (exit 0); `config validate` and `agent list` agree with Go.
 - `get`/`set` observations of `custom_tag_on_value` (node layer, `textCommands`) are no longer recorded
   with the promoted case; they were never part of the `accepted` class.
+
+## CONFIG-RESID: audit and paymentPolicies validation, deprecation warnings, 2026-11-02
+
+Closes the residuals the CONFIG-SECTIONS-001 sweep left (136 differences over its 1,589 configs x 3
+commands = 4,767 comparisons: 82 inputs Go rejects and native accepted, 51 that differed only in
+stderr, 3 `profiles: {p: null}`).
+
+- **`Config::validate` checks `audit` and `paymentPolicies`.** `Config` now carries
+  `audit_max_file_size` (`maxSizeMb` x 1 MiB in wrapping `int64`, present only when the file has an
+  `audit` mapping; a written `maxSizeMb` that is `null` or empty decodes to zero, as in Go),
+  `payment_policies` and `AgentProfile::payment_policy`, all read from the yaml.v3-coerced tree
+  (`parse_audit_max_file_size`, `parse_payment_policies`). The checks, their texts and their order are
+  `validatePaymentPolicies` / `validateDecimalString` / `validateAgentPaymentPolicies` of
+  `config_validate.go`, placed where Go's `Validate` puts them (audit before clipboard; payment policy,
+  then agent reference, before Argon2id). `config validate`, `--json`, the doctor check
+  `vault.config.validates` and the KDF migration all go through the one validator;
+  `config_fix.rs` no longer inserts the audit error itself and keeps the audit size in the core config
+  in step when `--fix` repairs it. Go ranges over the policy and agent maps in random order and returns
+  the first failing entry; the native validator reports the first in name order (like the existing
+  agent loops), and no recorded case has two failing entries in one map.
+- **Deprecation warnings reach stderr.** `symvault_core::config::set_warn_hook` is Go's
+  `config.SetWarnFunc`; the CLI installs `config::warn_sink` (Go's `cliout.Warnf`: the message plus a
+  newline on stderr, colour 220 only when stderr and stdout are terminals and `NO_COLOR` is empty) after
+  argument parsing. With a sink installed `Config::load` / `Config::load_from_bytes` emit each warning
+  in load order (`envWhitelist`, then `mcp.approval_required`, then `clipboard.printByDefault`, the last
+  once per process) **even when the load then fails**, as Go does. Without a sink (library users, unit
+  tests) the loaders still drop them. Recorded Go behaviour that is easy to get wrong: `--quiet` does
+  **not** silence them (Go hands `ctx.QuietMode` to `cliout` before cobra parses the flags, so the
+  persistent flag never reaches `cliout.Warnf`; `--color` does not either), a null `envWhitelist` and
+  `approval_required: false` do not warn, a merged `approval_required: true` does, a rejected or
+  undecodable document warns about nothing it did not reach.
+- **Deliberate deviation: `profiles: {p: null}`.** Go dereferences the nil `*Profile` in
+  `mergeTopLevel` (`config_merge.go:106`) and crashes: `panic: runtime error: invalid memory address or
+  nil pointer dereference [signal SIGSEGV ...]` in `config.mergeTopLevel` <- `LoadFromBytes`
+  (`config_load.go:189`) <- `Load`, exit 2 with a goroutine trace on stderr. The native CLI refuses the
+  document (`profiles.p: profile must not be null`, exit 6, `agent list` exit 1). A crash is not
+  behaviour to reproduce and the trace is not a stable byte contract (it carries build paths), so no
+  fixture records it; the refusal is pinned by the core unit test of the loader.
+
+Evidence: `testdata/port/cli/config-yaml-syntax.json` (now 249 cases, 29 open divergences, 957
+comparisons; the 183 earlier cases are byte-identical, only `oracle.generator_digest` changed; the four
+open divergences `load_audit_max_size_mb_zero`, `load_audit_max_size_mb_null`,
+`load_payment_policy_without_instrument` and `load_agent_payment_policy_unknown` became cases) gained 66
+cases recorded from the pinned Go binary (`resid_*`: the audit and payment-policy checks and every
+message of `validateDecimalString`, the validation order, Go's integer coercions for `maxSizeMb` and
+policy names, and the warnings on `config validate`, `--json`, `--quiet`, `agent list` and `doctor`).
+`config_resid_outcomes_are_pinned_to_what_go_prints` names the outcomes and mutates three expectations
+to prove the replay notices a missing check or warning. Re-measured with the CONFIG-SECTIONS sweep
+(1,589 configs x 3 commands = 4,767 comparisons, plus 353 adversarial inputs x 3 and the 26 fix-round
+inputs x 3): **0** Go-rejects/native-accepts, **0** stderr-only differences, the only remaining
+difference is `profiles: {p: null}` (3 comparisons, above).
+
+### Residuals (probed, not fixed)
+
+- (Closed by CONFIG-WRITER.) `symvault doctor` printed every warning 8 times where Go printed it 9 times:
+  Go's `checkPasswordStrength` makes one more config load (`vault.List`), now mirrored. Commands with a
+  single load (`agent list`, `agent profile show`, `config set`'s post-update reload, `config validate`) match.
+- (Closed by CONFIG-WRITER.) `doctor --fix` and `config validate --fix` dropped `paymentPolicies` and an
+  agent's `paymentPolicy`, and the doctor fixer lacked Go's fixes for `audit.maxFileSize` and
+  `clipboard.autoClearDuration`; see the CONFIG-WRITER section for the writer, the fixes and the declared
+  deviation (Go itself drops `paymentPolicies`).
+
+## CONFIG-WRITER: Rust config rewrites keep what Go keeps, 2026-11-02
+
+Review of CONFIG-RESID found that every `save_to` caller (`agent install`/`upgrade`/`uninstall`, `remote`,
+`doctor --fix`, the `config validate --fix` renderer) lost data on rewrite. Measured: `agent uninstall other
+--yes` on a config with `agents.bot.paymentPolicy` dropped the policy, `skillVersion` and the whole `audit`
+section; Go kept them.
+
+- **The typed `Config` now models and writes `audit`, `logging`, `security`, `scan_patterns` and the full
+  `paymentPolicies`** (`AuditConfig`, `LoggingConfig`, `SecurityConfig`, `ScanPattern`, `PaymentPolicy`),
+  parsed from the same yaml.v3-coerced tree as the other sections. `config_fix.rs` lost its private `Extras`
+  carrier and its own renderer: `Config::to_yaml_bytes` is the one writer. `Config::audit_max_file_size`
+  became `Config::audit` (`max_file_size` in bytes, `max_backups`, `max_age_days`).
+- **Agent profile writer in Go's struct order:** `skillVersion`, then `exposePaymentValues`, then
+  `paymentPolicy` close the block (`exposePaymentValues` used to sit after `exposeValueTools`); the fields the
+  writer never emitted are now written: `perToolRedactFields`, `approvalTimeout`, `allowed_tools`,
+  `max_reads_per_hour|day`, `max_secrets_in_session`, `dynamicProviders`, `allowedEnvVars` (all but
+  `perToolRedactFields` and `dynamicProviders` were already parsed; those two are parsed now, with Go's merge
+  rule), `promptInjectionMode`. A dropped `allowed_tools` list widens an agent's
+  permissions on the next load, so this was a security-relevant loss and not only a cosmetic one.
+- **Declared Rust-safer deviation:** Go's `SaveTo` copies a fixed field list into a fresh struct, so it
+  *drops* the top-level `paymentPolicies` and `security`; after `doctor --fix` an agent's `paymentPolicy`
+  then dangles and the next load fails validation. Rust keeps both sections (`paymentPolicies` last, `security`
+  between `logging` and `vaultDir`, the struct positions). Go evidence: the recorded bytes of
+  `testdata/port/config/rewrite.json` and the live oracle in `config_rewrite_differential.rs`. Entry 1 and 2
+  of `upstream-go-bugs.md`.
+- **Evidence (Go-recorded, byte level):** `scripts/rust-port/cmd/configrewritegen` records real Go
+  `Load` -> mutation -> `SaveTo` runs (21 in the first round, 47 after the fix round) (oracle `690647c5`, source digest enforced) into
+  `testdata/port/config/rewrite.json`; `config_rewrite_contract.rs` requires the Rust bytes minus exactly the
+  two declared sections to equal Go's, checks the declared sections survive, and carries negative controls
+  (dropping `paymentPolicy`, `skillVersion`, the `audit` block or reordering fields is rejected). Live:
+  `config_rewrite_differential.rs` runs `agent uninstall` (two agents) and `doctor --fix` on the Go binary and
+  on Rust and compares stdout, stderr, exit status and the resulting `config.yaml`. Gate:
+  `make config-rewrite-differential` (`scripts/rust-port/check_config_rewrite.sh`; generation is the explicit
+  `make config-rewrite-fixtures-generate`, `--check` never writes).
+- **Doctor fixer:** `fix_config_validation` gained Go's fixes 3 and 4 (`audit.maxFileSize <= 0` -> 100 MiB,
+  `clipboard.autoClearDuration < 0` -> 0). Go prints nothing for them, so there is no report line to mirror;
+  the live differential repairs both and compares the file.
+- **Doctor warning count:** `check_password_strength` mirrors Go's extra `vault.List` -> `loadVaultConfig`
+  load (the reuse check shares it through Go's mtime-keyed cache). A `doctor` run now prints each deprecation
+  warning 10 times (default) / 9 times (`--no-network`) on both sides.
+- **`__complete`** installs the warning sink with the rest of startup, so completion prints loader warnings.
+- **`config validate`** (text and `--json`) and the doctor message split the joined validation errors on
+  `'\n'` like Go (`resid_payment_policy_name_newline`; the fixture is `config-yaml-syntax.json`, now 250
+  cases / 960 comparisons, the 249 earlier cases byte-identical, only `oracle.generator_digest` changed after
+  the two comment fixes in `yamlsyntaxgen`: `--quiet` does **not** silence the loader warnings).
+
+### CONFIG-WRITER fix round (review of e74bdd9c: REQUEST_CHANGES)
+
+- **Scalars and keys are emitted by the yaml.v3 emitter port** (`symvault-gojson` `yaml::string_in_mapping`,
+  `string_in_sequence`, `mapping_key`), at the depth the writer puts them. Before, `yaml_scalar` handed a
+  multi-line string to `serde_yaml_ng`, which wrote a block scalar at the wrong indentation: the rewritten
+  `config.yaml` no longer loaded in Go or Rust (`scan_patterns[].description: |`, `allowedPaths`, `dynamicProviders`,
+  `perToolRedactFields`, `paymentPolicies`, vault/git/profile strings). Quoting (`'&amp'`, `'#c'`,
+  `"2026-01-02"`, `"\U0001F600"`), the `? key` / `:` form of a multi-line key and `[]` for an empty list under
+  `perToolRedactFields`/`dynamicProviders` now follow yaml.v3 byte for byte.
+- **Durations** are `time.Duration.String()` (`90s` -> `1m30s`, `1.5s` -> `1.5s`), also `sessionTimeout`,
+  `sessionMaxLifetime`, the mcp timeouts and `oauth` TTLs.
+- **`McpConfig` models `otlp_endpoint`, the trusted-proxy allowlist `trusted_proxy_ips`,
+  `approval_tls_cert_file` and `approval_tls_key_file`** and writes them in Go's order (`port`, `bind`,
+  `httpTokenFile`, `otlp_endpoint`, `stdio`, timeouts, `rate_limit`, `trusted_proxy_ips`,
+  `metrics_auth_required`, `tls_*`, `approval_tls_*`, `mtls_enabled`, `allow_insecure_bind`). A rewrite used to
+  disable approval mTLS and the trusted-proxy allowlist silently. `mcp.oauth` is kept (Go drops it:
+  `upstream-go-bugs.md` 8).
+- **A true capability is always written** (`canManageConfig`, `canUseClipboard`, `canUseAutotype`,
+  `canReadValues`, `autoUnseal` on a custom profile were dropped, which turned them off on the next load).
+- **`approvalTimeout: 0s`** is modelled (`AgentProfile::approval_timeout_zero_set`, the loader records a written
+  zero) and written back; it reloaded as the 5 minute default before.
+- **`vault.last_rotated`** is printed like `time.Time.Format(RFC3339Nano)` for every timestamp shape yaml.v3
+  reads (`2026-1-2`, `2026-01-02 03:04:05`, fractions, offsets); a quoted string made Rust's own loader reject
+  the file.
+- **Evidence:** the recorded fixture now has 47 Go cases (multi-line description, multi-line list items and keys
+  in every position, full mcp fields, stdio + httpTokenFile, oauth, durations, quoting, emoji, date-like
+  strings, empty lists, `approvalTimeout: 0s`, tier-only profiles, false/zero values, timestamps) plus the
+  **field-coverage probe** in `configrewritegen`: it walks every yaml key of Go's `Config` by reflection and
+  fails unless some case input sets it, and unless the set of keys Go reads but `SaveTo` does not write back
+  equals `droppedBySaveTo` (`dropped_by_save_to` in the fixture, `agents.*.pre_call_hooks|post_call_hooks`,
+  `clipboard.printByDefault`, `envAllowlist|envWhitelist`, `git.author|email`, `mcp.approval_required|oauth|perplexity*`,
+  `paymentPolicies*`, `security*`, `vault.listing_cache_ttl|manifest_generation|sync*`). The Rust contract proves
+  the probe case writes every key outside that set. `config_rewrite_differential.rs` additionally runs
+  `agent uninstall` on a multi-line config and on a full-mcp config against the live Go binary and loads the
+  file Rust wrote with **both** `symvault config validate` binaries.
+
+### Residuals (probed; every difference below is a `declared_line_differences` entry of `rewrite.json`
+with its reason, or a byte-level residual named here)
+
+- **Rust writes, Go drops (declared, `rust_adds`):** `mcp.oauth` (Go: TTLs fall back to defaults);
+  `git.auto_push: false` / `auto_pull: false` and `clipboard.copyByDefault: false` (Go's `omitempty` drops them
+  and the loader default `true` turns the opt-out into an opt-in: the older CONFIG-LOAD-001 deviation);
+  `mcp.port: 0`, `read_timeout: 0s`, `rate_limit: 0`, `metrics_auth_required: false` (Go drops them and the
+  defaults 8080 / 10s / 60 / true replace them); the top-level `paymentPolicies` and `security`.
+- **Go writes, Rust omits (declared, `go_only`):** an explicit `false` for `canRunCommands`, `canManageConfig`,
+  `canUseClipboard`, `canUseAutotype`, `canReadValues`, `autoUnseal`, `exposePaymentValues` on a *custom*
+  profile (Go's `*bool` is set; Rust's `bool` omits it, which reloads as the same `false`). Tiered and built-in
+  profiles write their full preset set on both sides (cases `tier_only_profiles`, `tier_with_overrides`).
+- **Double-quoted where yaml.v3 is unsafe (declared, `go_saved_faithful: false`):** a string that starts with a
+  line break (yaml.v3 drops the break) and a string that starts with a space inside a sequence item or a
+  mapping nested in one (yaml.v3's `|4` indicator is wrong there and the file does not parse back):
+  `upstream-go-bugs.md` 9. Cases `leading_break_*`.
+- **Other explicit zeros still unwritten:** `max_reads_per_hour: 0`, `max_reads_per_day: 0`,
+  `max_secrets_in_session: 0`, `skillVersion: ''`, `paymentPolicy: ''`, `exposePaymentValues: false`, an explicit
+  `5m` / `off` on a built-in preset; no non-zero value is lost and each reloads as its default.
+- **Kept by Rust, dropped by Go (declared, `rust_adds`):** `git.author`/`email`, `mcp.perplexity` (its `api_key`
+  too), `mcp.approval_required`, `clipboard.printByDefault` (`upstream-go-bugs.md` 10); an explicit empty
+  `allowedExecutables` and `approvalMode: null` of a tiered profile, which Go's rewrite turns into the tier
+  preset's grant (`upstream-go-bugs.md` 11); `canWrite: false` of a custom profile that never set it.
+- **Not modelled in Rust, dropped like Go:** `agents.*.pre_call_hooks|post_call_hooks`,
+  `envAllowlist|envWhitelist`, `vault.sync`/`listing_cache_ttl`/`manifest_generation`
+  (`upstream-go-bugs.md` 3, 4, 6).
+- Go loads the global config once at startup for every `__complete` and for `completion <shell>`; Rust's
+  completion path loads only what the completer needs, so Go prints a loader warning twice / once where Rust
+  prints it once / not at all (`__complete get ''`, `completion bash`). Ordinary commands match.
 
 ## SET-003 fix round: vault-open errors, hidden reads, piped input
 

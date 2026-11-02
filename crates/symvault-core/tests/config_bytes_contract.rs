@@ -589,10 +589,13 @@ fn go_writer_cases_reload_with_rust_semantics() {
                     auto_pull: false,
                     auto_pull_interval: std::time::Duration::ZERO,
                     commit_template: String::new(),
+                    author: String::new(),
+                    email: String::new(),
                 }),
                 clipboard: Some(symvault_core::config::ClipboardConfig {
                     auto_clear_duration: 0,
                     copy_by_default: false,
+                    print_by_default: None,
                 }),
                 ..Config::default()
             };

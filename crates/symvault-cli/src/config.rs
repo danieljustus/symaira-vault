@@ -898,6 +898,12 @@ fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
     }
 }
 
+/// The sink for the loader's deprecation warnings (Go's
+/// `config.SetWarnFunc(cliout.Warnf)`).
+pub(crate) fn warn_sink(message: &str) {
+    self::fix::warnf(message);
+}
+
 /// Implements `symvault config validate [path]`.
 ///
 /// Mirrors Go's `config validate`: load, then run
@@ -981,14 +987,18 @@ pub fn validate(path: &Path, fix: bool, output: &str, quiet: bool) -> Result<(),
 
     let errors = self::fix::validate(&loaded);
     if !errors.is_empty() {
+        // Go splits the joined error text on '\n', so one validation error
+        // that itself spans lines (a policy name containing a newline) is
+        // reported as several entries.
+        let lines: Vec<&str> = errors.iter().flat_map(|error| error.split('\n')).collect();
         if json {
             print_json(
-                &serde_json::json!({ "errors": errors, "valid": false }),
+                &serde_json::json!({ "errors": lines, "valid": false }),
                 quiet,
             )?;
         } else if !quiet {
             println!("Configuration is invalid ({path_display}):");
-            for line in &errors {
+            for line in &lines {
                 println!("  ✗ {line}");
             }
         }

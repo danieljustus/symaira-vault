@@ -71,6 +71,87 @@ pub fn to_string(node: &Node) -> String {
     emitter.out
 }
 
+/// A string as the value of an entry of a block mapping whose emitter
+/// indentation is `mapping_indent` (the column its keys sit at), as it follows
+/// `key:` — without the separating space and without the final line break, so
+/// a caller writes `format!("{key}: {value}\n")`. A multi-line string comes
+/// back as a literal block whose content is indented like yaml.v3 does.
+pub fn string_in_mapping(text: &str, mapping_indent: i32) -> String {
+    string_value(
+        text,
+        scalar_indent(mapping_indent, Parent::MappingValue),
+        mapping_indent,
+    )
+}
+
+/// A string as an item of a block sequence whose emitter indentation is
+/// `sequence_indent` (the column of its `-`); see [`string_in_mapping`].
+pub fn string_in_sequence(text: &str, sequence_indent: i32) -> String {
+    string_value(
+        text,
+        scalar_indent(sequence_indent, Parent::SequenceItem),
+        sequence_indent,
+    )
+}
+
+/// `parent_indent` is the indentation of the collection holding the scalar.
+///
+/// Two yaml.v3 defects make a literal block unsafe for a config file that is
+/// read back, so those strings are written double-quoted instead (every parser
+/// reads them back equal):
+///
+///  - a value that starts with a line break loses it: the emitter writes the
+///    break once, where the block scalar needs the header's break plus an empty
+///    line;
+///  - a value that starts with a space or break gets an indentation indicator
+///    of `4`, which a parser reads relative to the parent's column, while the
+///    content sits at the collection's emitter indent. The two agree only when
+///    the content is exactly four columns deeper (every sequence item and a
+///    mapping nested in one breaks: the file no longer parses);
+///  - a value that starts with a TAB: yaml.v3 writes the tab as the first
+///    content character of the block, and its scanner (and every other one)
+///    rejects it as indentation (`found a tab character where an indentation
+///    space is expected`).
+fn string_value(text: &str, content_indent: i32, parent_indent: i32) -> String {
+    let mut emitter = Emitter::new();
+    emitter.indention = false;
+    emitter.literal_parent = Some(parent_indent);
+    emitter.string(text, false, content_indent);
+    let mut out = emitter.out;
+    if out.ends_with('\n') {
+        out.pop();
+    }
+    out
+}
+
+/// A mapping key of a block mapping whose emitter indentation is
+/// `mapping_indent`, up to and including the `:` (a key that is multi-line or
+/// longer than 128 bytes takes the `? key` / `:` form). A caller writes
+/// `format!("{key} {value}\n")` or `format!("{key}\n")`.
+pub fn mapping_key(key: &str, mapping_indent: i32) -> String {
+    let mut emitter = Emitter::new();
+    emitter.column = mapping_indent;
+    if is_simple_key(key) {
+        emitter.string(key, true, mapping_indent);
+        emitter.write_indicator(":", false, false, false);
+    } else {
+        emitter.write_indicator("?", true, false, true);
+        // The same yaml.v3 literal-block defects as `string_value`: a key that
+        // starts with a line break loses it (so `"\na\nb"` and `"a\nb"` would
+        // collide on reload), and one that starts with a space needs the
+        // indentation indicator to match the content column.
+        emitter.literal_parent = Some(mapping_indent);
+        emitter.string(
+            key,
+            false,
+            scalar_indent(mapping_indent, Parent::MappingValue),
+        );
+        emitter.write_indent(mapping_indent);
+        emitter.write_indicator(":", true, false, true);
+    }
+    emitter.out
+}
+
 /// yaml.v3's `best_indent` for `Marshal`.
 const BEST_INDENT: i32 = 4;
 
@@ -81,6 +162,8 @@ struct Emitter {
     column: i32,
     whitespace: bool,
     indention: bool,
+    /// See [`string_value`]: set only for scalars written into a config file.
+    literal_parent: Option<i32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -109,6 +192,7 @@ impl Emitter {
             column: 0,
             whitespace: true,
             indention: true,
+            literal_parent: None,
         }
     }
 
@@ -263,6 +347,17 @@ impl Emitter {
         }
         if style == Style::Literal && (!analysis.block_allowed || simple_key) {
             style = Style::DoubleQuoted;
+        }
+        if style == Style::Literal
+            && let Some(parent) = self.literal_parent
+        {
+            let first = text.chars().next();
+            if first.is_some_and(is_break)
+                || first == Some('\t')
+                || (first == Some(' ') && indent != parent + BEST_INDENT)
+            {
+                style = Style::DoubleQuoted;
+            }
         }
         match style {
             Style::Plain => self.write_plain(text),
@@ -617,6 +712,54 @@ mod tests {
         assert_eq!(
             render(json!({"fields": {"notes": "a,b"}, "totp": null})),
             "fields:\n    notes: a,b\ntotp: null\n"
+        );
+    }
+
+    #[test]
+    fn config_file_scalars_follow_the_depth_they_are_written_at() {
+        // A multi-line map value at mapping depth 4 / 8 / a sequence at 12.
+        assert_eq!(string_in_mapping("a\nb", 4), "|-\n        a\n        b");
+        assert_eq!(
+            string_in_mapping("a\nb\n", 8),
+            "|\n            a\n            b"
+        );
+        assert_eq!(
+            string_in_sequence("a\nb", 12),
+            "|-\n              a\n              b"
+        );
+        assert_eq!(string_in_sequence("plain", 12), "plain");
+        assert_eq!(string_in_mapping("a: b", 4), "'a: b'");
+        // Scalars that would read back as another type are quoted.
+        assert_eq!(string_in_mapping("2026-01-02", 4), "\"2026-01-02\"");
+        assert_eq!(string_in_mapping("&amp", 4), "'&amp'");
+        assert_eq!(string_in_mapping("\u{1F600}", 4), "\"\\U0001F600\"");
+        // yaml.v3's own output for these cannot be read back (a sequence item,
+        // a mapping inside one) or loses the break: double-quoted instead.
+        assert_eq!(string_in_sequence(" a\nb", 12), "\" a\\nb\"");
+        assert_eq!(string_in_mapping(" a\nb", 6), "\" a\\nb\"");
+        assert_eq!(string_in_mapping("\na", 4), "\"\\na\"");
+        // A leading TAB cannot start a literal block's content.
+        assert_eq!(string_in_mapping("\ta\nb", 4), "\"\\ta\\nb\"");
+        assert_eq!(string_in_sequence("\ta\nb", 12), "\"\\ta\\nb\"");
+        assert_eq!(string_in_mapping("a\n\tb", 4), "|-\n        a\n        \tb");
+        // At depth 4 the indentation indicator is right and is kept.
+        assert_eq!(string_in_mapping(" a\nb", 4), "|4-\n         a\n        b");
+        // Keys: simple, quoted, and the `? key` form of a multi-line key.
+        assert_eq!(mapping_key("get", 8), "get:");
+        assert_eq!(mapping_key("yes", 8), "\"yes\":");
+        assert_eq!(
+            mapping_key("k\nj", 12),
+            "? |-\n                k\n                j\n            :"
+        );
+        // A key that starts with a line break would lose it as a literal
+        // block (`? |4-` reloads as `a\nb`): double-quoted instead.
+        assert_eq!(mapping_key("\na\nb", 8), "? \"\\na\\nb\"\n        :");
+        assert_eq!(mapping_key("\n", 4), "? \"\\n\"\n    :");
+        assert_eq!(mapping_key("\ta\nb", 8), "? \"\\ta\\nb\"\n        :");
+        // A leading space needs the indicator, which matches at this depth.
+        assert_eq!(
+            mapping_key(" a\nb", 4),
+            "? |4-\n         a\n        b\n    :"
         );
     }
 

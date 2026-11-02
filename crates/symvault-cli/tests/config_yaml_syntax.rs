@@ -110,18 +110,18 @@ struct Fixture {
 }
 
 /// Cases whose Go output the native CLI must reproduce byte for byte.
-const MATCHING_CASES: usize = 183;
+const MATCHING_CASES: usize = 250;
 /// Comparisons the replay executes: every recorded config observation, one
 /// `doctor` run per case and the `agent list` runs.
-const REPLAYED_COMPARISONS: usize = 737;
+const REPLAYED_COMPARISONS: usize = 960;
 /// The `load_*` cases (CONFIG-LOAD-001): what the loader and validator accept
 /// or reject once the bytes parse as YAML.
-const LOAD_CASES: usize = 86;
+const LOAD_CASES: usize = 90;
 /// The CONFIG-SECTIONS-001 cases among them: what the typed decode makes of
 /// each kind of scalar and how the section merge treats it.
-const SECTION_CASES: usize = 54;
+const SECTION_CASES: usize = 58;
 /// Inputs on which the native CLI is known to differ from Go.
-const OPEN_DIVERGENCES: usize = 33;
+const OPEN_DIVERGENCES: usize = 29;
 
 fn fixture() -> Fixture {
     const CONTENT: &[u8] = include_bytes!("../../../testdata/port/cli/config-yaml-syntax.json");
@@ -1032,4 +1032,190 @@ fn section_coercions_are_pinned_to_what_go_prints() {
             "{name}: a wrong coercion went unnoticed"
         );
     }
+}
+
+/// CONFIG-RESID: the `Config.Validate` checks on `audit` and `paymentPolicies`
+/// and the deprecation warnings. The replay above compares every byte; this
+/// names the Go outcomes the packet closed (a refusal where the native CLI used
+/// to accept, a warning on stderr where it used to print nothing), including a
+/// Go quirk that is easy to "fix" by mistake (`--quiet` does not silence the
+/// warnings), and proves a replay notices their absence.
+#[test]
+fn config_resid_outcomes_are_pinned_to_what_go_prints() {
+    let fixture = fixture();
+    let find = |name: &str| -> &Case {
+        fixture
+            .cases
+            .iter()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("{name} is not part of the corpus"))
+    };
+    let observation = |name: &str, command: &str| -> Observation {
+        find(name)
+            .observations
+            .iter()
+            .find(|observation| observation.command == command)
+            .unwrap_or_else(|| panic!("{name} has no {command} observation"))
+            .clone()
+    };
+
+    // Refusals: exit 6 with Go's text on stdout.
+    for (name, text) in [
+        (
+            "load_audit_max_size_mb_null",
+            "audit.maxFileSize: must be greater than 0",
+        ),
+        (
+            "resid_audit_max_size_mb_wraps_negative",
+            "audit.maxFileSize: must be greater than 0",
+        ),
+        (
+            "load_payment_policy_without_instrument",
+            "paymentPolicies.p.instrument: must not be empty",
+        ),
+        (
+            "resid_payment_policy_no_limits",
+            "paymentPolicies.p: must have at least one allowed_merchant or max_amount limit",
+        ),
+        (
+            "resid_payment_policy_limit_without_currency",
+            "paymentPolicies.p.currency: required when max_amount limits are set",
+        ),
+        (
+            "resid_payment_per_transaction_only_minus",
+            "paymentPolicies.p.max_amount.per_transaction: \"-\" is not a valid decimal amount (no digits)",
+        ),
+        (
+            "resid_payment_per_transaction_exponent_scalar",
+            "paymentPolicies.p.max_amount.per_transaction: \"1e3\" is not a valid decimal amount",
+        ),
+        (
+            "load_agent_payment_policy_unknown",
+            "agents.x.paymentPolicy: policy \"abc\" not found in paymentPolicies",
+        ),
+        (
+            "resid_agent_payment_policy_integer_unknown",
+            "agents.x.paymentPolicy: policy \"5\" not found in paymentPolicies",
+        ),
+    ] {
+        let validate = observation(name, "validate");
+        assert_eq!(validate.exit_code, 6, "{name}");
+        assert!(validate.stdout.contains(text), "{name}: {validate:?}");
+    }
+    // Go's Validate order: the audit, clipboard, payment and Argon2id errors,
+    // each after the agent ones, and the policy error before the agent's.
+    let order = observation("resid_validate_error_order", "validate").stdout;
+    let positions: Vec<usize> = [
+        "vaultDir: must not be empty",
+        "agents.x.allowedPaths[0]",
+        "audit.maxFileSize",
+        "clipboard.autoClearDuration",
+        "paymentPolicies.p.instrument",
+        "agents.x.paymentPolicy",
+        "vault.argon2id_time",
+    ]
+    .iter()
+    .map(|text| {
+        order
+            .find(text)
+            .unwrap_or_else(|| panic!("{text} is missing from {order:?}"))
+    })
+    .collect();
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "{order:?}"
+    );
+
+    // Acceptances the checks must not turn into refusals.
+    for name in [
+        "resid_audit_max_size_mb_via_merge",
+        "resid_payment_policy_decimal_forms",
+        "resid_payment_policy_float_scalar_amount",
+        "resid_agent_payment_policy_integer_defined",
+        "resid_agent_payment_policy_empty",
+    ] {
+        assert_eq!(observation(name, "validate").exit_code, 0, "{name}");
+    }
+
+    // Warnings: on stderr of a successful load, once per Load, in load order,
+    // and not silenced by `--quiet` (Go hands the flag to cliout before cobra
+    // has parsed it). `agent list` loads the config too.
+    let three = observation("resid_warn_all_three", "validate");
+    assert_eq!(three.exit_code, 0);
+    assert_eq!(
+        three.stderr,
+        "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead\n\
+         approval_required is deprecated and will be removed in a future version\n\
+         clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead\n"
+    );
+    assert_eq!(
+        observation("resid_warn_all_three", "validate_quiet").stderr,
+        three.stderr
+    );
+    let agent_list = find("resid_warn_env_whitelist")
+        .agent_list
+        .clone()
+        .expect("agent list observation");
+    assert!(agent_list.stderr.starts_with("envWhitelist is deprecated"));
+    for name in [
+        "resid_warn_env_whitelist_null",
+        "resid_warn_mcp_approval_required_false",
+        "resid_warn_clipboard_copy_by_default_wins",
+        "resid_warn_not_when_decode_fails",
+    ] {
+        assert!(
+            !observation(name, "validate").stderr.contains("deprecated"),
+            "{name}"
+        );
+    }
+    // Go prints the warning and then rejects the document.
+    let rejected = observation("resid_warn_then_loader_rejection", "validate");
+    assert_eq!(rejected.exit_code, 6);
+    assert!(rejected.stderr.starts_with("envWhitelist is deprecated"));
+
+    // Negative control: dropping what the packet added from the expectation
+    // must fail the replay.
+    let replay = |name: &str, command: &str, mutate: &dyn Fn(&mut Observation)| {
+        let case = find(name);
+        let bytes = decode_hex(&case.config_hex);
+        let mut expected = observation(name, command);
+        assert_eq!(run_config_observation(&bytes, &expected), None, "{name}");
+        mutate(&mut expected);
+        assert!(
+            run_config_observation(&bytes, &expected).is_some(),
+            "{name}: a missing check went unnoticed"
+        );
+    };
+    replay(
+        "load_payment_policy_without_instrument",
+        "validate",
+        &|expected| {
+            expected.exit_code = 0;
+            expected.stdout = "Configuration is valid (__CONFIG__)\n".to_owned();
+            expected.stderr.clear();
+        },
+    );
+    replay(
+        "load_audit_max_size_mb_null",
+        "validate_json",
+        &|expected| {
+            expected.exit_code = 0;
+            expected.stdout = "{\"path\":\"__CONFIG__\",\"valid\":true}\n".to_owned();
+            expected.stderr.clear();
+        },
+    );
+    replay("resid_warn_env_whitelist", "validate", &|expected| {
+        expected.stderr.clear();
+    });
+    replay(
+        "resid_warn_then_loader_rejection",
+        "validate",
+        &|expected| {
+            expected.stderr = expected.stderr.replacen(
+                "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead\n",
+                "",
+                1,
+            );
+        },
+    );
 }

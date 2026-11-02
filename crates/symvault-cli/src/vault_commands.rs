@@ -118,6 +118,8 @@ pub fn initialize(root: &Path, passphrase: &SecretBytes) -> Result<Identity, Str
             auto_pull: false,
             auto_pull_interval: std::time::Duration::ZERO,
             commit_template: "Update from Symaira Vault".to_owned(),
+            author: String::new(),
+            email: String::new(),
         }),
         ..Config::default()
     };

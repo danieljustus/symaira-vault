@@ -13,10 +13,9 @@
 //! `Configuration repaired successfully.` line goes to stdout (quiet-aware).
 //! Go keeps no backup of the file, and neither does this port.
 //!
-//! The Rust [`Config`] does not model the `audit`, `logging` and
-//! `scan_patterns` sections that Go's `SaveTo` rewrites. [`Extras`] carries
-//! them next to the typed config so that validation, auto-fix and the saved
-//! bytes stay Go-faithful for the shapes the loader accepts.
+//! The typed [`Config`] carries every section Go's `SaveTo` rewrites (`audit`,
+//! `logging`, `scan_patterns`, ...), so the saved bytes come straight from
+//! [`Config::to_yaml_bytes`].
 
 use std::{
     env, fs,
@@ -26,115 +25,16 @@ use std::{
     time::Duration,
 };
 
-use symvault_core::config::{ClipboardConfig, Config, McpConfig};
+use symvault_core::config::{AuditConfig, ClipboardConfig, Config, McpConfig};
 
 /// `DefaultVaultSubdir` in Go's config package.
 const DEFAULT_VAULT_SUBDIR: &str = ".symvault";
 const AUDIT_DEFAULT_MAX_BYTES: i64 = 100 * 1024 * 1024;
-const MIB: i64 = 1024 * 1024;
 
-/// A loaded config plus the sections the typed [`Config`] does not model.
+/// A loaded config.
 #[derive(Clone, Debug)]
 pub(crate) struct Loaded {
     pub(crate) config: Config,
-    pub(crate) extras: Extras,
-}
-
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Extras {
-    audit: Option<Audit>,
-    logging: Option<Logging>,
-    scan_patterns: Vec<ScanPattern>,
-}
-
-/// Go's `AuditConfig` after `mergeAuditConfig`: `MaxFileSize` is in bytes.
-#[derive(Clone, Debug)]
-struct Audit {
-    max_file_size: i64,
-    max_backups: i64,
-    max_age_days: i64,
-}
-
-impl Default for Audit {
-    fn default() -> Self {
-        Self {
-            max_file_size: AUDIT_DEFAULT_MAX_BYTES,
-            max_backups: 5,
-            max_age_days: 30,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct Logging {
-    level: String,
-    format: String,
-}
-
-#[derive(Clone, Debug)]
-struct ScanPattern {
-    name: String,
-    pattern: String,
-    description: String,
-    severity: String,
-}
-
-impl Extras {
-    fn from_bytes(bytes: &[u8]) -> Self {
-        let Ok(document) = serde_yaml_ng::from_slice::<serde_yaml_ng::Value>(bytes) else {
-            return Self::default();
-        };
-        let mut extras = Self::default();
-        if let Some(section) = document.get("audit").and_then(|v| v.as_mapping()) {
-            let mut audit = Audit::default();
-            let field = |name: &str| section.get(name).and_then(serde_yaml_ng::Value::as_i64);
-            if let Some(megabytes) = field("maxSizeMb") {
-                audit.max_file_size = megabytes.wrapping_mul(MIB);
-            }
-            if let Some(value) = field("maxBackups") {
-                audit.max_backups = value;
-            }
-            if let Some(value) = field("maxAgeDays") {
-                audit.max_age_days = value;
-            }
-            extras.audit = Some(audit);
-        }
-        if let Some(section) = document.get("logging").and_then(|v| v.as_mapping()) {
-            let mut logging = Logging {
-                level: "warn".to_owned(),
-                format: "text".to_owned(),
-            };
-            let field = |name: &str| section.get(name).and_then(scalar_text);
-            if let Some(level) = field("level") {
-                logging.level = level;
-            }
-            if let Some(format) = field("format") {
-                logging.format = format;
-            }
-            extras.logging = Some(logging);
-        }
-        if let Some(items) = document.get("scan_patterns").and_then(|v| v.as_sequence()) {
-            for item in items {
-                let field = |name: &str| item.get(name).and_then(scalar_text).unwrap_or_default();
-                extras.scan_patterns.push(ScanPattern {
-                    name: field("name"),
-                    pattern: field("pattern"),
-                    description: field("description"),
-                    severity: field("severity"),
-                });
-            }
-        }
-        extras
-    }
-}
-
-fn scalar_text(value: &serde_yaml_ng::Value) -> Option<String> {
-    match value {
-        serde_yaml_ng::Value::String(text) => Some(text.clone()),
-        serde_yaml_ng::Value::Number(number) => Some(number.to_string()),
-        serde_yaml_ng::Value::Bool(flag) => Some(flag.to_string()),
-        _ => None,
-    }
 }
 
 /// Go's `config.Load`: the error text is exactly what Go prints after
@@ -154,37 +54,13 @@ pub(crate) fn load(path: &Path) -> Result<Loaded, String> {
             .map_err(|error| super::format_go_path_error("open", &read_path, &error))?
     };
     let config = Config::load_from_bytes(&bytes).map_err(|error| error.to_string())?;
-    Ok(Loaded {
-        config,
-        extras: Extras::from_bytes(&bytes),
-    })
+    Ok(Loaded { config })
 }
 
-/// Go's `Config.Validate`, including the `audit.maxFileSize` check that the
-/// typed config cannot make. The message sits where Go's `errors.Join`
-/// emits it: after the agent checks, before the clipboard and Argon2id ones.
+/// Go's `Config.Validate`. `audit.maxFileSize` and `paymentPolicies` are
+/// checked by the core validator, which sees them as typed config fields.
 pub(crate) fn validate(loaded: &Loaded) -> Vec<String> {
-    let mut errors = loaded.config.validate();
-    if loaded
-        .extras
-        .audit
-        .as_ref()
-        .is_some_and(|audit| audit.max_file_size <= 0)
-    {
-        let at = errors
-            .iter()
-            .position(|line| {
-                line.starts_with("clipboard.autoClearDuration")
-                    || line.starts_with("vault.argon2id")
-            })
-            .unwrap_or(errors.len());
-        errors.insert(
-            at,
-            "audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)"
-                .to_owned(),
-        );
-    }
-    errors
+    loaded.config.validate()
 }
 
 /// The `--fix` flow after the first `Load` of `configValidateCmd`.
@@ -330,9 +206,9 @@ fn apply_auto_fixes(loaded: &mut Loaded, load_error: Option<&str>, validation_er
         )
     {
         loaded
-            .extras
+            .config
             .audit
-            .get_or_insert(Audit {
+            .get_or_insert(AuditConfig {
                 max_file_size: 0,
                 max_backups: 0,
                 max_age_days: 0,
@@ -351,6 +227,7 @@ fn apply_auto_fixes(loaded: &mut Loaded, load_error: Option<&str>, validation_er
             .get_or_insert(ClipboardConfig {
                 auto_clear_duration: 0,
                 copy_by_default: false,
+                print_by_default: None,
             })
             .auto_clear_duration = 30;
         modified = true;
@@ -585,6 +462,7 @@ fn home_dir() -> String {
 
 const SUCCESS_256: u8 = 82;
 const ERROR_256: u8 = 203;
+const WARN_256: u8 = 220;
 
 /// Go styles through lipgloss' default renderer, which profiles *stdout*, and
 /// only when stderr is a terminal and `NO_COLOR` is empty. Background
@@ -610,6 +488,7 @@ fn style(text: &str, color: u8) -> String {
             // 16-colour profile: the bright variant termenv picks for the palette.
             match color {
                 SUCCESS_256 => "92".to_owned(),
+                WARN_256 => "93".to_owned(),
                 _ => "91".to_owned(),
             }
         };
@@ -621,6 +500,18 @@ fn hintf(message: &str) {
     let _ = writeln!(err, "{}", style(message, SUCCESS_256));
 }
 
+/// Go's `cliout.Warnf` on stderr: the sink the loader hands its deprecation
+/// warnings to (Go installs the same function with `config.SetWarnFunc`).
+///
+/// `--quiet` does not silence it. Go copies `ctx.QuietMode` into `cliout`
+/// before cobra has parsed any flag, so the persistent flag never reaches
+/// `cliout.isQuiet`, and neither does `--color`: the output is the plain
+/// auto-colour one.
+pub(crate) fn warnf(message: &str) {
+    let mut err = io::stderr().lock();
+    let _ = writeln!(err, "{}", style(message, WARN_256));
+}
+
 fn errorf(message: &str) {
     let mut err = io::stderr().lock();
     let _ = writeln!(err, "{}", style(message, ERROR_256));
@@ -628,8 +519,7 @@ fn errorf(message: &str) {
 
 // --- saving: Go's Config.SaveTo --------------------------------------------
 
-/// The bytes Go's `SaveTo` marshals: the typed config's writer plus the
-/// sections it does not model, in Go's struct order.
+/// The bytes Go's `SaveTo` marshals, from the typed config's writer.
 fn render(loaded: &Loaded) -> Result<Vec<u8>, String> {
     let yaml = loaded
         .config
@@ -647,73 +537,7 @@ fn render(loaded: &Loaded) -> Result<Vec<u8>, String> {
             1,
         );
     }
-    let mut sections = String::new();
-    if let Some(audit) = &loaded.extras.audit {
-        sections.push_str("audit:\n");
-        let megabytes = audit.max_file_size / MIB;
-        if megabytes != 0 {
-            sections.push_str(&format!("    maxSizeMb: {megabytes}\n"));
-        }
-        sections.push_str(&format!("    maxBackups: {}\n", audit.max_backups));
-        sections.push_str(&format!("    maxAgeDays: {}\n", audit.max_age_days));
-    }
-    if let Some(logging) = &loaded.extras.logging {
-        if logging.level.is_empty() && logging.format.is_empty() {
-            sections.push_str("logging: {}\n");
-        } else {
-            sections.push_str("logging:\n");
-            if !logging.level.is_empty() {
-                sections.push_str(&format!("    level: {}\n", yaml_scalar(&logging.level)?));
-            }
-            if !logging.format.is_empty() {
-                sections.push_str(&format!("    format: {}\n", yaml_scalar(&logging.format)?));
-            }
-        }
-    }
-    // audit/logging sit between `clipboard` and `vaultDir` in Go's struct.
-    let mut out = String::with_capacity(yaml.len() + sections.len());
-    if sections.is_empty() {
-        out.push_str(&yaml);
-    } else {
-        const AFTER: [&str; 5] = [
-            "vaultDir:",
-            "defaultAgent:",
-            "sessionTimeout:",
-            "sessionMaxLifetime:",
-            "authMethod:",
-        ];
-        let mut offset = 0;
-        let mut at = yaml.len();
-        for line in yaml.split_inclusive('\n') {
-            if AFTER.iter().any(|key| line.starts_with(key)) {
-                at = offset;
-                break;
-            }
-            offset += line.len();
-        }
-        out.push_str(&yaml[..at]);
-        out.push_str(&sections);
-        out.push_str(&yaml[at..]);
-    }
-    if !loaded.extras.scan_patterns.is_empty() {
-        out.push_str("scan_patterns:\n");
-        for pattern in &loaded.extras.scan_patterns {
-            out.push_str(&format!("    - name: {}\n", yaml_scalar(&pattern.name)?));
-            out.push_str(&format!(
-                "      pattern: {}\n",
-                yaml_scalar(&pattern.pattern)?
-            ));
-            out.push_str(&format!(
-                "      description: {}\n",
-                yaml_scalar(&pattern.description)?
-            ));
-            out.push_str(&format!(
-                "      severity: {}\n",
-                yaml_scalar(&pattern.severity)?
-            ));
-        }
-    }
-    Ok(out.into_bytes())
+    Ok(yaml.into_bytes())
 }
 
 /// Go's `Config.SaveTo` file handling: reject traversal, `MkdirAll(dir, 0700)`,
@@ -804,79 +628,43 @@ fn make_private_dirs(dir: &Path) -> Result<(), String> {
     }
 }
 
-/// yaml.v3 scalar quoting, as `symvault_core::config` applies it to its own
-/// strings (that helper is private to the core crate).
-fn yaml_scalar(value: &str) -> Result<String, String> {
-    let resolved = serde_yaml_ng::from_str::<serde_yaml_ng::Value>(value);
-    let legacy_bool = matches!(
-        value,
-        "y" | "Y"
-            | "yes"
-            | "Yes"
-            | "YES"
-            | "on"
-            | "On"
-            | "ON"
-            | "n"
-            | "N"
-            | "no"
-            | "No"
-            | "NO"
-            | "off"
-            | "Off"
-            | "OFF"
-    );
-    if matches!(
-        resolved,
-        Ok(serde_yaml_ng::Value::Number(_)
-            | serde_yaml_ng::Value::Bool(_)
-            | serde_yaml_ng::Value::Null)
-    ) || value.replace('_', "").parse::<f64>().is_ok()
-        || legacy_bool
-        || value.is_empty()
-    {
-        return serde_json::to_string(value).map_err(|error| error.to_string());
-    }
-    serde_yaml_ng::to_string(&serde_yaml_ng::Value::String(value.into()))
-        .map(|rendered| rendered.trim_end().to_owned())
-        .map_err(|error| error.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn parsed(yaml: &str) -> Loaded {
+        Loaded {
+            config: Config::load_from_bytes(yaml.as_bytes()).expect("load"),
+        }
+    }
+
     #[test]
-    fn extras_follow_go_merge_defaults() {
-        let extras = Extras::from_bytes(
-            b"audit:\n  maxSizeMb: 0\nlogging:\n  level: debug\nscan_patterns:\n  - name: foo\n",
+    fn sections_follow_go_merge_defaults() {
+        let loaded = parsed(
+            "audit:\n  maxSizeMb: 0\nlogging:\n  level: debug\nscan_patterns:\n  - name: foo\n",
         );
-        let audit = extras.audit.expect("audit section");
+        let audit = loaded.config.audit.expect("audit section");
         assert_eq!(
             (audit.max_file_size, audit.max_backups, audit.max_age_days),
             (0, 5, 30)
         );
-        let logging = extras.logging.expect("logging section");
+        let logging = loaded.config.logging.expect("logging section");
         assert_eq!(
             (logging.level.as_str(), logging.format.as_str()),
             ("debug", "text")
         );
-        assert_eq!(extras.scan_patterns.len(), 1);
-        assert!(Extras::from_bytes(b"audit:\n").audit.is_none());
+        assert_eq!(loaded.config.scan_patterns.len(), 1);
+        assert!(parsed("audit:\n").config.audit.is_none());
     }
 
     #[test]
     fn audit_error_sits_between_agent_and_clipboard_errors() {
-        let loaded = Loaded {
-            config: Config {
-                clipboard: Some(ClipboardConfig {
-                    auto_clear_duration: -1,
-                    copy_by_default: true,
-                }),
-                ..Config::default()
-            },
-            extras: Extras::from_bytes(b"audit:\n  maxSizeMb: -1\n"),
-        };
+        let mut loaded = parsed("audit:\n  maxSizeMb: -1\n");
+        loaded.config.clipboard = Some(ClipboardConfig {
+            auto_clear_duration: -1,
+            copy_by_default: true,
+            print_by_default: None,
+        });
         let errors = validate(&loaded);
         assert!(errors[0].starts_with("audit.maxFileSize"), "{errors:?}");
         assert!(
@@ -886,16 +674,14 @@ mod tests {
     }
 
     #[test]
-    fn render_places_extras_in_go_struct_order() {
-        let mut loaded = Loaded {
-            config: Config::default(),
-            extras: Extras::from_bytes(
-                b"audit:\n  maxSizeMb: 7\nlogging:\n  format: json\nscan_patterns:\n  - name: nm\n    pattern: p\n",
-            ),
-        };
+    fn render_places_sections_in_go_struct_order() {
+        let mut loaded = parsed(
+            "audit:\n  maxSizeMb: 7\nlogging:\n  format: json\nscan_patterns:\n  - name: nm\n    pattern: p\n",
+        );
         loaded.config.clipboard = Some(ClipboardConfig {
             auto_clear_duration: 30,
             copy_by_default: true,
+            print_by_default: None,
         });
         let text = String::from_utf8(render(&loaded).expect("render")).expect("utf8");
         let clipboard = text.find("\nclipboard:\n").expect("clipboard");

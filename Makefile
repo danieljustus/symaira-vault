@@ -614,6 +614,18 @@ config-cli-differential:
 	python3 scripts/rust-port/gen_config_schema.py --check
 	./scripts/rust-port/check_config_cli.sh
 
+# CONFIG-WRITER: Go-recorded SaveTo bytes (pinned oracle 690647c5) replayed
+# against the Rust writer, plus the rewriting commands on the live Go binary.
+.PHONY: config-rewrite-fixtures-generate config-rewrite-differential
+config-rewrite-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configrewritegen \
+		--output testdata/port/config/rewrite.json \
+		--oracle-commit 690647c5068a818a4b237738882bb20c865a134a \
+		--oracle-release unreleased
+
+config-rewrite-differential:
+	./scripts/rust-port/check_config_rewrite.sh
+
 # CLI-005: go-yaml scanner/parser/reader error wording of config.yaml. Re-verifies
 # the frozen Go corpus (pinned oracle 0cc78062) and replays it against the Rust CLI.
 .PHONY: yaml-syntax-cli-differential
@@ -789,7 +801,7 @@ port-contract: timestamp-fixtures-check cfg-overrides-fixtures-check mcp-oauth-c
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9 --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential clipboard-linux-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check tool-registry-hash-differential ffi-differential
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential clipboard-linux-differential mcp-prompts-differential mcp-render-differential config-cli-differential config-rewrite-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check tool-registry-hash-differential ffi-differential
 
 # TOOLHASH-001: Go-recorded tool-registry hash + call-time drift refusal. The
 # process-level Go/Rust/cross-binary check needs prebuilt binaries (see

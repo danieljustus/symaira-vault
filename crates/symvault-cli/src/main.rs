@@ -1370,6 +1370,9 @@ fn main() -> ExitCode {
 }
 
 fn run_cli() -> ExitCode {
+    // Go's `init` in internal/cli: config deprecation warnings go to stderr.
+    // Installed before anything can load a config, `__complete` included.
+    symvault_core::config::set_warn_hook(config::warn_sink);
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(index) = completion_protocol::request_index(&args) {
         return completion_protocol::run(&args, index);

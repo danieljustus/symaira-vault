@@ -264,7 +264,8 @@ func inputs() []input {
 	}
 	all = append(all, decodeInputs()...)
 	all = append(all, loadInputs()...)
-	return append(all, sectionInputs()...)
+	all = append(all, sectionInputs()...)
+	return append(all, residInputs()...)
 }
 
 // decodeInputs are documents that parse but that yaml.v3 cannot decode into the
@@ -321,6 +322,97 @@ func loadInputs() []input {
 		{"load_session_timeout_fraction", "accepted", "a fractional positive duration loads", []byte("sessionTimeout: 1.5h\n")},
 		// mcp.bind: an empty bind is a loader rejection.
 		{"load_mcp_bind_empty", "loader", "an empty mcp.bind is rejected by the loader", []byte("mcp:\n  bind: ''\n")},
+	}
+}
+
+// residInputs are the CONFIG-RESID cases: the Config.Validate checks on the
+// audit and paymentPolicies sections that the native Config used to skip, and
+// the deprecation warnings the loader prints to stderr. They were open
+// divergences (load_audit_max_size_mb_zero and _null,
+// load_payment_policy_without_instrument, load_agent_payment_policy_unknown)
+// or unrecorded (the warnings); every case here is replayed byte for byte.
+//
+// Go walks the paymentPolicies and agents maps in random order and reports
+// the first failing entry, so no case below has two failing entries in the
+// same map: the message would not be deterministic on the Go side.
+func residInputs() []input {
+	const policy = "paymentPolicies:\n  p:\n    instrument: card\n"
+	return []input{
+		// audit.maxFileSize: maxSizeMb times 1 MiB, in int64.
+		{"load_audit_max_size_mb_zero", "loader", "audit.maxSizeMb 0 loads and fails validation (audit.maxFileSize)", []byte("audit:\n  maxSizeMb: 0\n")},
+		{"load_audit_max_size_mb_null", "loader", "audit.maxSizeMb null decodes to 0 and fails validation (audit.maxFileSize)", []byte("audit:\n  maxSizeMb: null\n")},
+		{"resid_audit_max_size_mb_empty_value", "loader", "a maxSizeMb key with no value is null", []byte("audit:\n  maxSizeMb:\n")},
+		{"resid_audit_max_size_mb_negative", "loader", "a negative maximum size", []byte("audit:\n  maxSizeMb: -3\n  maxBackups: 7\n")},
+		{"resid_audit_max_size_mb_wraps_negative", "loader", "the product with 1 MiB wraps in int64: MaxInt64 MiB is -1 MiB", []byte("audit:\n  maxSizeMb: 9223372036854775807\n")},
+		{"resid_audit_max_size_mb_wraps_to_zero", "loader", "2^44 MiB wraps to exactly zero bytes", []byte("audit:\n  maxSizeMb: 17592186044416\n")},
+		{"resid_audit_max_size_mb_hex_zero", "loader", "0x0 is the integer zero", []byte("audit:\n  maxSizeMb: 0x0\n")},
+		{"resid_audit_max_size_mb_float_zero", "loader", "0.0 decodes into the int64 as zero", []byte("audit:\n  maxSizeMb: 0.0\n")},
+		{"resid_audit_max_size_mb_fraction_to_zero", "loader", "0.5 truncates to zero when it decodes into the int64", []byte("audit:\n  maxSizeMb: 0.5\n")},
+		{"resid_audit_max_size_mb_fraction_truncates", "accepted", "2.5 truncates to two when it decodes into the int64", []byte("audit:\n  maxSizeMb: 2.5\n")},
+		{"resid_audit_max_size_mb_valid", "accepted", "a positive maximum size", []byte("audit:\n  maxSizeMb: 5\n")},
+		{"resid_audit_max_size_mb_hex", "accepted", "a hexadecimal maximum size", []byte("audit:\n  maxSizeMb: 0x10\n")},
+		{"resid_audit_max_size_mb_float_whole", "accepted", "2.0 decodes into the int64 as two", []byte("audit:\n  maxSizeMb: 2.0\n")},
+		{"resid_audit_empty", "accepted", "an empty audit mapping keeps the 100 MiB default", []byte("audit: {}\n")},
+		{"resid_audit_null", "accepted", "a null audit section is not merged", []byte("audit: null\n")},
+		{"resid_audit_max_backups_null", "accepted", "null in the other audit fields does not touch the size", []byte("audit:\n  maxBackups: null\n  maxAgeDays: null\n")},
+		{"resid_audit_max_size_mb_via_merge", "accepted", "a maxSizeMb merged in through << was not written, so the default stays", lines("base: &b", "  maxSizeMb: 0", "audit:", "  <<: *b")},
+
+		// paymentPolicies.<name>: first failing check of a policy.
+		{"load_payment_policy_without_instrument", "loader", "a payment policy with no instrument", []byte("paymentPolicies:\n  p: {}\n")},
+		{"load_agent_payment_policy_unknown", "loader", "an agent that names a payment policy no section defines", []byte("agents:\n  x:\n    paymentPolicy: abc\n")},
+		{"resid_payment_policy_name_newline", "loader", "a policy name containing a newline splits into several reported lines", lines("paymentPolicies:", "  \"a\\nb\":", "    instrument: ''")},
+		{"resid_payment_policy_null_entry", "loader", "a null entry is the zero policy", lines("paymentPolicies:", "  p: null")},
+		{"resid_payment_policy_blank_instrument", "loader", "white space is not an instrument", lines("paymentPolicies:", "  p:", "    instrument: '  '", "    allowed_merchants: [acme]")},
+		{"resid_payment_policy_no_limits", "loader", "an instrument alone constrains nothing", []byte(policy)},
+		{"resid_payment_policy_empty_allowlist", "loader", "an empty allowlist is no allowlist", lines("paymentPolicies:", "  p:", "    instrument: card", "    allowed_merchants: []")},
+		{"resid_payment_policy_null_max_amount", "loader", "a null max_amount is no limit", lines("paymentPolicies:", "  p:", "    instrument: card", "    max_amount: null")},
+		{"resid_payment_policy_limit_without_currency", "loader", "a limit needs a currency", lines("paymentPolicies:", "  p:", "    instrument: card", "    max_amount:", "      per_day: '5'")},
+		{"resid_payment_policy_blank_currency", "loader", "a blank currency is no currency", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: ' '", "    max_amount:", "      per_transaction: '5'")},
+		{"resid_payment_policy_key_integer", "loader", "an integer policy name is its text in the message", lines("paymentPolicies:", "  5:", "    instrument: ''")},
+		{"resid_payment_per_transaction_word", "loader", "letters in a decimal amount", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: abc")},
+		{"resid_payment_per_transaction_two_points", "loader", "two decimal points", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: '1.2.3'")},
+		{"resid_payment_per_transaction_inner_minus", "loader", "a minus sign after the first byte", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: '5-1'")},
+		{"resid_payment_per_transaction_only_minus", "loader", "a sign and no digits", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: '-'")},
+		{"resid_payment_per_transaction_only_point", "loader", "a point and no digits", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: '.'")},
+		{"resid_payment_per_transaction_plus", "loader", "a plus sign is not accepted", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: '+5'")},
+		{"resid_payment_per_transaction_too_long", "loader", "thirty-one bytes are one too many", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: '1234567890123456789012345678901'")},
+		{"resid_payment_per_transaction_unicode_digit", "loader", "an Arabic-Indic digit is not an ASCII digit", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: '٣'")},
+		{"resid_payment_per_transaction_exponent_scalar", "loader", "an unquoted 1e3 is the text 1e3 in a string field", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: 1e3")},
+		{"resid_payment_per_day_word", "loader", "the per-day limit is checked after the per-transaction one", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: '5'", "      per_day: x")},
+		{"resid_payment_both_amounts_bad", "loader", "the per-transaction message wins over the per-day one", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: 'a'", "      per_day: 'b'")},
+		{"resid_payment_policies_null", "accepted", "a null paymentPolicies section is a nil map", lines("paymentPolicies: null")},
+		{"resid_payment_policies_empty", "accepted", "an empty paymentPolicies section", lines("paymentPolicies: {}")},
+		{"resid_payment_policy_allowlist_only", "accepted", "an allowlist is a constraint on its own", lines("paymentPolicies:", "  p:", "    instrument: card", "    allowed_merchants: [acme]")},
+		{"resid_payment_policy_instrument_integer", "accepted", "an integer instrument is its text", lines("paymentPolicies:", "  p:", "    instrument: 5", "    allowed_merchants: [acme]")},
+		{"resid_payment_policy_float_scalar_amount", "accepted", "an unquoted 5.50 is the text 5.50 in a string field", lines("paymentPolicies:", "  p:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: 5.50")},
+		{"resid_payment_policy_decimal_forms", "accepted", "5., .5, a negative amount and the thirty-byte boundary", lines("paymentPolicies:", "  a:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: '5.'", "  b:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_day: '.5'", "  c:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_transaction: '-0.25'", "  d:", "    instrument: card", "    currency: EUR", "    max_amount:", "      per_day: '123456789012345678901234567890'")},
+		{"resid_agent_payment_policy_defined", "accepted", "an agent bound to a defined policy", lines("paymentPolicies:", "  p:", "    instrument: card", "    allowed_merchants: [acme]", "agents:", "  x:", "    paymentPolicy: p")},
+		{"resid_agent_payment_policy_empty", "accepted", "an empty paymentPolicy names nothing", lines("agents:", "  x:", "    paymentPolicy: ''")},
+		{"resid_agent_payment_policy_null", "accepted", "a null paymentPolicy is a nil pointer", lines("agents:", "  x:", "    paymentPolicy: null")},
+		{"resid_agent_payment_policy_integer_defined", "accepted", "an integer paymentPolicy finds the policy named by the same text", lines("paymentPolicies:", "  5:", "    instrument: card", "    allowed_merchants: [acme]", "agents:", "  x:", "    paymentPolicy: 5")},
+		{"resid_agent_payment_policy_integer_unknown", "loader", "an integer paymentPolicy is quoted as its text", lines("agents:", "  x:", "    paymentPolicy: 5")},
+		{"resid_agent_payment_policy_case_sensitive", "loader", "policy names are case-sensitive", lines("paymentPolicies:", "  p:", "    instrument: card", "    allowed_merchants: [acme]", "agents:", "  x:", "    paymentPolicy: P")},
+		{"resid_agent_payment_policy_and_policy_error", "loader", "the policy error comes before the agent reference error", lines("paymentPolicies:", "  p: {}", "agents:", "  x:", "    paymentPolicy: q")},
+		{"resid_validate_error_order", "loader", "audit, clipboard, payment and Argon2id errors in Go's order after the agent ones", lines("vaultDir: '  '", "agents:", "  x:", "    allowedPaths: ['[']", "    paymentPolicy: q", "audit:", "  maxSizeMb: 0", "clipboard:", "  auto_clear_duration: -2", "paymentPolicies:", "  p: {}", "vault:", "  argon2id_time: 1")},
+
+		// Deprecation warnings: cliout.Warnf on stderr, once per Load, after
+		// the document decoded and before it is merged. --quiet does NOT
+		// silence them: Go copies QuietMode into cliout before cobra parses
+		// the persistent flag (the quiet cases below record exactly that).
+		{"resid_warn_env_whitelist", "accepted", "envWhitelist warns", lines("envWhitelist: [a]")},
+		{"resid_warn_env_whitelist_empty", "accepted", "an empty envWhitelist is a non-nil list and warns", lines("envWhitelist: []")},
+		{"resid_warn_env_whitelist_null", "accepted", "a null envWhitelist is nil and does not warn", lines("envWhitelist: null")},
+		{"resid_warn_env_whitelist_and_allowlist", "accepted", "the deprecated list warns even when the replacement is set", lines("envAllowlist: [b]", "envWhitelist: [a]")},
+		{"resid_warn_mcp_approval_required", "accepted", "mcp.approval_required: true warns", lines("mcp:", "  approval_required: true")},
+		{"resid_warn_mcp_approval_required_false", "accepted", "mcp.approval_required: false does not warn", lines("mcp:", "  approval_required: false")},
+		{"resid_warn_mcp_approval_required_via_merge", "accepted", "the warning reads the decoded value, merged keys included", lines("base: &b", "  approval_required: true", "mcp:", "  <<: *b")},
+		{"resid_warn_clipboard_print_by_default", "accepted", "clipboard.printByDefault warns once per process", lines("clipboard:", "  printByDefault: true")},
+		{"resid_warn_clipboard_print_by_default_false", "accepted", "a false printByDefault still warns", lines("clipboard:", "  printByDefault: false")},
+		{"resid_warn_clipboard_copy_by_default_wins", "accepted", "copyByDefault written: printByDefault is ignored and does not warn", lines("clipboard:", "  copyByDefault: false", "  printByDefault: true")},
+		{"resid_warn_all_three", "accepted", "the three warnings in load order", lines("clipboard:", "  printByDefault: true", "mcp:", "  approval_required: true", "envWhitelist: [a]")},
+		{"resid_warn_then_loader_rejection", "loader", "Go prints the warning and then rejects the document", lines("envWhitelist: [a]", "mcp:", "  bind: ''")},
+		{"resid_warn_then_validation_error", "loader", "Go prints the warning, then validate reports the audit error", lines("envWhitelist: [a]", "audit:", "  maxSizeMb: 0")},
+		{"resid_warn_not_when_decode_fails", "loader", "a document that does not decode warns about nothing", lines("envWhitelist: [a]", "mcp:", "  port: abc")},
 	}
 }
 
@@ -529,9 +621,6 @@ func openInputs() []openEntry {
 			kindWording, append(append([]string(nil), textCommands...), "set_nested", "agent_list"), "the failure comes from yaml.v3's decoder and node layers, not from libyaml: validate says 'yaml: unmarshal errors: line 1: cannot unmarshal !!str `just a ...` into config.Config', get 'parent is a scalar node, not a mapping', set 'root node is a scalar, not a mapping'; the native CLI fails the same commands with the same exit status and leaves the file alone, with different text"},
 		{input{"sequence_root", "accepted", "a document that is a block sequence", []byte("- 1\n- 2\n")},
 			kindWording, append(append([]string(nil), textCommands...), "set_nested", "agent_list"), "yaml.v3 decoder and node layers again: 'cannot unmarshal !!seq into config.Config', 'parent is a sequence node, not a mapping', 'root node is a sequence, not a mapping'; same exit status and unchanged file natively, different text"},
-		// Config.Validate reaches into sections the native Config does not model.
-		{input{"load_audit_max_size_mb_zero", "loader", "audit.maxSizeMb 0 loads and fails validation (audit.maxFileSize)", []byte("audit:\n  maxSizeMb: 0\n")},
-			kindWording, []string{"validate", "validate_json", "doctor"}, "`config validate` reports audit.maxFileSize from the audit section it keeps beside the typed config (`config_fix.rs` `Extras`) and agrees with Go; the doctor check `vault.config.validates` calls only the typed `Config::validate`, which has no audit section, so it reports `config.yaml passes validation` where Go warns `config validation error: audit.maxFileSize: must be greater than 0 ...` and offers a fix"},
 		{input{"null_root", "accepted", "a document that is the scalar null", []byte("null\n")},
 			kindWording, []string{"get", "set"}, "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with 'parent is a scalar node, not a mapping' and 'root node is a scalar, not a mapping', the native CLI with 'key \"vaultDir\" not found' and 'document has no root to descend into'"},
 		{input{"comment_only", "accepted", "a config that contains only a comment", []byte("# nothing\n")},
@@ -548,14 +637,6 @@ func openInputs() []openEntry {
 			kindWording, []string{"get", "set"}, "validate and doctor agree (defaults); config get and set differ in the node-layer wording of an empty document, exit status and unchanged file agree"},
 		{input{"zero_width_space_root", "accepted", "a document that is only U+200B: not white space for Go, a plain scalar", []byte("\u200b\n")},
 			kindWording, textCommands, "same decode-layer wording gap as scalar_root: yaml.v3 says 'cannot unmarshal !!str `\u200b` into config.Config', the native loader 'invalid type: string'; exit status and the unchanged file agree"},
-		// Sections of Config.Validate the native Config does not model
-		// (CONFIG-SECTIONS-001 residuals).
-		{input{"load_audit_max_size_mb_null", "loader", "audit.maxSizeMb null decodes to 0 and fails validation (audit.maxFileSize)", []byte("audit:\n  maxSizeMb: null\n")},
-			kindBehavior, []string{"validate", "validate_json", "doctor"}, "the audit section is not part of the native Config: `config validate` takes audit.maxFileSize from the numeric value of the key (`config_fix.rs` `Extras`), which reads null as absent, so it reports the config valid where Go refuses a zero maximum size; the doctor check has no audit section at all (see load_audit_max_size_mb_zero)"},
-		{input{"load_payment_policy_without_instrument", "loader", "a payment policy with no instrument", []byte("paymentPolicies:\n  p: {}\n")},
-			kindBehavior, []string{"validate", "validate_json", "doctor"}, "Config.Validate's paymentPolicies checks (instrument, limits, agent references) are not ported: the native Config has no paymentPolicies section, so the native CLI accepts a policy Go refuses"},
-		{input{"load_agent_payment_policy_unknown", "loader", "an agent that names a payment policy no section defines", []byte("agents:\n  x:\n    paymentPolicy: abc\n")},
-			kindBehavior, []string{"validate", "validate_json", "doctor"}, "the agent -> paymentPolicies reference check of Config.Validate is not ported (see load_payment_policy_without_instrument), so the native CLI accepts the reference"},
 	}
 }
 
@@ -694,6 +775,13 @@ func buildCase(goBinary string, item input) (fixtureCase, error) {
 		}
 		built.Observations = append(built.Observations, observed)
 	}
+	if quietCases[item.name] {
+		observed, err := runConfigCommand(goBinary, item, "validate_quiet", []string{"config", "validate", configMarker, "--quiet"}, false)
+		if err != nil {
+			return fixtureCase{}, err
+		}
+		built.Observations = append(built.Observations, observed)
+	}
 	doctor, err := runDoctor(goBinary, item)
 	if err != nil {
 		return fixtureCase{}, err
@@ -714,6 +802,19 @@ func buildCase(goBinary string, item input) (fixtureCase, error) {
 		built.AuthMethod = &observed
 	}
 	return built, nil
+}
+
+// quietCases also record `config validate --quiet`: the deprecation warnings
+// the loader prints are cliout.Warnf messages, and --quiet does not silence
+// them (cliout reads QuietMode before cobra has parsed the persistent flag).
+var quietCases = map[string]bool{
+	"resid_warn_env_whitelist":                   true,
+	"resid_warn_mcp_approval_required":           true,
+	"resid_warn_clipboard_print_by_default":      true,
+	"resid_warn_all_three":                       true,
+	"resid_warn_then_loader_rejection":           true,
+	"resid_warn_then_validation_error":           true,
+	"resid_warn_mcp_approval_required_via_merge": true,
 }
 
 // authMethodCases also record the resolved top-level auth method, the value
@@ -760,6 +861,24 @@ var agentListCases = map[string]bool{
 	"load_mcp_bind_null":                      true,
 	// The loader's own bookkeeping must not swallow an agent named NUL+own.
 	"load_agent_name_nul_own": true,
+	// CONFIG-RESID: the deprecation warnings reach every command that loads
+	// the config, `agent list` included, and a rejected audit/payment config
+	// is not a load error there (agent list does not validate).
+	"resid_warn_env_whitelist":                    true,
+	"resid_warn_env_whitelist_empty":              true,
+	"resid_warn_env_whitelist_null":               true,
+	"resid_warn_mcp_approval_required":            true,
+	"resid_warn_mcp_approval_required_false":      true,
+	"resid_warn_mcp_approval_required_via_merge":  true,
+	"resid_warn_clipboard_print_by_default":       true,
+	"resid_warn_clipboard_print_by_default_false": true,
+	"resid_warn_clipboard_copy_by_default_wins":   true,
+	"resid_warn_all_three":                        true,
+	"resid_warn_then_loader_rejection":            true,
+	"resid_warn_then_validation_error":            true,
+	"resid_warn_not_when_decode_fails":            true,
+	"load_audit_max_size_mb_null":                 true,
+	"resid_payment_policy_null_entry":             true,
 }
 
 func buildDivergences(goBinary string) ([]openDivergence, error) {
