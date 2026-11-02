@@ -730,11 +730,15 @@ fn read(path: &Path) -> Result<BTreeMap<String, TokenRecord>, StoreError> {
     if bytes.is_empty() {
         return Ok(BTreeMap::new());
     }
-    let raw: RawFile = serde_json::from_slice(&bytes).map_err(|error| {
+    // Go's json.Unmarshal semantics: duplicate members, case-insensitive field
+    // names and invalid UTF-8 are accepted or rejected exactly as Go does.
+    let parse_error = |error: &dyn std::fmt::Display| {
         StoreError::Config(format!(
             "load token registry: parse token registry: {error}"
         ))
-    })?;
+    };
+    let value = crate::go_registry::decode_go_registry(&bytes).map_err(|e| parse_error(&e))?;
+    let raw: RawFile = serde_json::from_value(value).map_err(|e| parse_error(&e))?;
     Ok(raw
         .tokens
         .unwrap_or_default()

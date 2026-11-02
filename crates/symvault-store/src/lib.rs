@@ -37,6 +37,9 @@ pub mod search_index_store;
 /// Go-compatible MCP share metadata and atomic lifecycle updates.
 pub mod sharing;
 
+/// Go-compatible decoding of the MCP token registry file.
+pub mod go_registry;
+
 /// Go-compatible agent-scoped MCP token registry mutations.
 pub mod token_registry;
 
