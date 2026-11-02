@@ -2089,11 +2089,11 @@ impl SecretType {
     pub const fn usage_hint(self) -> &'static str {
         match self {
             Self::ApiKey => {
-                "Set as header or query parameter depending on API documentation. Common: X-API-Key: *** or ?api_key=<key>"
+                "Set as header or query parameter depending on API documentation. Common: X-API-Key: <key> or ?api_key=<key>"
             }
-            Self::BearerToken => "Set Header Authorization: Bearer ***",
+            Self::BearerToken => "Set Header Authorization: Bearer <token>",
             Self::BasicAuth => {
-                "Encode as base64(user:pass) and set Header Authorization: Basic ***"
+                "Encode as base64(user:pass) and set Header Authorization: Basic <encoded>"
             }
             Self::SshKey => {
                 "Write to temporary file with chmod 600 before use. Use with ssh -i <keyfile>"

@@ -2929,7 +2929,8 @@ fn run_add(
             let stdin = io::stdin();
             let mut input = io::BufReader::new(stdin.lock());
             let (value, totp_secret) =
-                add_commands::read_stdin_values(&mut input, stdin_value, stdin_totp_secret)?;
+                add_commands::read_stdin_values(&mut input, stdin_value, stdin_totp_secret)
+                    .map_err(|error| reported(1, &error, None))?;
             if value.is_some() {
                 options.value = value;
             }
@@ -2938,7 +2939,18 @@ fn run_add(
             }
         }
         let path = options.path.clone();
-        add_commands::add(&vault, &identity, &options)?;
+        // Go returns every `add` failure from `RunE`, so cobra and
+        // `ExecuteRoot` both print it (doubled `Error:` line). The exit status
+        // is 1, except for the empty sensitive value, a CLIError with
+        // ExitInvalidInput (9) in `cmd/crud/add.go`.
+        add_commands::add(&vault, &identity, &options).map_err(|error| {
+            let code = if error.starts_with("cannot set empty value for sensitive field") {
+                9
+            } else {
+                1
+            };
+            reported(code, &error, None)
+        })?;
         if !quiet {
             println!("Entry created: {path}");
         }
