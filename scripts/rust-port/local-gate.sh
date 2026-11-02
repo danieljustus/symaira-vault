@@ -9,7 +9,9 @@
 #       touch an area workflow's contract)
 #
 # Env: LOCAL_GATE_LOG_DIR / LOCAL_GATE_RECEIPTS (defaults below), RUN_MIRI=1,
-#      LOCAL_AREA_ONLY (subset of local-area targets, see local-gate-area.sh),
+#      LOCAL_AREA_ONLY (subset of local-area targets, see local-gate-area.sh;
+#      only with macos-area|linux-area, where the receipt is marked partial;
+#      refused with exit 2 for macos|linux|all),
 #      ALLOW_DIRTY=1 (receipt is then marked dirty and is not evidence),
 #      MAKE_PREFIX (e.g. a build launcher such as dev-external),
 #      LOCAL_GATE_MOUNT_AS (linux lane: absolute path to mount this worktree
@@ -19,6 +21,13 @@
 set -euo pipefail
 
 mode="${1:-all}"
+case "$mode" in
+  macos|linux|all)
+    if [ -n "${LOCAL_AREA_ONLY:-}" ]; then
+      echo "local-gate: LOCAL_AREA_ONLY narrows the area targets and cannot be combined with the full '$mode' gate" >&2
+      exit 2
+    fi ;;
+esac
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
 sha="$(git rev-parse HEAD)"
@@ -38,9 +47,23 @@ area_targets() { # log
   sed -n 's/^area-target: \([^ ]*\) exit=\([0-9]*\).*/\1:\2/p' "$1" | paste -sd, -
 }
 
+# The area run's own bookkeeping lines (local-gate-area.sh): whether the run
+# was narrowed by LOCAL_AREA_ONLY, the list `make local-area-list` expects, and
+# the targets that actually ran. `area_complete` is true only for an unnarrowed
+# run that executed exactly the expected list and exited 0.
+area_line() { # log prefix
+  sed -n "s/^$2: //p" "$1" | tail -n 1
+}
+
 receipt() { # target exit started log
-  printf '{"sha":"%s","dirty":%s,"target":"%s","exit":%s,"started":"%s","finished":"%s","log":"%s","area_targets":"%s"}\n' \
-    "$sha" "$dirty" "$1" "$2" "$3" "$(date -u +%FT%TZ)" "$4" "$(area_targets "$4")" >> "$receipts"
+  local partial expected ran complete=false
+  partial="$(area_line "$4" area-partial)"
+  expected="$(area_line "$4" area-expected | sed 's/^lane=[a-z]* //')"
+  ran="$(sed -n 's/^area-target: \([^ ]*\) exit=.*/\1/p' "$4" | paste -sd' ' -)"
+  if [ "$2" = 0 ] && [ "$partial" = false ] && [ -n "$expected" ] && [ "$ran" = "$expected" ]; then complete=true; fi
+  printf '{"sha":"%s","dirty":%s,"target":"%s","exit":%s,"started":"%s","finished":"%s","log":"%s","area_targets":"%s","partial":%s,"area_expected":"%s","area_complete":%s}\n' \
+    "$sha" "$dirty" "$1" "$2" "$3" "$(date -u +%FT%TZ)" "$4" "$(area_targets "$4")" \
+    "${partial:-false}" "$expected" "$complete" >> "$receipts"
 }
 
 # Targets no ci.yml job reaches (Makefile LOCAL_AREA_TARGETS, macOS lane): one
@@ -64,7 +87,7 @@ run_macos() {
   # ponytail: only this target uses the internal per-user temp dir.
   ${MAKE_PREFIX:-} make config-cli-differential TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
   ${MAKE_PREFIX:-} make mcp-approval-pty-acceptance
-  run_macos_area
+  LOCAL_AREA_FULL=1 run_macos_area
   # Go is the frozen oracle: test it only when this branch changed Go code.
   # Pin the toolchain CI uses (go.mod `toolchain`, = Makefile
   # BUILD_GO_TOOLCHAIN): direct `go test` bypasses the Makefile export, and a
@@ -123,7 +146,7 @@ run_linux() {
   targets="rust-gates-core port-contract mcp-approval-pty-acceptance"
   # local-area runs target by target (local-gate-area.sh) so the log names
   # each one; set -e stops the lane at the first failing make above it.
-  cmd="set -e; make $targets; scripts/rust-port/local-gate-area.sh linux"
+  cmd="set -e; make $targets; LOCAL_AREA_FULL=1 scripts/rust-port/local-gate-area.sh linux"
   # ponytail: Miri takes about an hour; opt in for slices touching
   # symvault-core. The closing hosted CI run always includes it.
   [ "${RUN_MIRI:-0}" = 1 ] && cmd="$cmd; make rust-miri MIRI_TARGET_DIR=/home/dev/target/miri"

@@ -7,18 +7,53 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
 SOURCE_FILES = ("go.mod", "go.sum", "internal/crypto/argon2id.go", "internal/crypto/symmetric.go")
+GO_TOOLCHAIN = "go1.26.6"
 PROGRAM = ROOT / "scripts/rust-port/kdf_policy_oracle.go.txt"
 FIXTURE = ROOT / "testdata/port/crypto/kdf-policy-v1.json"
 
 
 def run(argv, **kwargs):
-    return subprocess.run(argv, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs).stdout
+    try:
+        return subprocess.run(argv, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs).stdout
+    except subprocess.CalledProcessError as error:
+        # The child's stderr is the only evidence of why it failed.
+        sys.stderr.write(f"command failed (exit {error.returncode}): {argv}\n")
+        sys.stderr.write(error.stderr.decode(errors="replace") if error.stderr else "")
+        raise
+
+
+def pinned_go(parent_env):
+    """Resolve the pinned compiler with the caller's real HOME, before isolation.
+
+    GOTOOLCHAIN=go1.26.6 makes cmd/go exec a `go1.26.6` found on PATH. That is
+    usually the golang.org/dl wrapper in ~/go/bin, which needs $HOME/sdk, or else
+    cmd/go downloads the toolchain and its modules into a cache below HOME. Both
+    break (silently, exit 1, or after a ten second download) once HOME is blank.
+    Resolve GOROOT and the caches here, then run <GOROOT>/bin/go with
+    GOTOOLCHAIN=local so that no later step can switch or fetch a compiler.
+    """
+    env = dict(parent_env, GOTOOLCHAIN=GO_TOOLCHAIN, GOWORK="off")
+    with tempfile.TemporaryDirectory(prefix="symvault-kdf-go-") as neutral:
+        # A neutral directory: no go.mod may influence the toolchain choice.
+        raw = run(["go", "env", "-json", "GOROOT", "GOVERSION", "GOCACHE", "GOMODCACHE", "GOPATH"],
+                  cwd=neutral, env=env)
+    if not raw.strip():
+        raise ValueError(f"`go env` printed nothing for GOTOOLCHAIN={GO_TOOLCHAIN}: the toolchain wrapper on PATH failed")
+    settings = json.loads(raw)
+    if settings["GOVERSION"] != GO_TOOLCHAIN:
+        raise ValueError(f"pinned Go is {GO_TOOLCHAIN}, resolved {settings['GOVERSION']}")
+    go = Path(settings["GOROOT"]) / "bin" / "go"
+    if not go.is_file():
+        raise ValueError(f"resolved compiler is missing: {go}")
+    return str(go), {"GOROOT": settings["GOROOT"], "GOCACHE": settings["GOCACHE"],
+                     "GOMODCACHE": settings["GOMODCACHE"], "GOPATH": settings["GOPATH"]}
 
 
 def main():
@@ -40,6 +75,7 @@ def main():
     stored = None if args.generate else json.loads(FIXTURE.read_text())
     if stored is not None and any(stored.get(k) != v for k, v in provenance.items()):
         raise ValueError("historical fixture provenance changed")
+    go, go_dirs = pinned_go(os.environ)
     with tempfile.TemporaryDirectory(prefix="symvault-kdf-policy-") as private:
         private = Path(private)
         checkout = private / "oracle"
@@ -55,8 +91,9 @@ def main():
             target = private / key.lower()
             target.mkdir(mode=0o700)
             env[key] = str(target)
-        env.update(GOTOOLCHAIN="go1.26.6", GOWORK="off")
-        argv = ["go", "run", "./cmd/kdf-policy-oracle"]
+        env.update(go_dirs, GOTOOLCHAIN="local", GOWORK="off", GOENV="off")
+        env["PATH"] = str(Path(go).parent) + os.pathsep + env.get("PATH", os.defpath)
+        argv = [go, "run", "./cmd/kdf-policy-oracle"]
         if stored is not None:
             retained = private / "retained.json"
             retained.write_text(json.dumps(stored))
