@@ -71,7 +71,7 @@ LABEL org.opencontainers.image.title="Symvault Vault"
 LABEL org.opencontainers.image.description="Modern CLI password manager with age encryption"
 LABEL org.opencontainers.image.url="https://github.com/danieljustus/symaira-vault"
 LABEL org.opencontainers.image.source="https://github.com/danieljustus/symaira-vault"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD ["symvault", "version"]

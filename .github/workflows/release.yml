@@ -277,7 +277,7 @@ jobs:
           NOTARIZED=0
           while IFS= read -r f; do
             [ -n "$f" ] || continue
-            if [ ! -f "$f" ] || ! file "$f" | grep -q "Mach-O"; then
+            if [ ! -f "$f" ] || ! grep -q "Mach-O" <<<"$(file "$f")"; then
               echo "::error::darwin/arm64 binary $f from dist/artifacts.json is missing or not a Mach-O executable"
               exit 1
             fi

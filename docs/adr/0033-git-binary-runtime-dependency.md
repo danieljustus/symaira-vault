@@ -90,3 +90,7 @@ matters:
 - **Vendor/bundle a `git` binary in the archives:** rejected; it multiplies
   release size and security-patch duty for a tool every target platform already
   ships or packages.
+
+## Scope of the missing-git message
+
+The actionable message is produced by `symvault_sync`'s process runner (Unix spawn path) and by the device pairing `git clone` in `crates/symvault-cli/src/device.rs`. The Windows spawn path keeps the raw I/O error; Windows is not a supported target (#1550).
