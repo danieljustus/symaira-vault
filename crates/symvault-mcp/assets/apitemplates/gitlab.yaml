@@ -1,0 +1,23 @@
+# GitLab REST API template.
+# Auth shape: PRIVATE-TOKEN header — https://docs.gitlab.com/ee/api/rest/#authentication
+# (GitLab also accepts Authorization: Bearer; the PRIVATE-TOKEN header form is
+# the documented primary for personal/project access tokens.)
+# Fill the vault entry referenced by entry_ref with a "credential" field.
+base_url: https://gitlab.com/api/v4
+auth_type: none
+entry_ref: op:///gitlab
+default_headers:
+  PRIVATE-TOKEN: __GITLAB_TOKEN__
+substitutions:
+  - placeholder: __GITLAB_TOKEN__
+    field: credential
+    in: [header]
+allowed_endpoints:
+  - /projects/*
+  - /groups/*
+  - /issues/*
+  - /merge_requests/*
+  - /user
+allowed_methods:
+  - GET
+  - POST

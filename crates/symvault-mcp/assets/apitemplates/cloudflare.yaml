@@ -1,0 +1,14 @@
+# Cloudflare API template.
+# Auth shape: Authorization: Bearer <api-token> — https://developers.cloudflare.com/api/authorization/
+# Fill the vault entry referenced by entry_ref with a "credential" field.
+base_url: https://api.cloudflare.com/client/v4
+auth_type: bearer
+entry_ref: op:///cloudflare
+allowed_endpoints:
+  - /zones/*
+  - /accounts/*
+  - /user/*
+allowed_methods:
+  - GET
+  - POST
+  - PATCH

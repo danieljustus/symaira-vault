@@ -1,0 +1,12 @@
+# Sentry API template.
+# Auth shape: Authorization: Bearer <auth-token> — https://docs.sentry.io/api/auth/
+# Fill the vault entry referenced by entry_ref with a "credential" field.
+base_url: https://sentry.io
+auth_type: bearer
+entry_ref: op:///sentry
+allowed_endpoints:
+  - /api/0/projects/*
+  - /api/0/issues/*
+  - /api/0/organizations/*
+allowed_methods:
+  - GET
