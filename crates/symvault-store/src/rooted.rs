@@ -131,6 +131,7 @@ pub(super) fn walk_from_with_limits(
         &mut path_bytes,
         relative.components().count(),
         (max_depth, max_entries),
+        false,
     )?;
     Ok(entries)
 }
@@ -140,6 +141,31 @@ pub(super) fn walk_with_limits(
     display: &Path,
     max_depth: Option<usize>,
     max_entries: Option<usize>,
+) -> Result<Vec<RootedEntry>, StoreError> {
+    walk_root(root, display, max_depth, max_entries, false)
+}
+
+/// Walks the vault root like Go's legacy entry scan (`listEntriesFast` with
+/// `legacy`, `migrateLegacyEntries`): a directory named `.git` outside
+/// `entries/` is reported but not descended into (`filepath.SkipDir`). Go
+/// never enumerates the git object store, so its entry-count limit and its
+/// view of a repository that `git` is rewriting concurrently (auto-gc removes
+/// loose-object directories) must not depend on `.git` either.
+pub(super) fn walk_vault_root_with_limits(
+    root: &fs::File,
+    display: &Path,
+    max_depth: Option<usize>,
+    max_entries: Option<usize>,
+) -> Result<Vec<RootedEntry>, StoreError> {
+    walk_root(root, display, max_depth, max_entries, true)
+}
+
+fn walk_root(
+    root: &fs::File,
+    display: &Path,
+    max_depth: Option<usize>,
+    max_entries: Option<usize>,
+    prune_git: bool,
 ) -> Result<Vec<RootedEntry>, StoreError> {
     let mut entries = Vec::new();
     let mut path_bytes = 0;
@@ -151,6 +177,7 @@ pub(super) fn walk_with_limits(
         &mut path_bytes,
         0,
         (max_depth, max_entries),
+        prune_git,
     )?;
     Ok(entries)
 }
@@ -163,6 +190,7 @@ fn walk_directory(
     path_bytes: &mut usize,
     depth: usize,
     limits: (Option<usize>, Option<usize>),
+    prune_git: bool,
 ) -> Result<(), StoreError> {
     let (max_depth, max_entries) = limits;
     use rustix::fs::Dir;
@@ -209,6 +237,9 @@ fn walk_directory(
                     relative: relative.clone(),
                     regular: false,
                 });
+                if prune_git && raw_name == b".git" && !relative.starts_with("entries") {
+                    continue;
+                }
                 let child = rustix::fs::openat(
                     directory,
                     name,
@@ -229,6 +260,7 @@ fn walk_directory(
                     path_bytes,
                     depth + 1,
                     limits,
+                    prune_git,
                 )?;
             }
             FileType::RegularFile => entries.push(RootedEntry {
