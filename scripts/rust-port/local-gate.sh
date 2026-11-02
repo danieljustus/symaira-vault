@@ -132,6 +132,10 @@ linux_docker() { # shell command run inside the container
     -v "$target_volume:/home/dev/target" \
     -e CARGO_TARGET_DIR=/home/dev/target \
     -e CARGO_INCREMENTAL=0 -e GOCACHE=/home/dev/go/cache \
+    -e GIT_CONFIG_COUNT=3 \
+    -e GIT_CONFIG_KEY_0=gc.auto -e GIT_CONFIG_VALUE_0=0 \
+    -e GIT_CONFIG_KEY_1=gc.worktreePruneExpire -e GIT_CONFIG_VALUE_1=never \
+    -e GIT_CONFIG_KEY_2=maintenance.auto -e GIT_CONFIG_VALUE_2=false \
     -e RUST_TEST_THREADS=1 -e LOCAL_AREA_ONLY="${LOCAL_AREA_ONLY:-}" \
     "$image" bash -c "$1"
 }

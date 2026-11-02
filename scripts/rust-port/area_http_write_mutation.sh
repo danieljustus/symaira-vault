@@ -36,10 +36,20 @@ fingerprint() { # live view: tracked changes under crates/, then the binary
 before="$(fingerprint)"
 status_before="$(git status --porcelain)"
 
-remove_tree() {
-  git worktree remove --force "$tree" >/dev/null 2>&1 || rm -rf "$tree"
-  git worktree prune
+# Unregister exactly this worktree. Never `git worktree prune`: it is global to
+# the shared common dir, and in the Linux container the host worktrees' paths do
+# not exist, so a prune there deletes their admin dirs (.git/worktrees/*).
+remove_worktree_only() { # tree
+  local tree="$1" admin="" common
+  [ -f "$tree/.git" ] && admin="$(sed -n 's/^gitdir: //p' "$tree/.git")"
+  git worktree remove --force "$tree" >/dev/null 2>&1 && return 0
+  rm -rf "$tree"
+  common="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
+  admin="$(cd "$admin" 2>/dev/null && pwd -P)" || return 0
+  case "$admin" in "$common"/worktrees/*) rm -rf "$admin" ;; esac
 }
+
+remove_tree() { remove_worktree_only "$tree"; }
 
 child=""
 # shellcheck disable=SC2329 # invoked by the traps

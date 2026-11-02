@@ -987,7 +987,7 @@ LOCAL_AREA_DIFFERENTIAL_TARGETS := mcp-init-differential mcp-stdio-differential 
 #   linux: tui-contract (the contract needs Xvfb/xclip; on macOS it drives the
 #          real pasteboard and refuses to run outside a disposable CI host)
 #   macos: tui-harness-check (the harness checks without the clipboard half)
-LOCAL_AREA_PROCESS_TARGETS := area-check-selftest http-framing-contract http-head-contract \
+LOCAL_AREA_PROCESS_TARGETS := area-check-selftest worktree-prune-check http-framing-contract http-head-contract \
 	http-origin-contract http-slow-peer-contract http-timeout-contract \
 	http-tls-contract http-write-contract http-oauth-contract \
 	http-process-contract mcp-process-contract mcp-named-tests api-transport-contract \
@@ -1064,6 +1064,12 @@ area-oracle-runner:
 # partial and malformed receipts and logs must all fail it.
 area-check-selftest:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_gate_area_check.py
+
+# No gate script may prune worktrees globally (the Linux container deleted the
+# host worktrees' admin dirs that way); the container git guards must stay.
+worktree-prune-check:
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_check_worktree_prune.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/check_worktree_prune.py
 
 http-framing-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"

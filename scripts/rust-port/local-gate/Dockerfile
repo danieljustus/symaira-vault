@@ -49,3 +49,10 @@ RUN sudo add-apt-repository -y ppa:deadsnakes/ppa \
  && sudo apt-get update \
  && sudo apt-get install -y --no-install-recommends python3.13 python3.13-venv zsh fish xvfb xclip \
  && sudo rm -rf /var/lib/apt/lists/*
+
+# Container git never auto-prunes worktrees: the repository's common dir is
+# mounted read-write, host worktree paths do not exist in here, and a prune
+# (explicit or via `git gc --auto`) would delete the host worktrees' admin dirs.
+RUN sudo git config --system gc.auto 0 \
+ && sudo git config --system gc.worktreePruneExpire never \
+ && sudo git config --system maintenance.auto false
