@@ -30,6 +30,22 @@ pub enum GitError {
     },
     #[error("git I/O failed: {0}")]
     Io(#[from] io::Error),
+    /// The `git` executable could not be started because it is not on `PATH`.
+    /// git is a hard runtime dependency of the Rust CLI (ADR 0033).
+    #[error("git is required but was not found in PATH; install git and retry")]
+    GitNotFound,
+}
+
+/// Map a failed `git` spawn to [`GitError`]. `NotFound` means the executable is
+/// missing unless the requested working directory is the missing path.
+#[cfg_attr(windows, allow(dead_code))]
+fn spawn_error(program: &str, cwd: Option<&Path>, error: io::Error) -> GitError {
+    let cwd_missing = cwd.is_some_and(|dir| !dir.exists());
+    if program == "git" && error.kind() == io::ErrorKind::NotFound && !cwd_missing {
+        GitError::GitNotFound
+    } else {
+        GitError::Io(error)
+    }
 }
 
 const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
@@ -1056,7 +1072,7 @@ fn run_process_with_timeout(
             Err(error) => {
                 let _ = fs::remove_file(&stdout_path);
                 let _ = fs::remove_file(&stderr_path);
-                return Err(GitError::Io(error));
+                return Err(spawn_error(program, cwd, error));
             }
         };
         let deadline = Instant::now() + timeout;
@@ -1595,6 +1611,43 @@ mod tests {
         assert_eq!(actual.raw_os_error(), expected.raw_os_error());
         assert_eq!(actual.to_string(), expected.to_string());
         assert!(!path.exists());
+    }
+
+    /// git is a hard runtime dependency: a missing executable must surface a
+    /// clear, actionable message instead of a bare `NotFound` I/O error.
+    #[test]
+    fn missing_git_executable_reports_clear_error() {
+        let empty = tempfile::tempdir().unwrap();
+        let cwd = tempfile::tempdir().unwrap();
+        // A genuine spawn failure: `git` is not resolvable on an empty PATH.
+        let spawn_failure = Command::new("git")
+            .env("PATH", empty.path())
+            .current_dir(cwd.path())
+            .spawn()
+            .unwrap_err();
+        assert_eq!(spawn_failure.kind(), io::ErrorKind::NotFound);
+        let mapped = spawn_error("git", Some(cwd.path()), spawn_failure);
+        assert!(matches!(mapped, GitError::GitNotFound), "{mapped:?}");
+        assert_eq!(
+            mapped.to_string(),
+            "git is required but was not found in PATH; install git and retry"
+        );
+    }
+
+    #[test]
+    fn missing_working_directory_is_not_reported_as_missing_git() {
+        let parent = tempfile::tempdir().unwrap();
+        let missing = parent.path().join("absent");
+        let error = io::Error::from(io::ErrorKind::NotFound);
+        assert!(matches!(
+            spawn_error("git", Some(&missing), error),
+            GitError::Io(_)
+        ));
+        let error = io::Error::from(io::ErrorKind::PermissionDenied);
+        assert!(matches!(
+            spawn_error("git", Some(parent.path()), error),
+            GitError::Io(_)
+        ));
     }
 
     fn command_error(stderr: &str) -> GitError {

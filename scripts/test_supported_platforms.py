@@ -50,6 +50,14 @@ class SupportedPlatformsTests(unittest.TestCase):
         self.assertIn("depends_on arch: :arm64", formula)
         self.assertIn("linux_amd64", formula)
         self.assertIn("linux_arm64", formula)
+        # git is a hard runtime dependency (ADR 0033).
+        self.assertIn('depends_on "git"', formula)
+
+    def test_git_is_a_hard_package_dependency(self):
+        config = yaml.safe_load((ROOT / ".goreleaser.yml").read_text())
+        for nfpm in config["nfpms"]:
+            self.assertIn("git", nfpm.get("dependencies", []), nfpm["id"])
+            self.assertNotIn("git", nfpm.get("recommends", []), nfpm["id"])
 
 
 if __name__ == "__main__":

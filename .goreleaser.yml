@@ -157,6 +157,11 @@ release:
     ### Download
     Download the appropriate binary for your platform from the assets below.
 
+    `symvault` needs the `git` executable at runtime (vault history and sync
+    shell out to it). The deb/rpm/apk packages depend on `git`; install it
+    yourself when using the archive, install script or Homebrew-less setups
+    (macOS: `xcode-select --install` or `brew install git`).
+
     ### Build from source
     ```bash
     cargo install --locked --git https://github.com/danieljustus/symaira-vault --tag {{ .Tag }} symvault-cli
@@ -178,7 +183,9 @@ nfpms:
       - deb
       - rpm
       - apk
-    recommends:
+    # git is a hard runtime dependency of the Rust CLI (it shells out to git;
+    # the Go CLI embedded go-git). See docs/adr/0033-git-binary-runtime-dependency.md.
+    dependencies:
       - git
     bindir: /usr/bin
     section: utils

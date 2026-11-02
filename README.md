@@ -9,7 +9,7 @@
 
 ![Symaira Vault hero](docs/assets/symvault-hero.png)
 
-A modern, secure command-line password manager (`symvault`) written in Go. Uses [age](https://age-encryption.org/) for encryption with built-in MCP server support for AI agent integration.
+A modern, secure command-line password manager (`symvault`) written in Rust. Uses [age](https://age-encryption.org/) for encryption with built-in MCP server support for AI agent integration.
 
 ![Symaira Vault demo](docs/assets/symvault-demo.gif)
 
@@ -69,19 +69,31 @@ nix run github:danieljustus/symaira-vault
 ```
 > **Note:** The flake is new. Go module dependencies are pinned via `vendorHash` in `flake.nix`. If updating dependencies, run `go mod vendor && nix hash path --sri vendor/` and update the hash.
 
-**Go:**
+**Cargo (build from source):**
 ```bash
-go install github.com/danieljustus/symaira-vault@latest
+cargo install --locked --git https://github.com/danieljustus/symaira-vault --tag <release tag> symvault-cli
 ```
+Use the tag of the release you want (for example the latest on the
+[releases page](https://github.com/danieljustus/symaira-vault/releases/latest)).
+This installs the `symvault` binary into `~/.cargo/bin`.
+
+**Requires `git`:** `symvault` runs the `git` executable for vault history and
+sync, so `git` must be on `PATH` (see
+[ADR 0033](docs/adr/0033-git-binary-runtime-dependency.md)). The deb/rpm/apk
+packages depend on `git` and pull it in; with the install script, Homebrew-less
+manual downloads or `cargo install`, install it yourself — macOS:
+`xcode-select --install` (Xcode Command Line Tools, which will prompt on first
+use) or `brew install git`; Debian/Ubuntu: `sudo apt install git`;
+Fedora/RHEL: `sudo dnf install git`; Alpine: `sudo apk add git`.
 
 For manual downloads, Linux packages, release verification (including Cosign signature verification), and build-from-source instructions, see [docs/distribution.md](docs/distribution.md).
 
 | Platform | amd64 | arm64 | Install Methods |
 |----------|-------|-------|-----------------|
-| macOS | Unsupported | ✓ | Quick install, Homebrew, Go, Manual |
-| Linux | ✓ | ✓ | Quick install, Homebrew, Go, Manual, deb/rpm/apk |
+| macOS | Unsupported | ✓ | Quick install, Homebrew, Cargo, Manual |
+| Linux | ✓ | ✓ | Quick install, Homebrew, Cargo, Manual, deb/rpm/apk |
 | Windows | Unsupported | Unsupported | None |
-| FreeBSD | ✓ | ✓ | Go, Manual |
+| FreeBSD | ✓ | ✓ | Cargo, Manual |
 | NixOS / Nix | ✓ | ✓ | Nix flake (`nix run github:danieljustus/symaira-vault`) |
 
 ### Native macOS app (from source)

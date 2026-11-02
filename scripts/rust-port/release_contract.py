@@ -120,7 +120,7 @@ def deb_info(path):
                  for m in tf.getmembers() if m.isfile()}
     return {"name": fields.get("Package"), "version": fields.get("Version"), "arch": fields.get("Architecture"),
             "license": None, "maintainer": fields.get("Maintainer"), "description": fields.get("Description"),
-            "homepage": fields.get("Homepage"), "recommends": fields.get("Recommends"), "files": files}
+            "homepage": fields.get("Homepage"), "depends": fields.get("Depends"), "files": files}
 
 
 def apk_info(path):
@@ -139,7 +139,7 @@ def apk_info(path):
             fields.setdefault(k, v)
     return {"name": fields.get("pkgname"), "version": fields.get("pkgver"), "arch": fields.get("arch"),
             "license": fields.get("license"), "maintainer": fields.get("maintainer"),
-            "description": fields.get("pkgdesc"), "homepage": fields.get("url"), "recommends": None,
+            "description": fields.get("pkgdesc"), "homepage": fields.get("url"), "depends": None,
             "files": files}
 
 
@@ -176,7 +176,7 @@ def rpm_info(path):
     names = [(dirs[idx[i]] if i < len(idx) else "") + b for i, b in enumerate(tags.get(1117, []))]
     return {"name": tags.get(1000), "version": tags.get(1001), "arch": tags.get(1022),
             "license": tags.get(1014), "maintainer": tags.get(1011), "description": tags.get(1005),
-            "homepage": tags.get(1020), "recommends": None, "files": {n.lstrip("/"): None for n in names}}
+            "homepage": tags.get(1020), "depends": None, "files": {n.lstrip("/"): None for n in names}}
 
 
 def elf_info(data):
@@ -286,7 +286,7 @@ def check_dist(dist, native_runs=True, docker_runs=True):
                 chk.add(f"{name}: maintainer", "danieljustus" in info["maintainer"], info["maintainer"])
             chk.add(f"{name}: description", "password" in (info["description"] or "").lower(), info["description"])
             if fmt == "deb":
-                chk.add(f"{name}: Recommends git", "git" in (info["recommends"] or ""), info["recommends"])
+                chk.add(f"{name}: Depends git", "git" in (info["depends"] or ""), info["depends"])
             chk.add(f"{name}: installs usr/bin/symvault", "usr/bin/symvault" in info["files"], sorted(info["files"])[:5])
             entry = info["files"].get("usr/bin/symvault")
             if entry and entry[1] is not None and (goos, goarch) in binaries:
