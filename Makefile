@@ -970,7 +970,6 @@ local-area-list:
 AREA_EVIDENCE ?= $(CARGO_TARGET_DIR)/area-evidence
 AREA_ENV := GOWORK=off TZ=UTC PYTHONDONTWRITEBYTECODE=1 SYMVAULT_TEST_KEYRING=memory
 AREA_CHECK := python3 -B scripts/rust-port/gate_area_check.py
-AREA_VENV := $(AREA_EVIDENCE)/tui-venv
 AREA_PROBES := $(CARGO_TARGET_DIR)/debug/examples
 # HTTP and MCP-process contracts pin the oracle toolchain their workflows used
 # (the MCP oracle refuses anything but an actual go1.26.6); the other area
@@ -987,6 +986,8 @@ AREA_BUILD_CLI := $(CARGO) build -p symvault-cli --bin symvault --locked && mkdi
 # asserts it, and a python.org 3.14 on macOS lacks the CA bundle the shell
 # completion check needs for its one download.
 AREA_PYTHON := $(or $(shell command -v python3.13),python3)
+# One venv per interpreter version, so a stale one never outlives a switch.
+AREA_VENV := $(AREA_EVIDENCE)/tui-venv-$(shell $(AREA_PYTHON) -c 'import sys; print("%d.%d" % sys.version_info[:2])')
 # The contracts build their Go oracle through this runner; the workflows build
 # it into target/ before the first contract that needs it.
 AREA_ORACLE_RUNNER := $(AREA_EVIDENCE)/oraclebuild
@@ -1255,7 +1256,7 @@ tui-harness-check: $(AREA_VENV)/.ready
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_harness_test.py
 
 tui-contract: $(AREA_VENV)/.ready
-	@mkdir -p "$(AREA_EVIDENCE)/tui" && rm -f "$(AREA_EVIDENCE)"/tui/native-*.json
+	@rm -rf "$(AREA_EVIDENCE)/tui" && mkdir -p "$(AREA_EVIDENCE)/tui"
 	$(AREA_BUILD_CLI)
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_harness_test.py
 	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
