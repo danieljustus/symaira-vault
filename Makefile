@@ -743,6 +743,17 @@ manpages-differential:
 cli-help-differential: manpages-differential
 	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_HELP_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_help --test cli_get_list_help_differential --test cli_dynamic_setup_help --test cli_update_help --locked
 
+# SETUP-001: `symvault setup` through a real PTY against a no-cgo Go oracle built
+# from this checked-out source (a no-cgo build cannot see Touch ID; see
+# docs/rust-port/setup-wizard.md). Not part of port-contract: it needs a PTY and
+# the recording is darwin's. The replay without Go is part of `cargo test`.
+SETUP_GO_BINARY := target/port/symvault-setup-go
+.PHONY: setup-wizard-differential
+setup-wizard-differential:
+	@mkdir -p "$(dir $(SETUP_GO_BINARY))"
+	CGO_ENABLED=0 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=true -trimpath -o "$(SETUP_GO_BINARY)" .
+	SYMVAULT_GO_BINARY="$(abspath $(SETUP_GO_BINARY))" $(CARGO) test -p symvault-cli --test setup_wizard_differential --locked
+
 .PHONY: store004-isolation-check
 store004-isolation-check:
 	PYTHONDONTWRITEBYTECODE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/test_store004_isolation.py
@@ -753,7 +764,17 @@ port-contract: cfg-overrides-fixtures-check mcp-oauth-contract store004-isolatio
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9 --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check ffi-differential
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check tool-registry-hash-differential ffi-differential
+
+# TOOLHASH-001: Go-recorded tool-registry hash + call-time drift refusal. The
+# process-level Go/Rust/cross-binary check needs prebuilt binaries (see
+# scripts/rust-port/toolhash_process_contract.py) and is run explicitly.
+.PHONY: tool-registry-hash-fixtures-check tool-registry-hash-differential
+tool-registry-hash-fixtures-check:
+	SYMVAULT_TEST_KEYRING=memory SYMAIRA_CHECK_TOOL_REGISTRY_HASH_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateToolRegistryHashFixture$$' -count=1
+
+tool-registry-hash-differential: tool-registry-hash-fixtures-check
+	$(CARGO) test -p symvault-mcp --test tool_registry_hash_contract --locked
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:
@@ -881,6 +902,21 @@ ffi-ios-simulator-test: ffi-xcframework
 # own parallel job: Miri accounts for roughly two thirds of the aggregate gate
 # wall clock (see docs/rust-port/ci-runtime.md), and it needs a different
 # toolchain and target directory than every other gate.
+# Differential and fixture targets that neither ci.yml (rust-native,
+# port-contract, rust-gates-core) nor an area workflow's make step reaches.
+# The local gate runs them on both legs (docs/rust-port/local-first.md).
+LOCAL_AREA_TARGETS := signal-process-differential \
+	mcp-init-differential mcp-stdio-differential mcp-list-differential \
+	mcp-call-differential mcp-clipboard-signals-differential \
+	mcp-execute-api-policy-differential mcp-oauth-contract api-templates-differential \
+	config-profile-differential config-session-differential cfg-overrides-fixtures-check \
+	device-list-differential device-session-differential pairing-differential \
+	git-offline-differential git-winner-differential rust-007-differential \
+	store004-isolation-check update-fixtures-check
+
+.PHONY: local-area
+local-area: $(LOCAL_AREA_TARGETS)
+
 rust-gates-core: store-differential audit-differential
 	$(MAKE) rust-lint
 	$(MAKE) rust-check

@@ -490,12 +490,16 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
                 return OAuthResponse::Http(error(400, "invalid_grant"));
             }
             let label = format!("oauth-{}", &pending.client_id[..8]);
+            // Go's CreateWithRefresh stamps CurrentToolRegistryHash.
+            let Ok(registry_hash) = crate::toolhash::current_tool_registry_hash() else {
+                return OAuthResponse::Http(error(500, "server_error"));
+            };
             let new = NewToken {
                 label: &label,
                 allowed_tools: vec!["*".into()],
                 agent_name: &state.agent_name,
                 ttl: Some(state.access_token_ttl),
-                tool_registry_hash: "",
+                tool_registry_hash: &registry_hash,
             };
             match token_registry::create_with_refresh(
                 &state.root,
@@ -520,10 +524,14 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
                     "refresh_token is required",
                 ));
             };
+            let Ok(registry_hash) = crate::toolhash::current_tool_registry_hash() else {
+                return OAuthResponse::Http(error(500, "server_error"));
+            };
             match token_registry::rotate_via_refresh_token_with_access_ttl(
                 &state.root,
                 refresh,
                 state.access_token_ttl,
+                &registry_hash,
                 now,
             ) {
                 Ok((record, access, refresh)) => {
@@ -944,6 +952,14 @@ mod tests {
             .expect("OAuth access token persisted by its Go token ID");
         assert_eq!(access_record["agent_name"], "default");
         assert_eq!(access_record["allowed_tools"], serde_json::json!(["*"]));
+        // Go's CreateWithRefresh stamps CurrentToolRegistryHash on the code exchange.
+        let current_hash = crate::toolhash::current_tool_registry_hash().unwrap();
+        assert!(!current_hash.is_empty());
+        assert_eq!(
+            access_record["tool_registry_hash"],
+            serde_json::Value::String(current_hash.clone()),
+            "code exchange must stamp the current tool-registry hash"
+        );
         let parse_time = |field: &str| {
             OffsetDateTime::parse(
                 access_record[field].as_str().unwrap(),
@@ -972,6 +988,25 @@ mod tests {
         assert_eq!(status, 200);
         assert_ne!(rotated["access_token"].as_str(), Some(access));
         assert_ne!(rotated["refresh_token"].as_str(), Some(refresh));
+        // Rotation re-stamps the current hash (Go: RotateViaRefreshToken → CreateWithRefresh).
+        let registry: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(directory.path().join(token_registry::TOKEN_REGISTRY_FILE))
+                .unwrap(),
+        )
+        .unwrap();
+        let rotated_hash =
+            symvault_store::sha256_hex(rotated["access_token"].as_str().unwrap().as_bytes());
+        let rotated_record = registry["tokens"]
+            .as_object()
+            .unwrap()
+            .values()
+            .find(|record| record["hash"] == rotated_hash)
+            .expect("rotated OAuth access token persisted");
+        assert_eq!(
+            rotated_record["tool_registry_hash"],
+            serde_json::Value::String(current_hash),
+            "refresh rotation must stamp the current tool-registry hash"
+        );
         assert_eq!(
             response_body(token(&state, &refresh_request, OffsetDateTime::now_utc(),)).0,
             400,

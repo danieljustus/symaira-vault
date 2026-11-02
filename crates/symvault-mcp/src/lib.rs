@@ -30,6 +30,7 @@ pub mod render;
 mod request_context;
 pub use request_context::RequestContext;
 pub mod store_adapter;
+pub mod toolhash;
 mod tools;
 pub use call::{
     CommandExecution, CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig,
@@ -43,13 +44,6 @@ pub use tools::ToolListConfig;
 
 /// The newest protocol version this server speaks.
 pub const LATEST_SUPPORTED_PROTOCOL_VERSION: &str = "2025-11-25";
-
-/// SHA-256 of the pinned oracle's compiled MCP tool definitions. A scoped token
-/// stamped with any other non-empty value was issued against a different tool
-/// registry and is refused at `tools/call` time, as in Go
-/// (`IsToolRegistryDriftDetected`); an empty stamp (legacy tokens) never drifts.
-pub const TOOL_REGISTRY_HASH: &str =
-    "01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f";
 
 /// The version the HTTP transport defaults to. Kept here because it is part of
 /// the same oracle constant block; MCP-001 itself only exercises stdio.
@@ -422,8 +416,7 @@ pub struct ProtocolHandler {
     tool_call_runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>,
     initialized: bool,
     token_allowed_tools: Option<Vec<String>>,
-    /// Set (to the agent name) when the authenticated token's registry stamp drifted.
-    token_registry_drift: Option<String>,
+    token_registry_hash: Option<String>,
     request_context: RequestContext,
 }
 
@@ -436,7 +429,7 @@ impl ProtocolHandler {
             tool_call_runtime: None,
             initialized: false,
             token_allowed_tools: None,
-            token_registry_drift: None,
+            token_registry_hash: None,
             request_context: RequestContext::default(),
         }
     }
@@ -455,7 +448,7 @@ impl ProtocolHandler {
             tool_call_runtime: None,
             initialized: false,
             token_allowed_tools: None,
-            token_registry_drift: None,
+            token_registry_hash: None,
             request_context: RequestContext::default(),
         }
     }
@@ -475,7 +468,7 @@ impl ProtocolHandler {
             tool_call_runtime: Some(runtime),
             initialized: false,
             token_allowed_tools: None,
-            token_registry_drift: None,
+            token_registry_hash: None,
             request_context: RequestContext::default(),
         }
     }
@@ -541,10 +534,12 @@ impl ProtocolHandler {
         self.token_allowed_tools = Some(allowed_tools.to_vec());
     }
 
-    /// Records the authenticated token's tool-registry stamp for `tools/call`.
-    pub fn set_token_registry_hash(&mut self, token_hash: &str, agent: &str) {
-        self.token_registry_drift =
-            (!token_hash.is_empty() && token_hash != TOOL_REGISTRY_HASH).then(|| agent.to_owned());
+    /// Records the tool-registry hash the authenticated HTTP token was issued
+    /// against. An empty hash is a legacy token and never drifts; `None` (stdio
+    /// and untokened callers) performs no drift check, as in Go where only the
+    /// HTTP middleware puts a token into the call context.
+    pub fn set_token_registry_hash(&mut self, hash: &str) {
+        self.token_registry_hash = Some(hash.to_owned());
     }
 
     /// Set context on this session, never on its shared application runtime.
@@ -562,7 +557,7 @@ impl ProtocolHandler {
             tool_call_runtime: self.tool_call_runtime.clone(),
             initialized: false,
             token_allowed_tools: self.token_allowed_tools.clone(),
-            token_registry_drift: None,
+            token_registry_hash: self.token_registry_hash.clone(),
             request_context: RequestContext::default(),
         }
     }
@@ -774,7 +769,20 @@ impl ProtocolHandler {
                 None,
             ));
         }
-        if let Err(result) = runtime.authorize(&name, &arguments) {
+        // Go order inside validateToolAccess: availability, tier and token
+        // scope, UpdateLastUsed, registry drift, then entry policy. The drift
+        // refusal therefore sits between the tier checks and the policy gate,
+        // so the runtime sequences it; this only decides whether it applies.
+        let registry_drift = match self.token_registry_hash.as_deref() {
+            Some(token_hash) if !token_hash.is_empty() => {
+                let current = toolhash::current_tool_registry_hash().map_err(Error::Catalog)?;
+                toolhash::is_drift(token_hash, &current)
+            }
+            _ => false,
+        };
+        if let Err(result) =
+            runtime.authorize_with_registry_drift(&name, &arguments, registry_drift)
+        {
             if result.authorization_internal_error {
                 return Ok(Message::error_response(
                     msg.id.clone(),
@@ -784,14 +792,6 @@ impl ProtocolHandler {
                 ));
             }
             return Message::response(msg.id.clone(), call::payload(result));
-        }
-        if let Some(agent) = self.token_registry_drift.as_deref() {
-            return Message::response(
-                msg.id.clone(),
-                call::payload(ToolCallResult::error(format!(
-                    "tool registry has changed since this token was issued \u{2014} re-issue the token with 'symvault agent token new {agent}'"
-                ))),
-            );
         }
         match runtime.call_with_context(&name, &arguments, &self.request_context) {
             Ok(result) => Message::response(msg.id.clone(), call::payload(result)),

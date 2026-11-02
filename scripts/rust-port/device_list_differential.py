@@ -152,11 +152,20 @@ def main():
     assert Path(metadata["workspace_root"]).resolve() == ROOT
     package = next(p for p in metadata["packages"] if p["name"] == "symvault-cli")
     assert Path(package["manifest_path"]).resolve() == ROOT / "crates/symvault-cli/Cargo.toml"
-    assert Path(metadata["target_directory"]).resolve().is_relative_to(ROOT), "target must belong to candidate"
+    # The Rust binary must come from this checkout's build. An in-tree target
+    # is trivially owned; an out-of-tree one is accepted only when the operator
+    # pinned it explicitly via CARGO_TARGET_DIR (per-worktree external build
+    # trees), because the cargo build below then rebuilds it from ROOT sources.
+    target_dir = Path(metadata["target_directory"]).resolve()
+    pinned = env.get("CARGO_TARGET_DIR")
+    assert target_dir.is_relative_to(ROOT) or (
+        pinned is not None and Path(pinned).resolve() == target_dir
+    ), "target must belong to candidate"
     source = source_manifest(env)
     report = {"head": head, "oracle": oracle, "platform": platform.platform(),
               "cwd": str(ROOT), "toolchains": [go_version, rust_version],
-              "source_sha256": source, "started": time.time(), "cases": [], "success": False}
+              "source_sha256": source, "target_directory": str(target_dir),
+              "started": time.time(), "cases": [], "success": False}
     args.report.parent.mkdir(parents=True, exist_ok=True)
     try:
         with tempfile.TemporaryDirectory(prefix="sv-list-") as temp:
@@ -179,7 +188,9 @@ def main():
             with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
                 tar.extractall(oracle_dir, filter="data")
             go_binary = temp / ("go-symvault.exe" if os.name == "nt" else "go-symvault")
-            checked(["go", "build", "-o", go_binary, "."], oracle_dir, env, 600)
+            # The git-archive oracle tree has no VCS of its own; an unrelated
+            # repository enclosing TMPDIR must not leak into its build stamp.
+            checked(["go", "build", "-buildvcs=false", "-o", go_binary, "."], oracle_dir, env, 600)
             adapter = temp / ("caserun.exe" if os.name == "nt" else "caserun")
             checked(["go", "build", "-o", adapter, "./scripts/rust-port/cmd/caserun"], ROOT, env, 600)
             checked(["cargo", "build", "--manifest-path", ROOT / "Cargo.toml", "-p", "symvault-cli", "--locked"], ROOT, env, 600)

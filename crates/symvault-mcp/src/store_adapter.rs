@@ -2945,12 +2945,31 @@ fn read_scan_line<R: BufRead>(reader: &mut R, line: &mut Vec<u8>) -> std::io::Re
 
 impl ToolCallRuntime for StoreReadOnlyRuntime {
     fn authorize(&self, name: &str, arguments: &Value) -> Result<(), ToolCallResult> {
+        self.authorize_with_registry_drift(name, arguments, false)
+    }
+
+    fn registry_drift_agent(&self) -> String {
+        self.agent_name.clone()
+    }
+
+    fn authorize_with_registry_drift(
+        &self,
+        name: &str,
+        arguments: &Value,
+        drift: bool,
+    ) -> Result<(), ToolCallResult> {
         if let Err(error) = self.inner.authorize(name, arguments) {
             let path = Self::audit_target(name, arguments);
             if !self.unavailable_tools.iter().any(|tool| tool == name) {
                 self.append_audit("tool_denied", &path, false);
             }
             return Err(error);
+        }
+        if drift {
+            // Go: `s.logAudit(ctx, "tool_registry_drift", name, false)`, the
+            // tool name (not the entry path) is the audit target.
+            self.append_audit("tool_registry_drift", name, false);
+            return Err(crate::call::registry_drift_refusal(&self.agent_name));
         }
         self.authorize_policy(name, arguments)?;
         Ok(())

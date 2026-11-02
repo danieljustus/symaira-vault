@@ -1,0 +1,487 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "source_files": [
+      "internal/mcp/auth/token.go",
+      "internal/mcp/server/server_dispatch.go",
+      "internal/mcp/server/setup.go",
+      "internal/mcp/server/tool_registry.go",
+      "internal/mcp/toolhash.go"
+    ],
+    "source_hash": "79c22f5d839d6ceba74cab41b81975c0277d305f5a30228387578831e9c98ea7",
+    "generator_hash": "8ec449414b9aa4a017ac4ed44420c6a1e1a0b86c730963f888138100f7049c9a",
+    "note": "Recorded from the Go sources in this checkout; regenerate when any source file changes (a changed tool definition changes the registry hash by design)."
+  },
+  "algorithm": "sort defs by name; for each: fmt.Fprintf(sha256, \"%s|%s|%s|%v|%v\\n\", Name, Description, json.Marshal(InputSchema) (\"{}\" on error), ReadOnlyHint, DestructiveHint); hex digest. The hash covers the full toolDefinitions() registry (all 35 tools, not tier- or availability-filtered).",
+  "registry": {
+    "tool_count": 35,
+    "hash": "bccf8c7e8660328030bc4e9bbc0c0d43a650278bae4b8ef60d5543d64c46455d",
+    "tools": [
+      {
+        "name": "approve_share",
+        "description": "Approve a pending share request. Requires human confirmation.",
+        "input_schema_json": "{\"properties\":{\"grant_id\":{\"description\":\"ID of the share grant to approve\",\"type\":\"string\"}},\"required\":[\"grant_id\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "autotype",
+        "description": "Type a vault entry field value as keyboard input into the currently focused application without exposing the value to the agent",
+        "input_schema_json": "{\"properties\":{\"field\":{\"description\":\"Field name to type (default: password)\",\"type\":\"string\"},\"path\":{\"description\":\"Entry path\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "copy_to_clipboard",
+        "description": "Copy a vault entry password field to the system clipboard without exposing the value to the agent",
+        "input_schema_json": "{\"properties\":{\"path\":{\"description\":\"Entry path\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "delete_entry",
+        "description": "Delete a password entry by path",
+        "input_schema_json": "{\"properties\":{\"path\":{\"description\":\"Entry path to delete\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "execute_api_request",
+        "description": "Execute an HTTP API request using a named template with vault-injected credentials. The agent never sees the credential values. Requires command execution permission.",
+        "input_schema_json": "{\"properties\":{\"body\":{\"description\":\"Request body (optional)\",\"type\":\"string\"},\"endpoint\":{\"description\":\"API endpoint path (e.g. /repos/owner/repo)\",\"type\":\"string\"},\"headers\":{\"description\":\"Additional request headers (optional)\",\"type\":\"object\"},\"method\":{\"description\":\"HTTP method (default: GET)\",\"type\":\"string\"},\"template\":{\"description\":\"API template name (e.g. github, openai, anthropic, slack)\",\"type\":\"string\"},\"timeout\":{\"description\":\"Timeout in seconds (default: 30)\",\"type\":\"number\"}},\"required\":[\"template\",\"endpoint\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "execute_with_secret",
+        "description": "Execute a command with vault secrets injected as environment variables. The agent never sees the secret values. Requires command execution permission.",
+        "input_schema_json": "{\"properties\":{\"command\":{\"description\":\"\\\"Command and arguments as an array (e.g. [\\\"terraform\\\", \\\"apply\\\"])\",\"type\":\"array\"},\"env_vars\":{\"description\":\"Additional non-secret environment variables\",\"type\":\"object\"},\"secret_refs\":{\"description\":\"\\\"Array of op:// vault references (e.g. [\\\"op://vault/aws/access_key\\\"])\",\"type\":\"array\"},\"timeout\":{\"description\":\"Timeout in seconds (default: 30)\",\"type\":\"number\"},\"working_dir\":{\"description\":\"Working directory for the command\",\"type\":\"string\"}},\"required\":[\"command\",\"secret_refs\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "fetch",
+        "description": "Fetch a vault entry by path/id. Returns the full entry content with metadata and values.",
+        "input_schema_json": "{\"properties\":{\"id\":{\"description\":\"Entry path or id to fetch (e.g., 'github' or 'work/aws')\",\"type\":\"string\"}},\"required\":[\"id\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "find_entries",
+        "description": "Search entries by query string",
+        "input_schema_json": "{\"properties\":{\"query\":{\"description\":\"Search query\",\"type\":\"string\"}},\"required\":[\"query\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "generate_password",
+        "description": "Generate a secure password",
+        "input_schema_json": "{\"properties\":{\"length\":{\"description\":\"Password length\",\"type\":\"number\"},\"symbols\":{\"description\":\"Include symbols. Default: true.\",\"type\":\"boolean\"}},\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "generate_template",
+        "description": "Generate a configuration file from a template",
+        "input_schema_json": "{\"properties\":{\"dry_run\":{\"description\":\"Show template with masked values. Default: false\",\"type\":\"boolean\"},\"name\":{\"description\":\"Name of the resource being generated. Default: app\",\"type\":\"string\"},\"output_path\":{\"description\":\"Output file path (optional)\",\"type\":\"string\"},\"secret_refs\":{\"description\":\"Map of template variable names to vault references\",\"type\":\"object\"},\"template_type\":{\"description\":\"Template type (env, docker-compose, k8s-secret, github-actions, terraform)\",\"type\":\"string\"}},\"required\":[\"template_type\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "generate_totp",
+        "description": "Generate a TOTP code for an entry with TOTP configuration. By default the code is copied to the clipboard without being returned in the response. Use destination=\"autotype\" to type the code directly, or destination=\"return\" with return_code=true to return the code in the response (requires approval).",
+        "input_schema_json": "{\"properties\":{\"destination\":{\"description\":\"Where to send the code: \\\"clipboard\\\" (default, not returned), \\\"autotype\\\" (type directly), \\\"return\\\" (return in response, requires approval)\",\"type\":\"string\"},\"path\":{\"description\":\"Entry path with TOTP configuration\",\"type\":\"string\"},\"return_code\":{\"description\":\"Must be true when destination=\\\"return\\\"\",\"type\":\"boolean\"}},\"required\":[\"path\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "get_auth_status",
+        "description": "Return Symaira Vault unlock authentication status",
+        "input_schema_json": "{\"properties\":{},\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "get_entry",
+        "description": "Get metadata for a vault entry. Returns type, usage hints, and field names without secret values. Use get_entry_value to retrieve actual values.",
+        "input_schema_json": "{\"properties\":{\"include_value\":{\"description\":\"When true, returns the full entry with secret values. Default: false.\",\"type\":\"boolean\"},\"path\":{\"description\":\"Entry path\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "get_entry_metadata",
+        "description": "Get metadata for a vault entry without retrieving sensitive data",
+        "input_schema_json": "{\"properties\":{\"path\":{\"description\":\"Entry path\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "get_entry_value",
+        "description": "Get the actual secret values for a vault entry. Use with caution - only request values when absolutely needed.",
+        "input_schema_json": "{\"properties\":{\"path\":{\"description\":\"Entry path\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "health",
+        "description": "Return Symaira Vault MCP server health information",
+        "input_schema_json": "{\"properties\":{},\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "list_entries",
+        "description": "List vault entries matching a prefix with metadata",
+        "input_schema_json": "{\"properties\":{\"include_details\":{\"description\":\"When true, returns metadata for each entry. Default: false to avoid expensive decryption on large vaults.\",\"type\":\"boolean\"},\"prefix\":{\"description\":\"Path prefix to filter\",\"type\":\"string\"}},\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "list_shares",
+        "description": "List share grants. Can filter by status, agent, or secret path.",
+        "input_schema_json": "{\"properties\":{\"from_agent\":{\"description\":\"Filter by source agent name\",\"type\":\"string\"},\"secret_path\":{\"description\":\"Filter by secret path\",\"type\":\"string\"},\"status\":{\"description\":\"Filter by status: pending, approved, revoked, expired, rejected\",\"type\":\"string\"},\"to_agent\":{\"description\":\"Filter by target agent name\",\"type\":\"string\"}},\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "perplexity_ask",
+        "description": "Ask Perplexity AI a question with optional vault entry context. Returns an AI-generated answer with citations.",
+        "input_schema_json": "{\"properties\":{\"context\":{\"description\":\"Optional context from vault entries to include in the question\",\"type\":\"string\"},\"question\":{\"description\":\"Question to ask Perplexity AI\",\"type\":\"string\"}},\"required\":[\"question\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "perplexity_search",
+        "description": "Search the web using Perplexity AI. Returns synthesized search results with citations from the web.",
+        "input_schema_json": "{\"properties\":{\"query\":{\"description\":\"Natural language search query\",\"type\":\"string\"}},\"required\":[\"query\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "prepare_payment",
+        "description": "Prepare a payment by validating a payment entry, showing a native approval prompt with merchant/amount/currency, and on approval autotyping card or bank account fields into the focused checkout window. Card values are never returned to the agent.",
+        "input_schema_json": "{\"properties\":{\"amount\":{\"description\":\"Payment amount (e.g. 75.00)\",\"type\":\"string\"},\"currency\":{\"description\":\"Currency code (e.g. EUR, USD)\",\"type\":\"string\"},\"description\":{\"description\":\"Optional description shown in the approval prompt\",\"type\":\"string\"},\"entry_path\":{\"description\":\"Vault path of the payment entry\",\"type\":\"string\"},\"merchant\":{\"description\":\"Merchant name or origin (e.g. shop.example)\",\"type\":\"string\"}},\"required\":[\"entry_path\",\"merchant\",\"amount\",\"currency\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "request_credential",
+        "description": "Request the user to securely enter a credential the agent needs but cannot find in the vault. Opens a native input dialog (TTY box or OS-native popup). The value is stored in the vault and never exposed to the agent. Use this after find_entries / get_entry returns nothing for an expected path, instead of asking the user for the secret in chat.",
+        "input_schema_json": "{\"properties\":{\"field\":{\"description\":\"Field name, e.g. \\\"token\\\", \\\"password\\\", \\\"api_key\\\"\",\"type\":\"string\"},\"path\":{\"description\":\"Vault path to store the new credential, e.g. \\\"github/api-token\\\"\",\"type\":\"string\"},\"reason\":{\"description\":\"Short human-readable reason shown in the dialog (why does the agent need this?)\",\"type\":\"string\"}},\"required\":[\"path\",\"field\",\"reason\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "request_share",
+        "description": "Request to share a secret with another agent. Creates a pending share grant that requires human approval.",
+        "input_schema_json": "{\"properties\":{\"secret_field\":{\"description\":\"Specific field to share (optional, shares entire entry if omitted)\",\"type\":\"string\"},\"secret_path\":{\"description\":\"Path to the secret entry (e.g., \\\"api-keys/stripe\\\")\",\"type\":\"string\"},\"to_agent\":{\"description\":\"Name of the agent to share the secret with\",\"type\":\"string\"},\"ttl\":{\"description\":\"Time-to-live duration (e.g., \\\"1h\\\", \\\"30m\\\"). Share expires after this duration.\",\"type\":\"string\"}},\"required\":[\"to_agent\",\"secret_path\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "revoke_share",
+        "description": "Revoke an active share grant, immediately removing access.",
+        "input_schema_json": "{\"properties\":{\"grant_id\":{\"description\":\"ID of the share grant to revoke\",\"type\":\"string\"}},\"required\":[\"grant_id\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "run_command",
+        "description": "Execute a command on the host with secrets injected as environment variables. Requires write permission.",
+        "input_schema_json": "{\"properties\":{\"command\":{\"description\":\"\\\"Command and arguments as an array (e.g. [\\\"curl\\\", \\\"https://api.example.com\\\"])\",\"type\":\"array\"},\"env\":{\"description\":\"\\\"Map of environment variable names to secret references (e.g. {\\\"API_KEY\\\": \\\"github.api_key\\\"})\",\"type\":\"object\"},\"files\":{\"description\":\"Map of safe file names to secret references or {ref, encoding: base64} objects. Files are materialized ephemerally and exposed as SYMVAULT_FILE_\\u003cname\\u003e paths.\",\"type\":\"object\"},\"timeout\":{\"description\":\"Timeout in seconds (default: 30)\",\"type\":\"number\"},\"working_dir\":{\"description\":\"Working directory for the command\",\"type\":\"string\"}},\"required\":[\"command\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "sanitize_output",
+        "description": "Scan text for secrets and replace them with masked values. Use before sending output to LLM chat.",
+        "input_schema_json": "{\"properties\":{\"mask\":{\"description\":\"Custom mask string (default: ***)\",\"type\":\"string\"},\"mask_with_op_refs\":{\"description\":\"Replace vault-known secrets with op:// references\",\"type\":\"boolean\"},\"text\":{\"description\":\"Text to scan for secrets\",\"type\":\"string\"}},\"required\":[\"text\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "search",
+        "description": "Search vault entries by query. Returns results with id, title, and url for each matching entry.",
+        "input_schema_json": "{\"properties\":{\"query\":{\"description\":\"Search query to match against entry paths and field values\",\"type\":\"string\"}},\"required\":[\"query\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "secret_unseal",
+        "description": "Unseal a secret handle to reveal its value. High-sensitivity entries return handles (op://path/field) instead of plaintext. This tool resolves those handles. Requires user approval per handle.",
+        "input_schema_json": "{\"properties\":{\"handle\":{\"description\":\"Secret handle to unseal (e.g. op://github/password)\",\"type\":\"string\"}},\"required\":[\"handle\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "secure_input",
+        "description": "Prompt the user for sensitive data via TTY or native GUI dialog and store it without exposing the value to the agent",
+        "input_schema_json": "{\"properties\":{\"description\":{\"description\":\"Optional description shown to the user in the prompt\",\"type\":\"string\"},\"field\":{\"description\":\"Field name to store the value under\",\"type\":\"string\"},\"path\":{\"description\":\"Entry path to store the value\",\"type\":\"string\"}},\"required\":[\"path\",\"field\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "set_auth_method",
+        "description": "Set Symaira Vault unlock authentication method (requires canManageConfig)",
+        "input_schema_json": "{\"properties\":{\"method\":{\"description\":\"Authentication method: passphrase or touchid\",\"type\":\"string\"}},\"required\":[\"method\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "set_entry_field",
+        "description": "Set a field on an entry (requires write scope)",
+        "input_schema_json": "{\"properties\":{\"field\":{\"description\":\"Field name\",\"type\":\"string\"},\"force\":{\"description\":\"Skip password strength validation. Default: false.\",\"type\":\"boolean\"},\"path\":{\"description\":\"Entry path\",\"type\":\"string\"},\"value\":{\"description\":\"Field value\",\"type\":\"string\"}},\"required\":[\"path\",\"field\",\"value\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "symaira_audit_self",
+        "description": "Return recent audit events for this agent",
+        "input_schema_json": "{\"properties\":{\"limit\":{\"description\":\"Maximum number of events to return (default 50, max 100)\",\"type\":\"number\"}},\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "symaira_delete",
+        "description": "Deprecated alias for delete_entry. Use delete_entry for new clients.",
+        "input_schema_json": "{\"properties\":{\"path\":{\"description\":\"Entry path to delete\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"}",
+        "read_only_hint": false,
+        "destructive_hint": true
+      },
+      {
+        "name": "symaira_search",
+        "description": "Discover tools by intent matching. Returns tools whose name or description matches the intent.",
+        "input_schema_json": "{\"properties\":{\"intent\":{\"description\":\"Natural language intent or keyword to search for\",\"type\":\"string\"},\"return\":{\"description\":\"Output format: \\\"spec\\\" (full tool specs) or \\\"names\\\" (just tool names). Default: \\\"spec\\\".\",\"type\":\"string\"}},\"required\":[\"intent\"],\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      },
+      {
+        "name": "symaira_whoami",
+        "description": "Return the agent profile, available/unavailable tools, quotas, and vault status",
+        "input_schema_json": "{\"properties\":{},\"type\":\"object\"}",
+        "read_only_hint": true,
+        "destructive_hint": false
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "name": "reverse_order_keeps_hash",
+      "ops": [
+        {
+          "op": "reverse_order"
+        }
+      ],
+      "hash": "bccf8c7e8660328030bc4e9bbc0c0d43a650278bae4b8ef60d5543d64c46455d",
+      "changes_hash": false,
+      "tool_count": 35
+    },
+    {
+      "name": "description_changed",
+      "ops": [
+        {
+          "op": "set_description",
+          "tool": "get_auth_status",
+          "value": "Return Symaira Vault unlock authentication status (mutated)"
+        }
+      ],
+      "hash": "3c35026bb52f671fe6c05e90b959eec54bfe476513f7f5ef9ee5dcd925bb5dec",
+      "changes_hash": true,
+      "tool_count": 35
+    },
+    {
+      "name": "description_changed_with_html_chars",
+      "ops": [
+        {
+          "op": "set_description",
+          "tool": "health",
+          "value": "Return \u003cb\u003ehealth\u003c/b\u003e \u0026 \u2028status"
+        }
+      ],
+      "hash": "a2b2ccf9c48198be75a23b50281aa7ff795506460fef99c002ededb3b490ed28",
+      "changes_hash": true,
+      "tool_count": 35
+    },
+    {
+      "name": "read_only_hint_flipped",
+      "ops": [
+        {
+          "op": "set_read_only",
+          "tool": "get_auth_status",
+          "value": false
+        }
+      ],
+      "hash": "b2564268b2ba5aa10c87617acca5687648cc7e6a1a69ceeedf5c5dcf052b44ee",
+      "changes_hash": true,
+      "tool_count": 35
+    },
+    {
+      "name": "destructive_hint_flipped",
+      "ops": [
+        {
+          "op": "set_destructive",
+          "tool": "health",
+          "value": true
+        }
+      ],
+      "hash": "15e979fedac41005d98a2aebb6a4c0d4aa172877e852f7e70dca7afd96aa3605",
+      "changes_hash": true,
+      "tool_count": 35
+    },
+    {
+      "name": "schema_property_description_changed",
+      "ops": [
+        {
+          "op": "set_schema_property_description",
+          "tool": "get_entry",
+          "property": "path",
+          "value": "Entry path (mutated)"
+        }
+      ],
+      "hash": "4e617820cfcd08d7dc1e7fe7ad1e9f2a8077ec529984af00b6162cb7643fc51c",
+      "changes_hash": true,
+      "tool_count": 35
+    },
+    {
+      "name": "tool_removed",
+      "ops": [
+        {
+          "op": "remove_tool",
+          "tool": "health"
+        }
+      ],
+      "hash": "bfc9995ea43ca4aee4dd216929ea673b6dfffba7734dfe078f105ebd6c8fe5ef",
+      "changes_hash": true,
+      "tool_count": 34
+    },
+    {
+      "name": "tool_added",
+      "ops": [
+        {
+          "op": "add_tool",
+          "def": {
+            "name": "zz_added_tool",
+            "description": "Added",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "read_only_hint": true,
+            "destructive_hint": false
+          }
+        }
+      ],
+      "hash": "92cd24c7a41da13412aa46972bdeb0b304e8402b471884607af38268c80b7f0f",
+      "changes_hash": true,
+      "tool_count": 36
+    }
+  ],
+  "synthetic": [
+    {
+      "name": "escaping_and_numbers",
+      "defs": [
+        {
+          "name": "b_tool",
+          "description": "desc \u003cwith\u003e \u0026 \u2028 \u2029 chars %s %d |pipe|\nnewline",
+          "input_schema": {
+            "enum": [
+              1,
+              2.5,
+              "s",
+              null,
+              true
+            ],
+            "properties": {
+              "a": {
+                "description": "\u003c\u003e\u0026\u2028\u2029 café ✓ \\ \"quoted\" \u0007"
+              },
+              "z": {
+                "default": 1.5,
+                "maximum": 1e+21,
+                "minimum": 1e-7,
+                "neg": 0,
+                "type": "number",
+                "x": 100
+              }
+            },
+            "required": [
+              "z",
+              "a"
+            ],
+            "type": "object"
+          },
+          "read_only_hint": true,
+          "destructive_hint": false
+        },
+        {
+          "name": "a_tool",
+          "description": "",
+          "input_schema": null,
+          "read_only_hint": false,
+          "destructive_hint": true
+        },
+        {
+          "name": "c_tool",
+          "description": "empty schema",
+          "input_schema": {},
+          "read_only_hint": false,
+          "destructive_hint": false
+        }
+      ],
+      "hash": "50cc7ff55df3d8abccdb701e44ab9cd57ae3744a78d031fa4a921c60989abf5e",
+      "why": "json.Marshal escapes \u003c, \u003e, \u0026 and U+2028/U+2029 and formats float64 Go-style; descriptions are written verbatim"
+    },
+    {
+      "name": "empty_registry",
+      "defs": [],
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "why": "no tools hashes the empty byte stream"
+    }
+  ],
+  "drift": [
+    {
+      "name": "legacy_empty_hash_is_accepted",
+      "token_hash": "",
+      "token_hash_is_registry": false,
+      "drift": false,
+      "agent_name": "fixture",
+      "tool": "symaira_search",
+      "arguments": "{\"intent\":\"auth\",\"return\":\"names\"}",
+      "result_json": "{\"content\":[{\"text\":\"[\\\"get_auth_status\\\",\\\"set_auth_method\\\"]\",\"type\":\"text\"}],\"isError\":false}",
+      "refused": false
+    },
+    {
+      "name": "matching_hash_is_accepted",
+      "token_hash": "",
+      "token_hash_is_registry": true,
+      "drift": false,
+      "agent_name": "fixture",
+      "tool": "symaira_search",
+      "arguments": "{\"intent\":\"auth\",\"return\":\"names\"}",
+      "result_json": "{\"content\":[{\"text\":\"[\\\"get_auth_status\\\",\\\"set_auth_method\\\"]\",\"type\":\"text\"}],\"isError\":false}",
+      "refused": false
+    },
+    {
+      "name": "stale_hash_is_refused",
+      "token_hash": "stale-hash-does-not-match",
+      "token_hash_is_registry": false,
+      "drift": true,
+      "agent_name": "fixture",
+      "tool": "symaira_search",
+      "arguments": "{\"intent\":\"auth\",\"return\":\"names\"}",
+      "result_json": "{\"content\":[{\"text\":\"tool registry has changed since this token was issued — re-issue the token with 'symvault agent token new fixture'\",\"type\":\"text\"}],\"isError\":true}",
+      "refused": true
+    },
+    {
+      "name": "zero_hash_is_refused",
+      "token_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "token_hash_is_registry": false,
+      "drift": true,
+      "agent_name": "fixture",
+      "tool": "symaira_search",
+      "arguments": "{\"intent\":\"auth\",\"return\":\"names\"}",
+      "result_json": "{\"content\":[{\"text\":\"tool registry has changed since this token was issued — re-issue the token with 'symvault agent token new fixture'\",\"type\":\"text\"}],\"isError\":true}",
+      "refused": true
+    }
+  ]
+}

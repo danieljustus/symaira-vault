@@ -41,6 +41,9 @@ run_macos() {
   # ponytail: only this target uses the internal per-user temp dir.
   ${MAKE_PREFIX:-} make config-cli-differential TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
   ${MAKE_PREFIX:-} make mcp-approval-pty-acceptance
+  # Targets no ci.yml job reaches (Makefile LOCAL_AREA_TARGETS). -k reports
+  # every failing target, not just the first.
+  ${MAKE_PREFIX:-} make -k local-area
   # Go is the frozen oracle: test it only when this branch changed Go code.
   # Pin the toolchain CI uses (go.mod `toolchain`, = Makefile
   # BUILD_GO_TOOLCHAIN): direct `go test` bypasses the Makefile export, and a
@@ -72,7 +75,7 @@ run_macos() {
 run_linux() {
   docker build -q -t "$image" scripts/rust-port/local-gate >/dev/null
   common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
-  targets="rust-gates-core port-contract mcp-approval-pty-acceptance"
+  targets="rust-gates-core port-contract mcp-approval-pty-acceptance local-area"
   # ponytail: Miri takes about an hour; opt in for slices touching
   # symvault-core. The closing hosted CI run always includes it.
   [ "${RUN_MIRI:-0}" = 1 ] && targets="$targets rust-miri"

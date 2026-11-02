@@ -15,7 +15,7 @@
 mod test_temp_root;
 
 use std::{
-    env, fs,
+    env,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -303,6 +303,6 @@ mod real_keychain {
             orphan_count(find(&after, "audit.keyring.orphans")),
             baseline
         );
-        let _ = fs::remove_dir_all(&gone);
+        let _ = std::fs::remove_dir_all(&gone);
     }
 }

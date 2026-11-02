@@ -137,12 +137,13 @@ pub(crate) fn new(
         return Err("at least one tool must be specified (use --tools '*')".to_owned());
     }
     let ttl = resolve_token_ttl(ttl)?;
+    let registry_hash = super::agent_install_commands::tool_registry_hash()?;
     let request = token_registry::NewToken {
         label,
         allowed_tools: tools,
         agent_name: agent,
         ttl: Some(ttl),
-        tool_registry_hash: "",
+        tool_registry_hash: &registry_hash,
     };
     let (record, raw_token) = token_registry::create(root, &request, OffsetDateTime::now_utc())
         .map_err(|error| error.to_string())?;
@@ -194,12 +195,13 @@ pub(crate) fn rotate(
         return Err("at least one tool must be specified (use --tools '*')".to_owned());
     }
     let ttl = resolve_token_ttl(ttl)?;
+    let registry_hash = super::agent_install_commands::tool_registry_hash()?;
     let request = token_registry::NewToken {
         label,
         allowed_tools: tools,
         agent_name: agent,
         ttl: Some(ttl),
-        tool_registry_hash: "",
+        tool_registry_hash: &registry_hash,
     };
     let (record, raw_token) = token_registry::rotate(root, &request, OffsetDateTime::now_utc())
         .map_err(|error| error.to_string())?;

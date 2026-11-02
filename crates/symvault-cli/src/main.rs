@@ -54,6 +54,7 @@ mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod setup_wizard;
 mod share_commands;
 mod startup_profile_commands;
 mod sync_commands;
@@ -237,6 +238,19 @@ enum Command {
         vault_dir: Option<PathBuf>,
         #[arg(long, default_value = "ask")]
         auth: String,
+    },
+    /// Interactive setup wizard for Symaira Vault.
+    Setup {
+        /// Do not rollback vault init artifacts when subsequent steps fail.
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "keep_on_error")]
+        keep_on_error: bool,
+        /// Disable setup resume after abort.
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_resume")]
+        no_resume: bool,
+        #[command(flatten)]
+        _ignored: IgnoredPositionals,
     },
     /// Add a new password entry.
     #[command(alias = "new", alias = "create")]
@@ -1448,6 +1462,16 @@ fn run_cli() -> ExitCode {
             shell,
             no_descriptions,
         }) => completion_commands::generate(shell.as_deref(), no_descriptions, Cli::command()),
+        Some(Command::Setup {
+            keep_on_error,
+            no_resume,
+            ..
+        }) => run_setup(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            keep_on_error,
+            no_resume,
+        ),
         Some(Command::Init { vault_dir, auth }) => run_init(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -2905,7 +2929,8 @@ fn run_add(
             let stdin = io::stdin();
             let mut input = io::BufReader::new(stdin.lock());
             let (value, totp_secret) =
-                add_commands::read_stdin_values(&mut input, stdin_value, stdin_totp_secret)?;
+                add_commands::read_stdin_values(&mut input, stdin_value, stdin_totp_secret)
+                    .map_err(|error| reported(1, &error, None))?;
             if value.is_some() {
                 options.value = value;
             }
@@ -2914,7 +2939,18 @@ fn run_add(
             }
         }
         let path = options.path.clone();
-        add_commands::add(&vault, &identity, &options)?;
+        // Go returns every `add` failure from `RunE`, so cobra and
+        // `ExecuteRoot` both print it (doubled `Error:` line). The exit status
+        // is 1, except for the empty sensitive value, a CLIError with
+        // ExitInvalidInput (9) in `cmd/crud/add.go`.
+        add_commands::add(&vault, &identity, &options).map_err(|error| {
+            let code = if error.starts_with("cannot set empty value for sensitive field") {
+                9
+            } else {
+                1
+            };
+            reported(code, &error, None)
+        })?;
         if !quiet {
             println!("Entry created: {path}");
         }
@@ -3612,6 +3648,57 @@ fn run_file(
         Ok::<(), String>(())
     })();
     finish_vault_result(result)
+}
+
+/// `symvault setup`: the Go command refuses to start without a terminal on
+/// stdin, then hands the vault directory `cli.GetVaultDir()` resolves to
+/// (the resolver's data directory when resolution fails) to the wizard.
+fn run_setup(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    keep_on_error: bool,
+    no_resume: bool,
+) -> ExitCode {
+    if !setup_wizard::stdin_is_terminal() {
+        print_error_like_go(setup_wizard::NON_TTY_ERROR);
+        return ExitCode::from(1);
+    }
+    let vault_dir = resolve_vault(explicit_vault, profile)
+        .unwrap_or_else(|_| PathResolver::new().data_dir)
+        .to_string_lossy()
+        .into_owned();
+    let environment = setup_wizard::Environment {
+        // Go asks `session.BiometricAvailable()` with no CI gate. The only
+        // exception is the explicit test hook `SYMVAULT_TEST_TOUCH_ID=unavailable`:
+        // it lets the differential tests compare against a no-cgo Go oracle,
+        // which can never see Touch ID, without reaching the host's biometrics.
+        touch_id_available: std::env::var("SYMVAULT_TEST_TOUCH_ID").as_deref() != Ok("unavailable")
+            && touch_id_available(),
+        save_touch_id: Box::new(|vault, passphrase| {
+            #[cfg(target_os = "macos")]
+            {
+                let runtime = runtime_session_manager();
+                session_commands::save_touch_id_passphrase(
+                    vault,
+                    touch_id_items(&runtime).as_ref(),
+                    passphrase,
+                )
+                .map_err(|error| error.to_string())
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (vault, passphrase);
+                Err("touch ID is not available in this Symaira Vault build".to_owned())
+            }
+        }),
+    };
+    match setup_wizard::run(&vault_dir, keep_on_error, no_resume, environment) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(message) => {
+            print_error_like_go(&message);
+            ExitCode::from(1)
+        }
+    }
 }
 
 fn run_init(
@@ -5995,11 +6082,6 @@ mod nil_args_positional_tests {
     use super::*;
     use clap::error::ErrorKind;
 
-    /// Nil-Args commands that are not native subcommands yet; the clap parse
-    /// is expected to reject their name. The replay lists them as known
-    /// body divergences.
-    const NOT_NATIVE: &[&str] = &["symvault setup"];
-
     fn nil_args_paths() -> Vec<(String, bool)> {
         let raw = std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -6024,7 +6106,7 @@ mod nil_args_positional_tests {
     fn clap_accepts_extra_positionals_on_every_runnable_nil_args_command() {
         let mut checked = 0;
         for (path, runnable) in nil_args_paths() {
-            if !runnable || NOT_NATIVE.contains(&path.as_str()) {
+            if !runnable {
                 continue;
             }
             for extra in [&["x"][..], &["x", "y"][..], &["--", "x"][..]] {
@@ -6041,16 +6123,8 @@ mod nil_args_positional_tests {
                 checked += 1;
             }
         }
-        // 48 runnable nil-Args commands, minus the ones not native yet.
-        assert_eq!(checked, (48 - NOT_NATIVE.len()) * 3);
-    }
-
-    #[test]
-    fn not_native_nil_args_commands_are_still_listed() {
-        let paths = nil_args_paths();
-        for name in NOT_NATIVE {
-            assert!(paths.iter().any(|(path, _)| path == name), "{name}");
-        }
+        // All 48 runnable nil-Args commands are native subcommands now.
+        assert_eq!(checked, 48 * 3);
     }
 
     /// pflag keeps the last value of a repeated string/duration flag.
