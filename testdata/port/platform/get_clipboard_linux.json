@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
+    "commit": "5229f949",
+    "commit_sha": "5229f9490cd25c22adb641677546a57802417304",
     "go_version": "go1.26.6",
     "goos": "linux",
     "atotto_clipboard_version": "v0.1.4",
@@ -15,15 +17,16 @@
       "internal/clipboard/system_clipboard.go",
       "internal/ui/cliout/cliout.go"
     ],
-    "source_hash": "f9d7e86a493ff328e91980879e24cf3b022d26a974331ffa15717080d34735eb",
+    "source_hash": "222de88374a88070441144b9d116a7ce401e791ed41519915418b37d8132766b",
     "generator_files": [
       "cmd/get_clipboard_linux_fixture_generator_test.go",
+      "cmd/get_clipboard_linux_pin_test.go",
       "cmd/get_clipboard_fixture_generator_test.go",
       "cmd/test_helpers_test.go"
     ],
-    "generator_hash": "d9bc37378076b96a8788d545fd851d51e537b957d0d91a50ff67cd4293bbf49d"
+    "generator_hash": "aa7837fd47d4f298ff4277e378dd490d8ac4ffcd602b43c72aeead454c5b4f60"
   },
-  "note": "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) on GOOS=linux with the production clipboard.DefaultClipboard() (atotto/clipboard command backend, selected at process start from PATH and WAYLAND_DISPLAY) and fake POSIX-shell tools on a disposable PATH; only the terminal decision and the auto-clear timer are stubbed, as in get_clipboard.json. Source digests are working-tree digests, not a commit pin.",
+  "note": "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) on GOOS=linux with the production clipboard.DefaultClipboard() (atotto/clipboard command backend, selected at process start from PATH and WAYLAND_DISPLAY) and fake POSIX-shell tools on a disposable PATH; only the terminal decision and the auto-clear timer are stubbed, as in get_clipboard.json. source_hash is the digest of source_files, identical in the working tree and in commit_sha (the generator fails otherwise); go_version names the pinned oracle toolchain, the capture itself may run on a newer Go inside a Linux container.",
   "script_placeholders": [
     "@REC@",
     "@EXIT@",
@@ -658,6 +661,68 @@
             "--clipboard"
           ],
           "stdin": "s3cret-linux"
+        }
+      ]
+    },
+    {
+      "name": "large_payload_tool_closes_stdin_exit_0",
+      "path_tools": [
+        "xclip"
+      ],
+      "wayland_display": "",
+      "tool_exit": 0,
+      "secret": "s3cret-linux",
+      "auto_clear_seconds": 1,
+      "timer_stub_ms": 150,
+      "paste_output": "",
+      "secret_repeat": 80000,
+      "tool_overrides": {
+        "xclip": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\n{ printf '%s\\n' 'xclip' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) exec 0<&-; : > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n"
+      },
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: write |1: broken pipe\nError: copy to clipboard: write |1: broken pipe\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "large_payload_tool_closes_stdin_exit_1",
+      "path_tools": [
+        "xclip"
+      ],
+      "wayland_display": "",
+      "tool_exit": 1,
+      "secret": "s3cret-linux",
+      "auto_clear_seconds": 0,
+      "timer_stub_ms": 0,
+      "paste_output": "",
+      "secret_repeat": 80000,
+      "tool_overrides": {
+        "xclip": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\n{ printf '%s\\n' 'xclip' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) exec 0<&-; : > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n"
+      },
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: write |1: broken pipe\nError: copy to clipboard: write |1: broken pipe\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
         }
       ]
     }

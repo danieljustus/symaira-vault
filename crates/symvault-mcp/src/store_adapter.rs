@@ -3021,6 +3021,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.perplexity_ask(arguments, context)
         } else if name == "copy_to_clipboard" {
             self.copy_to_clipboard(arguments)
+        } else if name == "generate_totp" {
+            self.generate_totp(arguments)
         } else if name == "run_command" {
             self.run_command(arguments)
         } else {
@@ -3661,6 +3663,21 @@ impl StoreReadOnlyRuntime {
         self.start_clipboard_auto_clear();
         self.append_audit("copy_to_clipboard", &preflight.path, true);
         Ok(ToolCallResult::text(r#"{"success": true}"#))
+    }
+
+    /// `generate_totp` with the same clipboard backend and auto-clear as
+    /// `copy_to_clipboard` (Go `totpClipboard` uses `clipboard.DefaultClipboard()`
+    /// and `startClipboardAutoClear`); approval is not prompted for here, Go
+    /// refuses it, which `generate_totp_with` reproduces.
+    fn generate_totp(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let copy = |code: &str| -> Result<i64, String> {
+            self.clipboard
+                .set(code.as_bytes())
+                .map_err(|error| format!("clipboard copy failed: {error}"))?;
+            self.start_clipboard_auto_clear();
+            Ok(i64::try_from(self.clipboard_auto_clear_duration.as_secs()).unwrap_or(i64::MAX))
+        };
+        self.inner.generate_totp_with(arguments, Some(&copy))
     }
 
     fn start_clipboard_auto_clear(&self) {

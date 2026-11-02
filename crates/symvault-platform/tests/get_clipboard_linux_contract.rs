@@ -37,11 +37,33 @@ struct Fixture {
 
 #[derive(Debug, Deserialize)]
 struct Oracle {
+    commit: String,
+    commit_sha: String,
     goos: String,
     atotto_clipboard_version: String,
+    source_files: Vec<String>,
     source_hash: String,
+    generator_files: Vec<String>,
     generator_hash: String,
 }
+
+/// The oracle pin the fixture must carry: the reachable commit whose Go sources
+/// equal the working tree the capture ran against, and their digest. The
+/// generator refuses to run when the working tree differs from this commit.
+const ORACLE_COMMIT: &str = "5229f949";
+const ORACLE_COMMIT_SHA: &str = "5229f9490cd25c22adb641677546a57802417304";
+const ORACLE_SOURCE_HASH: &str = "222de88374a88070441144b9d116a7ce401e791ed41519915418b37d8132766b";
+const ORACLE_SOURCE_FILES: [&str; 9] = [
+    "go.mod",
+    "go.sum",
+    "cmd/crud/get.go",
+    "internal/clipboard/clipboard.go",
+    "internal/clipboard/clipboard_signal_unix.go",
+    "internal/clipboard/interface.go",
+    "internal/clipboard/provider.go",
+    "internal/clipboard/system_clipboard.go",
+    "internal/ui/cliout/cliout.go",
+];
 
 #[derive(Debug, Deserialize)]
 struct Scenario {
@@ -50,6 +72,10 @@ struct Scenario {
     wayland_display: String,
     tool_exit: i32,
     secret: String,
+    #[serde(default)]
+    secret_repeat: usize,
+    #[serde(default)]
+    tool_overrides: BTreeMap<String, String>,
     auto_clear_seconds: i64,
     timer_stub_ms: u64,
     paste_output: String,
@@ -157,9 +183,43 @@ fn fixture_is_go_linux_derived_and_uses_the_desktop_fixture_tools() {
     let fixture = fixture();
     assert_eq!(fixture.oracle.goos, "linux");
     assert_eq!(fixture.oracle.atotto_clipboard_version, "v0.1.4");
-    assert_eq!(fixture.oracle.source_hash.len(), 64);
-    assert_eq!(fixture.oracle.generator_hash.len(), 64);
-    assert_eq!(fixture.scenarios.len(), 16);
+    // Provenance: the capture is pinned to a reachable commit (the generator
+    // fails unless the working-tree Go sources equal that commit's blobs), and
+    // the digest of exactly those sources is the one recorded here.
+    assert_eq!(fixture.oracle.commit, ORACLE_COMMIT);
+    assert_eq!(fixture.oracle.commit_sha, ORACLE_COMMIT_SHA);
+    assert!(
+        fixture
+            .oracle
+            .commit_sha
+            .starts_with(&fixture.oracle.commit)
+    );
+    assert_eq!(fixture.oracle.source_files, ORACLE_SOURCE_FILES);
+    assert_eq!(fixture.oracle.source_hash, ORACLE_SOURCE_HASH);
+    // The generator digest follows the generator's own edits, so it is checked
+    // for shape and for covering the generator itself.
+    assert!(
+        fixture.oracle.generator_hash.len() == 64
+            && fixture
+                .oracle
+                .generator_hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    );
+    for generator in [
+        "cmd/get_clipboard_linux_fixture_generator_test.go",
+        "cmd/get_clipboard_linux_pin_test.go",
+    ] {
+        assert!(
+            fixture
+                .oracle
+                .generator_files
+                .iter()
+                .any(|name| name == generator),
+            "{generator} is not covered by generator_hash"
+        );
+    }
+    assert_eq!(fixture.scenarios.len(), 18);
     let desktop: DesktopFixture = serde_json::from_str(include_str!(
         "../../../testdata/port/platform/desktop_linux.json"
     ))
@@ -194,7 +254,11 @@ fn get_matches_go_linux_command_clipboard() {
         .unwrap();
         for name in s.path_tools.as_deref().unwrap_or_default() {
             let path = bin.join(name);
-            let body = fixture.fake_tools[name]
+            let template = s
+                .tool_overrides
+                .get(name)
+                .unwrap_or(&fixture.fake_tools[name]);
+            let body = template
                 .replace("@REC@", rec.to_str().unwrap())
                 .replace("@EXIT@", &s.tool_exit.to_string())
                 .replace("@FOCUS1@", "")
@@ -220,9 +284,14 @@ fn get_matches_go_linux_command_clipboard() {
         };
 
         let mut stderr = Vec::new();
+        let secret = if s.secret_repeat > 0 {
+            s.secret.repeat(s.secret_repeat)
+        } else {
+            s.secret.clone()
+        };
         let result = copy_and_auto_clear(
             clipboard.as_ref(),
-            &s.secret,
+            &secret,
             s.auto_clear_seconds,
             &clock,
             &mut stderr,
@@ -242,15 +311,19 @@ fn get_matches_go_linux_command_clipboard() {
         assert_eq!(s.stdout, "", "{} stdout", s.name);
         assert_eq!(read_calls(&rec), s.tool_calls, "{} tool calls", s.name);
         assert!(!stderr.contains(&s.secret), "{} leaked the secret", s.name);
+        assert!(!s.tool_overrides.is_empty() || s.secret_repeat == 0);
         copied += usize::from(!s.tool_calls.is_empty());
         failed += usize::from(exit_code != 0);
         warned += usize::from(s.stderr.contains("Warning:"));
         cleared += usize::from(s.stderr.contains("[clipboard cleared]"));
     }
     // A vacuous pass is impossible: the recorded set has all four outcomes.
-    assert_eq!(fixture.scenarios.len(), 16);
-    assert_eq!(copied, 15, "every scenario but the no-tool one ran a tool");
-    assert_eq!(failed, 3, "no tool, xclip exit 1, xsel exit 3");
+    assert_eq!(fixture.scenarios.len(), 18);
+    assert_eq!(copied, 17, "every scenario but the no-tool one ran a tool");
+    assert_eq!(
+        failed, 5,
+        "no tool, xclip exit 1, xsel exit 3, and the two tools that closed stdin"
+    );
     assert_eq!(
         warned, 2,
         "restored secret via xclip and via powershell.exe"

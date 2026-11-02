@@ -4,9 +4,11 @@
 //! fake POSIX-shell tools on a disposable PATH, compared with the Go-recorded
 //! fixtures:
 //!
-//! * `symvault mcp --stdio` `copy_to_clipboard` against
-//!   `testdata/port/mcp/copy-clipboard-linux.json` (tools/call responses, tool
-//!   argv and stdin bytes, timer-driven clear);
+//! * `symvault mcp --stdio` `copy_to_clipboard` and `generate_totp` (clipboard
+//!   destination) against `testdata/port/mcp/copy-clipboard-linux.json`
+//!   (tools/call responses, tool argv and stdin bytes, timer-driven clear;
+//!   Go's TOTP code is a placeholder that must equal a code of the call's time
+//!   window);
 //! * `symvault get <path.field>` on a pseudo-terminal against
 //!   `testdata/port/platform/get_clipboard_linux.json` (stderr, exit code, tool
 //!   argv and stdin bytes).
@@ -37,6 +39,15 @@ use std::{
 
 const PASSPHRASE: &str = "correct horse battery staple";
 const MCP_PASSWORD: &str = "StrongP@ssw0rd123";
+/// The real binary refuses TOTP secrets under 26 base32 characters (the
+/// fixture's 16-character secret is written to Go's store directly), so the
+/// entry gets a longer one; the fixture only records the code as a placeholder
+/// that must match a code of the run's time window for the secret in use.
+const TOTP_SECRET: &str = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+/// Tool invocations the Go-recorded MCP cases hold (clears included).
+const CALLS_TOTAL: usize = 31;
+/// Tool invocations the Go-recorded `get` scenarios hold.
+const GET_CALLS_TOTAL: usize = 41;
 
 #[derive(Debug, Deserialize)]
 struct Call {
@@ -56,12 +67,24 @@ impl PartialEq for Call {
 #[derive(Debug, Deserialize)]
 struct McpFixture {
     fake_tools: BTreeMap<String, String>,
+    totp: Totp,
     cases: Vec<McpCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Totp {
+    code_placeholder: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct McpCase {
     name: String,
+    tool: String,
+    approval_mode: String,
+    #[serde(default)]
+    password_repeat: usize,
+    #[serde(default)]
+    tool_overrides: BTreeMap<String, String>,
     path_tools: Option<Vec<String>>,
     wayland_display: String,
     tool_exit: i32,
@@ -85,6 +108,10 @@ struct GetScenario {
     wayland_display: String,
     tool_exit: i32,
     secret: String,
+    #[serde(default)]
+    secret_repeat: usize,
+    #[serde(default)]
+    tool_overrides: BTreeMap<String, String>,
     auto_clear_seconds: u64,
     paste_output: String,
     stdout: String,
@@ -139,7 +166,9 @@ fn assert_success(output: &Output, label: &str) {
     );
 }
 
-fn sandbox(label: &str, entry_path: &str, password: &str, agent: bool) -> Sandbox {
+/// A vault with the synthetic `entry_path` (when given) and, for the MCP run,
+/// an agent profile that may use the clipboard.
+fn sandbox(label: &str, entry_path: Option<(&str, &str)>, agent: bool) -> Sandbox {
     let root = test_temp_root::TempRoot::missing(&format!("symvault-clip-linux-{label}-"));
     let base: PathBuf = AsRef::<Path>::as_ref(&root).to_path_buf();
     let sandbox = Sandbox {
@@ -170,10 +199,12 @@ fn sandbox(label: &str, entry_path: &str, password: &str, agent: bool) -> Sandbo
         &run(&["--vault", vault, "init", "--auth", "passphrase"]),
         "init",
     );
-    assert_success(
-        &run(&["--vault", vault, "set", entry_path, "--value", password]),
-        "set",
-    );
+    if let Some((entry_path, password)) = entry_path {
+        assert_success(
+            &run(&["--vault", vault, "set", entry_path, "--value", password]),
+            "set",
+        );
+    }
     if agent {
         let config_path = sandbox.vault.join("config.yaml");
         let mut config: serde_yaml_ng::Value =
@@ -189,6 +220,73 @@ fn sandbox(label: &str, entry_path: &str, password: &str, agent: bool) -> Sandbo
         fs::write(&config_path, serde_yaml_ng::to_string(&config).unwrap()).unwrap();
     }
     sandbox
+}
+
+/// The fixture's fake tools with a scenario's per-scenario script replacements.
+fn with_overrides(
+    tools: &BTreeMap<String, String>,
+    overrides: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut merged = tools.clone();
+    merged.extend(overrides.iter().map(|(k, v)| (k.clone(), v.clone())));
+    merged
+}
+
+/// Runs the real binary against the sandbox vault, optionally feeding stdin.
+fn run_cli(sandbox: &Sandbox, args: &[&str], stdin: Option<&[u8]>) -> Output {
+    let mut command = Command::new(binary());
+    setup_env(&mut command, sandbox);
+    let mut child = command
+        .current_dir(&sandbox.work)
+        .arg("--vault")
+        .arg(&sandbox.vault)
+        .args(args)
+        .stdin(if stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn symvault");
+    if let Some(bytes) = stdin {
+        child.stdin.take().unwrap().write_all(bytes).unwrap();
+    }
+    child.wait_with_output().expect("symvault output")
+}
+
+/// The Go fixture's large payload: `"0123456789abcdef"` repeated.
+fn large_password(repeat: usize) -> String {
+    "0123456789abcdef".repeat(repeat)
+}
+
+fn add_large_entry(sandbox: &Sandbox, path: &str, password: &str) {
+    let mut line = password.to_owned();
+    line.push('\n');
+    assert_success(
+        &run_cli(
+            sandbox,
+            &[
+                "add",
+                path,
+                "--stdin-value",
+                "--type",
+                "password",
+                "--force",
+            ],
+            Some(line.as_bytes()),
+        ),
+        "add large entry",
+    );
+}
+
+fn set_approval_mode(sandbox: &Sandbox, mode: &str) {
+    let config_path = sandbox.vault.join("config.yaml");
+    let mut config: serde_yaml_ng::Value =
+        serde_yaml_ng::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+    config["agents"]["clip"]["approvalMode"] = mode.into();
+    fs::write(&config_path, serde_yaml_ng::to_string(&config).unwrap()).unwrap();
 }
 
 fn set_auto_clear(sandbox: &Sandbox, seconds: u64) {
@@ -297,21 +395,51 @@ fn mcp_copy_to_clipboard_matches_go_on_linux_through_the_real_binary() {
         "../../../testdata/port/mcp/copy-clipboard-linux.json"
     ))
     .expect("decode the Go copy_to_clipboard Linux fixture");
-    assert_eq!(fixture.cases.len(), 13);
-    let sandbox = sandbox("mcp", "github.password", MCP_PASSWORD, true);
+    assert_eq!(fixture.cases.len(), 25);
+    let sandbox = sandbox("mcp", None, true);
+    assert_success(
+        &run_cli(
+            &sandbox,
+            &[
+                "add",
+                "github",
+                "--value",
+                MCP_PASSWORD,
+                "--type",
+                "password",
+                "--totp-secret",
+                TOTP_SECRET,
+                "--force",
+            ],
+            None,
+        ),
+        "add github",
+    );
+    let big_repeat = fixture
+        .cases
+        .iter()
+        .map(|case| case.password_repeat)
+        .max()
+        .unwrap();
+    assert!(big_repeat > 0);
+    add_large_entry(&sandbox, "big", &large_password(big_repeat));
     let mut calls_total = 0;
     for case in &fixture.cases {
+        assert_eq!(case.password_repeat == 0, !case.name.starts_with("large_"));
+        assert!(case.password_repeat == 0 || case.password_repeat == big_repeat);
         set_auto_clear(&sandbox, case.auto_clear_duration);
+        set_approval_mode(&sandbox, &case.approval_mode);
         let label = case.name.replace('_', "");
         let tools = install_tools(
             &sandbox,
             &label,
-            &fixture.fake_tools,
+            &with_overrides(&fixture.fake_tools, &case.tool_overrides),
             case.path_tools.as_deref().unwrap_or_default(),
             case.tool_exit,
             &case.wayland_display,
             "",
         );
+        let window_start = unix_now();
         let mut child = Command::new(binary())
             .current_dir(&sandbox.work)
             .env_clear()
@@ -345,6 +473,7 @@ fn mcp_copy_to_clipboard_matches_go_on_linux_through_the_real_binary() {
         std::thread::sleep(Duration::from_millis(400));
         drop(stdin);
         let output = child.wait_with_output().expect("mcp output");
+        let window_end = unix_now();
         assert_success(&output, &case.name);
         let responses: Vec<Value> = String::from_utf8(output.stdout)
             .unwrap()
@@ -365,16 +494,76 @@ fn mcp_copy_to_clipboard_matches_go_on_linux_through_the_real_binary() {
             "{} returned its synthetic password",
             case.name
         );
-        assert_eq!(
-            read_calls(&tools.rec),
-            case.tool_calls,
-            "tool invocations of {}",
-            case.name
-        );
+        // Go reads the system clock for TOTP and records a placeholder; the
+        // real binary does too, so the copied code must be a code of the
+        // window the run happened in (exactly what Go's generator proved).
+        let valid_codes = totp_codes(TOTP_SECRET, window_start, window_end);
+        let expected: Vec<Call> = case
+            .tool_calls
+            .iter()
+            .map(|call| Call {
+                tool: call.tool.clone(),
+                mode: call.mode.clone(),
+                argv: call.argv.clone(),
+                stdin: call.stdin.clone(),
+            })
+            .collect();
+        let actual = read_calls(&tools.rec);
+        assert_eq!(actual.len(), expected.len(), "{} tool calls", case.name);
+        for (index, (got, want)) in actual.iter().zip(&expected).enumerate() {
+            if want.stdin == fixture.totp.code_placeholder {
+                assert_eq!(case.tool, "generate_totp", "{}", case.name);
+                assert!(
+                    valid_codes.contains(&got.stdin),
+                    "{} call {index}: {:?} is no TOTP code of the window",
+                    case.name,
+                    got.stdin
+                );
+                assert_eq!(
+                    (&got.tool, &got.mode, &got.argv),
+                    (&want.tool, &want.mode, &want.argv),
+                    "{} call {index}",
+                    case.name
+                );
+                assert!(
+                    !serde_json::to_string(&responses)
+                        .unwrap()
+                        .contains(&got.stdin),
+                    "{} returned the TOTP code",
+                    case.name
+                );
+            } else {
+                assert_eq!(got, want, "{} call {index}", case.name);
+            }
+        }
         calls_total += case.tool_calls.len();
         drop(tools.bin);
     }
-    assert_eq!(calls_total, 17, "recorded tool invocations replayed");
+    assert_eq!(
+        calls_total, CALLS_TOTAL,
+        "recorded tool invocations replayed"
+    );
+}
+
+fn unix_now() -> i64 {
+    i64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+    )
+    .unwrap()
+}
+
+/// Every code the clock can have produced between `start` and `end`.
+fn totp_codes(secret: &str, start: i64, end: i64) -> Vec<String> {
+    (start.div_euclid(30)..=end.div_euclid(30))
+        .map(|counter| {
+            symvault_core::totp::generate_totp_at(secret, "SHA1", 6, 30, counter * 30)
+                .expect("TOTP code")
+                .code
+        })
+        .collect()
 }
 
 /// Runs `symvault get` with stdout on a pseudo-terminal and stderr on a pipe,
@@ -404,9 +593,50 @@ fn python_available() -> bool {
         .is_ok_and(|output| output.status.success())
 }
 
+/// Whether the terminal run may proceed. Without python3/pty the run cannot
+/// happen: locally that is a visible skip, but in CI and in the local gate
+/// (`CI` or `SYMVAULT_GATE` set, the latter by `make
+/// clipboard-linux-differential`) a skipped run would be a green gate that
+/// verified nothing, so it fails instead.
+fn pty_run_possible(python_available: bool, ci: bool, gate: bool) -> bool {
+    if python_available {
+        return true;
+    }
+    assert!(
+        !(ci || gate),
+        "python3 with the pty module is required for the terminal run in CI and the local gate \
+         (CI={ci}, SYMVAULT_GATE={gate}); install python3 instead of skipping it"
+    );
+    false
+}
+
+fn env_set(name: &str) -> bool {
+    std::env::var_os(name).is_some_and(|value| !value.is_empty())
+}
+
+#[test]
+fn missing_python_fails_in_ci_and_the_gate_but_skips_locally() {
+    assert!(pty_run_possible(true, true, true));
+    assert!(pty_run_possible(true, false, false));
+    assert!(!pty_run_possible(false, false, false));
+    for (ci, gate) in [(true, false), (false, true), (true, true)] {
+        let panic = std::panic::catch_unwind(|| pty_run_possible(false, ci, gate))
+            .expect_err("a missing python3 must fail, not skip");
+        let text = panic
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| panic.downcast_ref::<&str>().map(|text| (*text).to_owned()))
+            .unwrap_or_default();
+        assert!(
+            text.contains("python3 with the pty module is required"),
+            "{text}"
+        );
+    }
+}
+
 #[test]
 fn get_matches_go_on_linux_through_the_real_binary_on_a_pty() {
-    if !python_available() {
+    if !pty_run_possible(python_available(), env_set("CI"), env_set("SYMVAULT_GATE")) {
         eprintln!("SKIP: python3 with the pty module is required for the terminal run");
         return;
     }
@@ -414,17 +644,31 @@ fn get_matches_go_on_linux_through_the_real_binary_on_a_pty() {
         "../../../testdata/port/platform/get_clipboard_linux.json"
     ))
     .expect("decode the Go get Linux fixture");
-    assert_eq!(fixture.scenarios.len(), 16);
+    assert_eq!(fixture.scenarios.len(), 18);
     let secret = fixture.scenarios[0].secret.clone();
-    let sandbox = sandbox("get", "fixture-entry.password", &secret, false);
+    let sandbox = sandbox("get", Some(("fixture-entry.password", &secret)), false);
+    let big_repeat = fixture
+        .scenarios
+        .iter()
+        .map(|s| s.secret_repeat)
+        .max()
+        .unwrap();
+    assert!(big_repeat > 0);
+    add_large_entry(&sandbox, "big", &secret.repeat(big_repeat));
     let mut calls_total = 0;
     for s in &fixture.scenarios {
         assert_eq!(s.secret, secret);
+        assert!(s.secret_repeat == 0 || s.secret_repeat == big_repeat);
+        let entry = if s.secret_repeat > 0 {
+            "big.password"
+        } else {
+            "fixture-entry.password"
+        };
         set_auto_clear(&sandbox, s.auto_clear_seconds);
         let tools = install_tools(
             &sandbox,
             &s.name.replace('_', ""),
-            &fixture.fake_tools,
+            &with_overrides(&fixture.fake_tools, &s.tool_overrides),
             s.path_tools.as_deref().unwrap_or_default(),
             s.tool_exit,
             &s.wayland_display,
@@ -436,7 +680,7 @@ fn get_matches_go_on_linux_through_the_real_binary_on_a_pty() {
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
         let config = serde_json::json!({
-            "argv": [binary(), "--vault", sandbox.vault.to_str().unwrap(), "get", "fixture-entry.password"],
+            "argv": [binary(), "--vault", sandbox.vault.to_str().unwrap(), "get", entry],
             "env": env,
             "cwd": sandbox.work.to_str().unwrap(),
         });
@@ -477,5 +721,8 @@ fn get_matches_go_on_linux_through_the_real_binary_on_a_pty() {
         calls_total += s.tool_calls.len();
         drop(tools.bin);
     }
-    assert_eq!(calls_total, 39, "recorded tool invocations replayed");
+    assert_eq!(
+        calls_total, GET_CALLS_TOTAL,
+        "recorded tool invocations replayed"
+    );
 }

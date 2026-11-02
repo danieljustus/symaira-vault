@@ -15,7 +15,6 @@ package cmd
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -35,18 +34,6 @@ const (
 	getClipboardLinuxChildEnv = "SYMAIRA_GET_CLIPBOARD_LINUX_CHILD"
 	getClipboardLinuxFixture  = "testdata/port/platform/get_clipboard_linux.json"
 )
-
-var getClipboardLinuxSourceFiles = []string{
-	"go.mod",
-	"go.sum",
-	"cmd/crud/get.go",
-	"internal/clipboard/clipboard.go",
-	"internal/clipboard/clipboard_signal_unix.go",
-	"internal/clipboard/interface.go",
-	"internal/clipboard/provider.go",
-	"internal/clipboard/system_clipboard.go",
-	"internal/ui/cliout/cliout.go",
-}
 
 type getClipboardLinuxTool struct {
 	name     string
@@ -104,6 +91,10 @@ type getClipboardLinuxScenario struct {
 	// PasteOutput is what the fake paste tool prints; "@SECRET@" stands for
 	// the scenario secret (a clipboard-history manager restoring it).
 	PasteOutput string `json:"paste_output"`
+	// SecretRepeat > 0 makes the stored password Secret repeated that many times.
+	SecretRepeat int `json:"secret_repeat,omitempty"`
+	// ToolOverrides replace a rendered fake tool's script for this scenario.
+	ToolOverrides map[string]string `json:"tool_overrides,omitempty"`
 }
 
 type getClipboardLinuxCall struct {
@@ -122,6 +113,8 @@ type getClipboardLinuxResult struct {
 }
 
 type getClipboardLinuxOracle struct {
+	Commit         string   `json:"commit"`
+	CommitSHA      string   `json:"commit_sha"`
 	GoVersion      string   `json:"go_version"`
 	GOOS           string   `json:"goos"`
 	AtottoVersion  string   `json:"atotto_clipboard_version"`
@@ -159,7 +152,31 @@ func getClipboardLinuxScenarios() []getClipboardLinuxScenario {
 		{Name: "windows_exe_trims_crlf_and_flags_restored_secret", PathTools: []string{"clip.exe", "powershell.exe"}, Secret: secret, AutoClear: 1, TimerStubMillis: 150, PasteOutput: "@SECRET@\r\n"},
 		{Name: "xclip_exit_failure", PathTools: []string{"xclip"}, ToolExit: 1, Secret: secret, AutoClear: 1, TimerStubMillis: 150},
 		{Name: "xsel_exit_failure_code_3", PathTools: []string{"xsel"}, ToolExit: 3, Secret: secret},
+		// atotto's writeAll returns the stdin write error without waiting for
+		// the tool, even when the tool exits 0: a payload larger than the pipe
+		// buffer and a tool that closes its stdin make that deterministic.
+		{Name: "large_payload_tool_closes_stdin_exit_0", PathTools: []string{"xclip"}, Secret: secret, SecretRepeat: 80000, AutoClear: 1, TimerStubMillis: 150,
+			ToolOverrides: map[string]string{"xclip": getClipboardLinuxClosedStdinTool("xclip")}},
+		{Name: "large_payload_tool_closes_stdin_exit_1", PathTools: []string{"xclip"}, ToolExit: 1, Secret: secret, SecretRepeat: 80000,
+			ToolOverrides: map[string]string{"xclip": getClipboardLinuxClosedStdinTool("xclip")}},
 	}
+}
+
+// getClipboardLinuxClosedStdinTool is a tool that records its call, closes its
+// stdin without reading it and exits.
+func getClipboardLinuxClosedStdinTool(name string) string {
+	for _, tool := range getClipboardLinuxTools {
+		if tool.name == name {
+			tpl := tool.template()
+			const read = "copy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\n"
+			const closed = "copy|type) exec 0<&-; : > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\n"
+			if !strings.Contains(tpl, read) {
+				panic("fake tool template changed: " + name)
+			}
+			return strings.Replace(tpl, read, closed, 1)
+		}
+	}
+	panic("unknown fake tool " + name)
 }
 
 func renderGetClipboardLinuxTool(tpl, rec string, exit int) string {
@@ -172,6 +189,7 @@ func TestGenerateGetClipboardLinuxFixture(t *testing.T) {
 		t.Skip("set SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=write or check")
 	}
 	root := ".."
+	pin := resolveGetClipboardLinuxPin(t, root)
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatalf("locate test binary: %v", err)
@@ -180,23 +198,25 @@ func TestGenerateGetClipboardLinuxFixture(t *testing.T) {
 	for _, tool := range getClipboardLinuxTools {
 		templates[tool.name] = tool.template()
 	}
-	results := make([]getClipboardLinuxResult, 0, 16)
+	results := make([]getClipboardLinuxResult, 0, 20)
 	for _, scenario := range getClipboardLinuxScenarios() {
 		results = append(results, runGetClipboardLinuxScenario(t, self, templates, scenario))
 	}
-	generatorFiles := []string{"cmd/get_clipboard_linux_fixture_generator_test.go", "cmd/get_clipboard_fixture_generator_test.go", "cmd/test_helpers_test.go"}
+	generatorFiles := []string{"cmd/get_clipboard_linux_fixture_generator_test.go", "cmd/get_clipboard_linux_pin_test.go", "cmd/get_clipboard_fixture_generator_test.go", "cmd/test_helpers_test.go"}
 	doc := getClipboardLinuxDocument{
 		SchemaVersion: 1,
 		Oracle: getClipboardLinuxOracle{
-			GoVersion:      "go1.26.6",
+			Commit:         pin.Commit,
+			CommitSHA:      pin.CommitSHA,
+			GoVersion:      getClipboardLinuxGoVersion,
 			GOOS:           "linux",
 			AtottoVersion:  "v0.1.4",
 			SourceFiles:    getClipboardLinuxSourceFiles,
-			SourceHash:     getClipboardLinuxDigest(t, root, getClipboardLinuxSourceFiles),
+			SourceHash:     pin.SourceHash,
 			GeneratorFiles: generatorFiles,
-			GeneratorHash:  getClipboardLinuxDigest(t, root, generatorFiles),
+			GeneratorHash:  getClipboardLinuxWorkingDigest(t, root, generatorFiles),
 		},
-		Note:              "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) on GOOS=linux with the production clipboard.DefaultClipboard() (atotto/clipboard command backend, selected at process start from PATH and WAYLAND_DISPLAY) and fake POSIX-shell tools on a disposable PATH; only the terminal decision and the auto-clear timer are stubbed, as in get_clipboard.json. Source digests are working-tree digests, not a commit pin.",
+		Note:              "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) on GOOS=linux with the production clipboard.DefaultClipboard() (atotto/clipboard command backend, selected at process start from PATH and WAYLAND_DISPLAY) and fake POSIX-shell tools on a disposable PATH; only the terminal decision and the auto-clear timer are stubbed, as in get_clipboard.json. source_hash is the digest of source_files, identical in the working tree and in commit_sha (the generator fails otherwise); go_version names the pinned oracle toolchain, the capture itself may run on a newer Go inside a Linux container.",
 		ScriptPlaceholder: []string{"@REC@", "@EXIT@", "@FOCUS1@", "@FOCUS2@", "@FOCUSEXIT@"},
 		FakeTools:         templates,
 		Scenarios:         results,
@@ -222,23 +242,6 @@ func TestGenerateGetClipboardLinuxFixture(t *testing.T) {
 	if !bytes.Equal(existing, buf.Bytes()) {
 		t.Fatal("get clipboard Linux fixture stale; regenerate with SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=write")
 	}
-}
-
-func getClipboardLinuxDigest(t *testing.T, root string, files []string) string {
-	t.Helper()
-	h := bytes.Buffer{}
-	for _, name := range files {
-		data, err := os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- fixed compiled-in source list
-		if err != nil {
-			t.Fatal(err)
-		}
-		h.WriteString(name)
-		h.WriteByte(0)
-		h.Write(data)
-		h.WriteByte(0)
-	}
-	sum := sha256.Sum256(h.Bytes())
-	return fmt.Sprintf("%x", sum)
 }
 
 type getClipboardLinuxChildRequest struct {
@@ -268,7 +271,11 @@ func runGetClipboardLinuxScenario(t *testing.T, self string, templates map[strin
 		t.Fatalf("%s: %v", scenario.Name, err)
 	}
 	for _, name := range scenario.PathTools {
-		body := renderGetClipboardLinuxTool(templates[name], rec, scenario.ToolExit)
+		template := templates[name]
+		if override, ok := scenario.ToolOverrides[name]; ok {
+			template = override
+		}
+		body := renderGetClipboardLinuxTool(template, rec, scenario.ToolExit)
 		// #nosec G306 -- a fake desktop tool must be executable; it lives in a private scratch directory
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(body), 0o700); err != nil {
 			t.Fatalf("%s: %v", scenario.Name, err)
@@ -371,7 +378,11 @@ func TestGetClipboardLinuxChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry := &vaultpkg.Entry{Data: map[string]any{"password": s.Secret}}
+	password := s.Secret
+	if s.SecretRepeat > 0 {
+		password = strings.Repeat(s.Secret, s.SecretRepeat)
+	}
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": password}}
 	if err := vaultpkg.WriteEntry(vaultDir, "fixture-entry", entry, identity.Identity); err != nil {
 		t.Fatal(err)
 	}

@@ -1198,9 +1198,20 @@ get-clipboard-differential: get-clipboard-fixtures-check
 # Linux host they are checked natively; elsewhere the Linux Go toolchain runs in
 # a container (clipboard-linux-fixtures-check) and the aggregate gate prints a
 # NOTE like desktop-linux-fixtures-ci. The Rust replays run on every Unix; the
-# real-binary test (mcp --stdio and `get` on a pty) is Linux-only.
+# real-binary test (mcp --stdio and `get` on a pty) is Linux-only and, with
+# SYMVAULT_GATE=1 (or CI), fails instead of skipping when python3/pty is missing.
 MCP_CLIPBOARD_LINUX_FIXTURE := testdata/port/mcp/copy-clipboard-linux.json
 GET_CLIPBOARD_LINUX_FIXTURE := testdata/port/platform/get_clipboard_linux.json
+
+# Off Linux the generators run in a container whose git cannot read a worktree
+# checkout and whose Go is not the pinned toolchain. The oracle pin (the
+# working-tree sources equal the blobs of the reachable pinned commit) is
+# therefore verified on the host first and handed to the container as a file.
+CLIPBOARD_LINUX_DOCKER = docker run --rm --name "symvault-clipboard-linux-$$$$" -v "$(CURDIR):$(CURDIR)" -v "$(DESKTOP_REPO_COMMON):$(DESKTOP_REPO_COMMON)" -v "$$pin:$$pin" -v "$(DESKTOP_GOMODCACHE):/gomod" -v desktopgen-gocache:/gocache -w "$(CURDIR)" \
+	-e GOMODCACHE=/gomod -e GOCACHE=/gocache -e GOWORK=off -e GOTOOLCHAIN=local -e GOFLAGS=-mod=mod -e GOPROXY=off -e CGO_ENABLED=0 \
+	-e SYMAIRA_MCP_COPY_CLIPBOARD_LINUX_PIN_FILE="$$pin/mcp.json" -e SYMVAULT_GET_CLIPBOARD_LINUX_PIN_FILE="$$pin/get.json"
+CLIPBOARD_LINUX_HOST_PIN = SYMAIRA_MCP_COPY_CLIPBOARD_LINUX_PIN_FILE="$$pin/mcp.json" GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestMCPCopyClipboardLinuxOraclePin$$' -count=1 \
+	&& SYMVAULT_GET_CLIPBOARD_LINUX_PIN_FILE="$$pin/get.json" GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGetClipboardLinuxOraclePin$$' -count=1
 
 .PHONY: clipboard-linux-fixtures-check clipboard-linux-fixtures-generate clipboard-linux-fixtures-ci clipboard-linux-differential
 clipboard-linux-fixtures-check:
@@ -1208,9 +1219,8 @@ ifeq ($(shell uname -s),Linux)
 	SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardLinuxFixture$$' -count=1
 	SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=check GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGenerateGetClipboardLinuxFixture$$' -count=1
 else
-	docker run --rm -v "$(CURDIR):$(CURDIR)" -v "$(DESKTOP_REPO_COMMON):$(DESKTOP_REPO_COMMON)" -v "$(DESKTOP_GOMODCACHE):/gomod" -v desktopgen-gocache:/gocache -w "$(CURDIR)" \
-		-e GOMODCACHE=/gomod -e GOCACHE=/gocache -e GOWORK=off -e GOTOOLCHAIN=local -e GOFLAGS=-mod=mod -e GOPROXY=off -e CGO_ENABLED=0 \
-		-e SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 -e SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=check \
+	pin=$$(mktemp -d) && trap 'rm -rf "$$pin"' EXIT && $(CLIPBOARD_LINUX_HOST_PIN) \
+	&& $(CLIPBOARD_LINUX_DOCKER) -e SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 -e SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=check \
 		$(DESKTOP_DOCKER_IMAGE) sh -c "go test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardLinuxFixture\$$' -count=1 && go test ./cmd -run '^TestGenerateGetClipboardLinuxFixture\$$' -count=1"
 endif
 
@@ -1219,9 +1229,8 @@ ifeq ($(shell uname -s),Linux)
 	SYMAIRA_GENERATE_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardLinuxFixture$$' -count=1
 	SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=write GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGenerateGetClipboardLinuxFixture$$' -count=1
 else
-	docker run --rm -v "$(CURDIR):$(CURDIR)" -v "$(DESKTOP_REPO_COMMON):$(DESKTOP_REPO_COMMON)" -v "$(DESKTOP_GOMODCACHE):/gomod" -v desktopgen-gocache:/gocache -w "$(CURDIR)" \
-		-e GOMODCACHE=/gomod -e GOCACHE=/gocache -e GOWORK=off -e GOTOOLCHAIN=local -e GOFLAGS=-mod=mod -e GOPROXY=off -e CGO_ENABLED=0 \
-		-e SYMAIRA_GENERATE_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 -e SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=write \
+	pin=$$(mktemp -d) && trap 'rm -rf "$$pin"' EXIT && $(CLIPBOARD_LINUX_HOST_PIN) \
+	&& $(CLIPBOARD_LINUX_DOCKER) -e SYMAIRA_GENERATE_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 -e SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=write \
 		$(DESKTOP_DOCKER_IMAGE) sh -c "go test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardLinuxFixture\$$' -count=1 && go test ./cmd -run '^TestGenerateGetClipboardLinuxFixture\$$' -count=1"
 endif
 
@@ -1236,7 +1245,7 @@ clipboard-linux-differential: clipboard-linux-fixtures-ci
 	$(CARGO) test -p symvault-mcp --test tools_copy_to_clipboard_linux_contract --locked
 	$(CARGO) test -p symvault-platform --test get_clipboard_linux_contract --test owned_clipboard_command_contract --locked
 ifeq ($(shell uname -s),Linux)
-	$(CARGO) test -p symvault-cli --test clipboard_linux_entrypoints --locked
+	SYMVAULT_GATE=1 $(CARGO) test -p symvault-cli --test clipboard_linux_entrypoints --locked
 endif
 
 .PHONY: export-differential

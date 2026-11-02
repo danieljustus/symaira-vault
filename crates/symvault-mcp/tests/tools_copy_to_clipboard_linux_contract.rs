@@ -11,6 +11,13 @@
 //! `SystemHost` behind `CommandClipboard` - the type `native_command_clipboard`
 //! returns on Linux - and the real MCP protocol handler: responses, tool argv
 //! and stdin bytes (including the timer-driven clear) must equal Go's.
+//!
+//! The fixture also records `generate_totp` with the clipboard destination
+//! (same backend, same auto-clear) and the write-error path of atotto's
+//! `writeAll` (a tool that closes its stdin without reading a large payload).
+//! Go reads the system clock for TOTP, so the copied code is the placeholder
+//! `@TOTP_CODE@` in the fixture; the replay injects a clock and requires the
+//! tool to have received exactly the code of that clock.
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -31,6 +38,7 @@ use tempfile::tempdir;
 #[derive(Debug, Deserialize)]
 struct Fixture {
     oracle: Oracle,
+    totp: TotpSpec,
     server_name: String,
     server_version: String,
     script_placeholders: Vec<String>,
@@ -40,15 +48,35 @@ struct Fixture {
 
 #[derive(Debug, Deserialize)]
 struct Oracle {
+    commit: String,
+    commit_sha: String,
     goos: String,
     atotto_clipboard_version: String,
+    source_files: Vec<String>,
     source_hash: String,
+    generator_files: Vec<String>,
     generator_hash: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TotpSpec {
+    secret: String,
+    algorithm: String,
+    digits: i32,
+    period: i32,
+    code_placeholder: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct Case {
     name: String,
+    tool: String,
+    arguments: String,
+    approval_mode: String,
+    #[serde(default)]
+    password_repeat: usize,
+    #[serde(default)]
+    tool_overrides: BTreeMap<String, String>,
     path_tools: Option<Vec<String>>,
     wayland_display: String,
     tool_exit: i32,
@@ -75,6 +103,29 @@ struct DesktopFixture {
 }
 
 const PASSWORD: &str = "StrongP@ssw0rd123";
+/// The injected clock of the replay; Go's handler reads the system clock.
+const NOW_UNIX: i64 = 1_700_000_000;
+
+/// The oracle pin the fixture must carry: the reachable commit whose Go sources
+/// equal the working tree the capture ran against, and their digest. The
+/// generator refuses to run when the working tree differs from this commit.
+const ORACLE_COMMIT: &str = "5229f949";
+const ORACLE_COMMIT_SHA: &str = "5229f9490cd25c22adb641677546a57802417304";
+const ORACLE_SOURCE_HASH: &str = "0636bc61995371865381248a9ff631ddb27fb04362713541f2593d52d00f7655";
+const ORACLE_SOURCE_FILES: [&str; 12] = [
+    "go.mod",
+    "go.sum",
+    "internal/clipboard/clipboard.go",
+    "internal/clipboard/clipboard_signal_unix.go",
+    "internal/clipboard/interface.go",
+    "internal/clipboard/provider.go",
+    "internal/clipboard/system_clipboard.go",
+    "internal/crypto/totp.go",
+    "internal/mcp/server/server.go",
+    "internal/mcp/server/server_authorize.go",
+    "internal/mcp/server/tools_clipboard.go",
+    "internal/mcp/server/tools_totp.go",
+];
 
 fn render(template: &str, rec: &Path, exit: i32) -> String {
     template
@@ -117,6 +168,19 @@ fn read_calls(rec: &Path) -> Vec<Call> {
         .collect()
 }
 
+/// The TOTP code of the injected clock for the fixture's fixed secret.
+fn expected_code(spec: &TotpSpec) -> String {
+    symvault_core::totp::generate_totp_at(
+        &spec.secret,
+        &spec.algorithm,
+        spec.digits,
+        spec.period,
+        NOW_UNIX,
+    )
+    .expect("TOTP code for the injected clock")
+    .code
+}
+
 fn fixture() -> Fixture {
     serde_json::from_str(include_str!(
         "../../../testdata/port/mcp/copy-clipboard-linux.json"
@@ -129,9 +193,51 @@ fn fixture_is_go_linux_derived_and_uses_the_desktop_fixture_tools() {
     let fixture = fixture();
     assert_eq!(fixture.oracle.goos, "linux");
     assert_eq!(fixture.oracle.atotto_clipboard_version, "v0.1.4");
-    assert_eq!(fixture.oracle.source_hash.len(), 64);
-    assert_eq!(fixture.oracle.generator_hash.len(), 64);
-    assert_eq!(fixture.cases.len(), 13);
+    // Provenance: the capture is pinned to a reachable commit (the generator
+    // fails unless the working-tree Go sources equal that commit's blobs), and
+    // the digest of exactly those sources is the one recorded here.
+    assert_eq!(fixture.oracle.commit, ORACLE_COMMIT);
+    assert_eq!(fixture.oracle.commit_sha, ORACLE_COMMIT_SHA);
+    assert!(
+        fixture
+            .oracle
+            .commit_sha
+            .starts_with(&fixture.oracle.commit)
+    );
+    assert_eq!(fixture.oracle.source_files, ORACLE_SOURCE_FILES);
+    assert_eq!(fixture.oracle.source_hash, ORACLE_SOURCE_HASH);
+    // The generator digest follows the generator's own edits, so it is checked
+    // for shape and for covering the generator itself.
+    assert!(
+        fixture
+            .oracle
+            .generator_hash
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            && fixture.oracle.generator_hash.len() == 64
+    );
+    assert!(fixture.oracle.generator_files.iter().any(|name| {
+        name == "internal/mcp/server/mcp_copy_clipboard_linux_fixture_generator_test.go"
+    }));
+    assert!(
+        fixture
+            .oracle
+            .generator_files
+            .iter()
+            .any(|name| { name == "internal/mcp/server/mcp_copy_clipboard_linux_pin_test.go" })
+    );
+    assert_eq!(fixture.totp.algorithm, "SHA1");
+    assert_eq!(fixture.totp.digits, 6);
+    assert_eq!(fixture.totp.period, 30);
+    assert_eq!(fixture.cases.len(), 25);
+    assert_eq!(
+        fixture
+            .cases
+            .iter()
+            .filter(|case| case.tool == "generate_totp")
+            .count(),
+        10
+    );
     let desktop: DesktopFixture = serde_json::from_str(include_str!(
         "../../../testdata/port/platform/desktop_linux.json"
     ))
@@ -152,6 +258,7 @@ fn copy_to_clipboard_matches_go_linux_command_clipboard() {
     let fixture = fixture();
     let mut with_tool_calls = 0;
     let mut cleared = 0;
+    let mut totp_copies = 0;
     for case in &fixture.cases {
         let sandbox = tempdir().expect("disposable sandbox");
         let bin = sandbox.path().join("bin");
@@ -163,11 +270,11 @@ fn copy_to_clipboard_matches_go_linux_command_clipboard() {
         fs::write(rec.join("paste"), b"").unwrap();
         for name in case.path_tools.as_deref().unwrap_or_default() {
             let path = bin.join(name);
-            fs::write(
-                &path,
-                render(&fixture.fake_tools[name], &rec, case.tool_exit),
-            )
-            .unwrap();
+            let template = case
+                .tool_overrides
+                .get(name)
+                .unwrap_or(&fixture.fake_tools[name]);
+            fs::write(&path, render(template, &rec, case.tool_exit)).unwrap();
             fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
         }
         let path_value = bin.to_str().unwrap().to_owned();
@@ -205,12 +312,40 @@ fn copy_to_clipboard_matches_go_linux_command_clipboard() {
                     data: BTreeMap::from([
                         ("username".into(), serde_json::json!("fixture-user")),
                         ("password".into(), serde_json::json!(PASSWORD)),
+                        (
+                            "totp".into(),
+                            serde_json::json!({
+                                "algorithm": fixture.totp.algorithm,
+                                "digits": fixture.totp.digits,
+                                "period": fixture.totp.period,
+                                "secret": fixture.totp.secret,
+                            }),
+                        ),
                     ]),
                     ..Entry::default()
                 },
                 &identity,
             )
             .expect("seed password entry");
+        if case.password_repeat > 0 {
+            store
+                .write_new_entry(
+                    "big",
+                    &Entry {
+                        path: "big".into(),
+                        data: BTreeMap::from([
+                            ("username".into(), serde_json::json!("fixture-user")),
+                            (
+                                "password".into(),
+                                serde_json::json!("0123456789abcdef".repeat(case.password_repeat)),
+                            ),
+                        ]),
+                        ..Entry::default()
+                    },
+                    &identity,
+                )
+                .expect("seed large password entry");
+        }
         let runtime = StoreReadOnlyRuntime::from_store(
             store,
             identity,
@@ -221,8 +356,9 @@ fn copy_to_clipboard_matches_go_linux_command_clipboard() {
                 agent_name: "clipboard-linux-fixture".into(),
                 tier: "admin".into(),
                 allowed_paths: vec!["*".into()],
-                approval_mode: "none".into(),
+                approval_mode: case.approval_mode.clone(),
                 can_use_clipboard: true,
+                now_unix: Some(NOW_UNIX),
                 available_tools: read_only_tool_names(),
                 vault_dir: "<fixture-vault>".into(),
                 vault_unlocked: true,
@@ -240,6 +376,14 @@ fn copy_to_clipboard_matches_go_linux_command_clipboard() {
             Arc::new(runtime),
         );
         assert_eq!(case.input.len(), 2 + case.repeat, "{}", case.name);
+        for call in &case.input[2..] {
+            assert!(
+                call.contains(&format!("\"name\":\"{}\"", case.tool))
+                    && call.contains(&case.arguments),
+                "{} replays a different call than its recorded tool/arguments",
+                case.name
+            );
+        }
         let input = case
             .input
             .iter()
@@ -265,17 +409,56 @@ fn copy_to_clipboard_matches_go_linux_command_clipboard() {
         // An unexpected extra call (a clear after a failed copy, a second
         // clear for a refreshed timer) would show up shortly after.
         std::thread::sleep(Duration::from_millis(300));
+        let expected_calls: Vec<Call> = case
+            .tool_calls
+            .iter()
+            .map(|call| Call {
+                tool: call.tool.clone(),
+                mode: call.mode.clone(),
+                argv: call.argv.clone(),
+                stdin: if call.stdin == fixture.totp.code_placeholder {
+                    assert_eq!(case.tool, "generate_totp", "{}", case.name);
+                    expected_code(&fixture.totp)
+                } else {
+                    call.stdin.clone()
+                },
+            })
+            .collect();
         assert_eq!(
             read_calls(&rec),
-            case.tool_calls,
+            expected_calls,
             "tool invocations of {}",
             case.name
         );
+        if case.tool == "generate_totp" {
+            // Whatever reached the tool is the code of the injected clock and
+            // nothing else leaked into the protocol output.
+            let code = expected_code(&fixture.totp);
+            assert!(
+                !serde_json::to_string(&actual).unwrap().contains(&code),
+                "{} returned the TOTP code",
+                case.name
+            );
+            totp_copies += expected_calls
+                .iter()
+                .filter(|call| call.stdin == code)
+                .count();
+        }
         with_tool_calls += usize::from(!case.tool_calls.is_empty());
-        cleared += usize::from(case.tool_calls.iter().any(|call| call.stdin.is_empty()));
+        cleared += usize::from(
+            case.tool_overrides.is_empty()
+                && case.tool_calls.iter().any(|call| call.stdin.is_empty()),
+        );
     }
     // Negative controls for the replay itself: a vacuous pass is impossible.
-    assert_eq!(fixture.cases.len(), 13);
-    assert_eq!(with_tool_calls, 12, "only the no-tool case has no call");
-    assert_eq!(cleared, 4, "auto-clear cases that really cleared");
+    assert_eq!(fixture.cases.len(), 25);
+    assert_eq!(
+        with_tool_calls, 21,
+        "the two no-tool cases and the two approval refusals have no call"
+    );
+    assert_eq!(cleared, 8, "auto-clear cases that really cleared");
+    assert_eq!(
+        totp_copies, 8,
+        "TOTP codes the tools received: seven cases reach a tool, the refresh case copies twice"
+    );
 }

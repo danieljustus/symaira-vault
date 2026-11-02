@@ -29,7 +29,9 @@ import (
 	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/mcp/transport"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 const (
@@ -37,20 +39,9 @@ const (
 	copyClipboardLinuxFixture  = "testdata/port/mcp/copy-clipboard-linux.json"
 )
 
-var copyClipboardLinuxSourceFiles = []string{
-	"go.mod",
-	"go.sum",
-	"internal/clipboard/clipboard.go",
-	"internal/clipboard/clipboard_signal_unix.go",
-	"internal/clipboard/interface.go",
-	"internal/clipboard/provider.go",
-	"internal/clipboard/system_clipboard.go",
-	"internal/mcp/server/server.go",
-	"internal/mcp/server/tools_clipboard.go",
-}
-
 var copyClipboardLinuxGeneratorFiles = []string{
 	"internal/mcp/server/mcp_copy_clipboard_linux_fixture_generator_test.go",
+	"internal/mcp/server/mcp_copy_clipboard_linux_pin_test.go",
 	"internal/mcp/server/mcp_copy_clipboard_fixture_generator_test.go",
 	"internal/mcp/server/mcpsetentry_fixture_generator_test.go",
 	"internal/mcp/server/tools_test_helpers.go",
@@ -105,7 +96,11 @@ func (s copyClipboardLinuxTool) template() string {
 }
 
 type copyClipboardLinuxScenario struct {
-	Name           string   `json:"name"`
+	Name string `json:"name"`
+	// Tool is the MCP tool the scenario calls: copy_to_clipboard or generate_totp.
+	Tool string `json:"tool"`
+	// Arguments is the tools/call arguments object, verbatim.
+	Arguments      string   `json:"arguments"`
 	PathTools      []string `json:"path_tools"`
 	WaylandDisplay string   `json:"wayland_display"`
 	ToolExit       int      `json:"tool_exit"`
@@ -114,6 +109,13 @@ type copyClipboardLinuxScenario struct {
 	// WantCalls is how many tool invocations the scenario must have recorded
 	// before the child may exit (the auto-clear runs on a timer).
 	WantCalls int `json:"want_calls"`
+	// ApprovalMode is the agent profile's approval mode ("none" when empty).
+	ApprovalMode string `json:"approval_mode"`
+	// PasswordRepeat > 0 reads the password of the "big" entry, which is
+	// "0123456789abcdef" repeated that many times.
+	PasswordRepeat int `json:"password_repeat,omitempty"`
+	// ToolOverrides replace a rendered fake tool's script for this scenario.
+	ToolOverrides map[string]string `json:"tool_overrides,omitempty"`
 }
 
 type copyClipboardLinuxCase struct {
@@ -131,6 +133,8 @@ type copyClipboardLinuxCall struct {
 }
 
 type copyClipboardLinuxOracle struct {
+	Commit         string   `json:"commit"`
+	CommitSHA      string   `json:"commit_sha"`
 	GoVersion      string   `json:"go_version"`
 	GOOS           string   `json:"goos"`
 	AtottoVersion  string   `json:"atotto_clipboard_version"`
@@ -140,10 +144,29 @@ type copyClipboardLinuxOracle struct {
 	GeneratorHash  string   `json:"generator_hash"`
 }
 
+// copyClipboardLinuxTOTP describes the fixed TOTP secret of the "github" entry.
+// Go's handler reads the system clock, so the copied code is recorded as the
+// placeholder after the generator proved it equals the code of a counter inside
+// the call's time window; the Rust replay injects a clock and asserts the exact
+// code for that clock.
+type copyClipboardLinuxTOTP struct {
+	Secret          string `json:"secret"`
+	Algorithm       string `json:"algorithm"`
+	Digits          int    `json:"digits"`
+	Period          int    `json:"period"`
+	CodePlaceholder string `json:"code_placeholder"`
+}
+
+const (
+	copyClipboardLinuxTOTPPlaceholder = "@TOTP_CODE@"
+	copyClipboardLinuxTOTPSecret      = "JBSWY3DPEHPK3PXP"
+)
+
 type copyClipboardLinuxDocument struct {
 	SchemaVersion     int                      `json:"schema_version"`
 	Oracle            copyClipboardLinuxOracle `json:"oracle"`
 	Note              string                   `json:"note"`
+	TOTP              copyClipboardLinuxTOTP   `json:"totp"`
 	ServerName        string                   `json:"server_name"`
 	ServerVersion     string                   `json:"server_version"`
 	ScriptPlaceholder []string                 `json:"script_placeholders"`
@@ -151,8 +174,39 @@ type copyClipboardLinuxDocument struct {
 	Cases             []copyClipboardLinuxCase `json:"cases"`
 }
 
+// copyClipboardLinuxClosedStdinTool is a tool that records its call, closes
+// its stdin without reading it and exits: the copy tool a clipboard owner that
+// died early looks like to the writer.
+func copyClipboardLinuxClosedStdinTool(name string) string {
+	for _, tool := range copyClipboardLinuxTools {
+		if tool.name == name {
+			tpl := tool.template()
+			const read = "copy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\n"
+			const closed = "copy|type) exec 0<&-; : > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\n"
+			if !strings.Contains(tpl, read) {
+				panic("fake tool template changed: " + name)
+			}
+			return strings.Replace(tpl, read, closed, 1)
+		}
+	}
+	panic("unknown fake tool " + name)
+}
+
 func copyClipboardLinuxScenarios() []copyClipboardLinuxScenario {
-	return []copyClipboardLinuxScenario{
+	const (
+		copyTool = "copy_to_clipboard"
+		totpTool = "generate_totp"
+		pathArgs = `{"path":"github"}`
+		totpArgs = `{"path":"github","destination":"clipboard"}`
+	)
+	totp := func(s copyClipboardLinuxScenario) copyClipboardLinuxScenario {
+		s.Tool = totpTool
+		if s.Arguments == "" {
+			s.Arguments = totpArgs
+		}
+		return s
+	}
+	scenarios := []copyClipboardLinuxScenario{
 		{Name: "no_tool_installed", Repeat: 1, WantCalls: 0},
 		{Name: "xclip_success", PathTools: []string{"xclip"}, Repeat: 1, WantCalls: 1},
 		{Name: "xclip_success_auto_clear", PathTools: []string{"xclip"}, AutoClear: 1, Repeat: 1, WantCalls: 2},
@@ -166,7 +220,38 @@ func copyClipboardLinuxScenarios() []copyClipboardLinuxScenario {
 		{Name: "windows_exe_success", PathTools: []string{"clip.exe", "powershell.exe"}, Repeat: 1, WantCalls: 1},
 		{Name: "xclip_exit_failure", PathTools: []string{"xclip"}, ToolExit: 1, AutoClear: 1, Repeat: 1, WantCalls: 1},
 		{Name: "xsel_exit_failure_code_3", PathTools: []string{"xsel"}, ToolExit: 3, Repeat: 1, WantCalls: 1},
+		// atotto's writeAll returns the stdin write error without waiting for
+		// the tool, even when the tool exits 0: a payload larger than the pipe
+		// buffer and a tool that closes its stdin make that deterministic.
+		{Name: "large_payload_tool_closes_stdin_exit_0", Arguments: `{"path":"big"}`, PathTools: []string{"xclip"}, PasswordRepeat: 65536, AutoClear: 1, Repeat: 1, WantCalls: 1,
+			ToolOverrides: map[string]string{"xclip": copyClipboardLinuxClosedStdinTool("xclip")}},
+		{Name: "large_payload_tool_closes_stdin_exit_1", Arguments: `{"path":"big"}`, PathTools: []string{"xclip"}, ToolExit: 1, PasswordRepeat: 65536, Repeat: 1, WantCalls: 1,
+			ToolOverrides: map[string]string{"xclip": copyClipboardLinuxClosedStdinTool("xclip")}},
+		// generate_totp with the clipboard destination uses the same
+		// clipboard.DefaultClipboard() and the same auto-clear.
+		totp(copyClipboardLinuxScenario{Name: "totp_default_destination_xclip_auto_clear", Arguments: pathArgs, PathTools: []string{"xclip"}, AutoClear: 1, Repeat: 1, WantCalls: 2}),
+		totp(copyClipboardLinuxScenario{Name: "totp_xclip_without_auto_clear", PathTools: []string{"xclip"}, Repeat: 1, WantCalls: 1}),
+		totp(copyClipboardLinuxScenario{Name: "totp_xclip_refreshes_auto_clear", PathTools: []string{"xclip"}, AutoClear: 1, Repeat: 2, WantCalls: 3}),
+		totp(copyClipboardLinuxScenario{Name: "totp_xsel_auto_clear", PathTools: []string{"xsel"}, AutoClear: 1, Repeat: 1, WantCalls: 2}),
+		totp(copyClipboardLinuxScenario{Name: "totp_wayland_wl_copy_auto_clear", PathTools: []string{"wl-copy", "wl-paste", "xclip"}, WaylandDisplay: "wayland-0", AutoClear: 1, Repeat: 1, WantCalls: 2}),
+		totp(copyClipboardLinuxScenario{Name: "totp_windows_exe_without_auto_clear", PathTools: []string{"clip.exe", "powershell.exe"}, Repeat: 1, WantCalls: 1}),
+		totp(copyClipboardLinuxScenario{Name: "totp_no_tool_installed", Repeat: 1, WantCalls: 0}),
+		totp(copyClipboardLinuxScenario{Name: "totp_xclip_exit_failure", PathTools: []string{"xclip"}, ToolExit: 1, AutoClear: 1, Repeat: 1, WantCalls: 1}),
+		totp(copyClipboardLinuxScenario{Name: "totp_prompt_approval_not_supported", PathTools: []string{"xclip"}, ApprovalMode: "prompt", AutoClear: 1, Repeat: 1, WantCalls: 0}),
+		totp(copyClipboardLinuxScenario{Name: "totp_deny_approval_not_supported", PathTools: []string{"xclip"}, ApprovalMode: "deny", AutoClear: 1, Repeat: 1, WantCalls: 0}),
 	}
+	for index := range scenarios {
+		if scenarios[index].Tool == "" {
+			scenarios[index].Tool = copyTool
+		}
+		if scenarios[index].Arguments == "" {
+			scenarios[index].Arguments = pathArgs
+		}
+		if scenarios[index].ApprovalMode == "" {
+			scenarios[index].ApprovalMode = "none"
+		}
+	}
+	return scenarios
 }
 
 func renderCopyClipboardLinuxTool(tpl, rec string, exit int) string {
@@ -180,6 +265,7 @@ func TestGenerateMCPCopyClipboardLinuxFixture(t *testing.T) {
 		t.Skip("set SYMAIRA_GENERATE_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 or SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1")
 	}
 	root := executeAPIRequestRepoRoot(t)
+	pin := resolveCopyClipboardLinuxPin(t, root)
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatalf("locate test binary: %v", err)
@@ -189,7 +275,7 @@ func TestGenerateMCPCopyClipboardLinuxFixture(t *testing.T) {
 	for _, tool := range copyClipboardLinuxTools {
 		templates[tool.name] = tool.template()
 	}
-	cases := make([]copyClipboardLinuxCase, 0, 16)
+	cases := make([]copyClipboardLinuxCase, 0, 32)
 	for _, scenario := range copyClipboardLinuxScenarios() {
 		cases = append(cases, runCopyClipboardLinuxScenario(t, self, templates, scenario))
 	}
@@ -197,15 +283,24 @@ func TestGenerateMCPCopyClipboardLinuxFixture(t *testing.T) {
 	doc := copyClipboardLinuxDocument{
 		SchemaVersion: 1,
 		Oracle: copyClipboardLinuxOracle{
+			Commit:         pin.Commit,
+			CommitSHA:      pin.CommitSHA,
 			GoVersion:      localMCPOracleGoVersion,
 			GOOS:           "linux",
 			AtottoVersion:  "v0.1.4",
 			SourceFiles:    copyClipboardLinuxSourceFiles,
-			SourceHash:     executeAPIRequestWorkingDigest(t, root, copyClipboardLinuxSourceFiles),
+			SourceHash:     pin.SourceHash,
 			GeneratorFiles: copyClipboardLinuxGeneratorFiles,
 			GeneratorHash:  executeAPIRequestWorkingDigest(t, root, copyClipboardLinuxGeneratorFiles),
 		},
-		Note:              "Real Go tools/call copy_to_clipboard on GOOS=linux with the production clipboard.DefaultClipboard() (atotto/clipboard command backend, selected at process start from PATH and WAYLAND_DISPLAY) and fake POSIX-shell tools on a disposable PATH; no clipboard.SetClipboard. Source digests are working-tree digests of the files listed, not a commit pin.",
+		Note: "Real Go tools/call copy_to_clipboard and generate_totp (destination clipboard) on GOOS=linux with the production clipboard.DefaultClipboard() (atotto/clipboard command backend, selected at process start from PATH and WAYLAND_DISPLAY) and fake POSIX-shell tools on a disposable PATH; no clipboard.SetClipboard. source_hash is the digest of source_files, identical in the working tree and in commit_sha (the generator fails otherwise); go_version names the pinned oracle toolchain, the capture itself may run on a newer Go inside a Linux container. generate_totp reads the system clock, so the copied code is recorded as the placeholder after the generator proved it equals a code inside the call's time window.",
+		TOTP: copyClipboardLinuxTOTP{
+			Secret:          copyClipboardLinuxTOTPSecret,
+			Algorithm:       "SHA1",
+			Digits:          6,
+			Period:          30,
+			CodePlaceholder: copyClipboardLinuxTOTPPlaceholder,
+		},
 		ServerName:        "symvault",
 		ServerVersion:     "0.0.0-copy-clipboard-linux-fixture",
 		ScriptPlaceholder: []string{"@REC@", "@EXIT@", "@FOCUS1@", "@FOCUS2@", "@FOCUSEXIT@"},
@@ -233,6 +328,46 @@ func TestGenerateMCPCopyClipboardLinuxFixture(t *testing.T) {
 	}
 }
 
+type copyClipboardLinuxChildResult struct {
+	Input  []string          `json:"input"`
+	Output []json.RawMessage `json:"output"`
+	// StartUnix/EndUnix bracket the tools/call dispatches, in Unix seconds.
+	StartUnix int64 `json:"start_unix"`
+	EndUnix   int64 `json:"end_unix"`
+}
+
+// normalizeCopyClipboardLinuxTOTPCalls proves every non-empty copy carried a
+// TOTP code Go could have generated inside [start, end] and records the
+// placeholder in its place; the clear (empty stdin) is kept as is.
+func normalizeCopyClipboardLinuxTOTPCalls(t *testing.T, name string, calls []copyClipboardLinuxCall, start, end int64) []copyClipboardLinuxCall {
+	t.Helper()
+	valid := map[string]bool{}
+	for counter := start / 30; counter <= end/30; counter++ {
+		code, err := crypto.GenerateTOTPAt(copyClipboardLinuxTOTPSecret, "SHA1", 6, 30, time.Unix(counter*30, 0))
+		if err != nil {
+			t.Fatalf("%s: expected TOTP code: %v", name, err)
+		}
+		valid[code.Code] = true
+	}
+	out := make([]copyClipboardLinuxCall, len(calls))
+	copies := 0
+	for index, call := range calls {
+		out[index] = call
+		if call.Mode != "copy" || call.Stdin == "" {
+			continue
+		}
+		copies++
+		if !valid[call.Stdin] {
+			t.Fatalf("%s: call %d copied %q, which is no TOTP code of the window [%d, %d]", name, index+1, call.Stdin, start, end)
+		}
+		out[index].Stdin = copyClipboardLinuxTOTPPlaceholder
+	}
+	if len(calls) > 0 && copies == 0 {
+		t.Fatalf("%s: no TOTP copy was recorded", name)
+	}
+	return out
+}
+
 type copyClipboardLinuxChildRequest struct {
 	Scenario copyClipboardLinuxScenario `json:"scenario"`
 	Rec      string                     `json:"rec"`
@@ -254,7 +389,11 @@ func runCopyClipboardLinuxScenario(t *testing.T, self string, templates map[stri
 		t.Fatalf("%s: %v", scenario.Name, err)
 	}
 	for _, name := range scenario.PathTools {
-		body := renderCopyClipboardLinuxTool(templates[name], rec, scenario.ToolExit)
+		template := templates[name]
+		if override, ok := scenario.ToolOverrides[name]; ok {
+			template = override
+		}
+		body := renderCopyClipboardLinuxTool(template, rec, scenario.ToolExit)
 		// #nosec G306 -- a fake desktop tool must be executable; it lives in a private scratch directory
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(body), 0o700); err != nil {
 			t.Fatalf("%s: %v", scenario.Name, err)
@@ -286,12 +425,19 @@ func runCopyClipboardLinuxScenario(t *testing.T, self string, templates map[stri
 	if err != nil {
 		t.Fatalf("%s result: %v", scenario.Name, err)
 	}
-	var observed copyClipboardLinuxCase
-	if err := json.Unmarshal(raw, &observed); err != nil {
+	var child copyClipboardLinuxChildResult
+	if err := json.Unmarshal(raw, &child); err != nil {
 		t.Fatalf("%s result decode: %v", scenario.Name, err)
 	}
-	observed.copyClipboardLinuxScenario = scenario
-	observed.ToolCalls = readCopyClipboardLinuxCalls(t, rec)
+	observed := copyClipboardLinuxCase{
+		copyClipboardLinuxScenario: scenario,
+		Input:                      child.Input,
+		Output:                     child.Output,
+		ToolCalls:                  readCopyClipboardLinuxCalls(t, rec),
+	}
+	if scenario.Tool == "generate_totp" {
+		observed.ToolCalls = normalizeCopyClipboardLinuxTOTPCalls(t, scenario.Name, observed.ToolCalls, child.StartUnix, child.EndUnix)
+	}
 	if len(observed.ToolCalls) != scenario.WantCalls {
 		t.Fatalf("%s: recorded %d tool calls, want %d", scenario.Name, len(observed.ToolCalls), scenario.WantCalls)
 	}
@@ -347,12 +493,21 @@ func TestMCPCopyClipboardLinuxChild(t *testing.T) {
 	}
 	scenario := request.Scenario
 	vaultDir, identity := mcpSetEntryFixtureVault(t)
+	if scenario.PasswordRepeat > 0 {
+		big := &vault.Entry{Data: map[string]any{
+			"username": "fixture-user",
+			"password": strings.Repeat("0123456789abcdef", scenario.PasswordRepeat),
+		}}
+		if err := vault.WriteEntry(vaultDir, "big", big, identity); err != nil {
+			t.Fatalf("write large fixture entry: %v", err)
+		}
+	}
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:            "clipboard-linux-fixture",
 		Tier:            config.StrPtr("admin"),
 		AllowedPaths:    []string{"*"},
 		CanUseClipboard: config.BoolPtr(true),
-		ApprovalMode:    config.StrPtr("none"),
+		ApprovalMode:    config.StrPtr(scenario.ApprovalMode),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	srv.vault.Config = &config.Config{
@@ -365,10 +520,11 @@ func TestMCPCopyClipboardLinuxChild(t *testing.T) {
 		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
 	}
 	for index := 0; index < scenario.Repeat; index++ {
-		inputs = append(inputs, fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"copy_to_clipboard","arguments":{"path":"github"}}}`, index+2))
+		inputs = append(inputs, fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":%q,"arguments":%s}}`, index+2, scenario.Tool, scenario.Arguments))
 	}
 	handler := NewProtocolHandler("symvault", "0.0.0-copy-clipboard-linux-fixture", srv)
 	outputs := make([]json.RawMessage, 0, len(inputs))
+	startUnix := time.Now().Unix()
 	for _, line := range inputs {
 		var message transport.Message
 		if err := json.Unmarshal([]byte(line), &message); err != nil {
@@ -390,6 +546,7 @@ func TestMCPCopyClipboardLinuxChild(t *testing.T) {
 		}
 		outputs = append(outputs, encoded)
 	}
+	endUnix := time.Now().Unix()
 	// The auto-clear runs on a timer; wait until the fake tools logged it.
 	deadline := time.Now().Add(5 * time.Second)
 	for scenario.WantCalls > 0 {
@@ -404,7 +561,7 @@ func TestMCPCopyClipboardLinuxChild(t *testing.T) {
 	}
 	// A call the scenario does not expect must not appear late.
 	time.Sleep(150 * time.Millisecond)
-	encoded, err := json.Marshal(copyClipboardLinuxCase{Input: inputs, Output: outputs})
+	encoded, err := json.Marshal(copyClipboardLinuxChildResult{Input: inputs, Output: outputs, StartUnix: startUnix, EndUnix: endUnix})
 	if err != nil {
 		t.Fatal(err)
 	}
