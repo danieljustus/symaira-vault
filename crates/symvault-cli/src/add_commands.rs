@@ -297,24 +297,30 @@ fn form_secret_metadata(options: &AddOptions, form: &add_form::FormResult) -> Se
     }
 }
 
-/// Go's `warnArgvExposure`: secrets on the command line are visible in process
-/// listings, which matters when a person is sitting at the terminal.
+/// Go's `warnArgvExposure` for `add`.
 fn warn_argv_exposure(options: &AddOptions) {
+    warn_argv_exposure_values(
+        options.value.as_deref().unwrap_or_default(),
+        &options.totp_secret,
+        STDIN_TOTP_READ.load(Ordering::Relaxed),
+    );
+}
+
+/// Go's `warnArgvExposure(value, totpSecret, stdinTOTP)`: secrets on the
+/// command line are visible in process listings, which matters when a person is
+/// sitting at the terminal. Shared by `add` and `set`.
+pub(crate) fn warn_argv_exposure_values(value: &str, totp_secret: &str, stdin_totp: bool) {
     // Go prints these even under `--quiet` (observed with the oracle: the
     // command-scoped quiet flag is applied after `cliout.Warnf` consults it).
     if !std::io::stdin().is_terminal() {
         return;
     }
-    if options
-        .value
-        .as_deref()
-        .is_some_and(|value| !value.is_empty())
-    {
+    if !value.is_empty() {
         eprintln!(
             "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input."
         );
     }
-    if !options.totp_secret.is_empty() && !STDIN_TOTP_READ.load(Ordering::Relaxed) {
+    if !totp_secret.is_empty() && !stdin_totp {
         eprintln!(
             "Warning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input."
         );

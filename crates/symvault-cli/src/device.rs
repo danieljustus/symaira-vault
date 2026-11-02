@@ -213,7 +213,8 @@ fn unlock_vault_with_mode(
         crate::unlock_passphrase_with_mode(&config_bytes, &config, vault, runtime, interactive)?;
     let data = data.ok_or_else(missing_identity)?;
     let sec_pass = SecretBytes::new(passphrase.as_bytes());
-    let identity = decrypt_identity(&data, &sec_pass).map_err(|e| format!("unlock vault: {e}"))?;
+    let identity = decrypt_identity(&data, &sec_pass)
+        .map_err(|_| format!("open vault: {}", crate::load_identity_error(vault, &data)))?;
     if !config_present {
         return Err(format!(
             "open vault: load config: {}",

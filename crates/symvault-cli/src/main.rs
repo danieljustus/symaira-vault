@@ -54,6 +54,7 @@ mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod set_input;
 mod share_commands;
 mod startup_profile_commands;
 mod sync_commands;
@@ -69,7 +70,7 @@ use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},
     fs,
-    io::{self, Write},
+    io::{self, BufRead, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
@@ -3320,6 +3321,20 @@ fn run_auth_set(
     finish_vault_result_exit_1(result)
 }
 
+/// Go's `load identity` failure for an identity file the passphrase cannot
+/// open: an Argon2id envelope reports the zero-key recovery outcome.
+pub(crate) fn load_identity_error(vault: &Path, envelope: &[u8]) -> &'static str {
+    if symvault_crypto::detect_envelope(envelope) == symvault_crypto::EnvelopeFormat::Argon2id {
+        if vault.join("recipients.txt").is_file() {
+            "load identity: zero-key recovery failed"
+        } else {
+            "load identity: zero-key recovery requires a trusted recipients.txt"
+        }
+    } else {
+        "load identity: decryption failed"
+    }
+}
+
 fn run_auth_rotate_passphrase(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
@@ -3343,18 +3358,7 @@ fn run_auth_rotate_passphrase(
             match decrypt_identity(&original, &SecretBytes::new(old_passphrase.as_bytes())) {
                 Ok(identity) => identity,
                 Err(_) => {
-                    let load_error = if symvault_crypto::detect_envelope(&original)
-                        == symvault_crypto::EnvelopeFormat::Argon2id
-                    {
-                        let recipients_file = vault.join("recipients.txt");
-                        if !recipients_file.is_file() {
-                            "load identity: zero-key recovery requires a trusted recipients.txt"
-                        } else {
-                            "load identity: zero-key recovery failed"
-                        }
-                    } else {
-                        "load identity: decryption failed"
-                    };
+                    let load_error = load_identity_error(&vault, &original);
                     return Err(format!("current passphrase is incorrect: {load_error}"));
                 }
             };
@@ -4165,6 +4169,28 @@ fn finish_vault_result_doubled(result: Result<(), String>) -> ExitCode {
             }
             if let Some(code) = report_failed_passphrase_read(&error, false) {
                 return code;
+            }
+            print_error_like_go(&error);
+            ExitCode::from(1)
+        }
+    }
+}
+
+/// `finish_vault_result_doubled` that keeps the exit-3 "vault not initialized"
+/// handling: Go's `set` returns every failure from `RunE`.
+fn finish_vault_result_doubled_exit3(result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            if let Some(code) = error.strip_prefix(REPORTED_PREFIX) {
+                return ExitCode::from(code.parse().unwrap_or(1));
+            }
+            if let Some(code) = report_failed_passphrase_read(&error, false) {
+                return code;
+            }
+            if is_not_initialized(&error) {
+                write_not_initialized(&error);
+                return ExitCode::from(3);
             }
             print_error_like_go(&error);
             ExitCode::from(1)
@@ -5112,73 +5138,77 @@ fn run_set(
 ) -> ExitCode {
     let result = (|| {
         // Go reads and validates the value before `WithVault` resolves and
-        // unlocks the vault, so input errors never trigger an unlock.
-        let value = if stdin_value {
-            let mut line = String::new();
+        // unlocks the vault, so input errors never trigger an unlock. Every
+        // failure is returned from `RunE` (cobra and `ExecuteRoot` each print
+        // it), so the pre-unlock ones go through `reported`.
+        let (path, field) = set_input::split_query(query);
+        let target_field = if field.is_empty() { "password" } else { field };
+        let mut value = value;
+        if stdin_value {
+            let mut bytes = Vec::new();
             io::stdin()
-                .read_line(&mut line)
-                .map_err(|error| format!("read --stdin-value: {error}"))?;
-            if line.is_empty() {
-                return Err("read --stdin-value: EOF".to_owned());
+                .lock()
+                .read_until(b'\n', &mut bytes)
+                .map_err(|error| reported(1, &format!("read --stdin-value: {error}"), None))?;
+            if bytes.is_empty() {
+                return Err(reported(1, "read --stdin-value: EOF", None));
             }
-            line.trim_end_matches(['\r', '\n']).to_owned()
-        } else if let Some(value) = value {
-            value
+            let line = String::from_utf8_lossy(&bytes);
+            // Go overwrites `SetValue`, so a terminal stdin warns here too.
+            value = Some(line.trim_end_matches(['\r', '\n']).to_owned());
+        }
+        add_commands::warn_argv_exposure_values(
+            value.as_deref().unwrap_or_default(),
+            totp_secret.as_deref().unwrap_or_default(),
+            false,
+        );
+
+        let mut data = BTreeMap::new();
+        if let Some(value) = value {
+            if value.is_empty() && write_commands::sensitive_field(target_field) && !allow_empty {
+                return Err(reported(
+                    9,
+                    &format!(
+                        "cannot set empty value for sensitive field {target_field:?} (use --allow-empty to override)"
+                    ),
+                    None,
+                ));
+            }
+            if !force && target_field == "password" && !value.is_empty() {
+                symvault_core::password::validate_password_strength(&value)
+                    .map_err(|error| reported(1, &error, None))?;
+            }
+            data.insert(target_field.to_owned(), serde_json::Value::String(value));
+        } else if !field.is_empty() {
+            let value =
+                set_input::read_confirmed_field_value(field, allow_empty).map_err(|error| {
+                    match error {
+                        set_input::InputError::Invalid(message) => reported(9, &message, None),
+                        set_input::InputError::General(message) => reported(1, &message, None),
+                    }
+                })?;
+            data.insert(field.to_owned(), serde_json::Value::String(value));
         } else {
-            interactive_set_value(query, allow_empty)
-                .map_err(empty_sensitive_value_is_invalid_input)?
-        };
-        let (path, data) = write_commands::set_entry_data(
-            query,
-            value,
-            allow_empty,
-            force,
+            data = set_input::collect_entry_data(totp_secret.as_deref().unwrap_or_default(), force)
+                .map_err(|error| reported(1, &error, None))?;
+        }
+        let data = write_commands::apply_totp_flags(
+            data,
             totp_secret.as_deref(),
             totp_issuer.as_deref(),
             totp_account.as_deref(),
         )
-        .map_err(empty_sensitive_value_is_invalid_input)?;
+        .map_err(|error| reported(1, &error, None))?;
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
-        write_commands::set_fields(&vault, &identity, &path, data)?;
+        write_commands::set_fields(&vault, &identity, path, data)?;
         if !quiet {
             println!("Entry saved: {path}");
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
-}
-
-/// Go's `set` rejects an empty sensitive value with a CLIError carrying
-/// ExitInvalidInput (9) (cmd/crud/set.go); every other failure keeps the
-/// command's usual reporting.
-fn empty_sensitive_value_is_invalid_input(error: String) -> String {
-    if error.starts_with("cannot set empty value for sensitive field") {
-        reported(9, &error, None)
-    } else {
-        error
-    }
-}
-
-fn interactive_set_value(query: &str, allow_empty: bool) -> Result<String, String> {
-    let field = query
-        .rsplit_once('.')
-        .map(|(_, field)| if field.is_empty() { "password" } else { field })
-        .unwrap_or("password");
-    let value = session_input::read_passphrase(&format!("Enter value for {field}: "))?.to_string();
-    if write_commands::sensitive_field(field) && !value.is_empty() {
-        let confirmation = session_input::read_passphrase(&format!("Confirm value for {field}: "))?;
-        if confirmation.as_str() != value {
-            return Err("values do not match".to_owned());
-        }
-    }
-    if value.is_empty() && write_commands::sensitive_field(field) && !allow_empty {
-        return Err(format!(
-            "cannot set empty value for sensitive field {field:?} (use --allow-empty to override)"
-        ));
-    }
-    Ok(value)
+    finish_vault_result_doubled_exit3(result)
 }
 
 fn run_delete(

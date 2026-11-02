@@ -28,7 +28,9 @@ pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String>
             Zeroizing::new(rpassword::read_password().map_err(|e| format!("read {label}: {e}"))?);
         return Ok(Zeroizing::new(line.trim().to_owned()));
     }
-    if !PIPE_WARNING_EMITTED.swap(true, Ordering::Relaxed)
+    // Go's `WarnPipeRead` returns early under `QuietMode`.
+    if !QUIET.load(Ordering::Relaxed)
+        && !PIPE_WARNING_EMITTED.swap(true, Ordering::Relaxed)
         && env::var("SYMVAULT_NO_PIPE_WARNING")
             .map(|v| v.is_empty() || v == "0")
             .unwrap_or(true)
