@@ -39,7 +39,10 @@ fi
 log_dir="${LOCAL_GATE_LOG_DIR:-$root/target/local-gate}"
 receipts="${LOCAL_GATE_RECEIPTS:-$log_dir/receipts.jsonl}"
 mkdir -p "$log_dir" "$(dirname "$receipts")"
-image=symvault-local-gate:1
+# The tag carries a hash of the Dockerfile: worktrees with different Dockerfiles
+# share one docker daemon, and a plain `:1` tag was retagged under a running
+# lane by another worktree's concurrent build.
+image="symvault-local-gate:1-$(shasum -a 256 "$root/scripts/rust-port/local-gate/Dockerfile" | cut -c1-12)"
 
 # Area targets that ran, as "name:exit,..." from the log's `area-target:`
 # lines (local-gate-area.sh), so a receipt names what it covers.

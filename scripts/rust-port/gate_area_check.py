@@ -586,7 +586,15 @@ def main():
     p.add_argument("--exact-prefix"); p.add_argument("--contains", action="append")
     p.add_argument("--sum-passed", type=int); p.add_argument("--results-ok", action="store_true")
     p.set_defaults(run=log_ok)
-    args = parser.parse_args()
+    # Names may follow options (`log-ok LOG --exact-prefix X name1 name2`):
+    # argparse before 3.13 consumes the empty positional list first and rejects
+    # the trailing names (the Linux gate container ships python 3.12 as python3).
+    args, extra = parser.parse_known_args()
+    if extra:
+        if hasattr(args, "names") and not any(item.startswith("-") for item in extra):
+            args.names = list(args.names) + extra
+        else:
+            parser.error("unrecognized arguments: " + " ".join(extra))
     args.run(args)
 
 

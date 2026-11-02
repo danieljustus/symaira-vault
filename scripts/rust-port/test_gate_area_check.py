@@ -525,6 +525,12 @@ class Reports(unittest.TestCase):
             self.assertEqual(self.run_main("log-ok", path, "three", "--exact-prefix",
                                            "migrate_kdf_commands::tests::"), 1)
             self.assertEqual(self.run_main("log-ok", path, "one", "--exact-prefix", "other::"), 1)
+            # names after the options (python < 3.13 argparse rejects this without the fix)
+            self.assertEqual(self.run_main("log-ok", path, "--exact-prefix", "migrate_kdf_commands::tests::",
+                                           "--contains", "9 passed; 0 failed; 0 ignored", "one", "two"), 0)
+            self.assertEqual(self.run_main("log-ok", path, "--exact-prefix", "migrate_kdf_commands::tests::",
+                                           "one", "three"), 1)
+            self.assertEqual(self.run_main("log-ok", path, "one", "--bogus-option"), 2)
             ignored = self.write(d, "ign", log.replace("0 ignored", "1 ignored"))
             self.assertEqual(self.run_main("log-ok", ignored, "--sum-passed", "9"), 1)
             self.assertEqual(self.run_main("log-ok", self.write(d, "none", "nothing ran\n"), "--results-ok"), 1)
