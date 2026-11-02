@@ -506,6 +506,9 @@ mod replay {
             names.sort();
             for name in names {
                 let path = dir.join(&name);
+                if super::d1_artifact(&path) {
+                    continue;
+                }
                 let rel = path
                     .strip_prefix(&self.root)
                     .unwrap()
@@ -709,6 +712,14 @@ mod replay {
                 || body.len() as u64 != header.size().unwrap_or(0)
             {
                 return listing;
+            }
+            // Declared D1 difference: a vault Rust mutated carries the marker and
+            // the local git exclude that keeps it out of commits.
+            if matches!(
+                name.trim_end_matches('/'),
+                ".symvault-rust" | ".git/info" | ".git/info/exclude"
+            ) {
+                continue;
             }
             let body = if name.rsplit('/').next() == Some("audit-symvault.log") {
                 normalize_audit_log(&body)
@@ -999,4 +1010,37 @@ fn export_backup_restore_replay_is_unix_only() {
     // pre-state; the Windows restore variant left the supported scope with
     // #1550/#1551 (docs/adr/0030-approved-restore-and-import-divergences.md).
     eprintln!("SKIP export/backup/restore replay: fixture recorded on a Unix host");
+}
+
+/// Declared D1 difference (DIST-005): Rust takes a verified backup before the
+/// first mutation of an unmarked vault, so a Rust run leaves the `.symvault-rust`
+/// marker in the vault and the archive below `$HOME/.local/state/symvault`.
+/// Go does neither; the data-safety contract
+/// (`make data-safety-differential`) verifies them, so the Go-parity tree
+/// comparisons look past exactly these paths.
+fn d1_artifact(path: &std::path::Path) -> bool {
+    if path
+        .file_name()
+        .is_some_and(|name| name == ".symvault-rust")
+    {
+        return true;
+    }
+    let text = path.to_string_lossy();
+    // `.git/info/exclude` keeps the marker out of `git add --all`; Go-created
+    // repositories have no `.git/info`.
+    if text.ends_with("/.git/info/exclude") || text.ends_with("/.git/info") {
+        return true;
+    }
+    if text.ends_with(".local/state/symvault") || text.contains(".local/state/symvault/") {
+        return true;
+    }
+    // `.local` and `.local/state` exist only because the backup created them.
+    let only = |dir: &std::path::Path, child: &str| {
+        std::fs::read_dir(dir).is_ok_and(|entries| {
+            let names: Vec<_> = entries.flatten().map(|e| e.file_name()).collect();
+            names.len() == 1 && names[0] == child
+        })
+    };
+    (text.ends_with("/.local") && only(path, "state") && only(&path.join("state"), "symvault"))
+        || (text.ends_with("/.local/state") && only(path, "symvault"))
 }

@@ -18,6 +18,7 @@ fn fixture() -> (PathBuf, Identity, SecretBytes, Vec<u8>) {
     let original = symvault_crypto::encrypt_identity_scrypt(&identity, &passphrase, 10)
         .expect("legacy envelope");
     fs::write(root.join("identity.age"), &original).expect("identity");
+    symvault_store::data_safety::test_support_pre_marked(&root);
     fs::write(
         root.join("config.yaml"),
         b"vault:\n  format_version: 1\n  scrypt_work_factor: 18\n  auto_migrate_kdf: false\ncustom: retained\n",
@@ -168,6 +169,7 @@ fn policy_fixture() -> (tempfile::TempDir, SecretBytes, Vec<u8>, Vec<u8>) {
         .unwrap();
     let config = b"vault:\n  format_version: 2\n  argon2id_time: 5\n  argon2id_memory: 65536\n  argon2id_threads: 4\n  custom: retained\nroot_unknown: [true, 7]\n".to_vec();
     fs::write(root.path().join("identity.age"), &original).unwrap();
+    symvault_store::data_safety::test_support_pre_marked(root.path());
     fs::write(root.path().join("config.yaml"), &config).unwrap();
     (
         root,

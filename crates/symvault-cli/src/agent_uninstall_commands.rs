@@ -203,6 +203,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("fixture root");
         let vault = dir.path().canonicalize().expect("resolved fixture root");
         let skill_file = vault.join("SKILL.md");
+        symvault_store::data_safety::test_support_pre_marked(&vault);
         fs::write(&skill_file, skill).unwrap();
         fs::write(
             vault.join("config.yaml"),

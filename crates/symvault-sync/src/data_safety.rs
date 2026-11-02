@@ -94,8 +94,8 @@ pub fn write_backup(vault: &Path, dir: &Path) -> Result<PathBuf, String> {
     let vault_real = vault
         .canonicalize()
         .map_err(|error| format!("resolve vault {}: {error}", vault.display()))?;
-    backup_writer::go_mkdir_all_private(dir)
-        .map_err(|reason| format!("create backup directory {}: {reason}", dir.display()))?;
+    ensure_private_dir(dir)
+        .map_err(|error| format!("create backup directory {}: {error}", dir.display()))?;
     let dir_real = dir
         .canonicalize()
         .map_err(|error| format!("resolve backup directory {}: {error}", dir.display()))?;
@@ -122,6 +122,29 @@ pub fn write_backup(vault: &Path, dir: &Path) -> Result<PathBuf, String> {
     }
 }
 
+/// Creates `dir` and its missing parents `0700`. Unlike `mkdir(2)` with a mode
+/// this is immune to a restrictive umask (`0277` would otherwise leave an
+/// unwritable `0500` directory and make the gate refuse for no reason).
+fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
+    let missing: Vec<&Path> = dir
+        .ancestors()
+        .take_while(|path| !path.as_os_str().is_empty() && fs::symlink_metadata(path).is_err())
+        .collect();
+    for path in missing.into_iter().rev() {
+        match fs::create_dir(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+        }
+    }
+    Ok(())
+}
+
 /// Restores `archive_path` into a scratch directory below `scratch_parent` with
 /// the production [`archive::restore`] and compares the result with the live
 /// `vault`. Returns the number of regular files compared.
@@ -137,12 +160,54 @@ pub fn verify_backup(
         .prefix(".verify-")
         .tempdir_in(scratch_parent)
         .map_err(|error| format!("create scratch directory: {error}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(scratch.path(), fs::Permissions::from_mode(0o700))
+            .map_err(|error| format!("prepare scratch directory: {error}"))?;
+    }
     let restored = scratch.path().join("vault");
-    archive::restore(archive_path, &restored, true).map_err(|error| format!("restore: {error}"))?;
+    // The production restore creates directories with the process umask; under
+    // a restrictive one (0277) it could not write into its own directories.
+    // Hold an owner-writable umask for the duration of the scratch restore.
+    let restored_result = {
+        let _umask = OwnerWritableUmask::enter();
+        archive::restore(archive_path, &restored, true)
+    };
+    restored_result.map_err(|error| format!("restore: {error}"))?;
     let live = snapshot(vault)?;
     let back = snapshot(&restored)?;
     compare(&live, &back)?;
     Ok(live.values().filter(|node| node.digest.is_some()).count() as u64)
+}
+
+/// Clears the owner bits of the umask (and sets group/other) while alive.
+struct OwnerWritableUmask(Option<rustix::fs::Mode>);
+
+impl OwnerWritableUmask {
+    fn enter() -> Self {
+        #[cfg(unix)]
+        {
+            use rustix::fs::Mode;
+            let old = rustix::process::umask(Mode::empty());
+            let wanted = (old | Mode::from_raw_mode(0o077)) & !Mode::from_raw_mode(0o700);
+            rustix::process::umask(wanted);
+            Self(Some(old))
+        }
+        #[cfg(not(unix))]
+        {
+            Self(None)
+        }
+    }
+}
+
+impl Drop for OwnerWritableUmask {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        if let Some(old) = self.0 {
+            rustix::process::umask(old);
+        }
+    }
 }
 
 fn receipt(archive_path: &Path, files: u64) -> Result<BackupReceipt, String> {

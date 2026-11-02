@@ -9,7 +9,14 @@
 use std::{fs, path::Path};
 use symvault_sync::archive;
 
-pub use symvault_sync::backup_writer::backup;
+/// `backup`: the Go-faithful writer shared with the pre-mutation data-safety gate.
+pub fn backup(
+    root: &Path,
+    destination: &Path,
+    exclude_git: bool,
+) -> Result<std::path::PathBuf, String> {
+    symvault_sync::backup_writer::backup(root, destination, exclude_git)
+}
 
 /// The operation name in the `*PathError` Go's `os.Stat` returns. Unix reports
 /// `stat`; on Windows (`os/stat_windows.go`) a missing path fails in

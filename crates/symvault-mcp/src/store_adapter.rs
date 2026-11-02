@@ -4624,7 +4624,9 @@ mod tests {
         fs::write(root.join("identity.age"), b"fixture marker").expect("identity marker");
         let identity = symvault_crypto::generate_identity();
         Store::open(
-            symvault_store::data_safety::test_support_pre_marked(root),
+            symvault_store::data_safety::test_support_pre_marked(
+                symvault_store::data_safety::test_support_pre_marked(root),
+            ),
             &identity,
         )
         .expect("open temporary vault");
@@ -4808,7 +4810,9 @@ mod tests {
         .expect("write synthetic API template");
         let identity = symvault_crypto::generate_identity();
         let store = Store::open(
-            symvault_store::data_safety::test_support_pre_marked(root),
+            symvault_store::data_safety::test_support_pre_marked(
+                symvault_store::data_safety::test_support_pre_marked(root),
+            ),
             &identity,
         )
         .expect("open temporary API vault");

@@ -75,10 +75,10 @@ thread_local! {
     static ACTIVE: Cell<bool> = const { Cell::new(false) };
 }
 
-/// The store crate's own unit tests build hundreds of throw-away vaults with
-/// the store API and no marker; they run with the gate off unless a test turns
-/// it on with [`enforce_in_unit_test`]. Integration tests and every other
-/// crate see the real gate.
+// The store crate's own unit tests build hundreds of throw-away vaults with
+// the store API and no marker; they run with the gate off unless a test turns
+// it on with [`enforce_in_unit_test`]. Integration tests and every other
+// crate see the real gate.
 #[cfg(test)]
 thread_local! {
     static ENFORCE: Cell<bool> = const { Cell::new(false) };
@@ -335,17 +335,23 @@ pub fn ensure_marker(root: &Path) -> Result<(), StoreError> {
     if bypassed() || ACTIVE.with(Cell::get) {
         return Ok(());
     }
-    let root = match root.canonicalize() {
-        Ok(root) => root,
-        // No directory, no vault: nothing to protect.
-        Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(()),
-        Err(source) => {
-            return Err(StoreError::Read {
-                path: root.to_path_buf(),
-                source,
-            });
-        }
+    // Only a root the store itself would accept is gated: a path through a
+    // user-owned symlink, a missing directory or a plain file is rejected by the
+    // operation with its own error, and must not be backed up (or resolved to
+    // the symlink target) on the way.
+    #[cfg(unix)]
+    let resolved = crate::resolve_trusted_root(root);
+    #[cfg(not(unix))]
+    let resolved = root.canonicalize().map_err(|source| StoreError::Read {
+        path: root.to_path_buf(),
+        source,
+    });
+    let Ok(root) = resolved else {
+        return Ok(());
     };
+    if !root.is_dir() {
+        return Ok(());
+    }
     if marker_present(&root)? || !has_vault_state(&root) {
         return Ok(());
     }

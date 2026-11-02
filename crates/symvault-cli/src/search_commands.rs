@@ -216,7 +216,11 @@ mod tests {
             &symvault_crypto::SecretBytes::new(b"synthetic search passphrase"),
         )
         .unwrap();
-        let store = Store::open(&root, &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         let mut entry = Entry::default();
         entry.data.insert("note".into(), "before".into());
         store.write_entry("account", &entry, &identity).unwrap();

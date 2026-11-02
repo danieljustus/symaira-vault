@@ -385,6 +385,80 @@ binary cannot report Touch ID), and it SKIPs visibly without `SYMVAULT_OUTPUT_MO
   in the generator digest, the rule-9 note and the five `symvault-version.1` hashes. The unit test pins the
   shapes that must not be rewritten.
 
+## DATA-SAFETY-GATE (P30, DIST-005 / RUST-014 acceptance), 2026-11-02
+
+Maintainer decision D1: the first vault-**mutating** operation Rust performs on a vault that carries no
+Rust marker is preceded by a verified backup; reads never trigger it. Verified by
+`make data-safety-differential` (`scripts/rust-port/data_safety_contract.py`, real Rust CLI + non-CGO Go
+oracle, disposable HOME/XDG roots).
+
+**Design.**
+
+- *Marker*: `.symvault-rust` in the vault root, JSON (`schema`, `kind` = `go-vault-backup` | `rust-created`,
+  `created_at`, and for the former the backup `path`, `sha256`, `bytes`, `files`). Written atomically
+  (temp file, fsync, rename, directory fsync, `0600`) only after the backup verified. `init` (CLI and FFI
+  `InitVault`) writes `rust-created` at once; an empty directory needs no backup. A marker whose backup file is
+  gone, or that does not parse, does not count. It is kept out of git (`.git/info/exclude`, also on
+  `git init`) so a pushed marker cannot make a peer skip its own backup.
+- *Choke points* (`symvault-store::data_safety`): `open_root_write_lock` (every store/manifest/grant/token/journal
+  write; the write lock is held across backup, restore check and marker); `Store::data_safety_gate` before the
+  first filesystem mutation of entry publication, `write_new_entry` and delete (Go publishes entries **outside**
+  the lock, so the lock alone was not enough: the first harness run found the entry already in the backup);
+  legacy-layout migration (`migrate_legacy`, a read-triggered rename of entry files) and the zero-key heal
+  (`rewrite_identity`); `symvault_sync::safeio` (`write_atomic`, `open_append`, `secure_delete`, `create_dir_all`:
+  recipients, device/pairing files, policies, identity rewrites; the vault is the nearest ancestor with an
+  `identity.age`); `Config::save_to` through a registered pre-save hook (vault `config.yaml`); `git pull`; `restore`
+  into an existing vault. The marker is looked up through the retained root capability, so a directory swapped in
+  under the path neither satisfies nor receives the gate. Refusal is `StoreError::DataSafety` / a `Error: ...
+  pre-migration backup failed, the vault was not modified: ...` message; nothing is written.
+- *Backup*: the Go-faithful `CreateBackup` port moved from `symvault-cli` to `symvault_sync::backup_writer` (CLI
+  `backup` re-exports it), `.git` included (Go's default; only `--exclude-git` omits it). Verification is the
+  production `symvault_sync::archive::restore` into a `0700` scratch directory next to the archive, then a
+  comparison of path set, file sha256/size and file mode with the live tree; the archive is removed on failure.
+  `symvault-store` cannot depend on `symvault-sync`, so the store defines `PreMutationGuard`; CLI, MCP
+  (`StoreReadOnlyAdapter::open`) and FFI (every open/init) call `symvault_sync::data_safety::install()`. A binary
+  without the guard refuses to touch an unmarked vault (fail closed).
+- *Location*: `$XDG_STATE_HOME/symvault/backups` (default `~/.local/state/symvault/backups`), file
+  `pre-rust-<vault>-<hash8>-<UTC stamp>.tar.gz` (`0600`, directories `0700`, umask-proof). Go has no default
+  backup directory (the `backup` command takes a path); the resolved data directory of a legacy install **is** the
+  vault (`~/.symvault`), so a backup there would archive itself and, in a git-synced vault, be pushed. A backup
+  directory inside the vault is refused.
+
+**Findings recorded, not hidden.**
+
+1. Go's restore (kept) retains only `mode & 0600` of a file and recreates directories `0700`; verification
+   compares file modes through that mask and directories by presence (`.git/HEAD` 0644 restores as 0600).
+2. Go's own reads create the empty `.symvault-migrated` and append to `audit-symvault.log` in the vault. They
+   stay ungated (empty file / append-only, hash-chained); the harness allows exactly those two and asserts
+   everything else is byte-identical. The audit appends of a mutating command can precede the backup; the backup
+   then contains them and the restore comparison treats the log as a prefix-extension.
+3. Not gated (derived or outside the vault): the encrypted search index, agent/config files outside the vault,
+   session caches. A mutation path that writes vault files without `safeio`, the store, `Config::save_to`,
+   `git pull` or `restore` would bypass the gate; the harness sweep (set, delete, file add, recipients add/remove,
+   policy apply, agent token new, migrate pseudonymize, device pair, import) asserts "tree changed => marker +
+   backup that restores to the pre-command tree" for the commands it runs. Other mutators (auth rotate-passphrase,
+   migrate kdf/v4, intake, approvals, share grants, remote init) pass through the same primitives but are
+   not individually exercised yet.
+4. `ffi-differential` seeds are pre-marked (in-process replay would write backups into the developer's state
+   directory); the FFI gate is covered by the store tests and the shared choke points.
+
+**Harness** (`make data-safety-differential`): seeds = frozen `mobilebind.json` vault, Go `init`+`set` vault
+(has `.git`), Go zero-key identity. Per seed: read battery leaves the tree identical (marker/backup absent);
+first `set` -> one backup + marker with matching sha256/size/mode; `restore` of that archive into a fresh dir
+reproduces the pre-mutation tree; second `set` makes no second backup; Go reads and writes afterwards (D2).
+Zero-key: `list` heals, backup precedes it and restores the zero-key identity, Go opens the healed vault. Ten
+mutators swept. Negative controls: unwritable backup directory (refused, tree untouched, retry succeeds);
+corrupted archive through `crates/symvault-sync/examples/data_safety_probe` (refused, no marker, archive removed);
+same corruption with the restore verification short-circuited (gate accepts; the harness's independent
+restore comparison must fail).
+
+**Normalizations changed (documented D1 differences).** Go-parity tree comparisons look past the
+`.symvault-rust` marker and the `home/.local/state/symvault` backup subtree: `zero_key_differential.rs`,
+`export_backup_restore_contract.rs`, `output_modes.rs` (each through a local `d1_artifact`), and the FFI replay
+(`tests/common/mod.rs`, marker only, seeds pre-marked). Store/MCP/sync/CLI test fixtures that build vaults with
+the store API are pre-marked with `symvault_store::data_safety::test_support_pre_marked`; the store crate's own unit
+tests run with the gate off (`cfg(test)`) except `data_safety::tests`.
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate

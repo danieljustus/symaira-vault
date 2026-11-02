@@ -284,10 +284,43 @@ struct Observed {
     follow: Vec<Out>,
 }
 
+/// Declared D1 difference (DIST-005): Rust takes a verified backup before the
+/// first mutation of an unmarked vault, so a Rust run leaves the `.symvault-rust`
+/// marker in the vault and the archive below `$HOME/.local/state/symvault`.
+/// Go does neither; the data-safety contract
+/// (`make data-safety-differential`) verifies them, so the Go-parity tree
+/// comparisons look past exactly these paths.
+fn d1_artifact(path: &std::path::Path) -> bool {
+    if path
+        .file_name()
+        .is_some_and(|name| name == ".symvault-rust")
+    {
+        return true;
+    }
+    let text = path.to_string_lossy();
+    // `.git/info/exclude` keeps the marker out of `git add --all`; Go-created
+    // repositories have no `.git/info`.
+    if text.ends_with("/.git/info/exclude") || text.ends_with("/.git/info") {
+        return true;
+    }
+    if text.ends_with(".local/state/symvault") || text.contains(".local/state/symvault/") {
+        return true;
+    }
+    // `.local` and `.local/state` exist only because the backup created them.
+    let only = |dir: &std::path::Path, child: &str| {
+        std::fs::read_dir(dir).is_ok_and(|entries| {
+            let names: Vec<_> = entries.flatten().map(|e| e.file_name()).collect();
+            names.len() == 1 && names[0] == child
+        })
+    };
+    (text.ends_with("/.local") && only(path, "state") && only(&path.join("state"), "symvault"))
+        || (text.ends_with("/.local/state") && only(path, "symvault"))
+}
+
 fn walk(dir: &Path, base: &Path, out: &mut BTreeMap<String, u32>) {
     for entry in fs::read_dir(dir).expect("read dir").flatten() {
         let path = entry.path();
-        if path.file_name().is_some_and(|name| name == ".git") {
+        if path.file_name().is_some_and(|name| name == ".git") || d1_artifact(&path) {
             continue;
         }
         let meta = fs::symlink_metadata(&path).expect("metadata");

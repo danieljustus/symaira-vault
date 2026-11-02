@@ -148,6 +148,11 @@ pub fn refuse_unsafe_target(path: &Path) -> Result<(), SafeIoError> {
 /// the first such mutation of a vault without a Rust marker is preceded by a
 /// verified backup (see [`symvault_store::data_safety`]).
 fn data_safety_gate(path: &Path) -> Result<(), SafeIoError> {
+    // Taking the vault lock is not a mutation of vault data (and a command that
+    // is going to reject its input still acquires it first).
+    if path.file_name().is_some_and(|name| name == ".lock") {
+        return Ok(());
+    }
     symvault_store::data_safety::ensure_marker_for_path(path)
         .map_err(|error| SafeIoError::Io(std::io::Error::other(error.to_string())))
 }

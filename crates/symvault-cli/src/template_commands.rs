@@ -120,7 +120,11 @@ mod tests {
         )
         .unwrap();
         let identity = symvault_crypto::generate_identity();
-        let store = symvault_store::Store::open(temp.path(), &identity).unwrap();
+        let store = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(temp.path()),
+            &identity,
+        )
+        .unwrap();
         let data = ["one", "two", "three", "four"].map(|key| {
             (
                 key.into(),

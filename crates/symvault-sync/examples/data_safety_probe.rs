@@ -37,9 +37,8 @@ impl PreMutationGuard for Broken {
         let archive = write_backup(vault, &self.dir)?;
         damage(&archive);
         if !self.skip_verification {
-            verify_backup(vault, &archive, &self.dir).map_err(|reason| {
+            verify_backup(vault, &archive, &self.dir).inspect_err(|_| {
                 let _ = fs::remove_file(&archive);
-                reason
             })?;
         }
         // Reaching here means verification was skipped or did not notice.
