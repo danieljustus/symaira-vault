@@ -63,11 +63,23 @@ pub fn set_entry_data(
     if !force && field == "password" && !value.is_empty() {
         password::validate_password_strength(&value)?;
     }
-    let mut data = BTreeMap::from([(field.to_owned(), Value::String(value))]);
+    let data = BTreeMap::from([(field.to_owned(), Value::String(value))]);
+    let data = apply_totp_flags(data, totp_secret, totp_issuer, totp_account)?;
+    Ok((path.to_owned(), data))
+}
+
+/// Go's `set` tail before `WithVault`: the `--totp-secret` flags replace the
+/// collected `totp` object, then `ValidateTOTPData` checks whichever `totp`
+/// object the data holds.
+pub fn apply_totp_flags(
+    mut data: BTreeMap<String, Value>,
+    totp_secret: Option<&str>,
+    totp_issuer: Option<&str>,
+    totp_account: Option<&str>,
+) -> Result<BTreeMap<String, Value>, String> {
     if let Some(secret) = totp_secret
         && !secret.is_empty()
     {
-        totp::validate_totp_secret(secret).map_err(|error| error.to_string())?;
         let mut totp_data = serde_json::Map::new();
         totp_data.insert("secret".to_owned(), Value::String(secret.to_owned()));
         if let Some(issuer) = totp_issuer
@@ -82,7 +94,13 @@ pub fn set_entry_data(
         }
         data.insert("totp".to_owned(), Value::Object(totp_data));
     }
-    Ok((path.to_owned(), data))
+    if let Some(Value::Object(totp_data)) = data.get("totp")
+        && let Some(Value::String(secret)) = totp_data.get("secret")
+        && !secret.is_empty()
+    {
+        totp::validate_totp_secret(secret).map_err(|error| error.to_string())?;
+    }
+    Ok(data)
 }
 
 #[allow(dead_code)]

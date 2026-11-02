@@ -2,13 +2,16 @@
 use serde::Deserialize;
 use std::{
     env,
-    io::{self, BufRead, IsTerminal, Write},
+    io::{self, IsTerminal, Write},
     sync::atomic::{AtomicBool, Ordering},
 };
 use zeroize::Zeroizing;
 
+use crate::stdin_input;
+
 static PIPE_WARNING_EMITTED: AtomicBool = AtomicBool::new(false);
 static QUIET: AtomicBool = AtomicBool::new(false);
+static NO_PIPE_WARNING: AtomicBool = AtomicBool::new(false);
 
 /// Mirrors Go's `cli.QuietMode`: `--quiet` also suppresses the environment
 /// passphrase warning (`WarnEnvPassphrase` returns early under QuietMode).
@@ -16,19 +19,41 @@ pub(crate) fn set_quiet(quiet: bool) {
     QUIET.store(quiet, Ordering::Relaxed);
 }
 
+/// `--no-pipe-warning`: Go's `cli.NoPipeWarning`, set from the root flag.
+pub(crate) fn set_no_pipe_warning(suppress: bool) {
+    NO_PIPE_WARNING.store(suppress, Ordering::Relaxed);
+}
+
+/// Go's `ReadHiddenInput(prompt, nil)`: a hidden terminal read, or the
+/// unbuffered `ReadLineFromStdin` when stdin is piped.
 pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String> {
+    read_hidden(prompt, false)
+}
+
+/// Go's `ReadHiddenInput(prompt, reader)` with the `bufio.Reader` over stdin
+/// that `set` creates: a piped read goes through the shared buffer.
+pub(crate) fn read_passphrase_buffered(prompt: &str) -> Result<Zeroizing<String>, String> {
+    read_hidden(prompt, true)
+}
+
+fn read_hidden(prompt: &str, buffered: bool) -> Result<Zeroizing<String>, String> {
     eprint!("{prompt}");
     io::stderr().flush().map_err(|e| format!("prompt: {e}"))?;
     // Go's `ReadHiddenInput` words its failures `read <label>: <cause>` with the
     // prompt minus its trailing `: `.
     let label = prompt.trim_end().trim_end_matches(':').trim();
     if io::stdin().is_terminal() {
-        // Secure input failure must never fall back to an echoing read.
-        let line =
-            Zeroizing::new(rpassword::read_password().map_err(|e| format!("read {label}: {e}"))?);
-        return Ok(Zeroizing::new(line.trim().to_owned()));
+        let read = stdin_input::read_hidden_tty();
+        // Go ends the hidden prompt's line on stderr, before it looks at the
+        // outcome; the terminal itself never echoes it.
+        let _ = writeln!(io::stderr());
+        let line = read.map_err(|error| format!("read {label}: {error}"))?;
+        return Ok(stdin_input::trim_space(&line));
     }
-    if !PIPE_WARNING_EMITTED.swap(true, Ordering::Relaxed)
+    // Go's `WarnPipeRead` returns early under `QuietMode` and `--no-pipe-warning`.
+    if !QUIET.load(Ordering::Relaxed)
+        && !NO_PIPE_WARNING.load(Ordering::Relaxed)
+        && !PIPE_WARNING_EMITTED.swap(true, Ordering::Relaxed)
         && env::var("SYMVAULT_NO_PIPE_WARNING")
             .map(|v| v.is_empty() || v == "0")
             .unwrap_or(true)
@@ -37,16 +62,24 @@ pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String>
             "Reading {label} from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'."
         );
     }
-    let mut line = Zeroizing::new(String::new());
-    if io::stdin()
-        .lock()
-        .read_line(&mut line)
-        .map_err(|e| format!("read {label}: {e}"))?
-        == 0
-    {
-        return Err(format!("read {label}: EOF"));
+    let line = if buffered {
+        match stdin_input::read_buffered_line() {
+            Ok((line, _)) if line.is_empty() => Err(None),
+            Ok((line, _)) => Ok(line),
+            Err(error) => Err(Some(error)),
+        }
+    } else {
+        match stdin_input::read_unbuffered_line() {
+            Ok(Some(line)) => Ok(line),
+            Ok(None) => Err(None),
+            Err(error) => Err(Some(error)),
+        }
+    };
+    match line {
+        Ok(line) => Ok(stdin_input::trim_space(&line)),
+        Err(None) => Err(format!("read {label}: EOF")),
+        Err(Some(error)) => Err(format!("read {label}: {error}")),
     }
-    Ok(Zeroizing::new(line.trim().to_owned()))
 }
 
 #[derive(Default, Deserialize)]
