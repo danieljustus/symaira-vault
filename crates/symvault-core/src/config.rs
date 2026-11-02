@@ -1108,18 +1108,15 @@ static NULL: serde_yaml_ng::Value = serde_yaml_ng::Value::Null;
 /// walk (`loadSectionFields`, `loadAgentFields`) counts and the section merges
 /// are gated on.
 fn written<'a>(map: &'a serde_yaml_ng::Mapping, name: &str) -> Option<&'a serde_yaml_ng::Value> {
-    map.get(key(crate::config_typed::OWN_KEYS))
+    map.get(crate::config_typed::own_keys_key())
         .and_then(serde_yaml_ng::Value::as_sequence)
         .is_some_and(|keys| keys.iter().any(|written| written.as_str() == Some(name)))
         .then(|| scalar(map, name).unwrap_or(&NULL))
 }
 /// A decoded `agents`/`profiles` map's entries, without the bookkeeping key.
 fn entries(map: &serde_yaml_ng::Mapping) -> impl Iterator<Item = (&str, &serde_yaml_ng::Value)> {
-    map.iter().filter_map(|(name, value)| {
-        name.as_str()
-            .filter(|name| *name != crate::config_typed::OWN_KEYS)
-            .map(|name| (name, value))
-    })
+    map.iter()
+        .filter_map(|(name, value)| name.as_str().map(|name| (name, value)))
 }
 /// A decoded string field; `null` is the empty string.
 fn string_field(value: &serde_yaml_ng::Value, field: &str) -> Result<String, ConfigError> {
@@ -1820,7 +1817,12 @@ fn parse_vault(
     if let Some(v) = written(map, "useTouchID") {
         out.use_touch_id = bool_field(v, "vault.useTouchID")?;
     }
-    if !auth_present && out.use_touch_id {
+    // The feed reads the decoded flag (`raw.UseTouchID`), merged keys
+    // included, while the section's own field keeps only a written one.
+    if !auth_present
+        && let Some(v) = scalar(map, "useTouchID")
+        && bool_field(v, "vault.useTouchID")?
+    {
         fed_auth = Some(AuthMethod::Touchid);
     }
     // Go copies a present, non-null `legacy_mode`; a null stays unset.
@@ -2515,6 +2517,25 @@ mod tests {
         // A merged `bind` is not a key the section wrote.
         load("base: &base\n  bind: ''\nmcp:\n  <<: *base\n");
         load("base: &base\n  bind: ''\nmcp: *base\n");
+        // The vault merge feeds the top-level method from the decoded
+        // `useTouchID` (merged keys included), while the section's own flag
+        // keeps only a written one.
+        for source in [
+            "base: &b\n  useTouchID: true\nvault:\n  <<: *b\n",
+            "base: &b\n  useTouchID: true\nvault: {<<: *b}\n",
+        ] {
+            let config = load(source);
+            assert_eq!(config.auth_method, AuthMethod::Touchid, "{source}");
+            assert_eq!(config.use_touch_id, Some(true), "{source}");
+            assert!(!config.vault.as_ref().unwrap().use_touch_id, "{source}");
+        }
+        // A flag the vault writes itself wins over the merged one, and an
+        // `authMethod` the vault writes keeps the feed off.
+        let config = load("base: &b\n  useTouchID: true\nvault:\n  <<: *b\n  useTouchID: false\n");
+        assert_eq!(config.auth_method, AuthMethod::Passphrase);
+        let config =
+            load("base: &b\n  useTouchID: true\nvault:\n  <<: *b\n  authMethod: passphrase\n");
+        assert_eq!(config.auth_method, AuthMethod::Passphrase);
         // A merged zero session timeout was not written by the operator.
         load("base: &base\n  sessionTimeout: 0s\n<<: *base\n");
         assert!(

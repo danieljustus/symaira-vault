@@ -78,9 +78,12 @@ pub fn unmarshal_errors(source: &str) -> Option<Vec<u8>> {
 /// (`loadSectionFields`, `loadAgentFields`, `loadTopLevelFields`): only keys
 /// of a mapping reached without an alias or a `<<` merge on the way down count,
 /// while the decoded values include everything a merge supplies. The tree
-/// keeps both views; the key cannot clash with a YAML key because the
-/// document's text never holds a NUL in a plain key (the scanner refuses it).
-pub const OWN_KEYS: &str = "\u{0}own";
+/// keeps both views. The bookkeeping key is a YAML `null`, which no decoded
+/// entry can use: every entry the coercion inserts is keyed by a string, so no
+/// operator key (a double-quoted `"\0own"` included) can collide with it.
+pub fn own_keys_key() -> serde_yaml_ng::Value {
+    serde_yaml_ng::Value::Null
+}
 
 /// The document as yaml.v3's typed decode of `config.Config` leaves it, for
 /// the loader's per-section merge.
@@ -99,7 +102,7 @@ pub const OWN_KEYS: &str = "\u{0}own";
 /// * struct fields the Go type does not name are dropped; keys of a `<<`
 ///   merge fill in what the mapping did not write itself, the earliest
 ///   operand first, as `mergedFields` does;
-/// * every struct and map mapping reached directly carries [`OWN_KEYS`].
+/// * every struct and map mapping reached directly carries [`own_keys_key`].
 ///
 /// Only call this for a document [`unmarshal_errors`] accepted.
 pub fn coerced_document(source: &str) -> Option<serde_yaml_ng::Value> {
@@ -1032,7 +1035,7 @@ impl<'a> Decoder<'a> {
                 self.coerce_mapping(id, go_type, direct, &mut seen, &mut out, &mut own)?;
                 if direct {
                     out.insert(
-                        Value::String(OWN_KEYS.to_owned()),
+                        own_keys_key(),
                         Value::Sequence(own.into_iter().map(Value::String).collect()),
                     );
                 }
@@ -1106,7 +1109,13 @@ impl<'a> Decoder<'a> {
             let Some(name) = self.key_text(key) else {
                 continue;
             };
-            if name == OWN_KEYS || !seen.insert(name.clone()) {
+            // Go's walk names a key by its node's `.Value`, which for an alias
+            // is the anchor name. An alias that resolves to another text
+            // therefore credits its fields to a name nothing looks up: they
+            // stay decoded but unwritten.
+            let key_direct =
+                direct && !(self.nodes[key].kind == Kind::Alias && self.nodes[key].value != name);
+            if !seen.insert(name.clone()) {
                 continue;
             }
             let element = match &shape {
@@ -1120,7 +1129,7 @@ impl<'a> Decoder<'a> {
             let Some(element) = element else {
                 continue;
             };
-            if let Some(coerced) = self.coerce(value, &element, direct) {
+            if let Some(coerced) = self.coerce(value, &element, key_direct) {
                 out.insert(serde_yaml_ng::Value::String(name), coerced);
             }
         }
@@ -1461,20 +1470,22 @@ mod tests {
         assert_eq!(paths, ["a", "5"]);
     }
 
+    /// The keys the mapping at `path` wrote itself.
+    fn own(tree: &serde_yaml_ng::Value, path: &str) -> Vec<String> {
+        at(tree, path)
+            .get(own_keys_key())
+            .and_then(serde_yaml_ng::Value::as_sequence)
+            .map(|keys| {
+                keys.iter()
+                    .filter_map(serde_yaml_ng::Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     #[test]
     fn coerced_mappings_separate_written_keys_from_merged_ones() {
-        let own = |tree: &serde_yaml_ng::Value, path: &str| -> Vec<String> {
-            at(tree, path)
-                .get(OWN_KEYS)
-                .and_then(serde_yaml_ng::Value::as_sequence)
-                .map(|keys| {
-                    keys.iter()
-                        .filter_map(serde_yaml_ng::Value::as_str)
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
         let tree = coerced(
             "base: &base\n  port: 7\n  bind: merged\nmcp:\n  <<: *base\n  bind: own\n  extra: 1\nupdate: *base\n",
         );
@@ -1487,5 +1498,46 @@ mod tests {
         assert!(own(&tree, "update").is_empty());
         // Fields the Go type does not name are dropped.
         assert!(at(&tree, "mcp").get("extra").is_none());
+    }
+
+    #[test]
+    fn a_quoted_nul_own_key_is_an_ordinary_entry() {
+        // The bookkeeping key is not a string, so an agent whose name spells
+        // the old marker keeps its entry and its own-key list.
+        let tree = coerced("agents:\n  \"\\0own\":\n    canWrite: true\n");
+        let agents = at(&tree, "agents");
+        assert_eq!(
+            agents
+                .get("\u{0}own")
+                .and_then(|agent| agent.get("canWrite")),
+            Some(&serde_yaml_ng::Value::Bool(true))
+        );
+        assert_eq!(own(&tree, "agents"), ["\u{0}own"]);
+        assert!(
+            agents.as_mapping().is_some_and(|map| map
+                .keys()
+                .filter(|key| !key.is_string())
+                .count()
+                == 1)
+        );
+    }
+
+    #[test]
+    fn an_alias_key_that_resolves_to_another_name_writes_nothing() {
+        // Go lists a key by its node's Value, the anchor name for an alias:
+        // `*authMethod` is a written `authMethod` that decodes as `path`.
+        let tree = coerced("k: &authMethod path\nvault:\n  *authMethod : /y\n");
+        assert_eq!(own(&tree, "vault"), ["authMethod"]);
+        assert_eq!(at(&tree, "vault.path").as_str(), Some("/y"));
+        // The same alias naming a section (or an agent) credits its fields to
+        // a name nothing looks up: they decode but stay unwritten.
+        let tree = coerced("s: &git vault\n*git :\n  authMethod: ' Bogus '\n");
+        assert_eq!(at(&tree, "vault.authMethod").as_str(), Some(" Bogus "));
+        assert!(own(&tree, "vault").is_empty());
+        let tree = coerced("n: &a x\nagents:\n  *a :\n    approvalMode: bogus\n");
+        assert!(own(&tree, "agents.x").is_empty());
+        // An alias that names what it resolves to keeps the fields written.
+        let tree = coerced("s: &vault vault\n*vault :\n  authMethod: touchid\n");
+        assert_eq!(own(&tree, "vault"), ["authMethod"]);
     }
 }

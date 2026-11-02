@@ -113,6 +113,15 @@ type doctorObservation struct {
 	Results  []doctorResult `json:"results"`
 }
 
+// authObservation is the method `auth status` reports: the one line of its
+// output that depends on the loaded config alone (the rest reads the host's
+// keyring and biometrics).
+type authObservation struct {
+	Args     []string `json:"args"`
+	ExitCode int      `json:"exit_code"`
+	Method   string   `json:"method"`
+}
+
 type fixtureCase struct {
 	Name         string            `json:"name"`
 	Class        string            `json:"class"`
@@ -122,6 +131,7 @@ type fixtureCase struct {
 	Observations []observation     `json:"observations"`
 	Doctor       doctorObservation `json:"doctor"`
 	AgentList    *observation      `json:"agent_list,omitempty"`
+	AuthMethod   *authObservation  `json:"auth_method,omitempty"`
 }
 
 type openDivergence struct {
@@ -412,6 +422,29 @@ func sectionInputs() []input {
 		{"load_session_timeout_zero_via_merge", "accepted", "a zero sessionTimeout merged in through << was not written, so it is not refused", lines(
 			"base: &base", "  sessionTimeout: 0s", "<<: *base")},
 
+		// The vault merge feeds the top-level method from the decoded
+		// useTouchID (merged keys included) while the section's own flag keeps
+		// only a written one: `auth status` shows the touchid method either way.
+		{"load_vault_use_touch_id_via_merge", "accepted", "a useTouchID merged into vault through << still selects touchid as the top-level method", lines(
+			"base: &b", "  useTouchID: true", "vault:", "  <<: *b")},
+		{"load_vault_use_touch_id_via_merge_inline", "accepted", "the same merge written as an inline flow mapping", lines(
+			"base: &b", "  useTouchID: true", "vault: {<<: *b}")},
+		{"load_vault_use_touch_id_merged_then_overridden", "accepted", "a useTouchID the vault writes itself wins over the merged one", lines(
+			"base: &b", "  useTouchID: true", "vault:", "  <<: *b", "  useTouchID: false")},
+
+		// Go names a key by its node's Value, which is the anchor name for an
+		// alias: an alias that resolves to another text writes nothing.
+		{"load_agent_name_alias_fields_unwritten", "accepted", "agents.x is reached through an alias named a, so its approvalMode is not a written field", lines(
+			"n: &a x", "agents:", "  *a :", "    approvalMode: bogus")},
+		{"load_vault_section_alias_fields_unwritten", "accepted", "the vault section is reached through an alias named git, so its authMethod is not a written field", lines(
+			"s: &git vault", "*git :", "  authMethod: ' Bogus '")},
+		{"load_vault_field_alias_named_by_anchor", "accepted", "a vault key written as an alias counts under its anchor name authMethod, not under the text path it resolves to", lines(
+			"k: &authMethod path", "vault:", "  *authMethod : ' Bogus '")},
+
+		// The loader's bookkeeping must not swallow an operator's key.
+		{"load_agent_name_nul_own", "accepted", "an agent named NUL+own is an ordinary agent", lines(
+			"agents:", "  \"\\0own\":", "    canWrite: true")},
+
 		// A local tag yaml.v3 does not know is ignored; the value decodes.
 		{"custom_tag_on_value", "accepted", "a local tag on a plain scalar", lines("a: !t x")},
 
@@ -673,7 +706,22 @@ func buildCase(goBinary string, item input) (fixtureCase, error) {
 		}
 		built.AgentList = &observed
 	}
+	if authMethodCases[item.name] {
+		observed, err := runAuthMethod(goBinary, item)
+		if err != nil {
+			return fixtureCase{}, err
+		}
+		built.AuthMethod = &observed
+	}
 	return built, nil
+}
+
+// authMethodCases also record the resolved top-level auth method, the value
+// the vault merge feeds from a useTouchID the vault block did not write itself.
+var authMethodCases = map[string]bool{
+	"load_vault_use_touch_id_via_merge":              true,
+	"load_vault_use_touch_id_via_merge_inline":       true,
+	"load_vault_use_touch_id_merged_then_overridden": true,
 }
 
 // agentListCases are the failures that also record `agent list`, a loader
@@ -710,6 +758,8 @@ var agentListCases = map[string]bool{
 	"load_agent_merged_approval_mode_ignored": true,
 	"load_mcp_port_overflow":                  true,
 	"load_mcp_bind_null":                      true,
+	// The loader's own bookkeeping must not swallow an agent named NUL+own.
+	"load_agent_name_nul_own": true,
 }
 
 func buildDivergences(goBinary string) ([]openDivergence, error) {
@@ -864,6 +914,43 @@ func runAgentList(goBinary string, item input) (observation, error) {
 	}
 	if result.Stderr, err = box.normalize(stderr); err != nil {
 		return observation{}, errors.Join(fmt.Errorf("case %s agent list stderr: %w", item.name, err), box.close())
+	}
+	return result, box.close()
+}
+
+// runAuthMethod records the `Auth method:` line of `auth status` against a
+// vault directory whose config.yaml holds the case's bytes (and an empty
+// identity.age).
+func runAuthMethod(goBinary string, item input) (authObservation, error) {
+	box, err := newSandbox()
+	if err != nil {
+		return authObservation{}, err
+	}
+	vault := filepath.Join(box.root, "vault")
+	if setupErr := os.MkdirAll(vault, 0o700); setupErr != nil {
+		return authObservation{}, errors.Join(setupErr, box.close())
+	}
+	if setupErr := os.WriteFile(filepath.Join(vault, "config.yaml"), item.config, 0o600); setupErr != nil {
+		return authObservation{}, errors.Join(setupErr, box.close())
+	}
+	// `auth status` refuses a vault without an identity file; its content is
+	// never read.
+	if setupErr := os.WriteFile(filepath.Join(vault, "identity.age"), nil, 0o600); setupErr != nil {
+		return authObservation{}, errors.Join(setupErr, box.close())
+	}
+	template := []string{"--vault", vaultMarker, "auth", "status"}
+	code, stdout, stderr, err := runOracle(goBinary, box, replaceArgs(template, vaultMarker, vault))
+	if err != nil {
+		return authObservation{}, errors.Join(fmt.Errorf("case %s auth status: %w", item.name, err), box.close())
+	}
+	result := authObservation{Args: template, ExitCode: code}
+	for _, line := range strings.Split(string(stdout), "\n") {
+		if method, ok := strings.CutPrefix(line, "Auth method: "); ok {
+			result.Method = method
+		}
+	}
+	if code != 0 || result.Method == "" {
+		return authObservation{}, errors.Join(fmt.Errorf("case %s auth status: exit %d, stdout %q, stderr %q", item.name, code, stdout, stderr), box.close())
 	}
 	return result, box.close()
 }

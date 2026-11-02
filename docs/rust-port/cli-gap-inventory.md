@@ -294,11 +294,15 @@ source text, bool = the decoded boolean incl. `y/yes/on/n/no/off`, int = the tru
 nanoseconds, null = null, null items of a `[]string` dropped, struct fields the Go type does not name
 dropped, `<<` merges filled in behind the mapping's own keys with the earliest operand first). Every
 struct/map mapping reached without an alias or merge also carries the list of keys it wrote itself
-(`OWN_KEYS`), the view Go's `loadSectionFields`/`loadAgentFields`/`loadTopLevelFields` walk the node tree
+(under a non-string mapping key, `own_keys_key()`, so no YAML string key such as a double-quoted `"\0own"`
+can collide with it; a key is listed by its node's text, which for an alias is the anchor name, and an alias
+that resolves to another text credits its fields to a name nothing looks up), the view Go's `loadSectionFields`/`loadAgentFields`/`loadTopLevelFields` walk the node tree
 for. `config.rs` then merges exactly as `config_merge.go`: a section field only when the section wrote it,
 `*T` agent fields whenever the decoded value is not nil (a merged `promptInjectionMode: weird` is
 rejected, a merged `approvalMode: bogus` is ignored because that field is gated on being written), the
-`sync` block and the `approval_required` warning regardless. The per-field special cases
+`sync` block and the `approval_required` warning regardless. The vault merge feeds the top-level method
+from the *decoded* `useTouchID` (`raw.UseTouchID`, merged keys included) when no `authMethod` was written,
+while `vault.useTouchID` itself keeps only a key the section wrote. The per-field special cases
 (`text_scalar`, `boolean`, `integer`, `duration`, `duration_allowing_negative`, `present`,
 `ProfileFields`/`ProfileYaml`) are gone. `yaml_edit` now parses with `YamlFile::parse(..).tree()` so a
 syntax error in a later document (which Go never reads) no longer hides the first document from the
@@ -309,13 +313,18 @@ The scrypt path (`migrate_kdf`, `prepare_config_update`) has no Go counterpart t
 (`vault.MigrateKDF` works on the already loaded one and ignores the save error), so its `load config` /
 `validate rendered config` texts are left as they were.
 
-Evidence: `testdata/port/cli/config-yaml-syntax.json` (now 176 cases, 33 open divergences, 712
+Evidence: `testdata/port/cli/config-yaml-syntax.json` (now 183 cases, 33 open divergences, 737
 comparisons; the 128 earlier cases and 30 of the 31 earlier open divergences are byte-identical, the
 31st, `custom_tag_on_value`, matches Go now and became a regular case) gained 47 `load_*` cases recorded
 from the pinned Go binary (`yamlsyntaxgen`, oracle `0cc78062`): every coercion class above with its
 accepted and rejected siblings, chosen so the coerced value shows in Go's message where it prints one
 (`invalid authMethod "0x10"`, `argon2id_time: 1 is below minimum floor of 2`, `allowedPaths[0]`), plus
-the merge gates. `section_coercions_are_pinned_to_what_go_prints` names the pinned outcomes and mutates
+the merge gates. The CONFIG-SECTIONS-001 fix round added seven more (`load_vault_use_touch_id_via_merge`
+and its inline-flow sibling, `..._merged_then_overridden`, `load_agent_name_alias_fields_unwritten`,
+`load_vault_section_alias_fields_unwritten`, `load_vault_field_alias_named_by_anchor`,
+`load_agent_name_nul_own`) and two new optional observations: `auth_method` (the `Auth method:` line of
+`auth status`, the only command that shows the method the vault merge resolved) and `agent_list` for the NUL
+agent; the 176 earlier cases are byte-identical. `section_coercions_are_pinned_to_what_go_prints` names the pinned outcomes and mutates
 three expectations (a wrong coercion must fail the replay). Core unit tests cover the decoded tree and the
 loader (`coerced_*`, `sections_read_the_values_yaml_v3_decodes`, `agents_take_nulls_and_non_string_scalars_like_go`,
 `merged_values_follow_the_gates_of_the_go_merge`, `coerced_values_show_in_the_loader_and_validator_messages`).
@@ -338,9 +347,16 @@ configs; 344 of 4,767 comparisons before).
 - Negative durations are not representable in the unsigned `Duration` of the native config; they are kept
   as zero. The Go consumers read `vault.listing_cache_ttl`, `update.cache_ttl` and `git.auto_pull_interval`
   only when positive (`vault.go:231`, `update.go:35`, `sync.go:27`), the MCP network timeouts and `oauth`
-  TTLs are positive-only overrides, and an agent's `approvalTimeout` of zero or below expires the approval
-  context at once; zero says the same in each case. `config get`/`config list` style output of a negative
-  value is not modelled.
+  TTLs are positive-only overrides, and an agent's `approvalTimeout` of zero or below falls back to the default approval timeout
+  (`approval_helper.go:77-81`; the native `store_adapter.rs` falls back too), so zero says the same in each
+  case. What is not modelled is the display: `agent profile show` / `agent profile export` print a negative
+  `approvalTimeout` as Go does (`-1s`) and omit a `null` one, while the native CLI prints `0h0m0s` for both
+  (`agents.x.approvalTimeout: -1s` and `null`); `config get`/`config list` style output of a negative value
+  is not modelled either.
+- Go credits an alias key's fields to the anchor name; when that name is itself a different section (or
+  agent) name, Go attributes the written fields to that other section. The native tree only withholds them
+  from the section the alias resolves to (the case Go's own lookup reaches), so a second, real section named
+  like the anchor does not inherit them.
 - `agents.*.perToolRedactFields`, `dynamicProviders`, `pre_call_hooks`, `post_call_hooks`, `paymentPolicy`,
   `scan_patterns`, `mcp.perplexity` are decoded and type-checked but not carried by the native
   `AgentProfile`/`McpConfig` (unchanged).

@@ -68,6 +68,13 @@ struct DoctorObservation {
 }
 
 #[derive(Debug, Deserialize)]
+struct AuthObservation {
+    args: Vec<String>,
+    exit_code: i32,
+    method: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct Case {
     name: String,
     class: String,
@@ -76,6 +83,8 @@ struct Case {
     doctor: DoctorObservation,
     #[serde(default)]
     agent_list: Option<Observation>,
+    #[serde(default)]
+    auth_method: Option<AuthObservation>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,16 +110,16 @@ struct Fixture {
 }
 
 /// Cases whose Go output the native CLI must reproduce byte for byte.
-const MATCHING_CASES: usize = 176;
+const MATCHING_CASES: usize = 183;
 /// Comparisons the replay executes: every recorded config observation, one
 /// `doctor` run per case and the `agent list` runs.
-const REPLAYED_COMPARISONS: usize = 712;
+const REPLAYED_COMPARISONS: usize = 737;
 /// The `load_*` cases (CONFIG-LOAD-001): what the loader and validator accept
 /// or reject once the bytes parse as YAML.
-const LOAD_CASES: usize = 79;
+const LOAD_CASES: usize = 86;
 /// The CONFIG-SECTIONS-001 cases among them: what the typed decode makes of
 /// each kind of scalar and how the section merge treats it.
-const SECTION_CASES: usize = 47;
+const SECTION_CASES: usize = 54;
 /// Inputs on which the native CLI is known to differ from Go.
 const OPEN_DIVERGENCES: usize = 33;
 
@@ -311,6 +320,31 @@ fn agent_list_observation_difference(
     )
 }
 
+/// `auth status` against a vault directory holding the case's config.yaml:
+/// the resolved top-level method it reports.
+fn run_auth_method_observation(case_bytes: &[u8], expected: &AuthObservation) -> Option<String> {
+    let sandbox = Sandbox::new();
+    let vault = sandbox.vault_dir();
+    fs::create_dir_all(&vault).expect("create isolated vault directory");
+    fs::write(vault.join("config.yaml"), case_bytes).expect("write isolated vault config");
+    fs::write(vault.join("identity.age"), b"").expect("write isolated vault identity");
+    let args = substitute(&expected.args, "__VAULT__", &vault);
+    let output = sandbox.run(&args);
+    let code = output.status.code().unwrap_or(255);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let method = stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("Auth method: "))
+        .next_back()
+        .unwrap_or_default();
+    (code != expected.exit_code || method != expected.method).then(|| {
+        format!(
+            "exit {code} method {method:?}, Go exit {} method {:?}",
+            expected.exit_code, expected.method
+        )
+    })
+}
+
 fn run_doctor_observation(
     case_bytes: &[u8],
     expected: &DoctorObservation,
@@ -492,7 +526,12 @@ fn native_cli_matches_go_recorded_yaml_syntax_failures() {
     let expected_runs: usize = fixture
         .cases
         .iter()
-        .map(|case| case.observations.len() + 1 + usize::from(case.agent_list.is_some()))
+        .map(|case| {
+            case.observations.len()
+                + 1
+                + usize::from(case.agent_list.is_some())
+                + usize::from(case.auth_method.is_some())
+        })
         .sum();
     assert_eq!(fixture.cases.len(), MATCHING_CASES);
     assert_eq!(
@@ -521,6 +560,12 @@ fn native_cli_matches_go_recorded_yaml_syntax_failures() {
             compared += 1;
             if let Some(difference) = run_agent_list_observation(&bytes, agent_list) {
                 failures.push(format!("{} agent list: {difference}", case.name));
+            }
+        }
+        if let Some(auth) = &case.auth_method {
+            compared += 1;
+            if let Some(difference) = run_auth_method_observation(&bytes, auth) {
+                failures.push(format!("{} auth status: {difference}", case.name));
             }
         }
     }
