@@ -196,8 +196,16 @@ jobs:
       - name: Install Zig and cargo-zigbuild
         run: |
           set -euo pipefail
-          brew install zig
-          cargo install --locked cargo-zigbuild cargo-auditable
+          # Pinned (keep in sync with the Dockerfile). Zig comes from the
+          # `ziglang` PyPI wheel instead of `brew install zig`, which cannot be
+          # pinned; the shim lets cargo-zigbuild and GoReleaser find `zig`.
+          python3 -m venv "$RUNNER_TEMP/zig-venv"
+          "$RUNNER_TEMP/zig-venv/bin/pip" install --no-cache-dir ziglang==0.17.0
+          printf '#!/bin/sh\nexec "%s" -m ziglang "$@"\n' "$RUNNER_TEMP/zig-venv/bin/python" > "$RUNNER_TEMP/zig-venv/bin/zig"
+          chmod +x "$RUNNER_TEMP/zig-venv/bin/zig"
+          echo "$RUNNER_TEMP/zig-venv/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/zig-venv/bin/zig" version
+          cargo install --locked cargo-zigbuild@0.23.4 cargo-auditable@0.7.5
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2

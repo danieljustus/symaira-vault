@@ -30,10 +30,25 @@ before:
 # builds were CGO_ENABLED=0) cross-built with cargo-zigbuild; darwin builds
 # natively with cargo so the system frameworks resolve against the host SDK.
 # Both go through cargo-auditable so syft finds the crate list in the binary.
+#
+# Tool versions are pinned in release.yml and the Dockerfile (cargo-zigbuild
+# 0.23.4, cargo-auditable 0.7.5, ziglang 0.17.0, Rust 1.98.0 via
+# rust-toolchain.toml); `--locked` pins every crate.
+#
+# Reproducibility choice: mod_timestamp pins each binary's mtime to the commit
+# time ({{ .CommitTimestamp }}; this repo does not export SOURCE_DATE_EPOCH, the
+# commit timestamp is the same instant it would carry), so re-running the
+# release on the same commit does not change file metadata that GoReleaser
+# copies into archives and MCPB bundles. Byte-identical binaries are
+# NOT claimed: cargo embeds build-host paths and the zig/Apple linkers are not
+# verified deterministic here, and the LICENSE/README/completions/man members
+# keep their checkout mtimes. The Rust sources define no build timestamp
+# (SYMVAULT_VERSION is the only stamp), so nothing else varies per run.
 builds:
   - id: symvault-static
     builder: rust
     binary: symvault
+    mod_timestamp: "{{ .CommitTimestamp }}"
     targets:
       - x86_64-unknown-linux-musl
       - aarch64-unknown-linux-musl
@@ -54,6 +69,7 @@ builds:
   - id: symvault-darwin
     builder: rust
     binary: symvault
+    mod_timestamp: "{{ .CommitTimestamp }}"
     targets:
       - aarch64-apple-darwin
     tool: ./scripts/cargo-auditable.sh
