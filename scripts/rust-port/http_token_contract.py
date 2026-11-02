@@ -244,7 +244,10 @@ def duplicate_documents(body):
     Go's encoding/json decodes every occurrence of a repeated key into the same field and returns the first
     type error it saw, so a bad earlier value fails the whole document even when a later one is fine; a
     repeated root `tokens` object is decoded into the same map (ids merge, a repeated id replaces the entry,
-    `null` resets the map); invalid UTF-8 inside a string is replaced by U+FFFD instead of rejected.
+    `null` resets the map); invalid UTF-8 inside a string is replaced by U+FFFD instead of rejected; a lone
+    `\\u` surrogate decodes to U+FFFD; a root `null` is an empty registry; nesting up to 10000 is accepted;
+    timestamps are parsed by time.Parse(RFC3339) on the RAW bytes (lowercase t/z, a space separator and any
+    escape such as `\\u005a` are rejected, a one-digit hour, a comma fraction and `+24:00` are accepted).
     name -> (document bytes, startup state, code of the `never` token when served)."""
     never = {k: v for k, v in json.loads(body)['tokens']['tok-never'].items() if k != 'revoked'}
     head = json.dumps(never)[:-1]
@@ -288,6 +291,24 @@ def duplicate_documents(body):
         'utf8-invalid-label': (one(',"label":"a@@"').replace(b'@@', b'\xff\xe2\x82'), *ok),
         'utf8-invalid-revoked-key-padding': (one(',"revoked":true,"zz@@":"x"').replace(b'@@', b'\xff'), *('listening', 401)),
         'utf8-invalid-outside-string': (one(',"revoked":false') + b'\xff', *bad),
+        'ts-control-future': (one(',"expires_at":"2099-01-01T00:00:00Z"'), *ok),
+        'ts-lowercase-t': (one(',"expires_at":"2099-01-01t00:00:00Z"'), *bad),
+        'ts-lowercase-z': (one(',"expires_at":"2099-01-01T00:00:00z"'), *bad),
+        'ts-space-separator': (one(',"expires_at":"2099-01-01 00:00:00Z"'), *bad),
+        'ts-escaped-z': (one(',"expires_at":"2099-01-01T00:00:00\\u005a"'), *bad),
+        'ts-escaped-digit': (one(',"created_at":"\\u0032099-01-01T00:00:00Z"'), *bad),
+        'ts-offset-25': (one(',"expires_at":"2099-01-01T00:00:00+25:00"'), *bad),
+        'ts-one-digit-hour': (one(',"expires_at":"2099-01-01T1:00:00Z"'), *ok),
+        'ts-comma-fraction': (one(',"expires_at":"2099-01-01T00:00:00,5Z"'), *ok),
+        'ts-offset-24': (one(',"expires_at":"2099-01-01T00:00:00+24:00"'), *ok),
+        'ts-offset-minute-60': (one(',"expires_at":"2099-01-01T00:00:00+00:60"'), *ok),
+        'ts-past-comma-fraction-expired': (one(',"expires_at":"2000-01-01T00:00:00,5Z"'), *('listening', 401)),
+        'root-null': (b'null', *('listening', 401)),
+        'root-null-whitespace': (b' null\n', *('listening', 401)),
+        'surrogate-lone-label': (one(',"label":"\\ud800"'), *ok),
+        'surrogate-lone-revoked': (one(',"zz":"\\udc00","revoked":true'), *('listening', 401)),
+        'depth-9997-unknown': (one(',"zz":' + '[' * 9997 + ']' * 9997), *ok),
+        'depth-9998-unknown': (one(',"zz":' + '[' * 9998 + ']' * 9998), *bad),
     }
 
 
@@ -504,6 +525,13 @@ def observe_duplicate_reload(binary, base, seed_vault, port, raws, body):
         accepted('revoked-third', revoked_bytes, 401)
         accepted('root-tokens-id-replaced-valid', docs['dup-root-tokens-id-replaced-valid'][0], 200)
         accepted('root-tokens-id-replaced-revoked', docs['dup-root-tokens-id-replaced-revoked'][0], 401)
+        # a timestamp Go rejects keeps the revoked state; a root null empties the registry in Go, so Rust must adopt it too
+        rejected('timestamp-lowercase-t-unrevoke', docs['ts-lowercase-t'][0], 401)
+        rejected('timestamp-escaped-z-unrevoke', docs['ts-escaped-z'][0], 401)
+        accepted('control', docs['dup-control'][0], 200)
+        accepted('root-null', docs['root-null'][0], 401)
+        accepted('control-again', docs['dup-control'][0], 200)
+        accepted('lone-surrogate-revoked', docs['surrogate-lone-revoked'][0], 401)
     finally:
         process.close()
     return codes
@@ -511,7 +539,7 @@ def observe_duplicate_reload(binary, base, seed_vault, port, raws, body):
 
 def check_duplicate_reload(go, rust):
     assert go == rust, ('duplicate-key reload sequence differs', go, rust)
-    assert len(go) == 13, len(go)
+    assert len(go) == 19, len(go)
 
 
 def check_dynamic(go, rust):

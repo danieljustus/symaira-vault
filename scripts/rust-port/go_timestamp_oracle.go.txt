@@ -1,0 +1,48 @@
+// Records whether Go 1.26.6 `encoding/json` accepts each raw JSON value as a
+// *time.Time field (Time.UnmarshalJSON -> time.Parse(RFC3339), raw bytes, no
+// unescaping). Input: a JSON array of raw JSON value texts. Output: JSON array
+// of {raw, go: accept|reject|syntax}. Re-record the fixture
+// crates/symvault-store/tests/fixtures/go_timestamp_cases.json ([raw, accepts]
+// pairs) with:  cp go_timestamp_oracle.go.txt /tmp/x/oracle.go &&
+//   CGO_ENABLED=0 GOWORK=off go run /tmp/x/oracle.go cases.json
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"time"
+)
+
+type entry struct {
+	ExpiresAt *time.Time `json:"expires_at"`
+}
+type file struct {
+	Tokens map[string]entry `json:"tokens"`
+}
+
+func main() {
+	var cases []string
+	data, _ := os.ReadFile(os.Args[1])
+	if err := json.Unmarshal(data, &cases); err != nil {
+		panic(err)
+	}
+	type out struct {
+		Raw string `json:"raw"`
+		Go  string `json:"go"`
+	}
+	var res []out
+	for _, raw := range cases {
+		doc := `{"tokens":{"a":{"expires_at":` + raw + `}}}`
+		var f file
+		r := "accept"
+		if !json.Valid([]byte(doc)) {
+			r = "syntax"
+		} else if err := json.Unmarshal([]byte(doc), &f); err != nil {
+			r = "reject"
+		}
+		res = append(res, out{raw, r})
+	}
+	b, _ := json.MarshalIndent(res, "", " ")
+	fmt.Println(string(b))
+}

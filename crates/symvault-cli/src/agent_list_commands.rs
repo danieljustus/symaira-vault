@@ -53,7 +53,7 @@ struct YamlAgentList<'a> {
 #[derive(Debug, Deserialize)]
 struct TokenRegistryFile {
     #[serde(default)]
-    tokens: Option<BTreeMap<String, TokenEntry>>,
+    tokens: Option<BTreeMap<String, Option<TokenEntry>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -160,9 +160,22 @@ pub(crate) fn load_tokens(root: &Path) -> Result<Vec<TokenEntry>, String> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(format!("load token registry: {error}")),
     };
-    let registry: TokenRegistryFile = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("load token registry: parse token registry: {error}"))?;
-    let tokens: Vec<_> = registry.tokens.unwrap_or_default().into_values().collect();
+    // The same Go-faithful decoder the MCP server and the store use: field
+    // names bind case-insensitively, duplicate members are folded in document
+    // order and timestamps are validated like Go's `time.Time` JSON decoding.
+    let parse_error = |error: &dyn std::fmt::Display| {
+        format!("load token registry: parse token registry: {error}")
+    };
+    let value = symvault_store::go_registry::decode_go_registry(&bytes)
+        .map_err(|error| parse_error(&error))?;
+    let registry: TokenRegistryFile =
+        serde_json::from_value(value).map_err(|error| parse_error(&error))?;
+    let tokens: Vec<_> = registry
+        .tokens
+        .unwrap_or_default()
+        .into_values()
+        .flatten()
+        .collect();
     for token in &tokens {
         for timestamp in [&token.created_at, &token.expires_at, &token.last_used_at]
             .into_iter()
@@ -256,7 +269,7 @@ fn is_expired(timestamp: Option<&str>) -> bool {
 }
 
 pub(crate) fn timestamp_to_epoch(timestamp: &str) -> i64 {
-    time::OffsetDateTime::parse(timestamp, &time::format_description::well_known::Rfc3339)
+    symvault_store::go_registry::parse_go_rfc3339(timestamp)
         .map_or(i64::MIN, |value| value.unix_timestamp())
 }
 
