@@ -1061,14 +1061,18 @@ area-oracle-runner:
 	$(AREA_ENV) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/test_oracle_build.py
 
 # Negative controls of the checker every area target below ends with: shrunken,
-# partial and malformed receipts and logs must all fail it.
+# partial and malformed receipts and logs must all fail it; the gate receipt's
+# area_complete (dirty/partial/short runs) and the pinned target list of each lane.
 area-check-selftest:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_gate_area_check.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_local_gate_receipt.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_local_area_list.py
 
 # No gate script may prune worktrees globally (the Linux container deleted the
 # host worktrees' admin dirs that way); the container git guards must stay.
 worktree-prune-check:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_check_worktree_prune.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_worktree_remove.py
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/check_worktree_prune.py
 
 http-framing-contract:

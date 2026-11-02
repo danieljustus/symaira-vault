@@ -539,6 +539,23 @@ class Reports(unittest.TestCase):
             failed = self.write(d, "failed", log + "test result: FAILED. 1 passed; 1 failed; 0 ignored\n")
             self.assertEqual(self.run_main("log-ok", failed, "one"), 1)
 
+    def test_contains_counts_are_digit_bounded(self):
+        for text, needle, expected in [
+            ("test result: ok. 110 passed; 0 failed; 0 ignored;", "10 passed; 0 failed; 0 ignored", 1),
+            ("test result: ok. 12 passed; 0 failed; 0 ignored;", "2 passed; 0 failed; 0 ignored", 1),
+            ("test result: ok. 10 passed; 0 failed; 0 ignored;", "10 passed; 0 failed; 0 ignored", 0),
+            ("test result: ok. 2 passed; 0 failed; 0 ignored;", "test result: ok. 2 passed; 0 failed; 0 ignored;", 0),
+            ("test result: ok. 12 passed; 0 failed; 0 ignored;", "test result: ok. 2 passed; 0 failed; 0 ignored;", 1),
+            ("4 passed; 0 failed; 0 ignored", "4 passed; 0 failed; 0 ignored", 0),
+            ("14 passed; 0 failed; 0 ignored", "4 passed; 0 failed; 0 ignored", 1),
+            ("10 passed; 0 failed; 0 ignored; 0 measured", "10 passed; 0 failed; 0 ignored", 0),
+            ("10 passed; 0 failed; 0 ignored 1", "10 passed; 0 failed; 0 ignored 1", 0),
+            ("10 passed; 0 failed; 0 ignored 10", "10 passed; 0 failed; 0 ignored 1", 1),
+        ]:
+            with tempfile.TemporaryDirectory() as d:
+                path = self.write(d, "log", text + "\n")
+                self.assertEqual(self.run_main("log-ok", path, "--contains", needle), expected, (text, needle))
+
     def test_go_text_pass(self):
         with tempfile.TemporaryDirectory() as d:
             path = self.write(d, "t", "--- PASS: TestX (0.00s)\n")

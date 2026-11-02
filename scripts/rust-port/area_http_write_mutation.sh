@@ -26,6 +26,7 @@ cmd_words="${6:?command words}"
 cargo="${CARGO:-cargo}"
 mutated=crates/symvault-mcp/src/http.rs
 
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$live" || exit 2
 
 fingerprint() { # live view: tracked changes under crates/, then the binary
@@ -36,20 +37,12 @@ fingerprint() { # live view: tracked changes under crates/, then the binary
 before="$(fingerprint)"
 status_before="$(git status --porcelain)"
 
-# Unregister exactly this worktree. Never `git worktree prune`: it is global to
-# the shared common dir, and in the Linux container the host worktrees' paths do
-# not exist, so a prune there deletes their admin dirs (.git/worktrees/*).
-remove_worktree_only() { # tree
-  local tree="$1" admin="" common
-  [ -f "$tree/.git" ] && admin="$(sed -n 's/^gitdir: //p' "$tree/.git")"
-  git worktree remove --force "$tree" >/dev/null 2>&1 && return 0
-  rm -rf "$tree"
-  common="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
-  admin="$(cd "$admin" 2>/dev/null && pwd -P)" || return 0
-  case "$admin" in "$common"/worktrees/*) rm -rf "$admin" ;; esac
-}
-
-remove_tree() { remove_worktree_only "$tree"; }
+# Unregister exactly this worktree (never a global `git worktree prune`; see
+# worktree_remove.sh). The scratch tree must lie inside the receipt's directory,
+# the evidence dir.
+# shellcheck source=scripts/rust-port/worktree_remove.sh
+. "$here/worktree_remove.sh"
+remove_tree() { remove_worktree_only "$tree" "$(dirname "$receipt")"; }
 
 child=""
 # shellcheck disable=SC2329 # invoked by the traps
@@ -77,8 +70,7 @@ trap 'guard 143' TERM
 trap 'guard 130' INT
 trap 'guard $?' EXIT
 
-remove_tree
-rm -rf "$tree"
+remove_tree || exit 1
 git worktree add --detach "$tree" HEAD >/dev/null || exit 1
 mkdir -p "$target"
 

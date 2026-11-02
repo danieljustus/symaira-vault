@@ -203,7 +203,13 @@ Running them:
   `area-partial: true` and records `"partial":true` in its receipt. Each
   receipt also records `area_expected` (what `make local-area-list` printed for
   the lane) and `area_complete`, true only for an unnarrowed run that executed
-  exactly that list and exited 0; a run whose executed list differs fails.
+  exactly that list, exited 0 and ran on a clean tree (`ALLOW_DIRTY=1` runs
+  have `dirty: true` and are never complete); a run whose executed list differs
+  fails. `test_local_area_list.py` pins each lane's 48 targets (so a target
+  removed from the Makefile fails `area-check-selftest`), and
+  `area_http_write_mutation.sh` / `area_pairing_oracle.sh` remove their scratch
+  worktrees through `worktree_remove.sh` (refuses symlinks and paths outside the
+  evidence dir; deletes only the admin dir whose `gitdir` names that tree).
   `make <target>` runs one contract directly; the contracts need a clean tree.
   `local-gate-area.sh` also fails (and, when the run started clean, restores
   the tracked files of) a run that changed the tracked tree, and forwards

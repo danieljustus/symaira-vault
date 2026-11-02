@@ -536,6 +536,21 @@ def go_text_pass(args):
     print(f"gate_area_check: ok {args.path} ({len(args.names)} required tests)")
 
 
+def contains(text, needle):
+    """`needle` occurs in `text` and is not the tail/head of a longer number.
+
+    A count such as "10 passed" must not match "110 passed", nor "2 passed" match
+    "12 passed": a needle starting (ending) with a digit may not be preceded
+    (followed) by one.
+    """
+    pattern = re.escape(needle)
+    if needle[:1].isdigit():
+        pattern = r"(?<!\d)" + pattern
+    if needle[-1:].isdigit():
+        pattern += r"(?!\d)"
+    return re.search(pattern, text) is not None
+
+
 def log_ok(args):
     text = read_text(args.path)
     for name in args.names:
@@ -546,7 +561,7 @@ def log_ok(args):
         if not found:
             fail(f"{args.path}: no `{name} ... ok`")
     for needle in args.contains or []:
-        if needle not in text:
+        if not contains(text, needle):
             fail(f"{args.path}: does not contain {needle!r}")
     results = RESULT.findall(text)
     if args.results_ok or args.sum_passed is not None:

@@ -44,30 +44,8 @@ mkdir -p "$log_dir" "$(dirname "$receipts")"
 # lane by another worktree's concurrent build.
 image="symvault-local-gate:1-$(shasum -a 256 "$root/scripts/rust-port/local-gate/Dockerfile" | cut -c1-12)"
 
-# Area targets that ran, as "name:exit,..." from the log's `area-target:`
-# lines (local-gate-area.sh), so a receipt names what it covers.
-area_targets() { # log
-  sed -n 's/^area-target: \([^ ]*\) exit=\([0-9]*\).*/\1:\2/p' "$1" | paste -sd, -
-}
-
-# The area run's own bookkeeping lines (local-gate-area.sh): whether the run
-# was narrowed by LOCAL_AREA_ONLY, the list `make local-area-list` expects, and
-# the targets that actually ran. `area_complete` is true only for an unnarrowed
-# run that executed exactly the expected list and exited 0.
-area_line() { # log prefix
-  sed -n "s/^$2: //p" "$1" | tail -n 1
-}
-
-receipt() { # target exit started log
-  local partial expected ran complete=false
-  partial="$(area_line "$4" area-partial)"
-  expected="$(area_line "$4" area-expected | sed 's/^lane=[a-z]* //')"
-  ran="$(sed -n 's/^area-target: \([^ ]*\) exit=.*/\1/p' "$4" | paste -sd' ' -)"
-  if [ "$2" = 0 ] && [ "$partial" = false ] && [ -n "$expected" ] && [ "$ran" = "$expected" ]; then complete=true; fi
-  printf '{"sha":"%s","dirty":%s,"target":"%s","exit":%s,"started":"%s","finished":"%s","log":"%s","area_targets":"%s","partial":%s,"area_expected":"%s","area_complete":%s}\n' \
-    "$sha" "$dirty" "$1" "$2" "$3" "$(date -u +%FT%TZ)" "$4" "$(area_targets "$4")" \
-    "${partial:-false}" "$expected" "$complete" >> "$receipts"
-}
+# shellcheck source=scripts/rust-port/local-gate-receipt.sh
+. "$root/scripts/rust-port/local-gate-receipt.sh"
 
 # Targets no ci.yml job reaches (Makefile LOCAL_AREA_TARGETS, macOS lane): one
 # line per target in the log, every target runs, status 1 if any failed.
