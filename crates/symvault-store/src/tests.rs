@@ -764,45 +764,83 @@ fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
     assert!(matches!(error, StoreError::Config(message) if message.contains("replacement")));
 }
 
-/// A crafted `entries/**/*.age` (it can arrive by git pull or rsync) whose
-/// X25519 stanza line is 64 KiB. The `age` crate takes about a minute to parse
-/// such a line; Go takes microseconds. Opening the store (which reconciles the
-/// manifest), listing, reading and verifying must stay fast and fail the read
-/// with an ordinary envelope error.
+/// Crafted `entries/**/*.age` files (they can arrive by git pull or rsync) whose
+/// age header is cheap to write and minutes of work for the `age` crate's header
+/// parser (debug build: a 64 KiB X25519 line about a minute, 2000 tiny stanzas
+/// 67 s, one stanza of 200 body lines 21 s, 32 stanzas of 1 KiB lines 15 s, a
+/// 2 MiB header over 100 s; Go needs 0.1-0.5 s for any of them). Opening the
+/// store (which reconciles the manifest), listing, reading and verifying must
+/// stay fast and fail the read with an ordinary envelope error.
 #[test]
-fn oversized_entry_header_line_never_reaches_the_age_parser() {
+fn hostile_entry_headers_never_reach_the_age_parser() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     materialize(root, &value.vaults[0]);
-    let mut evil = b"age-encryption.org/v1\n-> X25519 ".to_vec();
-    evil.extend(std::iter::repeat_n(b'z', 64 * 1024));
-    evil.extend_from_slice(b"\nAAAA\n--- ");
-    evil.extend(std::iter::repeat_n(b'A', 43));
-    evil.push(b'\n');
-    evil.extend_from_slice(&[0; 64]);
+    let crafted = |stanzas: &[u8]| {
+        let mut raw = b"age-encryption.org/v1\n".to_vec();
+        raw.extend_from_slice(stanzas);
+        raw.extend_from_slice(b"--- ");
+        raw.extend(std::iter::repeat_n(b'A', 43));
+        raw.push(b'\n');
+        raw.extend_from_slice(&[0; 64]);
+        raw
+    };
+    let mut body_lines = b"-> X25519 ".to_vec();
+    body_lines.extend(std::iter::repeat_n(b'A', 43));
+    body_lines.push(b'\n');
+    for _ in 0..200 {
+        body_lines.extend(std::iter::repeat_n(b'A', 64));
+        body_lines.push(b'\n');
+    }
+    body_lines.push(b'\n');
+    let mut kilo_lines = Vec::new();
+    for _ in 0..32 {
+        kilo_lines.extend_from_slice(b"-> X25519 ");
+        kilo_lines.extend(std::iter::repeat_n(b'z', 1000));
+        kilo_lines.extend_from_slice(b"\nAAAA\n");
+    }
+    let mut huge_line = b"-> X25519 ".to_vec();
+    huge_line.extend(std::iter::repeat_n(b'z', 64 * 1024));
+    huge_line.extend_from_slice(b"\nAAAA\n");
+    let mut two_mib = Vec::new();
+    while two_mib.len() < (2 << 20) - 2000 {
+        two_mib.extend_from_slice(b"-> a\n\n");
+    }
+    let shapes = [
+        ("zz-line", crafted(&huge_line)),
+        ("zz-tiny", crafted(&b"-> a\n\n".repeat(2000))),
+        ("zz-body", crafted(&body_lines)),
+        ("zz-kilo", crafted(&kilo_lines)),
+        ("zz-two-mib", crafted(&two_mib)),
+    ];
     fs::create_dir_all(root.join("entries/w")).unwrap();
-    fs::write(root.join("entries/w/zz-evil.age"), &evil).unwrap();
+    for (name, bytes) in &shapes {
+        fs::write(root.join(format!("entries/w/{name}.age")), bytes).unwrap();
+    }
 
     let started = std::time::Instant::now();
     let store = Store::open(root, &identity).unwrap();
     store.reconcile_manifest_on_open(&identity);
     let listed = store.list(&identity).unwrap();
-    assert!(listed.contains(&"w/zz-evil".to_owned()));
-    let error = store.get("w/zz-evil", &identity).unwrap_err();
-    assert!(
-        error.to_string().contains("malformed age envelope"),
-        "{error}"
-    );
+    for (name, _) in &shapes {
+        assert!(listed.contains(&format!("w/{name}")), "{name}");
+        let error = store.get(&format!("w/{name}"), &identity).unwrap_err();
+        assert!(
+            error.to_string().contains("malformed age envelope"),
+            "{name}: {error}"
+        );
+    }
     store.verify_manifest(&identity).unwrap();
     store.rebuild_manifest(&identity).unwrap();
     let elapsed = started.elapsed();
     assert!(
         elapsed < std::time::Duration::from_secs(10),
-        "a 64 KiB header line took {elapsed:?}; the unguarded age parser needs about a minute"
+        "{} hostile headers took {elapsed:?}; the unguarded age parser needs minutes each",
+        shapes.len()
     );
-    // A legitimate entry next to it is untouched.
+    // A legitimate entry next to them is untouched.
     assert!(store.get("minimal", &identity).is_ok());
 }
 
