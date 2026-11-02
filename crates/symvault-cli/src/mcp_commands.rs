@@ -915,10 +915,7 @@ fn build_handler(
     }
     let mut handler =
         ProtocolHandler::with_tool_call_runtime("symaira", "1.0.0", Arc::new(runtime));
-    handler.set_tool_list_config(tool_list_config(
-        profile,
-        transport == "stdio" && is_tty_present(),
-    ));
+    handler.set_tool_list_config(tool_list_config(profile, secure_input_capable(transport)));
     Ok(handler)
 }
 
@@ -962,6 +959,16 @@ fn clipboard_backend() -> Arc<dyn Clipboard> {
     symvault_platform::native_command_clipboard()
 }
 
+/// Go's `secureui.Detect()` for the tools gated on a prompt (`secure_input`,
+/// `request_credential`): the `SYMVAULT_SECUREUI=none` override disables the
+/// backend even with a controlling terminal. Rust has no GUI backend, so only
+/// a stdio session with a terminal is capable.
+fn secure_input_capable(transport: &str) -> bool {
+    transport == "stdio"
+        && std::env::var("SYMVAULT_SECUREUI").as_deref() != Ok("none")
+        && is_tty_present()
+}
+
 fn runtime_config(
     root: &Path,
     profile: &AgentProfile,
@@ -985,7 +992,7 @@ fn runtime_config(
         // let the normal allowed_tools filter below further restrict it.
         available_tools.push("execute_with_secret".into());
     }
-    let secure_input_available = transport == "stdio" && is_tty_present();
+    let secure_input_available = secure_input_capable(transport);
     let mut unavailable_tools = Vec::new();
     if !profile.can_run_commands {
         unavailable_tools.push(unavailable_tool(

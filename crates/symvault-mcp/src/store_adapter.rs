@@ -2958,12 +2958,30 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         arguments: &Value,
         drift: bool,
     ) -> Result<(), ToolCallResult> {
-        if let Err(error) = self.inner.authorize(name, arguments) {
+        self.authorize_with_token_scope(name, arguments, false, drift)
+    }
+
+    /// Go `validateToolAccess` order: availability and tier, scoped-token tool
+    /// scope, registry drift, entry policy; the handler's capability checks
+    /// (command execution) follow, as they do inside Go's handlers.
+    fn authorize_with_token_scope(
+        &self,
+        name: &str,
+        arguments: &Value,
+        token_denied: bool,
+        drift: bool,
+    ) -> Result<(), ToolCallResult> {
+        let deny = |error: ToolCallResult| {
             let path = Self::audit_target(name, arguments);
             if !self.unavailable_tools.iter().any(|tool| tool == name) {
                 self.append_audit("tool_denied", &path, false);
             }
-            return Err(error);
+            error
+        };
+        self.inner.authorize_access(name).map_err(deny)?;
+        if token_denied {
+            // Go: `s.logAudit(ctx, "tool_denied", name, false)`.
+            return Err(deny(crate::call::token_scope_refusal(name)));
         }
         if drift {
             // Go: `s.logAudit(ctx, "tool_registry_drift", name, false)`, the
@@ -2972,6 +2990,7 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             return Err(crate::call::registry_drift_refusal(&self.agent_name));
         }
         self.authorize_policy(name, arguments)?;
+        self.inner.authorize_dispatch(name).map_err(deny)?;
         Ok(())
     }
 
@@ -3040,6 +3059,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.perplexity_ask(arguments, context)
         } else if name == "copy_to_clipboard" {
             self.copy_to_clipboard(arguments)
+        } else if name == "autotype" {
+            self.autotype(arguments)
         } else if name == "generate_totp" {
             self.generate_totp(arguments)
         } else if name == "run_command" {
@@ -3685,6 +3706,53 @@ impl StoreReadOnlyRuntime {
         Ok(ToolCallResult::text(r#"{"success": true}"#))
     }
 
+    /// Go `handleAutotype`: type one string field through the application-owned
+    /// backend. Every failure writes Go's `autotype` audit row; the typed text
+    /// never becomes a protocol result.
+    fn autotype(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let preflight = match self.inner.autotype_preflight(arguments) {
+            Ok(preflight) => preflight,
+            Err(SecureInputPreflightError::Tool(result)) => {
+                self.append_audit("autotype", "<invalid>", false);
+                return Ok(result);
+            }
+            Err(SecureInputPreflightError::Handler(error)) => {
+                let path = if error == "autotype operations not permitted for this agent" {
+                    "<autotype-denied>"
+                } else {
+                    arguments
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .unwrap_or("<invalid>")
+                };
+                self.append_audit("autotype", path, false);
+                return Err(error);
+            }
+        };
+        let value = match self.inner.autotype_value(&preflight.path, &preflight.field) {
+            Ok(value) => value,
+            Err(error) => {
+                self.append_audit("autotype", &preflight.path, false);
+                return Err(error);
+            }
+        };
+        if value.is_error {
+            self.append_audit("autotype", &preflight.path, false);
+            return Ok(value);
+        }
+        let Some(autotype) = &self.autotype else {
+            return Ok(ToolCallResult::error(
+                "autotype not available on this platform",
+            ));
+        };
+        if let Err(error) = autotype.type_text(&value.text) {
+            self.append_audit("autotype", &preflight.path, false);
+            return Ok(ToolCallResult::error(format!("autotype failed: {error}")));
+        }
+        self.append_audit("autotype", &preflight.path, true);
+        Ok(ToolCallResult::text(r#"{"success": true}"#))
+    }
+
     /// `generate_totp` with the same clipboard backend and auto-clear as
     /// `copy_to_clipboard` (Go `totpClipboard` uses `clipboard.DefaultClipboard()`
     /// and `startClipboardAutoClear`); approval is not prompted for here, Go
@@ -3948,6 +4016,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "generate_password",
         "generate_totp",
         "copy_to_clipboard",
+        "autotype",
         "set_entry_field",
         "delete_entry",
         "find_entries",

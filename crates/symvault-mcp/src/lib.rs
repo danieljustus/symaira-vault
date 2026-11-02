@@ -750,16 +750,11 @@ impl ProtocolHandler {
                 None,
             ));
         }
-        if let Some(allowed) = self.token_allowed_tools.as_deref()
-            && !tools::is_tool_allowed_by_token(allowed, &name).map_err(Error::Catalog)?
-        {
-            return Message::response(
-                msg.id.clone(),
-                call::payload(ToolCallResult::error(format!(
-                    "Tool {name:?} requires tier \"token_scope\""
-                ))),
-            );
-        }
+        // Go's executeTool resolves the tool definition (unknown tool is a
+        // JSON-RPC error) before validateToolAccess, whose order is
+        // availability, tier, token scope, registry drift, entry policy. The
+        // runtime sequences the phases it owns; this only decides whether the
+        // token scope excludes the tool and whether drift applies.
         let known = tools::contains_tool(&name).map_err(Error::Catalog)?;
         if !known {
             return Ok(Message::error_response(
@@ -769,10 +764,12 @@ impl ProtocolHandler {
                 None,
             ));
         }
-        // Go order inside validateToolAccess: availability, tier and token
-        // scope, UpdateLastUsed, registry drift, then entry policy. The drift
-        // refusal therefore sits between the tier checks and the policy gate,
-        // so the runtime sequences it; this only decides whether it applies.
+        let token_denied = match self.token_allowed_tools.as_deref() {
+            Some(allowed) => {
+                !tools::is_tool_allowed_by_token(allowed, &name).map_err(Error::Catalog)?
+            }
+            None => false,
+        };
         let registry_drift = match self.token_registry_hash.as_deref() {
             Some(token_hash) if !token_hash.is_empty() => {
                 let current = toolhash::current_tool_registry_hash().map_err(Error::Catalog)?;
@@ -781,7 +778,7 @@ impl ProtocolHandler {
             _ => false,
         };
         if let Err(result) =
-            runtime.authorize_with_registry_drift(&name, &arguments, registry_drift)
+            runtime.authorize_with_token_scope(&name, &arguments, token_denied, registry_drift)
         {
             if result.authorization_internal_error {
                 return Ok(Message::error_response(
