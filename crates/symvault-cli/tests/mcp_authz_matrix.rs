@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 //! MCP-002/MCP-003 call-time authorization matrix: the frozen Go outcome of a
 //! minimal `tools/call` for every registered tool plus an unknown name, under
-//! 22 agent profiles and three token scopes (`testdata/port/mcp/authz-matrix.json`,
-//! recorded by `scripts/rust-port/mcp_authz_matrix.py` from the pinned Go
-//! oracle), replayed through the production CLI assembly
+//! 22 agent profiles and three token scopes, recorded per host OS by
+//! `scripts/rust-port/mcp_authz_matrix.py` from the pinned Go oracle
+//! (`testdata/port/mcp/authz-matrix.json` = darwin,
+//! `authz-matrix-linux.json` = linux; the replay picks the fixture of the OS it
+//! runs on and fails on an OS without a recording), replayed through the production CLI assembly
 //! (`mcp_commands::build_handler`: config profile -> runtime config -> store
 //! runtime) over a disposable encrypted store. Arguments are inert (`{}`), so
 //! no clipboard, autotype, payment, Perplexity, network or child process runs.
@@ -20,7 +22,41 @@ use symvault_crypto::generate_identity;
 use symvault_mcp::handle_line;
 use symvault_store::{Entry, EntryMetadata, Store};
 
-const FIXTURE: &str = include_str!("../../../testdata/port/mcp/authz-matrix.json");
+const FIXTURE_DARWIN: &str = include_str!("../../../testdata/port/mcp/authz-matrix.json");
+const FIXTURE_LINUX: &str = include_str!("../../../testdata/port/mcp/authz-matrix-linux.json");
+
+/// Selects the Go recording for a Rust `std::env::consts::OS` value. Returns the
+/// Go spelling of the OS (the fixture's `oracle.compiler.goos`) and the fixture
+/// text. An OS without a recording is an error, never a fallback to another
+/// platform's matrix.
+fn fixture_for(rust_os: &str) -> Result<(&'static str, &'static str), String> {
+    match rust_os {
+        "macos" => Ok(("darwin", FIXTURE_DARWIN)),
+        "linux" => Ok(("linux", FIXTURE_LINUX)),
+        other => Err(format!(
+            "no Go-recorded MCP authz matrix for OS {other:?}; recorded: darwin (macos), linux"
+        )),
+    }
+}
+
+/// The exact set of deliberate differences per recorded OS. Every rule is
+/// asserted per case; a rule that starts matching more or fewer cases, or an
+/// OS-only difference, is a behavior change that needs its own decision.
+fn expected_declared(goos: &str) -> BTreeMap<&'static str, usize> {
+    let common = BTreeMap::from([
+        ("canonical-delete-alias-tier", 21),
+        ("go-nil-share-store-panic", 38),
+        ("operator-allowlist-call", 303),
+        ("operator-allowlist-whoami", 2),
+    ]);
+    match goos {
+        // The Linux recording is case-for-case identical to darwin (pinned by
+        // `authorization_matrix_fixtures_differ_only_in_oracle_platform`), so
+        // Linux has no additional declared difference.
+        "darwin" | "linux" => common,
+        other => panic!("no declared-difference table for {other}"),
+    }
+}
 
 /// Rust-side counterpart of the recorder's `normalize`/`mask`: only the
 /// disposable HOME prefix, nested JSON text (compared as JSON), the host Touch
@@ -129,6 +165,7 @@ fn tool_error(id: &Value, text: &str) -> Value {
 /// Rust response for a precisely characterised case; any other difference
 /// fails the replay, and the per-rule counts are pinned by the test.
 fn declared_difference(
+    _goos: &str,
     profile: &Value,
     ordered_tools: &[&str],
     case: &Value,
@@ -138,18 +175,6 @@ fn declared_difference(
     let tool = case["tool"].as_str().unwrap();
     let overlay = &profile["overlay"];
     let id = &rust["id"];
-    // Go's production server never installs a ShareStore: the four share tools
-    // dereference nil and would crash a real Go process. Rust serves them.
-    if go.get("go_panic").is_some()
-        && matches!(
-            tool,
-            "list_shares" | "request_share" | "approve_share" | "revoke_share"
-        )
-        && rust.get("jsonrpc") == Some(&json!("2.0"))
-        && (rust.get("result").is_some() || rust.get("error").is_some())
-    {
-        return Some("go-nil-share-store-panic");
-    }
     // ADR 0016 "Explicit allowed_tools": Go ignores an operator allowlist for
     // calls; Rust applies it to every registered tool outside the list, before
     // any other check, for every token mode.
@@ -160,6 +185,20 @@ fn declared_difference(
         && rust == &tool_error(id, &format!("tool \"{tool}\" is not allowed"))
     {
         return Some("operator-allowlist-call");
+    }
+    // Go's production server never installs a ShareStore, so `list_shares`
+    // dereferences nil (a real Go stdio process crashes; an HTTP connection
+    // aborts). The other three share tools fail argument validation first and
+    // equal Rust. The recorded Go value must be exactly the recovered panic and
+    // Rust must serve exactly the empty list of the freshly opened store.
+    if tool == "list_shares"
+        && go
+            == &json!({"go_panic": "runtime error: invalid memory address or nil pointer dereference"})
+        && rust
+            == &json!({"jsonrpc":"2.0","id":id,"result":{"content":[{"type":"text",
+                "text":{"json_text":[]}}],"isError":false}})
+    {
+        return Some("go-nil-share-store-panic");
     }
     // ADR 0016: discovery metadata (`symaira_whoami`) applies the same
     // operator allowlist. Rust must equal Go's complete result with exactly
@@ -193,8 +232,18 @@ fn declared_difference(
 
 #[test]
 fn authorization_matrix_matches_go_recording() {
-    let fixture: Value = serde_json::from_str(FIXTURE).expect("parse frozen Go matrix");
+    let (goos, text) = fixture_for(std::env::consts::OS).unwrap_or_else(|error| panic!("{error}"));
+    replay(goos, text);
+}
+
+fn replay(goos: &str, fixture_text: &str) {
+    let fixture: Value = serde_json::from_str(fixture_text).expect("parse frozen Go matrix");
     assert_eq!(fixture["schema_version"], json!(1));
+    assert_eq!(
+        fixture["oracle"]["compiler"]["goos"],
+        json!(goos),
+        "the selected fixture was recorded by a Go toolchain for this OS"
+    );
     assert_eq!(fixture["oracle"]["commit_sha"].as_str().unwrap().len(), 40);
     let profiles = fixture["profiles"].as_array().unwrap();
     let tools = fixture["tools"].as_array().unwrap();
@@ -313,7 +362,7 @@ fn authorization_matrix_matches_go_recording() {
             let go = &case["response"];
             executed += 1;
             if &rust != go {
-                match declared_difference(profile, &ordered_tools, case, go, &rust) {
+                match declared_difference(goos, profile, &ordered_tools, case, go, &rust) {
                     Some(rule) => *declared.entry(rule).or_default() += 1,
                     None => failures.push(format!(
                         "{name} / {tool} / token={}:\n  go:   {go}\n  rust: {rust}",
@@ -332,19 +381,49 @@ fn authorization_matrix_matches_go_recording() {
     assert_eq!(executed, cases.len(), "every recorded case executed");
     // Pin the deliberate differences exactly: a rule that starts matching more
     // (or fewer) cases is a behavior change that needs a new decision.
-    assert_eq!(
-        declared,
-        BTreeMap::from([
-            ("canonical-delete-alias-tier", 21),
-            ("go-nil-share-store-panic", 44),
-            ("operator-allowlist-call", 297),
-            ("operator-allowlist-whoami", 2),
-        ])
-    );
+    assert_eq!(declared, expected_declared(goos));
     assert!(
         failures.is_empty(),
         "{} unexplained differences:\n{}",
         failures.len(),
         failures.join("\n")
     );
+}
+
+#[test]
+fn authorization_matrix_fixture_selection_is_per_host_os() {
+    assert_eq!(fixture_for("macos").unwrap(), ("darwin", FIXTURE_DARWIN));
+    assert_eq!(fixture_for("linux").unwrap(), ("linux", FIXTURE_LINUX));
+    assert!(!std::ptr::eq(FIXTURE_DARWIN, FIXTURE_LINUX));
+    // Negative controls: an unrecorded OS is a visible failure, not a fallback.
+    for other in ["windows", "freebsd", "", "darwin"] {
+        let error = fixture_for(other).expect_err("no recording for this OS");
+        assert!(error.contains("no Go-recorded MCP authz matrix"), "{error}");
+    }
+    // Every OS the selector accepts has a declared-difference table.
+    for os in ["macos", "linux"] {
+        let (goos, _) = fixture_for(os).unwrap();
+        assert!(!expected_declared(goos).is_empty());
+    }
+}
+
+#[test]
+fn authorization_matrix_fixtures_differ_only_in_oracle_platform() {
+    let darwin: Value = serde_json::from_str(FIXTURE_DARWIN).unwrap();
+    let linux: Value = serde_json::from_str(FIXTURE_LINUX).unwrap();
+    for (goos, fixture) in [("darwin", &darwin), ("linux", &linux)] {
+        assert_eq!(fixture["oracle"]["compiler"]["goos"], json!(goos));
+        assert_eq!(fixture["oracle"]["compiler"]["version"], json!("go1.26.6"));
+        assert_eq!(fixture["cases"].as_array().unwrap().len(), 22 * 36 * 3);
+    }
+    // The Go outcomes recorded on Linux equal the darwin ones case for case; the
+    // oracle block differs only in the compiler's GOOS. A future OS-specific Go
+    // outcome must fail here and get an exact, OS-gated declared rule.
+    let strip = |fixture: &Value| {
+        let mut fixture = fixture.clone();
+        fixture["oracle"]["compiler"]["goos"] = Value::Null;
+        fixture
+    };
+    assert_eq!(strip(&darwin), strip(&linux));
+    assert_ne!(darwin["oracle"], linux["oracle"]);
 }

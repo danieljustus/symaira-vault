@@ -299,13 +299,21 @@ plus one unknown name, three times each: no token, a token scope excluding the
 tool, and a token scope naming exactly the tool. Stdio cannot carry a token, so
 the probe (`mcp_authz_probe.go.txt`) drives the production `ProtocolHandler`
 with `auth.WithToken`, exactly as the HTTP middleware places it. The result is
-frozen as `testdata/port/mcp/authz-matrix.json` (2376 cases, each profile
-recorded twice and required to be identical after masking the two documented
+frozen per host OS as `testdata/port/mcp/authz-matrix.json` (darwin) and
+`testdata/port/mcp/authz-matrix-linux.json` (linux), 2376 cases each, every
+profile recorded twice and required to be identical after masking the two documented
 random/audit-trail results and the host Touch ID capability). `make
-mcp-authz-differential` re-derives it from the oracle (`--check`) and replays
-every case through the production CLI assembly
-(`symvault-cli/tests/mcp_authz_matrix.rs`: config profile, runtime config,
-encrypted store runtime).
+mcp-authz-differential` re-derives the host's fixture from the oracle
+(`--check`; `--generate` writes only the host's file, and a host without a
+recorded fixture fails instead of skipping) and replays every case through the
+production CLI assembly (`symvault-cli/tests/mcp_authz_matrix.rs`: config
+profile, runtime config, encrypted store runtime) against the fixture of the OS
+it runs on. The Linux recording was made by the same generator with the Go
+oracle compiled for linux inside the Linux gate image; it equals the darwin
+recording case for case (the only difference is `oracle.compiler.goos`), which
+a replay test pins, so any future OS-specific Go outcome needs its own exact,
+OS-gated declared difference. `GOARCH` is not pinned in the fixture because no
+recorded outcome depends on it.
 
 Rust divergences found and fixed:
 
@@ -320,6 +328,12 @@ Rust divergences found and fixed:
 
 Differences that stay, each asserted exactly and counted by the replay: the
 operator `allowed_tools` restriction on calls (297) and in `symaira_whoami` (2),
-the canonical delete alias tier (21), and Go's four share tools (44), which
-dereference a never-installed `ShareStore` and would crash a real Go serve
-process (the probe records the recovered panic; Rust serves them).
+the canonical delete alias tier (21), and Go's `list_shares` (38 cases outside
+operator-allowlisted profiles), which hits a nil dereference of the
+never-installed `ShareStore` (stdio process crash; HTTP connection abort). The
+probe records the recovered panic; Rust serves exactly the empty list
+`[]`. The other three share tools (`request_share`, `approve_share`,
+`revoke_share`) fail argument validation before reaching the store and equal
+Rust. The six `list_shares` cases of operator-allowlisted profiles are counted
+under the allowlist rule (303 call cases in total) and asserted as the exact
+allowlist denial.
