@@ -195,17 +195,10 @@ Fixed, each pinned against the real Go binary (oracle `bf7f687b`) in
 - Config reads and `agent profile export -o` print ENOTDIR, ELOOP, ENAMETOOLONG (and every other
   create failure) as Go's `open <path>: <cause>`.
 
-Still open (probed, not fixed; see the CFG-003 and CLI-005 rows of the contract matrix; the `vault.authMethod` and `sessionTimeout: null` rows that stood here are closed, see CONFIG-LOAD-001 below):
+Still open (probed, not fixed; see the CFG-003 and CLI-005 rows of the contract matrix; the `vault.authMethod` and `sessionTimeout: null` rows that stood here are closed, see CONFIG-LOAD-001 below; the seven `Config::load` rows on float and YAML 1.1 scalars, custom tags and unread keys are closed too, see CONFIG-SECTIONS-001 below):
 
 | Class | Go | Rust |
 | --- | --- | --- |
-| `Config::load`: `mcp.port: 1.5`, `!!float 3` | accepted | `port must be an integer` |
-| `Config::load`: `useTouchID: y`, `approval_required: n` | accepted (YAML 1.1 words) | `must be a boolean` |
-| `Config::load`: custom or non-specific tags on scalars | accepted | serde_yaml_ng enum error |
-| `Config::load`: recursive alias under an unread key | accepted | `recursion limit exceeded` |
-| `Config::load`: duplicate keys in an unread mapping (`m: {a: 1, a: 2}`, `"<<"` plus `'<<'`) | accepted | `duplicate entry` |
-| `Config::load`: explicit tags on unread values (`d0: !!float ~`) | accepted | `expected a float` |
-| `Config::load`: alias bomb under an unread key | accepted | `repetition limit exceeded` after about 0.7 s (safe refusal) |
 | nesting depth | up to 10000 levels | refused beyond 256 (`yaml_edit`); 100k `[` take about 100 s to refuse |
 | `profiles:\n  x: null` | nil pointer panic, exit 2 | parse error, exit 6 |
 | `config set x 1e3` / `0b11` / `010` / `y` / `2026-10-31` | writes `1000` / `3` / `8` / `"y"` / `2026-10-31T00:00:00Z` | `1000.0` / `"0b11"` / `10` / `y` / `2026-10-31` |
@@ -271,11 +264,150 @@ authMethod entries of `config_sections_contract` are gone (the loader matches Go
   replaced the two entries `agents_scalar` and `alias_value_for_string_field` that this change closed).
 - A typed-decode error whose quoted value is cut inside a multi-byte character is rendered with
   U+FFFD by the loader (`String::from_utf8_lossy`); `config set` still prints Go's raw bytes.
-- A non-string scalar in a string field decodes to its text in Go. The native merge does that for
-  `vaultDir`, `defaultAgent`, `promptInjectionMode`, `authMethod` and `vault.authMethod` only (the
-  other string fields still report `must be a string`), and renders a number the way `serde_yaml_ng`
-  prints it, so `vault.authMethod: 0x10` is quoted as `"16"` where Go says `"0x10"` (same for `1.50`,
-  `True`).
+- A non-string scalar in a string field decodes to its text in Go. (Closed by CONFIG-SECTIONS-001:
+  every string field reads the source text, so `vault.authMethod: 0x10` is quoted as `"0x10"`.)
+
+## CONFIG-SECTIONS-001: the section parsers read what yaml.v3 decoded, 2026-11-02
+
+The CONFIG-LOAD-001 review swept 1,316 generated field-table configs plus 62 syntax variants through
+both CLIs (`config validate`, `config validate --json`, `agent list`) and found 109 inputs Go accepts
+and the native loader rejected. They shared one cause: the per-section parsers in `config.rs` read the
+`serde_yaml_ng` value of the first document and re-implemented, field by field, what yaml.v3's typed
+decode does to a scalar, so every scalar that decode coerces (and `serde_yaml_ng` does not) was refused.
+
+| Class (Go decode of the field type) | Example | Before | Now |
+| --- | --- | --- | --- |
+| string field takes any scalar as its source text | `vault.path: 5`, `mcp.bind: 1.5`, `git.commit_template: true`, `agents.x.skillPath: 0x10`, `tier: 5`, `[5, true]` in a `[]string` | `must be a string` | text kept (`"5"`, `"1.5"`, `"0x10"`) |
+| int field truncates a float, reads YAML 1.1 ints | `mcp.port: 1.5` / `1e3` / `1_000` / `017`, `argon2id_time: -1.5` | `must be an integer` | `1` / `1000` / `1000` / `15` |
+| `*bool`, `*int`, `*string`, `*time.Duration` take `null` as nil | `agents.x.canWrite: null`, `max_reads_per_hour: null`, `tier: null`, `skillPath: null` | `must be a boolean/an integer/a string` | field left alone (`tier: null` still counts as written, so the profile is not made to expose the value tools) |
+| negative durations in the sections | `mcp.approval_timeout: -1s`, `vault.listing_cache_ttl`, `update.cache_ttl`, `git.auto_pull_interval`, `agents.x.approvalTimeout` | `has a negative duration` | accepted; kept as zero (see below) |
+| `agents: null`, `agents.x: null` | | `top-level YAML document must be a mapping` | nil map / zero profile (the profile still exposes the value tools) |
+| null item in a `[]string` | `allowedPaths: [null, '[']` | `must be a string` | item dropped, so the bad glob is entry 0 as in Go |
+| non-string `approvalMode` | `approvalMode: 5` | `approvalMode must be a string` | Go's `invalid approvalMode "5" (valid: none, deny, prompt)` |
+| rendering of a coerced number | `vault.authMethod: 0x10`, `defaultAgent: 0x10`, `promptInjectionMode: 0x10`, `1.50`, `True` | quoted as `"16"` / `"1.5"` / `"true"` (serde's rendering) | source text |
+| custom tag `a: !t x`, second-document syntax error | | rejected by serde (tag), or typed decode skipped | accepted like Go (open divergence `custom_tag_on_value` promoted to a case) |
+
+Design: one source of coercion truth. `config_typed.rs` (the port of yaml.v3's `decode.go` that already
+validates the whole first document) now also produces the *decoded* tree
+(`config_typed::coerced_document`): each scalar is converted by the Go type of its field (string = the
+source text, bool = the decoded boolean incl. `y/yes/on/n/no/off`, int = the truncated int, duration = its
+nanoseconds, null = null, null items of a `[]string` dropped, struct fields the Go type does not name
+dropped, `<<` merges filled in behind the mapping's own keys with the earliest operand first). Every
+struct/map mapping reached without an alias or merge also carries the list of keys it wrote itself
+(under a non-string mapping key, `own_keys_key()`, so no YAML string key such as a double-quoted `"\0own"`
+can collide with it; a key is listed by its node's text, which for an alias is the anchor name, and an alias
+that resolves to another text credits its fields to a name nothing looks up), the view Go's `loadSectionFields`/`loadAgentFields`/`loadTopLevelFields` walk the node tree
+for. `config.rs` then merges exactly as `config_merge.go`: a section field only when the section wrote it,
+`*T` agent fields whenever the decoded value is not nil (a merged `promptInjectionMode: weird` is
+rejected, a merged `approvalMode: bogus` is ignored because that field is gated on being written), the
+`sync` block and the `approval_required` warning regardless. The vault merge feeds the top-level method
+from the *decoded* `useTouchID` (`raw.UseTouchID`, merged keys included) when no `authMethod` was written,
+while `vault.useTouchID` itself keeps only a key the section wrote. The per-field special cases
+(`text_scalar`, `boolean`, `integer`, `duration`, `duration_allowing_negative`, `present`,
+`ProfileFields`/`ProfileYaml`) are gone. `yaml_edit` now parses with `YamlFile::parse(..).tree()` so a
+syntax error in a later document (which Go never reads) no longer hides the first document from the
+typed decode. `migrate kdf --allow-legacy-kdf` (`migrate_resource_policy`) wraps its config stages like
+`prepareResourceMigrationConfig`: `read migration config: …`, `load migration config: …`,
+`validate migration config: …` (the validate stage is new), `migration config vault must be a mapping`.
+The scrypt path (`migrate_kdf`, `prepare_config_update`) has no Go counterpart that re-reads the config
+(`vault.MigrateKDF` works on the already loaded one and ignores the save error), so its `load config` /
+`validate rendered config` texts are left as they were.
+
+Evidence: `testdata/port/cli/config-yaml-syntax.json` (now 183 cases, 33 open divergences, 737
+comparisons; the 128 earlier cases and 30 of the 31 earlier open divergences are byte-identical, the
+31st, `custom_tag_on_value`, matches Go now and became a regular case) gained 47 `load_*` cases recorded
+from the pinned Go binary (`yamlsyntaxgen`, oracle `0cc78062`): every coercion class above with its
+accepted and rejected siblings, chosen so the coerced value shows in Go's message where it prints one
+(`invalid authMethod "0x10"`, `argon2id_time: 1 is below minimum floor of 2`, `allowedPaths[0]`), plus
+the merge gates. The CONFIG-SECTIONS-001 fix round added seven more (`load_vault_use_touch_id_via_merge`
+and its inline-flow sibling, `..._merged_then_overridden`, `load_agent_name_alias_fields_unwritten`,
+`load_vault_section_alias_fields_unwritten`, `load_vault_field_alias_named_by_anchor`,
+`load_agent_name_nul_own`) and two new optional observations: `auth_method` (the `Auth method:` line of
+`auth status`, the only command that shows the method the vault merge resolved) and `agent_list` for the NUL
+agent; the 176 earlier cases are byte-identical. `section_coercions_are_pinned_to_what_go_prints` names the pinned outcomes and mutates
+three expectations (a wrong coercion must fail the replay). Core unit tests cover the decoded tree and the
+loader (`coerced_*`, `sections_read_the_values_yaml_v3_decodes`, `agents_take_nulls_and_non_string_scalars_like_go`,
+`merged_values_follow_the_gates_of_the_go_merge`, `coerced_values_show_in_the_loader_and_validator_messages`).
+Re-measured with the review's sweep (1,316 generated + 190 + 62 + 2 + 19 hand-written configs, three
+commands each): Go accepts and native rejects **109 → 0** in the generated set (118 → 0 over all 1,589
+configs; 344 of 4,767 comparisons before).
+
+### Residuals (probed, not fixed)
+
+- The sweep's 59 remaining differences are all outside the section parsers: 41 inputs Go rejects and
+  native accepts — `paymentPolicies` (Config.Validate's instrument / limit / agent-reference checks are
+  not ported: the native `Config` has no `paymentPolicies` section; open divergences
+  `load_payment_policy_without_instrument`, `load_agent_payment_policy_unknown`) and `audit.maxSizeMb:
+  null` (Go validates a zero maximum size; `config validate` reads the numeric value only, open divergence
+  `load_audit_max_size_mb_null`; `load_audit_max_size_mb_zero` stays open for the doctor check) — 17 inputs
+  that differ only in stderr because the CLI does not print the loader's three deprecation warnings
+  (`envWhitelist`, `mcp.approval_required`, `clipboard.printByDefault`; `Config::load_from_bytes_with_warnings`
+  returns them, no command shows them) and `profiles: {p: null}` (Go dereferences the nil profile and
+  panics with exit 2; native refuses with exit 6, deliberately).
+- Negative durations are not representable in the unsigned `Duration` of the native config; they are kept
+  as zero. The Go consumers read `vault.listing_cache_ttl`, `update.cache_ttl` and `git.auto_pull_interval`
+  only when positive (`vault.go:231`, `update.go:35`, `sync.go:27`), the MCP network timeouts and `oauth`
+  TTLs are positive-only overrides, and an agent's `approvalTimeout` of zero or below falls back to the default approval timeout
+  (`approval_helper.go:77-81`; the native `store_adapter.rs` falls back too), so zero says the same in each
+  case. What is not modelled is the display: `agent profile show` / `agent profile export` print a negative
+  `approvalTimeout` as Go does (`-1s`) and omit a `null` one, while the native CLI prints `0h0m0s` for both
+  (`agents.x.approvalTimeout: -1s` and `null`); `config get`/`config list` style output of a negative value
+  is not modelled either.
+- Go credits an alias key's fields to the anchor name; when that name is itself a different section (or
+  agent) name, Go attributes the written fields to that other section. The native tree only withholds them
+  from the section the alias resolves to (the case Go's own lookup reaches), so a second, real section named
+  like the anchor does not inherit them.
+- `agents.*.perToolRedactFields`, `dynamicProviders`, `pre_call_hooks`, `post_call_hooks`, `paymentPolicy`,
+  `scan_patterns`, `mcp.perplexity` are decoded and type-checked but not carried by the native
+  `AgentProfile`/`McpConfig` (unchanged).
+- A key written both as an integer and as the same text under a merge (`1: a` own, `"1"` merged) is one
+  key here and two in Go's `mergedFields` (interface-typed keys).
+- An explicitly empty or null `vault.authMethod` loads as `""` in Go and `passphrase` in Rust. No command
+  shows it (delta review probed 6 configs across `config get vault.authMethod`/`authMethod`, `config list`,
+  `auth status [--json]`, `config validate`, `agent list`, `doctor --no-network`): Go's
+  `EffectiveAuthMethod` reads `Vault.AuthMethod` only when the top-level method is empty. It could only
+  surface in file text after a save when the top-level method is touchid, and the top-level key wins on
+  reload; no save path was exercised.
+- `agent profile show/export` still read the raw YAML (`agent_profile_commands.rs`), so a duplicate agent
+  key reached through an alias (`&a x: {...}` then `*a : {...}`) fails there with `agents: duplicate entry
+  with key "x"` (exit 1) where Go loads it (exit 0); `config validate` and `agent list` agree with Go.
+- `get`/`set` observations of `custom_tag_on_value` (node layer, `textCommands`) are no longer recorded
+  with the promoted case; they were never part of the `accepted` class.
+
+## SET-003 fix round: vault-open errors, hidden reads, piped input
+
+Fixed, each pinned against the Go oracle in `crates/symvault-cli/tests/set_differential.rs` (228 piped
+cases, 28 prompt-driven terminal cases):
+
+- The `open vault: load identity: …` text follows Go's chain (`identity_error.rs`): an Argon2id envelope
+  goes through `trustedZeroKeyAuthorities` first (`recipients.txt` missing, symlinked, a directory or
+  unreadable: `requires a trusted recipients.txt`; empty, garbled, comment-only:
+  `requires valid recipients.txt authority`; valid: `zero-key recovery failed: decryption failed`); any
+  other envelope is `decryption failed: ` plus the age header parser's message (quoting the bytes, base64
+  offsets, scrypt stanza checks, `identity did not match any of the recipients: …`). An empty passphrase is
+  `open vault: passphrase is empty`, before the identity is read.
+- `get`, `list`, `find`, `add`, `delete` and `edit` print a returned error twice (cobra, then `ExecuteRoot`)
+  like `set`; `vault locked:` errors add the locked hint and exit 4. `get` unlocks without prompting once
+  stdin is not a terminal (`WithVaultForScripting`).
+- A hidden terminal read ends its line on stderr (Go's `fmt.Fprintln(os.Stderr)`), not on the terminal; the
+  read is `term.ReadPassword` on stdin (echo off, no `ECHONL`).
+- `--no-pipe-warning` suppresses the pipe warning on every prompting path.
+- Piped prompt values are bytes: each invalid UTF-8 byte is stored as U+FFFD, like Go's JSON encoding.
+- Go's `bufio.Reader` over stdin (the one `set` hands to its prompts) takes what is piped, up to 4096 bytes
+  per `read(2)`, so a passphrase prompt after the `set` prompts finds end of input; the Rust prompts share an
+  equivalent buffer. Unbuffered `ReadLineFromStdin` reads one byte at a time.
+
+Still open:
+
+| Class | Go | Rust |
+| --- | --- | --- |
+| read-only commands (`get`, `list`, `find`, `delete` without a match) after a successful open | leave `.lock` and `manifest.age` in the vault | write neither (the prompt differential ignores the two names for these commands) |
+| vault-open failure of `verify` (probed; `run` matches, the rest were not probed) | `Error:` twice | once (only `set` and the six commands above were re-pinned) |
+| legacy zero-key vault (identity wrapped under the pre-#476 bug, valid `recipients.txt`) | heals the file and opens | refuses with `zero-key recovery failed: decryption failed` |
+| non-UTF-8 passphrase bytes at the unlock prompt | raw bytes are the passphrase | each invalid byte is U+FFFD |
+| age header larger than 2 MiB; `%q` of exotic Unicode in the quoted intro | `header exceeds 2 MiB`; `strconv.Quote` | not ported; an approximation of `unicode.IsPrint` |
+| Go's `bufio` fill when the writer is slower than the reader | takes one `read(2)` of whatever arrived | same model, so the same timing dependence |
+| Windows hidden read | `term.ReadPassword` | `rpassword` plus the stderr line feed (no native run) |
 
 ## Historical measurement, 2026-09-27
 
@@ -458,8 +590,7 @@ in the way its kind says, so a fix has to move it into `cases`):
 - *Not libyaml.* A lone UTF-16 BOM stream (yaml.v3 decodes it), a UTF-8 BOM after the first line
   (yaml.v3 skips it), an alias to a scalar used for a string field (`vaultDir: *x`, accepted by
   Go, so validate, doctor, `agent list` and a nested `config set` succeed there; natively they
-  fail, and `config set` rewrites the file before its post-update load fails) and a local tag on a
-  value (`a: !t x`, accepted by Go) all differ in acceptance.
+  fail, and `config set` rewrites the file before its post-update load fails) differ in acceptance (the local tag on a value, `a: !t x`, matches since CONFIG-SECTIONS-001).
 - *yaml.v3 decode and node layers.* A scalar or sequence root, `agents: x`, a root made of one
   zero-width space, and `config get`/`config set` (and `agent list`) on `null`, `---`, `{}`,
   comment-only, empty, spaces-only, NBSP-only and BOM-only configs fail on both sides with the

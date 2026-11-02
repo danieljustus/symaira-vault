@@ -56,19 +56,7 @@ const MERGE_REQUIRES_MAP: &str = "yaml: map merge requires map or sequence of ma
 /// instead. Bytes, because the truncated value may split a multi-byte
 /// character.
 pub fn unmarshal_errors(source: &str) -> Option<Vec<u8>> {
-    let file = yaml_edit::YamlFile::from_str(source).ok()?;
-    let document = file.documents().next()?;
-    let root = if let Some(mapping) = document.as_mapping() {
-        YamlNode::Mapping(mapping)
-    } else if let Some(sequence) = document.as_sequence() {
-        YamlNode::Sequence(sequence)
-    } else if let Some(tagged) = document.as_tagged() {
-        YamlNode::TaggedNode(tagged)
-    } else {
-        YamlNode::Scalar(document.as_scalar()?)
-    };
-    let mut decoder = Decoder::new(source, document.build_anchor_registry());
-    let root = decoder.build(&root, false);
+    let (mut decoder, root) = Decoder::for_source(source)?;
     if let Err(fatal) = decoder.unmarshal(root, "Config") {
         return Some(fatal);
     }
@@ -81,6 +69,45 @@ pub fn unmarshal_errors(source: &str) -> Option<Vec<u8>> {
         message.extend_from_slice(&error);
     }
     Some(message)
+}
+
+/// Mapping key under which [`coerced_document`] records the keys a mapping
+/// wrote itself, as a sequence of strings.
+///
+/// Go's loader finds which fields an operator wrote by walking the node tree
+/// (`loadSectionFields`, `loadAgentFields`, `loadTopLevelFields`): only keys
+/// of a mapping reached without an alias or a `<<` merge on the way down count,
+/// while the decoded values include everything a merge supplies. The tree
+/// keeps both views. The bookkeeping key is a YAML `null`, which no decoded
+/// entry can use: every entry the coercion inserts is keyed by a string, so no
+/// operator key (a double-quoted `"\0own"` included) can collide with it.
+pub fn own_keys_key() -> serde_yaml_ng::Value {
+    serde_yaml_ng::Value::Null
+}
+
+/// The document as yaml.v3's typed decode of `config.Config` leaves it, for
+/// the loader's per-section merge.
+///
+/// This is the one place the Go coercions live, so the section parsers read
+/// values exactly as Go's merge sees them instead of repeating the rules:
+///
+/// * a string field holds the scalar's source text (`12`, `0x10`, `true`,
+///   `1.5` and `1e3` stay as written; a quoted scalar is its unescaped text);
+/// * a bool field holds the decoded boolean (`yes`/`on`/`y` and their
+///   inverses included), an int field the int (a float is truncated, `017`
+///   is octal, `1_000` drops its underscores), a `time.Duration` its
+///   nanoseconds (negative ones too);
+/// * `null` is `Null` wherever it appears; a `[]string` drops a null item the
+///   way yaml.v3 does (a `string` cannot hold it);
+/// * struct fields the Go type does not name are dropped; keys of a `<<`
+///   merge fill in what the mapping did not write itself, the earliest
+///   operand first, as `mergedFields` does;
+/// * every struct and map mapping reached directly carries [`own_keys_key`].
+///
+/// Only call this for a document [`unmarshal_errors`] accepted.
+pub fn coerced_document(source: &str) -> Option<serde_yaml_ng::Value> {
+    let (mut decoder, root) = Decoder::for_source(source)?;
+    decoder.coerce(root, "Config", true)
 }
 
 /// yaml.v3 gives a plain `<<` scalar the tag `!!merge`, and its encoder keeps
@@ -169,7 +196,7 @@ struct Node {
 /// A scalar after `d.scalar` resolved it.
 enum Val {
     Null,
-    Bool,
+    Bool(bool),
     Int(i64),
     Uint(u64),
     Float(f64),
@@ -327,6 +354,27 @@ impl<'a> Decoder<'a> {
             alias_count: 0,
             alias_depth: 0,
         }
+    }
+
+    /// The decoder over the first document of `source`, and its root node.
+    fn for_source(source: &str) -> Option<(Decoder<'_>, usize)> {
+        // Go reads the first document and never looks at a later one that
+        // does not decode, so a syntax error further down must not hide the
+        // first document: take the (possibly partial) tree.
+        let file = yaml_edit::YamlFile::parse(source).tree();
+        let document = file.documents().next()?;
+        let root = if let Some(mapping) = document.as_mapping() {
+            YamlNode::Mapping(mapping)
+        } else if let Some(sequence) = document.as_sequence() {
+            YamlNode::Sequence(sequence)
+        } else if let Some(tagged) = document.as_tagged() {
+            YamlNode::TaggedNode(tagged)
+        } else {
+            YamlNode::Scalar(document.as_scalar()?)
+        };
+        let mut decoder = Decoder::new(source, document.build_anchor_registry());
+        let root = decoder.build(&root, false);
+        Some((decoder, root))
     }
 
     /// yaml.v3's `Node.Line` (1-based): the event starts at the first of the
@@ -606,7 +654,7 @@ impl<'a> Decoder<'a> {
         let rtag = resolved.tag();
         let value = match resolved {
             Resolved::Null => Val::Null,
-            Resolved::Bool(_) => Val::Bool,
+            Resolved::Bool(flag) => Val::Bool(flag),
             Resolved::Int(value) => Val::Int(value),
             Resolved::Uint(value) => Val::Uint(value),
             Resolved::Float(value) => Val::Float(value),
@@ -665,7 +713,7 @@ impl<'a> Decoder<'a> {
         if matches!(
             (go_type, &value),
             ("string", Val::Str(_))
-                | ("bool", Val::Bool)
+                | ("bool", Val::Bool(_))
                 | ("int", Val::Int(_))
                 | ("time.Time", Val::Time)
         ) {
@@ -685,7 +733,7 @@ impl<'a> Decoder<'a> {
         let accepted = match go_type {
             "string" => true,
             "bool" => match &value {
-                Val::Bool => true,
+                Val::Bool(_) => true,
                 Val::Str(word) => matches!(
                     word.as_str(),
                     "y" | "Y"
@@ -934,6 +982,172 @@ impl<'a> Decoder<'a> {
             Kind::Scalar => return fail(),
         }
         Ok(())
+    }
+    /// The text of a mapping key as `d.unmarshal(key, string)` stores it, or
+    /// `None` for a key that does not decode into a string.
+    fn key_text(&self, key: usize) -> Option<String> {
+        let target = self.target_of(key)?;
+        if self.nodes[target].kind != Kind::Scalar {
+            return None;
+        }
+        match self.scalar_value(target).ok()? {
+            (_, Val::Null) => None,
+            (_, Val::Str(text)) => Some(text),
+            _ => Some(self.nodes[target].value.clone()),
+        }
+    }
+
+    /// The value of node `id` decoded into Go type `go_type`, or `None` when
+    /// yaml.v3 would leave the target untouched (a node of the wrong shape).
+    /// `direct` says the node is reached through plain mappings and sequences
+    /// only, which is what makes its keys count as written by the operator.
+    fn coerce(&mut self, id: usize, go_type: &str, direct: bool) -> Option<serde_yaml_ng::Value> {
+        use serde_yaml_ng::Value;
+        if self.nodes[id].kind == Kind::Alias {
+            if self.aliases.contains(&id) {
+                return None;
+            }
+            self.aliases.push(id);
+            let target = self.alias_target(id);
+            let value = target.and_then(|target| self.coerce(target, go_type, false));
+            self.aliases.pop();
+            return value;
+        }
+        let go_type = go_type.trim_start_matches('*');
+        match self.nodes[id].kind {
+            Kind::Scalar => self.coerce_scalar(id, go_type),
+            Kind::Sequence => {
+                let element = go_type.strip_prefix("[]")?;
+                let mut items = Vec::new();
+                for item in self.nodes[id].children.clone() {
+                    match self.coerce(item, element, direct) {
+                        Some(Value::Null) if !Self::null(element) => {}
+                        Some(value) => items.push(value),
+                        None => {}
+                    }
+                }
+                Some(Value::Sequence(items))
+            }
+            Kind::Mapping => {
+                let mut out = serde_yaml_ng::Mapping::new();
+                let mut seen = HashSet::new();
+                let mut own = Vec::new();
+                self.coerce_mapping(id, go_type, direct, &mut seen, &mut out, &mut own)?;
+                if direct {
+                    out.insert(
+                        own_keys_key(),
+                        Value::Sequence(own.into_iter().map(Value::String).collect()),
+                    );
+                }
+                Some(Value::Mapping(out))
+            }
+            Kind::Alias => None,
+        }
+    }
+
+    fn coerce_scalar(&self, id: usize, go_type: &str) -> Option<serde_yaml_ng::Value> {
+        use serde_yaml_ng::Value;
+        let (_, value) = self.scalar_value(id).ok()?;
+        let text = match &value {
+            Val::Str(text) => text.clone(),
+            _ => self.nodes[id].value.clone(),
+        };
+        Some(match (go_type, value) {
+            (_, Val::Null) => Value::Null,
+            ("bool", Val::Bool(flag)) => Value::Bool(flag),
+            ("bool", Val::Str(word)) => Value::Bool(matches!(
+                word.as_str(),
+                "y" | "Y" | "yes" | "Yes" | "YES" | "on" | "On" | "ON"
+            )),
+            ("int" | "int64", Val::Int(number)) => Value::Number(number.into()),
+            ("int" | "int64", Val::Uint(number)) => {
+                Value::Number(i64::try_from(number).ok()?.into())
+            }
+            ("int" | "int64", Val::Float(number)) => Value::Number((number as i64).into()),
+            ("time.Duration", Val::Str(word)) => {
+                Value::Number(crate::config::parse_go_duration(&word).ok()?.into())
+            }
+            ("bool" | "int" | "int64" | "time.Duration", _) => return None,
+            _ => Value::String(text),
+        })
+    }
+
+    /// `mappingStruct` / `mapping` into a struct or a `map[string]T`: the
+    /// node's own keys first, then the `<<` operands, none of which may
+    /// replace a key that is already in `seen`.
+    fn coerce_mapping(
+        &mut self,
+        id: usize,
+        go_type: &str,
+        direct: bool,
+        seen: &mut HashSet<String>,
+        out: &mut serde_yaml_ng::Mapping,
+        own: &mut Vec<String>,
+    ) -> Option<()> {
+        enum Shape {
+            Struct(&'static [(&'static str, &'static str)]),
+            Map(String),
+            Time,
+        }
+        let shape = if let Some(fields) = struct_fields(go_type) {
+            Shape::Struct(fields)
+        } else if go_type == "time.Time" {
+            Shape::Time
+        } else {
+            Shape::Map(go_type.strip_prefix("map[string]")?.to_owned())
+        };
+        let mut merge_node = None;
+        for pair in self.nodes[id].children.clone().chunks(2) {
+            let (key, value) = (pair[0], pair[1]);
+            if self.is_merge(key) {
+                merge_node = Some(value);
+                continue;
+            }
+            if direct {
+                own.push(self.nodes[key].value.clone());
+            }
+            let Some(name) = self.key_text(key) else {
+                continue;
+            };
+            // Go's walk names a key by its node's `.Value`, which for an alias
+            // is the anchor name. An alias that resolves to another text
+            // therefore credits its fields to a name nothing looks up: they
+            // stay decoded but unwritten.
+            let key_direct =
+                direct && !(self.nodes[key].kind == Kind::Alias && self.nodes[key].value != name);
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            let element = match &shape {
+                Shape::Struct(fields) => fields
+                    .iter()
+                    .find(|(field, _)| *field == name)
+                    .map(|(_, field_type)| (*field_type).to_owned()),
+                Shape::Map(element) => Some(element.clone()),
+                Shape::Time => None,
+            };
+            let Some(element) = element else {
+                continue;
+            };
+            if let Some(coerced) = self.coerce(value, &element, key_direct) {
+                out.insert(serde_yaml_ng::Value::String(name), coerced);
+            }
+        }
+        if let Some(merge) = merge_node {
+            let operands = match self.nodes[merge].kind {
+                Kind::Sequence => self.nodes[merge].children.clone(),
+                _ => vec![merge],
+            };
+            for operand in operands {
+                let target = self.target_of(operand)?;
+                if self.nodes[target].kind != Kind::Mapping {
+                    continue;
+                }
+                let mut ignored = Vec::new();
+                self.coerce_mapping(target, go_type, false, seen, out, &mut ignored)?;
+            }
+        }
+        Some(())
     }
 }
 
@@ -1193,5 +1407,137 @@ mod tests {
             tag_merge_keys("b: &b {p: 1}\nm: {<<: *b}\nn:\n  <<: *b\nq: [<<, \"<<\", !!str <<]\n"),
             "b: &b {p: 1}\nm: {!!merge <<: *b}\nn:\n  !!merge <<: *b\nq: [!!merge <<, \"<<\", !!str <<]\n"
         );
+    }
+    fn coerced(source: &str) -> serde_yaml_ng::Value {
+        assert_eq!(errors(source), "", "{source}");
+        coerced_document(source).expect("coerced tree")
+    }
+
+    fn at<'a>(value: &'a serde_yaml_ng::Value, path: &str) -> &'a serde_yaml_ng::Value {
+        path.split('.').fold(value, |node, name| {
+            node.get(name).unwrap_or_else(|| panic!("{name} in {path}"))
+        })
+    }
+
+    #[test]
+    fn coerced_strings_are_the_source_text() {
+        let tree = coerced(
+            "vault:\n  path: 0x10\ngit:\n  commit_template: true\nmcp:\n  bind: 1e3\n  tls_cert_file: \"a\\tb\"\n  tls_key_file: 1.50\n",
+        );
+        assert_eq!(at(&tree, "vault.path").as_str(), Some("0x10"));
+        assert_eq!(at(&tree, "git.commit_template").as_str(), Some("true"));
+        assert_eq!(at(&tree, "mcp.bind").as_str(), Some("1e3"));
+        assert_eq!(at(&tree, "mcp.tls_cert_file").as_str(), Some("a\tb"));
+        assert_eq!(at(&tree, "mcp.tls_key_file").as_str(), Some("1.50"));
+    }
+
+    #[test]
+    fn coerced_ints_truncate_floats_and_read_yaml_11_spellings() {
+        for (text, expected) in [
+            ("1.5", 1),
+            ("-1.5", -1),
+            ("1e3", 1000),
+            ("1_000", 1000),
+            ("017", 15),
+            ("0o17", 15),
+            ("0x1F", 31),
+            ("-0.5", 0),
+        ] {
+            let tree = coerced(&format!("mcp:\n  port: {text}\n"));
+            assert_eq!(at(&tree, "mcp.port").as_i64(), Some(expected), "{text}");
+        }
+    }
+
+    #[test]
+    fn coerced_bools_durations_and_nulls() {
+        let tree = coerced(
+            "git:\n  auto_push: yes\n  auto_pull: Off\n  auto_pull_interval: -1500ms\nagents:\n  x:\n    canWrite: null\n    allowedPaths: [a, null, 5]\n",
+        );
+        assert_eq!(at(&tree, "git.auto_push").as_bool(), Some(true));
+        assert_eq!(at(&tree, "git.auto_pull").as_bool(), Some(false));
+        assert_eq!(
+            at(&tree, "git.auto_pull_interval").as_i64(),
+            Some(-1_500_000_000)
+        );
+        assert!(at(&tree, "agents.x.canWrite").is_null());
+        // yaml.v3 cannot put a null into a `string`, so the item is dropped.
+        let paths: Vec<_> = at(&tree, "agents.x.allowedPaths")
+            .as_sequence()
+            .expect("sequence")
+            .iter()
+            .filter_map(serde_yaml_ng::Value::as_str)
+            .collect();
+        assert_eq!(paths, ["a", "5"]);
+    }
+
+    /// The keys the mapping at `path` wrote itself.
+    fn own(tree: &serde_yaml_ng::Value, path: &str) -> Vec<String> {
+        at(tree, path)
+            .get(own_keys_key())
+            .and_then(serde_yaml_ng::Value::as_sequence)
+            .map(|keys| {
+                keys.iter()
+                    .filter_map(serde_yaml_ng::Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn coerced_mappings_separate_written_keys_from_merged_ones() {
+        let tree = coerced(
+            "base: &base\n  port: 7\n  bind: merged\nmcp:\n  <<: *base\n  bind: own\n  extra: 1\nupdate: *base\n",
+        );
+        // The mapping's own key wins over the merge; the merge fills the rest.
+        assert_eq!(at(&tree, "mcp.bind").as_str(), Some("own"));
+        assert_eq!(at(&tree, "mcp.port").as_i64(), Some(7));
+        // Only `bind` and `extra` were written by `mcp` itself (Go's walk lists
+        // every key, known or not), and an alias writes nothing.
+        assert_eq!(own(&tree, "mcp"), ["bind", "extra"]);
+        assert!(own(&tree, "update").is_empty());
+        // Fields the Go type does not name are dropped.
+        assert!(at(&tree, "mcp").get("extra").is_none());
+    }
+
+    #[test]
+    fn a_quoted_nul_own_key_is_an_ordinary_entry() {
+        // The bookkeeping key is not a string, so an agent whose name spells
+        // the old marker keeps its entry and its own-key list.
+        let tree = coerced("agents:\n  \"\\0own\":\n    canWrite: true\n");
+        let agents = at(&tree, "agents");
+        assert_eq!(
+            agents
+                .get("\u{0}own")
+                .and_then(|agent| agent.get("canWrite")),
+            Some(&serde_yaml_ng::Value::Bool(true))
+        );
+        assert_eq!(own(&tree, "agents"), ["\u{0}own"]);
+        assert!(
+            agents.as_mapping().is_some_and(|map| map
+                .keys()
+                .filter(|key| !key.is_string())
+                .count()
+                == 1)
+        );
+    }
+
+    #[test]
+    fn an_alias_key_that_resolves_to_another_name_writes_nothing() {
+        // Go lists a key by its node's Value, the anchor name for an alias:
+        // `*authMethod` is a written `authMethod` that decodes as `path`.
+        let tree = coerced("k: &authMethod path\nvault:\n  *authMethod : /y\n");
+        assert_eq!(own(&tree, "vault"), ["authMethod"]);
+        assert_eq!(at(&tree, "vault.path").as_str(), Some("/y"));
+        // The same alias naming a section (or an agent) credits its fields to
+        // a name nothing looks up: they decode but stay unwritten.
+        let tree = coerced("s: &git vault\n*git :\n  authMethod: ' Bogus '\n");
+        assert_eq!(at(&tree, "vault.authMethod").as_str(), Some(" Bogus "));
+        assert!(own(&tree, "vault").is_empty());
+        let tree = coerced("n: &a x\nagents:\n  *a :\n    approvalMode: bogus\n");
+        assert!(own(&tree, "agents.x").is_empty());
+        // An alias that names what it resolves to keeps the fields written.
+        let tree = coerced("s: &vault vault\n*vault :\n  authMethod: touchid\n");
+        assert_eq!(own(&tree, "vault"), ["authMethod"]);
     }
 }

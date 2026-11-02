@@ -1189,6 +1189,35 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
     }
 
     fn generate_totp(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        self.generate_totp_with(arguments, None)
+    }
+
+    /// Go `requiresApproval()`: `deny` and `prompt` (also the legacy
+    /// `requireApproval` flag with no explicit mode) need approval, every other
+    /// mode does not.
+    fn requires_approval(&self) -> bool {
+        let mode = if self.config.approval_mode.is_empty() {
+            if self.config.require_approval {
+                "prompt"
+            } else {
+                return false;
+            }
+        } else {
+            self.config.approval_mode.as_str()
+        };
+        matches!(mode, "deny" | "prompt")
+    }
+
+    /// Go `handleGenerateTOTP`. `clipboard` is the application-owned copy for
+    /// `destination: "clipboard"` (Go `clipboard.DefaultClipboard()` plus its
+    /// auto-clear): it receives the code and returns the seconds until the
+    /// clipboard clears, or the tool-error text. Without it the destination
+    /// answers Go's "clipboard not available".
+    pub(crate) fn generate_totp_with(
+        &self,
+        arguments: &Value,
+        clipboard: Option<&TotpClipboardCopy<'_>>,
+    ) -> Result<ToolCallResult, String> {
         let path = match required_string(arguments, "path") {
             Ok(path) => path,
             Err(result) => return Ok(result),
@@ -1261,7 +1290,20 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                 if !self.config.can_use_clipboard {
                     return Err("clipboard operations not permitted for this agent".into());
                 }
-                Ok(ToolCallResult::error("clipboard not available"))
+                if self.requires_approval() {
+                    return Err("generate_totp denied: approval required but clipboard mode does not support approval".into());
+                }
+                let Some(copy) = clipboard else {
+                    return Ok(ToolCallResult::error("clipboard not available"));
+                };
+                match copy(&code.code) {
+                    Err(message) => Ok(ToolCallResult::error(message)),
+                    Ok(clears_in) => json_text(serde_json::json!({
+                        "success": true,
+                        "destination": "clipboard",
+                        "clipboard_clears_in": clears_in,
+                    })),
+                }
             }
             "autotype" => {
                 if !self.config.can_use_autotype {
@@ -1890,6 +1932,10 @@ fn entry_title(path: &str) -> &str {
         Some(name) => name,
     }
 }
+
+/// Copies a TOTP code for `generate_totp`'s clipboard destination: the seconds
+/// until the clipboard clears, or the tool-error text.
+pub(crate) type TotpClipboardCopy<'a> = dyn Fn(&str) -> Result<i64, String> + 'a;
 
 fn json_text(value: Value) -> Result<ToolCallResult, String> {
     symvault_gojson::to_string(&value)

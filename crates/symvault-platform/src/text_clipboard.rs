@@ -1,31 +1,57 @@
 //! Owned native text clipboard, initialized only by an explicit UI caller.
 use std::sync::Arc;
 use symvault_core::platform::Clipboard;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use symvault_core::platform::UnavailablePlatform;
 
-pub fn native_text_clipboard() -> Arc<dyn Clipboard> {
+/// Go `clipboard.DefaultClipboard()` as every command-style consumer sees it:
+/// `pbcopy` on macOS, the atotto tool selection (`wl-copy`, `xclip`, `xsel`,
+/// Termux, `clip.exe`) from [`crate::desktop_commands::CommandClipboard`] on
+/// Linux, fail-closed elsewhere. Tool selection happens once, when this is
+/// called, like atotto's package `init()`. Used by the MCP runtime, the TUI and
+/// (through its read-capable wrapper) `symvault get`.
+#[must_use]
+pub fn native_command_clipboard() -> Arc<dyn Clipboard> {
     #[cfg(target_os = "macos")]
     {
         Arc::new(crate::MacOsPlatform)
     }
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
-        match arboard::Clipboard::new() {
-            Ok(backend) => Arc::new(NativeTextClipboard(std::sync::Mutex::new(backend))),
-            Err(_) => Arc::new(UnavailablePlatform),
-        }
+        Arc::new(crate::desktop_commands::CommandClipboard::new(Arc::new(
+            crate::desktop_commands::SystemHost::new(),
+        )))
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         Arc::new(UnavailablePlatform)
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+/// The clipboard for the interactive TUI: the command clipboard on macOS and
+/// Linux (Go's TUI writes through atotto too), `arboard` on Windows.
+pub fn native_text_clipboard() -> Arc<dyn Clipboard> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        native_command_clipboard()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        match arboard::Clipboard::new() {
+            Ok(backend) => Arc::new(NativeTextClipboard(std::sync::Mutex::new(backend))),
+            Err(_) => Arc::new(symvault_core::platform::UnavailablePlatform),
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        native_command_clipboard()
+    }
+}
+
+#[cfg(target_os = "windows")]
 struct NativeTextClipboard(std::sync::Mutex<arboard::Clipboard>);
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(target_os = "windows")]
 impl Clipboard for NativeTextClipboard {
     fn set(&self, text: &[u8]) -> Result<(), symvault_core::platform::PlatformError> {
         let text = std::str::from_utf8(text).map_err(|_| clipboard_error())?;
@@ -45,7 +71,7 @@ impl Clipboard for NativeTextClipboard {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(target_os = "windows")]
 fn clipboard_error() -> symvault_core::platform::PlatformError {
     symvault_core::platform::PlatformError {
         kind: symvault_core::platform::PlatformErrorKind::Failed,

@@ -211,9 +211,24 @@ fn unlock_vault_with_mode(
 
     let passphrase =
         crate::unlock_passphrase_with_mode(&config_bytes, &config, vault, runtime, interactive)?;
+    // `OpenWithPassphrase` refuses an empty passphrase before it reads the
+    // identity file.
+    if passphrase.is_empty() {
+        return Err("open vault: passphrase is empty".to_owned());
+    }
     let data = data.ok_or_else(missing_identity)?;
     let sec_pass = SecretBytes::new(passphrase.as_bytes());
-    let identity = decrypt_identity(&data, &sec_pass).map_err(|e| format!("unlock vault: {e}"))?;
+    let identity = decrypt_identity(&data, &sec_pass).map_err(|error| {
+        format!(
+            "open vault: {}",
+            crate::identity_error::load_identity_error(
+                vault,
+                &data,
+                passphrase.as_bytes(),
+                error.class()
+            )
+        )
+    })?;
     if !config_present {
         return Err(format!(
             "open vault: load config: {}",
