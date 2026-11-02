@@ -30,7 +30,13 @@
 //!   directories, and timestamps, token ids/hashes/prefixes, age public keys,
 //!   resume-file name hashes and `tool_registry_hash` (normalized to
 //!   placeholders; the Rust port pins a registry hash from an older oracle, see
-//!   `docs/rust-port/cli-gap-inventory.md`).
+//!   `docs/rust-port/setup-wizard.md`) and the order of `mcp-tokens.json`
+//!   entries (random ids).
+//!
+//! One pinned difference is accepted, in exactly one form: the `.git/config` of
+//! a new git-synced vault carries git-CLI defaults and a `[user]` block that
+//! go-git's `PlainInit` does not write (`accepted_git_config_divergence`; the
+//! test fails if it disappears).
 //!
 //! Modes
 //!
