@@ -196,6 +196,10 @@ def snapshot(home):
         parts = path.relative_to(home).parts
         if parts in {("child.py",), ("child.pid",)}:
             continue
+        # Declared D1 artifact: the data-safety backup of a Go-created vault lands in
+        # $HOME/.local/state/symvault/backups (and the dirs created for it).
+        if parts in {(".local",), (".local", "state")} or parts[:3] == (".local", "state", "symvault"):
+            continue
         if parts[0] == "vault" and (len(parts) > 2 or (len(parts) == 2 and parts[1] in VAULT_BASELINE)):
             continue
         # Go and Rust name the intake spool differently (random suffix only).
