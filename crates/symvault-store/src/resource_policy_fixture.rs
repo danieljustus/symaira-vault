@@ -129,7 +129,16 @@ fn actual_go_resource_policy_observations_match_rust() {
     for file in &fixture.oracle.generator_files {
         generator_digest.update(file.as_bytes());
         generator_digest.update([0]);
-        generator_digest.update(fs::read(root.join(file)).unwrap());
+        // `.go` generators are read from their frozen snapshot (identical
+        // bytes, testdata/port/go-snapshots/MANIFEST.json) so the check
+        // survives removal of the Go tree.
+        let path = if file.ends_with(".go") {
+            root.join("testdata/port/go-snapshots")
+                .join(format!("{file}.txt"))
+        } else {
+            root.join(file)
+        };
+        generator_digest.update(fs::read(path).unwrap());
         generator_digest.update([0]);
     }
     assert_eq!(
