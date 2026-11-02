@@ -219,7 +219,8 @@ class TokenContract(unittest.TestCase):
             tokens.check_token_rows(scoped, copy.deepcopy(scoped))
 
     def test_startup_policy(self):
-        body = json.dumps({'version': 2, 'tokens': {'tok-future1h': {'expires_at': '2999-01-01T00:00:00Z'}}}, indent=2) + '\n'
+        never = tokens.entry('never')[1]
+        body = json.dumps({'version': 2, 'tokens': {'tok-never': never, 'tok-future1h': {'expires_at': '2999-01-01T00:00:00Z'}}}, indent=2) + '\n'
         scenarios = {s[0]: s for s in tokens.startup_scenarios({}, body)}
         observed = dict(state='exited', exit=1, disposal='exited', before={}, after={}, responses=[], stderr_has_legacy_warning=False)
         tokens.check_startup(scenarios['registry-array'], observed, copy.deepcopy(observed))
@@ -229,6 +230,33 @@ class TokenContract(unittest.TestCase):
             tokens.check_startup(scenarios['registry-array'], dict(observed, after={'mcp-tokens.json': 'x'}), copy.deepcopy(observed))
         with self.assertRaisesRegex(AssertionError, 'fatal registry exit status'):
             tokens.check_startup(scenarios['registry-array'], dict(observed, exit=2), dict(observed, exit=2))
+
+    def test_duplicate_key_documents_are_held_to_go(self):
+        _, body = tokens.token_registry()
+        documents = tokens.duplicate_documents(body)
+        scenarios = {s[0]: s for s in tokens.startup_scenarios({}, body)}
+        for name in ('dup-revoked-typeerr-then-false', 'dup-version-typeerr-then-int', 'dup-root-tokens-typeerr-first',
+                     'dup-root-tokens-merge', 'dup-root-tokens-null-resets', 'utf8-invalid-label'):
+            assert name in documents and name in scenarios, name
+        # Go rejects a bad value that a later duplicate would override; a Rust that serves it is the old folding.
+        go = dict(state='exited', exit=1, disposal='exited', before={}, after={}, responses=[], stderr_has_legacy_warning=False)
+        old_rust = dict(go, state='listening', exit=None)
+        scenario = scenarios['dup-revoked-typeerr-then-false']
+        tokens.check_startup(scenario, go, copy.deepcopy(go))
+        with self.assertRaisesRegex(AssertionError, 'startup state'):
+            tokens.check_startup(scenario, go, old_rust)
+        # the documents are real JSON-with-duplicates and invalid UTF-8 only where declared
+        for name, (data, _, _) in documents.items():
+            if name.startswith('utf8-invalid'):
+                with self.assertRaises(UnicodeDecodeError):
+                    data.decode('utf-8')
+            else:
+                data.decode('utf-8')
+        assert documents['dup-root-tokens-merge'][0].count(b'"tokens"') == 2, 'the merge document repeats the root tokens key'
+        # the live-reload comparison rejects a Rust that diverges from Go
+        steps = [('baseline', 200), ('revoked-typeerr-then-false', 401)]
+        with self.assertRaises(AssertionError):
+            tokens.check_duplicate_reload(steps, [('baseline', 200), ('revoked-typeerr-then-false', 200)])
 
     def test_dynamic_policy(self):
         good = dict(live_before_expiry=200, live_expiry_epoch=100.0, live_detected_epoch=101.0, added_latency=2.1, revoke_latency=2.2, recovered_latency=2.0)

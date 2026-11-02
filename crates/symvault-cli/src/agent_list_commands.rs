@@ -53,7 +53,7 @@ struct YamlAgentList<'a> {
 #[derive(Debug, Deserialize)]
 struct TokenRegistryFile {
     #[serde(default)]
-    tokens: Option<BTreeMap<String, TokenEntry>>,
+    tokens: Option<BTreeMap<String, Option<TokenEntry>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -123,10 +123,13 @@ pub(crate) fn list(
             // tokens exist. Keep Rust output reproducible; the differential
             // fixture uses one active token per agent.
             let token = active.first().copied();
-            let last_seen = active
-                .iter()
-                .filter_map(|token| token.last_used_at.as_deref())
-                .max_by_key(|timestamp| timestamp_to_epoch(timestamp));
+            // Go starts from the zero time and keeps a strictly later
+            // `LastUsedAt`, so a value at or before it never shows.
+            let last_seen = symvault_store::go_registry::latest_after_go_zero(
+                active
+                    .iter()
+                    .filter_map(|token| token.last_used_at.as_deref()),
+            );
             let skill = skill_status(home, &profile.skill_path);
             AgentListItem {
                 name,
@@ -160,9 +163,22 @@ pub(crate) fn load_tokens(root: &Path) -> Result<Vec<TokenEntry>, String> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(format!("load token registry: {error}")),
     };
-    let registry: TokenRegistryFile = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("load token registry: parse token registry: {error}"))?;
-    let tokens: Vec<_> = registry.tokens.unwrap_or_default().into_values().collect();
+    // The same Go-faithful decoder the MCP server and the store use: field
+    // names bind case-insensitively, duplicate members are folded in document
+    // order and timestamps are validated like Go's `time.Time` JSON decoding.
+    let parse_error = |error: &dyn std::fmt::Display| {
+        format!("load token registry: parse token registry: {error}")
+    };
+    let value = symvault_store::go_registry::decode_go_registry(&bytes)
+        .map_err(|error| parse_error(&error))?;
+    let registry: TokenRegistryFile =
+        serde_json::from_value(value).map_err(|error| parse_error(&error))?;
+    let tokens: Vec<_> = registry
+        .tokens
+        .unwrap_or_default()
+        .into_values()
+        .flatten()
+        .collect();
     for token in &tokens {
         for timestamp in [&token.created_at, &token.expires_at, &token.last_used_at]
             .into_iter()
@@ -256,7 +272,7 @@ fn is_expired(timestamp: Option<&str>) -> bool {
 }
 
 pub(crate) fn timestamp_to_epoch(timestamp: &str) -> i64 {
-    time::OffsetDateTime::parse(timestamp, &time::format_description::well_known::Rfc3339)
+    symvault_store::go_registry::parse_go_rfc3339(timestamp)
         .map_or(i64::MIN, |value| value.unix_timestamp())
 }
 
@@ -269,9 +285,8 @@ pub(crate) fn now_epoch() -> i64 {
 }
 
 fn format_timestamp(timestamp: &str) -> String {
-    timestamp
-        .get(..16)
-        .map_or_else(|| timestamp.to_owned(), |prefix| prefix.replace('T', " "))
+    // Go: `lastSeen.Format("2006-01-02 15:04")` on the parsed time.
+    symvault_store::go_registry::format_go_minute(timestamp).unwrap_or_else(|| timestamp.to_owned())
 }
 
 fn write_text(result: &AgentListResult, output: &mut impl Write) -> Result<(), String> {

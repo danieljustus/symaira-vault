@@ -91,9 +91,8 @@ fn is_expired(token: &TokenEntry) -> bool {
 }
 
 fn format_expiry(timestamp: &str) -> String {
-    timestamp
-        .get(..16)
-        .map_or_else(|| timestamp.to_owned(), |prefix| prefix.replace('T', " "))
+    // Go: `ExpiresAt.Format("2006-01-02 15:04")` on the parsed time.
+    symvault_store::go_registry::format_go_minute(timestamp).unwrap_or_else(|| timestamp.to_owned())
 }
 
 fn truncate_tools(tools: &str) -> String {

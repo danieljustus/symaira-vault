@@ -2135,159 +2135,10 @@ fn read_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::E
             "token registry too large",
         ));
     }
-    let value = fold_go_registry_keys(&bytes)?;
-    validate_go_registry(&value)?;
+    let value = symvault_store::go_registry::decode_go_registry(&bytes)?;
     let registry: TokenRegistry = serde_json::from_value(value)
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     Ok(registry)
-}
-
-/// JSON object members in document order, duplicates kept, values unparsed.
-struct OrderedMembers(Vec<(String, Box<serde_json::value::RawValue>)>);
-
-impl<'de> Deserialize<'de> for OrderedMembers {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct Visitor;
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = OrderedMembers;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str("a JSON object")
-            }
-
-            fn visit_map<A: serde::de::MapAccess<'de>>(
-                self,
-                mut map: A,
-            ) -> Result<Self::Value, A::Error> {
-                let mut members = Vec::new();
-                while let Some(member) = map.next_entry()? {
-                    members.push(member);
-                }
-                Ok(OrderedMembers(members))
-            }
-        }
-        deserializer.deserialize_map(Visitor)
-    }
-}
-
-const REGISTRY_ROOT_FIELDS: &[&str] = &["version", "tokens"];
-const REGISTRY_ENTRY_FIELDS: &[&str] = &[
-    "id",
-    "label",
-    "hash",
-    "prefix",
-    "allowed_tools",
-    "tool_registry_hash",
-    "agent_name",
-    "created_at",
-    "expires_at",
-    "last_used_at",
-    "revoked",
-    "revoked_at",
-    "refresh_token_hash",
-    "refresh_expires_at",
-];
-/// Fields Go decodes into non-pointer scalars: a JSON `null` leaves them as is.
-const NULL_IS_NOOP_FIELDS: &[&str] = &[
-    "version",
-    "id",
-    "label",
-    "hash",
-    "prefix",
-    "tool_registry_hash",
-    "agent_name",
-    "created_at",
-    "revoked",
-    "refresh_token_hash",
-];
-
-/// `encoding/json` simple case folding for ASCII field names: U+017F folds to
-/// `s` and U+212A (Kelvin) to `k`, everything else by Unicode lowercase.
-fn go_fold_name(name: &str) -> String {
-    name.chars()
-        .flat_map(|character| match character {
-            '\u{17f}' => 's'.to_lowercase(),
-            '\u{212a}' => 'k'.to_lowercase(),
-            other => other.to_lowercase(),
-        })
-        .collect()
-}
-
-/// The struct field Go's `json.Unmarshal` would bind `key` to: an exact match,
-/// else a case-insensitive one; unknown keys are returned unchanged.
-fn go_field_name<'a>(key: &'a str, fields: &'static [&'static str]) -> &'a str {
-    if fields.contains(&key) {
-        return key;
-    }
-    let folded = go_fold_name(key);
-    fields
-        .iter()
-        .find(|field| go_fold_name(field) == folded)
-        .copied()
-        .unwrap_or(key)
-}
-
-fn fold_members(
-    members: OrderedMembers,
-    fields: &'static [&'static str],
-) -> Result<serde_json::Map<String, serde_json::Value>, serde_json::Error> {
-    let mut folded = serde_json::Map::new();
-    for (key, raw) in members.0 {
-        let name = go_field_name(&key, fields).to_owned();
-        let mut value = if fields == REGISTRY_ROOT_FIELDS && name == "tokens" {
-            fold_tokens(raw.get())?
-        } else {
-            serde_json::from_str::<serde_json::Value>(raw.get())?
-        };
-        if value.is_null() && NULL_IS_NOOP_FIELDS.contains(&name.as_str()) {
-            continue;
-        }
-        if name == "allowed_tools"
-            && let Some(tools) = value.as_array_mut()
-        {
-            // A null element decodes into a Go string as the empty string.
-            for tool in tools.iter_mut().filter(|tool| tool.is_null()) {
-                *tool = serde_json::Value::String(String::new());
-            }
-        }
-        // Later members override earlier ones, as repeated Go assignments do.
-        folded.insert(name, value);
-    }
-    Ok(folded)
-}
-
-/// Folds each entry of the `tokens` object (ids are case-sensitive map keys,
-/// the last duplicate wins); anything that is not an object is left for
-/// `validate_go_registry` to reject.
-fn fold_tokens(text: &str) -> Result<serde_json::Value, serde_json::Error> {
-    let tokens: serde_json::Value = serde_json::from_str(text)?;
-    if !tokens.is_object() {
-        return Ok(tokens);
-    }
-    let mut folded = serde_json::Map::new();
-    for (id, raw) in serde_json::from_str::<OrderedMembers>(text)?.0 {
-        let entry: serde_json::Value = serde_json::from_str(raw.get())?;
-        let entry = if entry.is_object() {
-            let members = serde_json::from_str::<OrderedMembers>(raw.get())?;
-            serde_json::Value::Object(fold_members(members, REGISTRY_ENTRY_FIELDS)?)
-        } else {
-            entry
-        };
-        folded.insert(id, entry);
-    }
-    Ok(serde_json::Value::Object(folded))
-}
-
-/// Rebuilds the registry with Go's field-name binding applied: Go matches
-/// struct fields case-insensitively, so `{"TOKENS":{"a":{"REVOKED":true}}}`
-/// revokes a token and must never be read as an unknown, ignored key.
-fn fold_go_registry_keys(bytes: &[u8]) -> Result<serde_json::Value, std::io::Error> {
-    let invalid = |error: serde_json::Error| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())
-    };
-    let root: OrderedMembers = serde_json::from_slice(bytes).map_err(invalid)?;
-    let root = fold_members(root, REGISTRY_ROOT_FIELDS).map_err(invalid)?;
-    Ok(serde_json::Value::Object(root))
 }
 
 /// Whether the registry file holds at least one hashed entry (Go's
@@ -2305,63 +2156,6 @@ pub fn registry_has_entries(registry_path: &Path) -> Result<bool, std::io::Error
         .values()
         .flatten()
         .any(|token| !token.hash.is_empty()))
-}
-
-/// Go's `json.Unmarshal` into `TokenRegistryFile` fails the whole registry on
-/// any type error, including a malformed timestamp; one bad entry must never
-/// leave the rest of the file half-trusted.
-fn validate_go_registry(value: &serde_json::Value) -> Result<(), std::io::Error> {
-    fn invalid(message: &str) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, message.to_owned())
-    }
-    fn timestamp(value: &serde_json::Value) -> bool {
-        value.is_null()
-            || value.as_str().is_some_and(|text| {
-                time::OffsetDateTime::parse(text, &time::format_description::well_known::Rfc3339)
-                    .is_ok()
-            })
-    }
-    let root = value
-        .as_object()
-        .ok_or_else(|| invalid("token registry must be a JSON object"))?;
-    if root
-        .get("version")
-        .is_some_and(|version| !version.is_null() && version.as_i64().is_none())
-    {
-        return Err(invalid("token registry version must be an integer"));
-    }
-    let tokens = match root.get("tokens") {
-        None | Some(serde_json::Value::Null) => return Ok(()),
-        Some(serde_json::Value::Object(tokens)) => tokens,
-        Some(_) => return Err(invalid("token registry tokens must be an object")),
-    };
-    for entry in tokens.values() {
-        let fields = match entry {
-            serde_json::Value::Null => continue,
-            serde_json::Value::Object(fields) => fields,
-            _ => return Err(invalid("token registry entry must be an object")),
-        };
-        for (key, field) in fields {
-            let valid = match key.as_str() {
-                "id" | "label" | "hash" | "prefix" | "tool_registry_hash" | "agent_name"
-                | "refresh_token_hash" => field.is_null() || field.is_string(),
-                "allowed_tools" => {
-                    field.is_null()
-                        || field.as_array().is_some_and(|tools| {
-                            tools.iter().all(|tool| tool.is_null() || tool.is_string())
-                        })
-                }
-                "revoked" => field.is_null() || field.is_boolean(),
-                "created_at" | "expires_at" | "last_used_at" | "revoked_at"
-                | "refresh_expires_at" => timestamp(field),
-                _ => true,
-            };
-            if !valid {
-                return Err(invalid("token registry entry field has the wrong type"));
-            }
-        }
-    }
-    Ok(())
 }
 
 pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
@@ -3652,6 +3446,10 @@ mod tests {
     }
 
     fn lookup_in_document(document: &str) -> Option<bool> {
+        lookup_in_bytes(document)
+    }
+
+    fn lookup_in_bytes(document: impl AsRef<[u8]>) -> Option<bool> {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("mcp-tokens.json");
         fs::write(&path, document).expect("write registry");
@@ -3728,6 +3526,161 @@ mod tests {
             lookup_in_document(&doc(r#","REVOKED":"yes""#, "tokens")),
             None
         );
+    }
+
+    /// Go's `json.Unmarshal` decodes every duplicate occurrence into the same
+    /// field and fails the whole document on the first type error, so a bad
+    /// earlier value must not be forgiven by a good later one. Negative control
+    /// for the previous last-duplicate-wins folding, which served all of these.
+    #[test]
+    fn duplicate_member_with_a_type_error_fails_the_document_like_go() {
+        let hash = symvault_store::sha256_hex(BEARER.as_bytes());
+        let entry = |extra: &str| {
+            format!(
+                r#"{{"id":"t","hash":"{hash}","prefix":"http","allowed_tools":["*"],"agent_name":"default","created_at":"2026-01-01T00:00:00Z"{extra}}}"#
+            )
+        };
+        let one = |extra: &str| format!(r#"{{"version":2,"tokens":{{"t":{}}}}}"#, entry(extra));
+        assert_eq!(lookup_in_bytes(one("")), Some(true), "control");
+        for (extra, name) in [
+            (r#","revoked":"yes","revoked":false"#, "revoked"),
+            (r#","REVOKED":"yes","revoked":false"#, "revoked folded"),
+            (r#","expires_at":"bad","expires_at":null"#, "expires_at"),
+            (
+                r#","allowed_tools":[5],"allowed_tools":["*"]"#,
+                "allowed_tools",
+            ),
+            (r#","hash":5,"hash":"x""#, "hash"),
+            (
+                r#","created_at":"bad","created_at":"2026-01-01T00:00:00Z""#,
+                "created_at",
+            ),
+            (r#","revoked":false,"revoked":"yes""#, "bad last"),
+        ] {
+            assert_eq!(lookup_in_bytes(one(extra)), None, "{name}");
+        }
+        // Duplicate root members.
+        assert_eq!(
+            lookup_in_bytes(format!(
+                r#"{{"version":"a","version":2,"tokens":{{"t":{}}}}}"#,
+                entry("")
+            )),
+            None
+        );
+        assert_eq!(
+            lookup_in_bytes(format!(
+                r#"{{"version":2,"tokens":{{"u":{{"revoked":"yes"}}}},"tokens":{{"t":{}}}}}"#,
+                entry("")
+            )),
+            None
+        );
+        assert_eq!(
+            lookup_in_bytes(format!(
+                r#"{{"version":2,"tokens":[],"tokens":{{"t":{}}}}}"#,
+                entry("")
+            )),
+            None
+        );
+        // A superseded duplicate id with the wrong type, and a bad nested entry.
+        assert_eq!(
+            lookup_in_bytes(format!(
+                r#"{{"version":2,"tokens":{{"t":"x","t":{}}}}}"#,
+                entry("")
+            )),
+            None
+        );
+        assert_eq!(
+            lookup_in_bytes(format!(
+                r#"{{"version":2,"tokens":{{"t":{},"t":{}}}}}"#,
+                entry(r#","revoked":"yes""#),
+                entry("")
+            )),
+            None
+        );
+        // A type error inside an unknown member is skipped by Go, not decoded.
+        assert_eq!(
+            lookup_in_bytes(one(r#","unknown":"yes","unknown":5"#)),
+            Some(true)
+        );
+        // Valid duplicates keep the later value (null leaves a scalar alone).
+        assert_eq!(
+            lookup_in_bytes(one(r#","revoked":true,"revoked":false"#)),
+            Some(true)
+        );
+        assert_eq!(
+            lookup_in_bytes(one(r#","revoked":true,"revoked":null"#)),
+            Some(false)
+        );
+        // A repeated allowed_tools array overlays the previous slice in Go; a
+        // null element there is rejected instead of being modelled.
+        assert_eq!(
+            lookup_in_bytes(one(r#","allowed_tools":["a"],"allowed_tools":[null]"#)),
+            None
+        );
+        assert_eq!(
+            lookup_in_bytes(one(r#","allowed_tools":[],"allowed_tools":[null]"#)),
+            Some(true)
+        );
+    }
+
+    /// Go decodes a repeated root `tokens` object into the same map: ids merge,
+    /// a repeated id replaces the whole entry, and `null` resets the map.
+    #[test]
+    fn duplicate_root_tokens_merge_like_go() {
+        let hash = symvault_store::sha256_hex(BEARER.as_bytes());
+        let entry = |id: &str, extra: &str| {
+            format!(
+                r#""{id}":{{"id":"{id}","hash":"{hash}","prefix":"http","allowed_tools":["*"],"agent_name":"default","created_at":"2026-01-01T00:00:00Z"{extra}}}"#
+            )
+        };
+        let other = r#""o":{"id":"o","hash":"ab"}"#;
+        let doc = |first: &str, second: &str| {
+            format!(r#"{{"version":2,"tokens":{{{first}}},"tokens":{{{second}}}}}"#)
+        };
+        assert_eq!(
+            lookup_in_bytes(doc(&entry("t", ""), other)),
+            Some(true),
+            "earlier ids survive a later tokens object"
+        );
+        assert_eq!(lookup_in_bytes(doc(other, &entry("t", ""))), Some(true));
+        assert_eq!(
+            lookup_in_bytes(doc(&entry("t", ""), &entry("t", r#","revoked":true"#))),
+            Some(false),
+            "a repeated id replaces the whole entry"
+        );
+        assert_eq!(
+            lookup_in_bytes(doc(&entry("t", r#","revoked":true"#), &entry("t", ""))),
+            Some(true),
+            "the replacement entry does not inherit the earlier revoked flag"
+        );
+        let with_null = format!(
+            r#"{{"version":2,"tokens":{{{}}},"tokens":null}}"#,
+            entry("t", "")
+        );
+        assert_eq!(lookup_in_bytes(with_null), Some(false), "null resets");
+        let null_then_map = format!(
+            r#"{{"version":2,"tokens":null,"tokens":{{{}}}}}"#,
+            entry("t", "")
+        );
+        assert_eq!(lookup_in_bytes(null_then_map), Some(true));
+    }
+
+    /// Go replaces each invalid UTF-8 byte inside a string with U+FFFD and
+    /// accepts the document; the Rust loader must not treat it as corrupt.
+    #[test]
+    fn invalid_utf8_inside_strings_is_replaced_like_go() {
+        let hash = symvault_store::sha256_hex(BEARER.as_bytes());
+        let mut document = format!(
+            r#"{{"version":2,"tokens":{{"t":{{"id":"t","hash":"{hash}","prefix":"http","allowed_tools":["*"],"agent_name":"default","created_at":"2026-01-01T00:00:00Z","label":"a"#
+        )
+        .into_bytes();
+        document.extend_from_slice(&[0xff, 0xe2, 0x82]);
+        document.extend_from_slice(br#"z"}}}"#);
+        assert_eq!(lookup_in_bytes(&document), Some(true));
+        // An invalid byte outside a string is still a syntax error.
+        let mut outside = document.clone();
+        outside.push(0xff);
+        assert_eq!(lookup_in_bytes(&outside), None);
     }
 
     fn revoke_in_file(path: &Path) {

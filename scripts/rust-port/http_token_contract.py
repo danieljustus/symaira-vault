@@ -8,7 +8,8 @@ CLIs against file-level registry states (missing, legacy, malformed, typed
 errors) and compares the startup outcome, served responses and resulting token
 files, with kill and SIGINT disposal.  Section C changes the registry while the
 servers run (live expiry, out-of-band add/revoke/corrupt) and records latency;
-Section D revokes in the file with no intervening request, waits past Go's 2 s
+Section C2 writes duplicate-key and invalid-UTF-8 documents while the servers
+run (rejected documents must leave the last good state in place).  Section D revokes in the file with no intervening request, waits past Go's 2 s
 poll, corrupts or deletes the file and requires both to answer 401.
 Every expectation is hand-written; Go and Rust are each held to it.
 """
@@ -237,6 +238,80 @@ def check_token_rows(go_rows, rust_rows):
     return different
 
 
+def duplicate_documents(body):
+    """Go-decoder duplicate-key and encoding documents, built around the real `never` entry.
+
+    Go's encoding/json decodes every occurrence of a repeated key into the same field and returns the first
+    type error it saw, so a bad earlier value fails the whole document even when a later one is fine; a
+    repeated root `tokens` object is decoded into the same map (ids merge, a repeated id replaces the entry,
+    `null` resets the map); invalid UTF-8 inside a string is replaced by U+FFFD instead of rejected; a lone
+    `\\u` surrogate decodes to U+FFFD; a root `null` is an empty registry; nesting up to 10000 is accepted;
+    timestamps are parsed by time.Parse(RFC3339) on the RAW bytes (lowercase t/z, a space separator and any
+    escape such as `\\u005a` are rejected, a one-digit hour, a comma fraction and `+24:00` are accepted).
+    name -> (document bytes, startup state, code of the `never` token when served)."""
+    never = {k: v for k, v in json.loads(body)['tokens']['tok-never'].items() if k != 'revoked'}
+    head = json.dumps(never)[:-1]
+
+    def entry_with(extra, **overrides):
+        return (json.dumps({**never, **overrides})[:-1] if overrides else head) + extra + '}'
+
+    def doc(tokens_text, prefix='"version":2,'):
+        return ('{%s"tokens":%s}' % (prefix, tokens_text)).encode()
+
+    def one(extra, **overrides):
+        return doc('{"tok-never":%s}' % entry_with(extra, **overrides))
+
+    ok, bad = ('listening', 200), ('exited', None)
+    other = '{"tok-other":{"id":"tok-other","hash":"%s"}}' % ('ab' * 32)
+    never_entry = entry_with(',"revoked":false')
+    revoked_entry = entry_with(',"revoked":true')
+    return {
+        'dup-control': (one(',"revoked":false'), *ok),
+        'dup-revoked-typeerr-then-false': (one(',"revoked":"yes","revoked":false'), *bad),
+        'dup-revoked-false-then-typeerr': (one(',"revoked":false,"revoked":"yes"'), *bad),
+        'dup-revoked-typeerr-folded-then-false': (one(',"REVOKED":"yes","revoked":false'), *bad),
+        'dup-revoked-true-then-null': (one(',"revoked":true,"REVOKED":null'), *('listening', 401)),
+        'dup-expires-typeerr-then-null': (one(',"expires_at":"tomorrow","expires_at":null'), *bad),
+        'dup-expires-valid-then-null': (one(',"expires_at":"2000-01-01T00:00:00Z","EXPIRES_AT":null'), *ok),
+        'dup-allowed-tools-typeerr-then-valid': (one(',"allowed_tools":[5],"allowed_tools":["*"]'), *bad),
+        'dup-hash-typeerr-then-valid': (doc('{"tok-never":{"hash":5,%s}}' % json.dumps(never)[1:]), *bad),
+        'dup-version-typeerr-then-int': (doc('{"tok-never":%s}' % never_entry, '"version":"a","version":2,'), *bad),
+        'dup-version-int-then-typeerr': (doc('{"tok-never":%s}' % never_entry, '"version":2,"version":"a",'), *bad),
+        'dup-root-tokens-typeerr-first': (doc('{"tok-bad":{"revoked":"yes"}},"tokens":{"tok-never":%s}' % never_entry), *bad),
+        'dup-root-tokens-notobject-first': (doc('[],"tokens":{"tok-never":%s}' % never_entry), *bad),
+        'dup-id-entry-typeerr-first': (doc('{"tok-never":"x","tok-never":%s}' % never_entry), *bad),
+        'dup-id-entry-nested-typeerr-first': (doc('{"tok-never":%s,"tok-never":%s}' % (entry_with(',"revoked":"yes"'), never_entry)), *bad),
+        'dup-unknown-member-typeerr-ignored': (one(',"zzz":"x","zzz":5'), *ok),
+        'dup-root-tokens-merge': (doc('{"tok-never":%s},"tokens":%s' % (never_entry, other)), *ok),
+        'dup-root-tokens-merge-reverse': (doc('%s,"tokens":{"tok-never":%s}' % (other, never_entry)), *ok),
+        'dup-root-tokens-id-replaced-revoked': (doc('{"tok-never":%s},"tokens":{"tok-never":%s}' % (never_entry, revoked_entry)), *('listening', 401)),
+        'dup-root-tokens-id-replaced-valid': (doc('{"tok-never":%s},"tokens":{"tok-never":%s}' % (revoked_entry, never_entry)), *ok),
+        'dup-root-tokens-null-resets': (doc('{"tok-never":%s},"tokens":null' % never_entry), *('listening', 401)),
+        'dup-root-tokens-null-then-map': (doc('null,"tokens":{"tok-never":%s}' % never_entry), *ok),
+        'utf8-invalid-label': (one(',"label":"a@@"').replace(b'@@', b'\xff\xe2\x82'), *ok),
+        'utf8-invalid-revoked-key-padding': (one(',"revoked":true,"zz@@":"x"').replace(b'@@', b'\xff'), *('listening', 401)),
+        'utf8-invalid-outside-string': (one(',"revoked":false') + b'\xff', *bad),
+        'ts-control-future': (one(',"expires_at":"2099-01-01T00:00:00Z"'), *ok),
+        'ts-lowercase-t': (one(',"expires_at":"2099-01-01t00:00:00Z"'), *bad),
+        'ts-lowercase-z': (one(',"expires_at":"2099-01-01T00:00:00z"'), *bad),
+        'ts-space-separator': (one(',"expires_at":"2099-01-01 00:00:00Z"'), *bad),
+        'ts-escaped-z': (one(',"expires_at":"2099-01-01T00:00:00\\u005a"'), *bad),
+        'ts-escaped-digit': (one(',"created_at":"\\u0032099-01-01T00:00:00Z"'), *bad),
+        'ts-offset-25': (one(',"expires_at":"2099-01-01T00:00:00+25:00"'), *bad),
+        'ts-one-digit-hour': (one(',"expires_at":"2099-01-01T1:00:00Z"'), *ok),
+        'ts-comma-fraction': (one(',"expires_at":"2099-01-01T00:00:00,5Z"'), *ok),
+        'ts-offset-24': (one(',"expires_at":"2099-01-01T00:00:00+24:00"'), *ok),
+        'ts-offset-minute-60': (one(',"expires_at":"2099-01-01T00:00:00+00:60"'), *ok),
+        'ts-past-comma-fraction-expired': (one(',"expires_at":"2000-01-01T00:00:00,5Z"'), *('listening', 401)),
+        'root-null': (b'null', *('listening', 401)),
+        'root-null-whitespace': (b' null\n', *('listening', 401)),
+        'surrogate-lone-label': (one(',"label":"\\ud800"'), *ok),
+        'surrogate-lone-revoked': (one(',"zz":"\\udc00","revoked":true'), *('listening', 401)),
+        'depth-9997-unknown': (one(',"zz":' + '[' * 9997 + ']' * 9997), *ok),
+        'depth-9998-unknown': (one(',"zz":' + '[' * 9998 + ']' * 9998), *bad),
+    }
+
+
 # --- Section B: file-level and startup states ---------------------------------------------------------
 def startup_scenarios(raws, body):
     def put(text):
@@ -256,6 +331,9 @@ def startup_scenarios(raws, body):
     def directory(vault):
         remove(vault)
         (vault / 'mcp-tokens.json').mkdir()
+
+    def put_bytes(data):
+        return lambda vault: (vault / 'mcp-tokens.json').write_bytes(data)
 
     expiry = json.loads(body)['tokens']['tok-future1h']['expires_at']
     assert expiry in body, 'registry anchor for the malformed-expiry controls'
@@ -278,7 +356,7 @@ def startup_scenarios(raws, body):
         ('registry-entry-string', put('{"version":2,"tokens":{"a":"x"}}'), False, 'exited', None),
         ('registry-hash-number', put('{"version":2,"tokens":{"a":{"hash":5}}}'), False, 'exited', None),
         ('registry-entry-minimal', put('{"version":2,"tokens":{"a":{"hash":"ab","id":"a"}}}'), False, 'listening', 401),
-    ]
+    ] + [(name, put_bytes(data), False, state, first) for name, (data, state, first) in duplicate_documents(body).items()]
 
 
 def startup_calls(port, raws):
@@ -407,6 +485,63 @@ def check_stale_revocation(go, rust):
             assert observed['other_token_status'] == 200, (side, observed['mode'], 'unrevoked tokens keep the last good registry')
 
 
+def observe_duplicate_reload(binary, base, seed_vault, port, raws, body):
+    """Live reload of duplicate-key and encoding documents.  Every write is followed by either a wait for the
+    expected status or, for a document Go rejects, a wait past Go's 2 s poll proving the last good state stays."""
+    docs = duplicate_documents(body)
+    registry_path = None
+    codes = []
+    home = prepare(base, 'dup-reload', seed_vault, lambda vault: (vault / 'mcp-tokens.json').write_text(body, encoding='utf-8'))
+    registry_path = home / 'vault' / 'mcp-tokens.json'
+    revoked_document = json.loads(body)
+    revoked_document['tokens']['tok-never']['revoked'] = True
+    revoked_bytes = (json.dumps(revoked_document, indent=2) + '\n').encode()
+    process = Process(binary, home, port)
+    try:
+        assert process.state == 'listening'
+
+        def accepted(label, data, expected):
+            registry_path.write_bytes(data)
+            wait_for(port, raws['never'], expected)
+            codes.append((label, code_of(port, raws['never'])))
+
+        def rejected(label, data, expected):
+            registry_path.write_bytes(data)
+            time.sleep(3.5)
+            codes.append((label, code_of(port, raws['never'])))
+            assert codes[-1][1] == expected, (label, 'last good state must stay', codes[-1])
+
+        accepted('baseline', body.encode(), 200)
+        accepted('revoked', revoked_bytes, 401)
+        # a revoked token is un-revoked only by a document Go accepts
+        rejected('revoked-typeerr-then-false', docs['dup-revoked-typeerr-then-false'][0], 401)
+        rejected('root-tokens-typeerr-first', docs['dup-root-tokens-typeerr-first'][0], 401)
+        rejected('version-typeerr-first', docs['dup-version-typeerr-then-int'][0], 401)
+        rejected('id-entry-typeerr-first', docs['dup-id-entry-typeerr-first'][0], 401)
+        rejected('expires-typeerr-then-null', docs['dup-expires-typeerr-then-null'][0], 401)
+        accepted('root-tokens-merge', docs['dup-root-tokens-merge'][0], 200)
+        accepted('revoked-again', revoked_bytes, 401)
+        accepted('invalid-utf8-label', docs['utf8-invalid-label'][0], 200)
+        accepted('revoked-third', revoked_bytes, 401)
+        accepted('root-tokens-id-replaced-valid', docs['dup-root-tokens-id-replaced-valid'][0], 200)
+        accepted('root-tokens-id-replaced-revoked', docs['dup-root-tokens-id-replaced-revoked'][0], 401)
+        # a timestamp Go rejects keeps the revoked state; a root null empties the registry in Go, so Rust must adopt it too
+        rejected('timestamp-lowercase-t-unrevoke', docs['ts-lowercase-t'][0], 401)
+        rejected('timestamp-escaped-z-unrevoke', docs['ts-escaped-z'][0], 401)
+        accepted('control', docs['dup-control'][0], 200)
+        accepted('root-null', docs['root-null'][0], 401)
+        accepted('control-again', docs['dup-control'][0], 200)
+        accepted('lone-surrogate-revoked', docs['surrogate-lone-revoked'][0], 401)
+    finally:
+        process.close()
+    return codes
+
+
+def check_duplicate_reload(go, rust):
+    assert go == rust, ('duplicate-key reload sequence differs', go, rust)
+    assert len(go) == 19, len(go)
+
+
 def check_dynamic(go, rust):
     for side, observed in (('go', go), ('rust', rust)):
         assert observed['live_before_expiry'] == 200, (side, 'token live before its deadline')
@@ -481,6 +616,10 @@ def main():
                 dynamic = [observe_dynamic(binary, base, seed_home / 'vault', port, raws, body) for binary in (go, rust)]
                 check_dynamic(*dynamic)
                 receipt['dynamic'] = dict(go=dynamic[0], rust=dynamic[1])
+                # C2: duplicate-key / invalid-UTF-8 documents written while running
+                reload_codes = [observe_duplicate_reload(binary, base, seed_home / 'vault', port, raws, body) for binary in (go, rust)]
+                check_duplicate_reload(*reload_codes)
+                receipt['duplicate_reload'] = dict(go=reload_codes[0], rust=reload_codes[1])
                 # D: revoke -> no request -> wait > poll -> corrupt / delete -> request (cache must not outlive the revocation)
                 stale = {impl: [observe_stale_revocation(binary, base, seed_home / 'vault', port, raws, body, mode) for mode in ('corrupt', 'delete')]
                          for impl, binary in (('go', go), ('rust', rust))}
@@ -496,6 +635,7 @@ def main():
     finally:
         args.receipt.write_text(json.dumps(receipt, indent=2, default=str) + '\n', encoding='utf-8')
     print(f"PASS: {receipt['token_cases']} token-state cases, {len(receipt['startup'])} startup/storage scenarios and 1 dynamic clock/out-of-band scenario and "
+          f"{len(receipt['duplicate_reload']['go'])} duplicate-key reload steps and "
           f"{len(receipt['stale_revocation']['go'])} stale-revocation scenarios per implementation on {platform.system()}")
 
 

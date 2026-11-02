@@ -2051,8 +2051,8 @@ fn check_mcp_tokens(vault_dir: &Path, opts: &DoctorOptions) -> DoctorResult {
     let now = OffsetDateTime::now_utc();
     tokens.retain(|token| {
         token.expires_at.as_deref().is_none_or(|expires_at| {
-            OffsetDateTime::parse(expires_at, &time::format_description::well_known::Rfc3339)
-                .is_ok_and(|expires_at| now <= expires_at)
+            symvault_store::go_registry::parse_go_rfc3339(expires_at)
+                .is_some_and(|expires_at| now <= expires_at)
         })
     });
     if tokens.is_empty() {
@@ -2063,8 +2063,8 @@ fn check_mcp_tokens(vault_dir: &Path, opts: &DoctorOptions) -> DoctorResult {
         .iter()
         .filter(|token| {
             token.created_at.as_deref().is_none_or(|created_at| {
-                OffsetDateTime::parse(created_at, &time::format_description::well_known::Rfc3339)
-                    .is_ok_and(|created_at| now - created_at > time::Duration::days(90))
+                symvault_store::go_registry::parse_go_rfc3339(created_at)
+                    .is_some_and(|created_at| now - created_at > time::Duration::days(90))
             })
         })
         .count();
