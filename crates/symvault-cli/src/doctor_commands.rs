@@ -508,6 +508,22 @@ fn fix_config_validation(cfg_path: &Path) -> Result<(), String> {
         }
     }
 
+    // Fix 3: audit.maxFileSize <= 0 -> 100 MB default.
+    if let Some(audit) = config.audit.as_mut()
+        && audit.max_file_size <= 0
+    {
+        audit.max_file_size = 100 * 1024 * 1024;
+        fixed = true;
+    }
+
+    // Fix 4: clipboard.autoClearDuration < 0 -> 0 (disabled).
+    if let Some(clipboard) = config.clipboard.as_mut()
+        && clipboard.auto_clear_duration < 0
+    {
+        clipboard.auto_clear_duration = 0;
+        fixed = true;
+    }
+
     if !fixed {
         return Ok(());
     }
@@ -552,11 +568,15 @@ fn check_vault_config_validates(vault_dir: &Path, _opts: &DoctorOptions) -> Doct
                         false,
                     )
                 } else {
-                    let first = &val_errs[0];
-                    let msg = if val_errs.len() > 1 {
+                    // Go splits the trimmed joined text on '\n', so a single
+                    // error that spans lines counts as several.
+                    let joined = val_errs.join("\n");
+                    let msgs: Vec<&str> = joined.trim().split('\n').collect();
+                    let first = msgs[0];
+                    let msg = if msgs.len() > 1 {
                         format!(
                             "config validation error: {first} (+{} more)",
-                            val_errs.len() - 1
+                            msgs.len() - 1
                         )
                     } else {
                         format!("config validation error: {first}")
@@ -2345,6 +2365,13 @@ fn check_password_strength(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorRes
     if cfg_path.is_file()
         && let Ok(bytes) = fs::read(&cfg_path)
     {
+        // Go's `checkPasswordStrength` starts with `vault.List`, whose
+        // `loadVaultConfig` loads the config (deprecation warnings included).
+        // The loaded value is cached by mtime, so the reuse check that follows
+        // shares this one load rather than adding another. The outcome is
+        // judged below exactly as before; only the warning side effect is
+        // mirrored here.
+        let _ = Config::load_from_bytes(&bytes);
         if let Ok(doc) = serde_yaml_ng::from_slice::<serde_yaml_ng::Value>(&bytes) {
             if let Some(vault) = doc.get("vault")
                 && vault

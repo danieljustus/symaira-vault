@@ -104,15 +104,73 @@ pub struct Config {
     pub mcp: Option<McpConfig>,
     pub update: Option<UpdateConfig>,
     pub clipboard: Option<ClipboardConfig>,
-    /// Go's `audit.maxFileSize` in bytes (`maxSizeMb` times 1 MiB, wrapping as
-    /// Go's `int64` product does), present exactly when the file carries an
-    /// `audit` mapping. Only `Validate` reads it here: the rest of the audit
-    /// section is not modelled by this crate.
+    /// Go's `audit` section, present exactly when the file carries an `audit`
+    /// mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub audit_max_file_size: Option<i64>,
+    pub audit: Option<AuditConfig>,
+    /// Go's `logging` section, present exactly when the file carries one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logging: Option<LoggingConfig>,
+    /// Go's `security` section, present exactly when the file carries one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub security: Option<SecurityConfig>,
+    /// Go's `scan_patterns`, in file order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scan_patterns: Vec<ScanPattern>,
     /// Go's `paymentPolicies`, keyed by policy name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub payment_policies: BTreeMap<String, PaymentPolicy>,
+}
+
+/// Go's `AuditConfig` after `mergeAuditConfig`: `max_file_size` is in bytes
+/// (`maxSizeMb` times 1 MiB, wrapping as Go's `int64` product does).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AuditConfig {
+    pub max_file_size: i64,
+    pub max_backups: i64,
+    pub max_age_days: i64,
+}
+
+impl Default for AuditConfig {
+    fn default() -> Self {
+        Self {
+            max_file_size: 100 * 1024 * 1024,
+            max_backups: 5,
+            max_age_days: 30,
+        }
+    }
+}
+
+/// Go's `LoggingConfig` after `mergeLoggingConfig`.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    pub level: String,
+    pub format: String,
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            level: "warn".into(),
+            format: "text".into(),
+        }
+    }
+}
+
+/// Go's `SecurityConfig`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SecurityConfig {
+    pub disable_env_passphrase: bool,
+    pub allow_env_passphrase: bool,
+}
+
+/// Go's `CustomPattern` (`scan_patterns`).
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ScanPattern {
+    pub name: String,
+    pub pattern: String,
+    pub description: String,
+    pub severity: String,
 }
 
 /// Go's `PaymentMaxAmount`: decimal limits kept as text.
@@ -165,6 +223,9 @@ pub struct AgentProfile {
     pub approval_mode: Option<String>,
     pub allowed_paths: Vec<String>,
     pub redact_fields: Vec<String>,
+    /// Go's `perToolRedactFields`: extra redacted fields per MCP tool name.
+    #[serde(default)]
+    pub per_tool_redact_fields: BTreeMap<String, Vec<String>>,
     pub can_write: bool,
     pub can_run_commands: bool,
     pub can_manage_config: bool,
@@ -560,7 +621,10 @@ impl Default for Config {
             mcp: None,
             update: None,
             clipboard: None,
-            audit_max_file_size: None,
+            audit: None,
+            logging: None,
+            security: None,
+            scan_patterns: Vec::new(),
             payment_policies: BTreeMap::new(),
         }
     }
@@ -666,7 +730,7 @@ impl Config {
             }
         }
 
-        if self.audit_max_file_size.is_some_and(|bytes| bytes <= 0) {
+        if self.audit.is_some_and(|audit| audit.max_file_size <= 0) {
             errors.push(
                 "audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)"
                     .to_owned(),
@@ -973,7 +1037,16 @@ impl Config {
             config.clipboard = Some(parse_clipboard(v, warnings, state)?);
         }
         if let Some(v) = root.get(key("audit")).filter(|v| !v.is_null()) {
-            config.audit_max_file_size = Some(parse_audit_max_file_size(v)?);
+            config.audit = Some(parse_audit(v)?);
+        }
+        if let Some(v) = root.get(key("logging")).filter(|v| !v.is_null()) {
+            config.logging = Some(parse_logging(v)?);
+        }
+        if let Some(v) = root.get(key("security")).filter(|v| !v.is_null()) {
+            config.security = Some(parse_security(v)?);
+        }
+        if let Some(v) = scalar(root, "scan_patterns") {
+            config.scan_patterns = parse_scan_patterns(v)?;
         }
         if let Some(v) = scalar(root, "paymentPolicies") {
             config.payment_policies = parse_payment_policies(v)?;
@@ -1007,6 +1080,17 @@ impl Config {
         }
         if let Some(clipboard) = &self.clipboard {
             write_clipboard(&mut out, clipboard)?;
+        }
+        if let Some(audit) = &self.audit {
+            write_audit(&mut out, audit);
+        }
+        if let Some(logging) = &self.logging {
+            write_logging(&mut out, logging)?;
+        }
+        // Rust-safer deviation from Go's `SaveTo`, which never copies the
+        // `security` section into its raw struct (docs/rust-port/upstream-go-bugs.md).
+        if let Some(security) = &self.security {
+            write_security(&mut out, security);
         }
         if !self.vault_dir.is_empty() {
             out.push_str(&format!("vaultDir: {}\n", yaml_scalar(&self.vault_dir)?));
@@ -1062,6 +1146,14 @@ impl Config {
                 "defaultProfile: {}\n",
                 yaml_scalar(&self.default_profile)?
             ));
+        }
+        if !self.scan_patterns.is_empty() {
+            write_scan_patterns(&mut out, &self.scan_patterns)?;
+        }
+        // Rust-safer deviation: Go's `SaveTo` drops `paymentPolicies`, which
+        // leaves every agent's `paymentPolicy` dangling (upstream-go-bugs.md).
+        if !self.payment_policies.is_empty() {
+            write_payment_policies(&mut out, &self.payment_policies)?;
         }
         Ok(out.into_bytes())
     }
@@ -1654,6 +1746,18 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
         if wrote("redactFields") {
             profile.redact_fields = string_list(scalar(fields, "redactFields"), "redactFields")?;
         }
+        // Go appends each tool's list to what the profile already holds.
+        if wrote("perToolRedactFields")
+            && let Some(map) = set("perToolRedactFields").and_then(serde_yaml_ng::Value::as_mapping)
+        {
+            for (tool, list) in entries(map) {
+                profile
+                    .per_tool_redact_fields
+                    .entry(tool.to_owned())
+                    .or_default()
+                    .extend(string_list(Some(list), "perToolRedactFields")?);
+            }
+        }
         macro_rules! bool_field {
             ($key:literal, $field:ident) => {
                 if let Some(v) = set($key) {
@@ -1689,6 +1793,20 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
         int_field!("max_reads_per_hour", max_reads_per_hour);
         int_field!("max_reads_per_day", max_reads_per_day);
         int_field!("max_secrets_in_session", max_secrets_in_session);
+        // Go's `mergeStringSliceMap`: a decoded (non-nil) map replaces the
+        // profile's wholesale.
+        if wrote("dynamicProviders")
+            && let Some(map) = set("dynamicProviders").and_then(serde_yaml_ng::Value::as_mapping)
+        {
+            profile.dynamic_providers = entries(map)
+                .map(|(provider, list)| {
+                    Ok((
+                        provider.to_owned(),
+                        string_list(Some(list), "dynamicProviders")?,
+                    ))
+                })
+                .collect::<Result<_, ConfigError>>()?;
+        }
         if wrote("allowedEnvVars")
             && let Some(v) = set("allowedEnvVars")
         {
@@ -2183,16 +2301,75 @@ fn parse_mcp(
     }
     Ok(out)
 }
-/// Go's `mergeAuditConfig` for the one field `Validate` reads: a written
-/// `maxSizeMb` (a `null` decodes to zero) replaces the 100 MiB default and is
-/// scaled to bytes with `int64` wrap-around.
-fn parse_audit_max_file_size(value: &serde_yaml_ng::Value) -> Result<i64, ConfigError> {
+/// Go's `mergeAuditConfig`: a written `maxSizeMb` (a `null` decodes to zero)
+/// replaces the 100 MiB default and is scaled to bytes with `int64`
+/// wrap-around; `maxBackups` and `maxAgeDays` replace their defaults when
+/// written.
+fn parse_audit(value: &serde_yaml_ng::Value) -> Result<AuditConfig, ConfigError> {
     const MIB: i64 = 1024 * 1024;
     let map = mapping(value)?;
-    match written(map, "maxSizeMb") {
-        Some(v) => Ok(int_field(v, "maxSizeMb")?.wrapping_mul(MIB)),
-        None => Ok(100 * MIB),
+    let mut out = AuditConfig::default();
+    if let Some(v) = written(map, "maxSizeMb") {
+        out.max_file_size = int_field(v, "maxSizeMb")?.wrapping_mul(MIB);
     }
+    if let Some(v) = written(map, "maxBackups") {
+        out.max_backups = int_field(v, "maxBackups")?;
+    }
+    if let Some(v) = written(map, "maxAgeDays") {
+        out.max_age_days = int_field(v, "maxAgeDays")?;
+    }
+    Ok(out)
+}
+
+/// Go's `mergeLoggingConfig`.
+fn parse_logging(value: &serde_yaml_ng::Value) -> Result<LoggingConfig, ConfigError> {
+    let map = mapping(value)?;
+    let mut out = LoggingConfig::default();
+    if let Some(v) = written(map, "level") {
+        out.level = string_field(v, "level")?;
+    }
+    if let Some(v) = written(map, "format") {
+        out.format = string_field(v, "format")?;
+    }
+    Ok(out)
+}
+
+/// Go's `mergeSecurityConfig`.
+fn parse_security(value: &serde_yaml_ng::Value) -> Result<SecurityConfig, ConfigError> {
+    let map = mapping(value)?;
+    let mut out = SecurityConfig::default();
+    if let Some(v) = written(map, "disable_env_passphrase") {
+        out.disable_env_passphrase = bool_field(v, "disable_env_passphrase")?;
+    }
+    if let Some(v) = written(map, "allow_env_passphrase") {
+        out.allow_env_passphrase = bool_field(v, "allow_env_passphrase")?;
+    }
+    Ok(out)
+}
+
+/// Go's `[]CustomPattern`: a `null` list is nil, a `null` entry the zero
+/// pattern.
+fn parse_scan_patterns(value: &serde_yaml_ng::Value) -> Result<Vec<ScanPattern>, ConfigError> {
+    let Some(items) = value.as_sequence() else {
+        return Ok(Vec::new());
+    };
+    let empty = serde_yaml_ng::Mapping::new();
+    items
+        .iter()
+        .map(|item| {
+            let fields = item.as_mapping().unwrap_or(&empty);
+            let text = |field: &str| match scalar(fields, field) {
+                Some(v) => string_field(v, field),
+                None => Ok(String::new()),
+            };
+            Ok(ScanPattern {
+                name: text("name")?,
+                pattern: text("pattern")?,
+                description: text("description")?,
+                severity: text("severity")?,
+            })
+        })
+        .collect()
 }
 
 /// Go's `map[string]PaymentPolicy`: a `null` map is nil, a `null` entry the
@@ -2417,6 +2594,13 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
             out.push_str(&format!("            - {}\n", yaml_scalar(v)?));
         }
     }
+    if !p.per_tool_redact_fields.is_empty() {
+        out.push_str("        perToolRedactFields:\n");
+        for (tool, fields) in yaml_entries(&p.per_tool_redact_fields) {
+            out.push_str(&format!("            {}:\n", yaml_scalar(tool)?));
+            write_string_list_body(out, 16, fields)?;
+        }
+    }
     let builtin = matches!(
         name,
         "default" | "claude-code" | "codex" | "hermes" | "openclaw" | "opencode"
@@ -2450,9 +2634,6 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
         p.expose_value_tools
     ));
     out.push('\n');
-    if p.expose_payment_values {
-        out.push_str("        exposePaymentValues: true\n");
-    }
     if builtin || tiered {
         out.push_str(&format!("        autoUnseal: {}", p.auto_unseal));
         out.push('\n');
@@ -2463,18 +2644,84 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
             p.require_approval
         ));
     }
+    // Go writes the remaining pointer fields only when set. Rust stores plain
+    // values, so a zero (or, for the builtin presets, the preset default that
+    // `AgentProfile::deny_all` fills in) reads as "not written".
+    if !p.approval_timeout.is_zero()
+        && !(builtin && p.approval_timeout == Duration::from_secs(5 * 60))
+    {
+        out.push_str(&format!(
+            "        approvalTimeout: {}\n",
+            format_duration(p.approval_timeout)
+        ));
+    }
+    if !p.allowed_tools.is_empty() {
+        out.push_str("        allowed_tools:\n");
+        write_string_list_body(out, 12, &p.allowed_tools)?;
+    }
+    for (key, value) in [
+        ("max_reads_per_hour", p.max_reads_per_hour),
+        ("max_reads_per_day", p.max_reads_per_day),
+        ("max_secrets_in_session", p.max_secrets_in_session),
+    ] {
+        if value != 0 {
+            out.push_str(&format!("        {key}: {value}\n"));
+        }
+    }
+    if !p.dynamic_providers.is_empty() {
+        out.push_str("        dynamicProviders:\n");
+        for (provider, hosts) in yaml_entries(&p.dynamic_providers) {
+            out.push_str(&format!("            {}:\n", yaml_scalar(provider)?));
+            write_string_list_body(out, 16, hosts)?;
+        }
+    }
+    if !p.allowed_env_vars.is_empty() {
+        out.push_str("        allowedEnvVars:\n");
+        write_string_list_body(out, 12, &p.allowed_env_vars)?;
+    }
     if !p.allowed_executables.is_empty() {
         out.push_str("        allowedExecutables:\n");
-        for exe in &p.allowed_executables {
-            out.push_str(&format!("            - {exe}"));
-            out.push('\n');
-        }
+        write_string_list_body(out, 12, &p.allowed_executables)?;
+    }
+    if !p.prompt_injection_mode.is_empty() && !(builtin && p.prompt_injection_mode == "off") {
+        out.push_str(&format!(
+            "        promptInjectionMode: {}\n",
+            yaml_scalar(&p.prompt_injection_mode)?
+        ));
     }
     if !p.skill_path.is_empty() {
         out.push_str(&format!(
             "        skillPath: {}\n",
             yaml_scalar(&p.skill_path)?
         ));
+    }
+    // Go's declaration order closes with skillPath, skillVersion,
+    // exposePaymentValues and paymentPolicy (`internal/config/config.go:171`).
+    if !p.skill_version.is_empty() {
+        out.push_str(&format!(
+            "        skillVersion: {}\n",
+            yaml_scalar(&p.skill_version)?
+        ));
+    }
+    if p.expose_payment_values {
+        out.push_str("        exposePaymentValues: true\n");
+    }
+    if let Some(policy) = &p.payment_policy {
+        out.push_str(&format!(
+            "        paymentPolicy: {}\n",
+            yaml_scalar(policy)?
+        ));
+    }
+    Ok(())
+}
+/// A block sequence of scalars, `indent` spaces deep.
+fn write_string_list_body(
+    out: &mut String,
+    indent: usize,
+    items: &[String],
+) -> Result<(), ConfigError> {
+    for item in items {
+        out.push_str(&format!("{:indent$}- {}\n", "", yaml_scalar(item)?));
     }
     Ok(())
 }
@@ -2645,6 +2892,101 @@ fn write_mcp(out: &mut String, v: &McpConfig) -> Result<(), ConfigError> {
             format_duration(oauth.access_token_ttl),
             format_duration(oauth.refresh_token_ttl)
         ));
+    }
+    Ok(())
+}
+/// Go's `AuditConfig`: `maxSizeMb` is `omitempty`, the other two are not, and
+/// `SaveTo` writes the megabyte count (integer division of the byte size).
+fn write_audit(out: &mut String, v: &AuditConfig) {
+    out.push_str("audit:\n");
+    let megabytes = v.max_file_size / (1024 * 1024);
+    if megabytes != 0 {
+        out.push_str(&format!("    maxSizeMb: {megabytes}\n"));
+    }
+    out.push_str(&format!("    maxBackups: {}\n", v.max_backups));
+    out.push_str(&format!("    maxAgeDays: {}\n", v.max_age_days));
+}
+fn write_logging(out: &mut String, v: &LoggingConfig) -> Result<(), ConfigError> {
+    if v.level.is_empty() && v.format.is_empty() {
+        out.push_str("logging: {}\n");
+        return Ok(());
+    }
+    out.push_str("logging:\n");
+    if !v.level.is_empty() {
+        out.push_str(&format!("    level: {}\n", yaml_scalar(&v.level)?));
+    }
+    if !v.format.is_empty() {
+        out.push_str(&format!("    format: {}\n", yaml_scalar(&v.format)?));
+    }
+    Ok(())
+}
+fn write_security(out: &mut String, v: &SecurityConfig) {
+    if !v.disable_env_passphrase && !v.allow_env_passphrase {
+        out.push_str("security: {}\n");
+        return;
+    }
+    out.push_str("security:\n");
+    if v.disable_env_passphrase {
+        out.push_str("    disable_env_passphrase: true\n");
+    }
+    if v.allow_env_passphrase {
+        out.push_str("    allow_env_passphrase: true\n");
+    }
+}
+fn write_scan_patterns(out: &mut String, patterns: &[ScanPattern]) -> Result<(), ConfigError> {
+    out.push_str("scan_patterns:\n");
+    for p in patterns {
+        out.push_str(&format!("    - name: {}\n", yaml_scalar(&p.name)?));
+        out.push_str(&format!("      pattern: {}\n", yaml_scalar(&p.pattern)?));
+        out.push_str(&format!(
+            "      description: {}\n",
+            yaml_scalar(&p.description)?
+        ));
+        out.push_str(&format!("      severity: {}\n", yaml_scalar(&p.severity)?));
+    }
+    Ok(())
+}
+/// Go's `PaymentPolicy`: `instrument` always, the rest `omitempty`; a
+/// `max_amount` struct is omitted when both limits are empty.
+fn write_payment_policies(
+    out: &mut String,
+    policies: &BTreeMap<String, PaymentPolicy>,
+) -> Result<(), ConfigError> {
+    out.push_str("paymentPolicies:\n");
+    for (name, policy) in yaml_entries(policies) {
+        out.push_str(&format!("    {}:\n", yaml_scalar(name)?));
+        out.push_str(&format!(
+            "        instrument: {}\n",
+            yaml_scalar(&policy.instrument)?
+        ));
+        if !policy.allowed_merchants.is_empty() {
+            out.push_str("        allowed_merchants:\n");
+            for merchant in &policy.allowed_merchants {
+                out.push_str(&format!("            - {}\n", yaml_scalar(merchant)?));
+            }
+        }
+        let amount = &policy.max_amount;
+        if !amount.per_transaction.is_empty() || !amount.per_day.is_empty() {
+            out.push_str("        max_amount:\n");
+            if !amount.per_transaction.is_empty() {
+                out.push_str(&format!(
+                    "            per_transaction: {}\n",
+                    yaml_scalar(&amount.per_transaction)?
+                ));
+            }
+            if !amount.per_day.is_empty() {
+                out.push_str(&format!(
+                    "            per_day: {}\n",
+                    yaml_scalar(&amount.per_day)?
+                ));
+            }
+        }
+        if !policy.currency.is_empty() {
+            out.push_str(&format!(
+                "        currency: {}\n",
+                yaml_scalar(&policy.currency)?
+            ));
+        }
     }
     Ok(())
 }

@@ -430,15 +430,72 @@ difference is `profiles: {p: null}` (3 comparisons, above).
 
 ### Residuals (probed, not fixed)
 
-- `symvault doctor` prints every warning 8 times where Go prints it 9 times (each check that loads the
-  config prints its warnings; Go's doctor makes one more load than the native one, not located). Commands
-  with a single load (`agent list`, `agent profile show`, `config set`'s post-update reload,
-  `config validate`) match.
-- `doctor --fix` and `config validate --fix` save through writers that do not write `paymentPolicies`
-  or an agent's `paymentPolicy` (the typed writer has no such keys), so repairing an unrelated error
-  drops them from the file. Go's `SaveTo` writes it. The doctor fixer also lacks Go's fixes for `audit.maxFileSize` and
-  `clipboard.autoClearDuration` (the check is now `warn`, fixable, and the fix leaves it unchanged);
-  `config validate --fix` repairs the audit size.
+- (Closed by CONFIG-WRITER.) `symvault doctor` printed every warning 8 times where Go printed it 9 times:
+  Go's `checkPasswordStrength` makes one more config load (`vault.List`), now mirrored. Commands with a
+  single load (`agent list`, `agent profile show`, `config set`'s post-update reload, `config validate`) match.
+- (Closed by CONFIG-WRITER.) `doctor --fix` and `config validate --fix` dropped `paymentPolicies` and an
+  agent's `paymentPolicy`, and the doctor fixer lacked Go's fixes for `audit.maxFileSize` and
+  `clipboard.autoClearDuration`; see the CONFIG-WRITER section for the writer, the fixes and the declared
+  deviation (Go itself drops `paymentPolicies`).
+
+## CONFIG-WRITER: Rust config rewrites keep what Go keeps, 2026-11-02
+
+Review of CONFIG-RESID found that every `save_to` caller (`agent install`/`upgrade`/`uninstall`, `remote`,
+`doctor --fix`, the `config validate --fix` renderer) lost data on rewrite. Measured: `agent uninstall other
+--yes` on a config with `agents.bot.paymentPolicy` dropped the policy, `skillVersion` and the whole `audit`
+section; Go kept them.
+
+- **The typed `Config` now models and writes `audit`, `logging`, `security`, `scan_patterns` and the full
+  `paymentPolicies`** (`AuditConfig`, `LoggingConfig`, `SecurityConfig`, `ScanPattern`, `PaymentPolicy`),
+  parsed from the same yaml.v3-coerced tree as the other sections. `config_fix.rs` lost its private `Extras`
+  carrier and its own renderer: `Config::to_yaml_bytes` is the one writer. `Config::audit_max_file_size`
+  became `Config::audit` (`max_file_size` in bytes, `max_backups`, `max_age_days`).
+- **Agent profile writer in Go's struct order:** `skillVersion`, then `exposePaymentValues`, then
+  `paymentPolicy` close the block (`exposePaymentValues` used to sit after `exposeValueTools`); the fields the
+  writer never emitted are now written: `perToolRedactFields`, `approvalTimeout`, `allowed_tools`,
+  `max_reads_per_hour|day`, `max_secrets_in_session`, `dynamicProviders`, `allowedEnvVars` (all but
+  `perToolRedactFields` and `dynamicProviders` were already parsed; those two are parsed now, with Go's merge
+  rule), `promptInjectionMode`. A dropped `allowed_tools` list widens an agent's
+  permissions on the next load, so this was a security-relevant loss and not only a cosmetic one.
+- **Declared Rust-safer deviation:** Go's `SaveTo` copies a fixed field list into a fresh struct, so it
+  *drops* the top-level `paymentPolicies` and `security`; after `doctor --fix` an agent's `paymentPolicy`
+  then dangles and the next load fails validation. Rust keeps both sections (`paymentPolicies` last, `security`
+  between `logging` and `vaultDir`, the struct positions). Go evidence: the recorded bytes of
+  `testdata/port/config/rewrite.json` and the live oracle in `config_rewrite_differential.rs`. Entry 1 and 2
+  of `upstream-go-bugs.md`.
+- **Evidence (Go-recorded, byte level):** `scripts/rust-port/cmd/configrewritegen` records 21 real Go
+  `Load` -> mutation -> `SaveTo` runs (oracle `690647c5`, source digest enforced) into
+  `testdata/port/config/rewrite.json`; `config_rewrite_contract.rs` requires the Rust bytes minus exactly the
+  two declared sections to equal Go's, checks the declared sections survive, and carries negative controls
+  (dropping `paymentPolicy`, `skillVersion`, the `audit` block or reordering fields is rejected). Live:
+  `config_rewrite_differential.rs` runs `agent uninstall` (two agents) and `doctor --fix` on the Go binary and
+  on Rust and compares stdout, stderr, exit status and the resulting `config.yaml`. Gate:
+  `make config-rewrite-differential` (`scripts/rust-port/check_config_rewrite.sh`; generation is the explicit
+  `make config-rewrite-fixtures-generate`, `--check` never writes).
+- **Doctor fixer:** `fix_config_validation` gained Go's fixes 3 and 4 (`audit.maxFileSize <= 0` -> 100 MiB,
+  `clipboard.autoClearDuration < 0` -> 0). Go prints nothing for them, so there is no report line to mirror;
+  the live differential repairs both and compares the file.
+- **Doctor warning count:** `check_password_strength` mirrors Go's extra `vault.List` -> `loadVaultConfig`
+  load (the reuse check shares it through Go's mtime-keyed cache). A `doctor` run now prints each deprecation
+  warning 10 times (default) / 9 times (`--no-network`) on both sides.
+- **`__complete`** installs the warning sink with the rest of startup, so completion prints loader warnings.
+- **`config validate`** (text and `--json`) and the doctor message split the joined validation errors on
+  `'\n'` like Go (`resid_payment_policy_name_newline`; the fixture is `config-yaml-syntax.json`, now 250
+  cases / 960 comparisons, the 249 earlier cases byte-identical, only `oracle.generator_digest` changed after
+  the two comment fixes in `yamlsyntaxgen`: `--quiet` does **not** silence the loader warnings).
+
+### Residuals (probed, not fixed)
+
+- Rust holds plain values for the agent's pointer fields, so a key the operator wrote with an *explicit zero*
+  (`approvalTimeout: 0s`, `max_reads_per_hour: 0`, `skillVersion: ''`, `paymentPolicy: ''`,
+  `exposePaymentValues: false`, an explicit `5m` on a built-in preset) is not written back where Go writes it;
+  no non-zero value is lost. A built-in preset's default (`approvalTimeout: 5m`, `promptInjectionMode: off`)
+  is likewise treated as unset.
+- Go loads the global config once at startup for every `__complete` and for `completion <shell>`; Rust's
+  completion path loads only what the completer needs, so Go prints a loader warning twice / once where Rust
+  prints it once / not at all (`__complete get ''`, `completion bash`). Ordinary commands match.
+- `envAllowlist`/`envWhitelist` and `vault.sync`/`listing_cache_ttl`/`manifest_generation` are dropped on
+  rewrite, exactly as Go drops them (`upstream-go-bugs.md` 3 and 4).
 
 ## SET-003 fix round: vault-open errors, hidden reads, piped input
 

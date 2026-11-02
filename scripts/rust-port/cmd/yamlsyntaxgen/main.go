@@ -360,6 +360,7 @@ func residInputs() []input {
 		// paymentPolicies.<name>: first failing check of a policy.
 		{"load_payment_policy_without_instrument", "loader", "a payment policy with no instrument", []byte("paymentPolicies:\n  p: {}\n")},
 		{"load_agent_payment_policy_unknown", "loader", "an agent that names a payment policy no section defines", []byte("agents:\n  x:\n    paymentPolicy: abc\n")},
+		{"resid_payment_policy_name_newline", "loader", "a policy name containing a newline splits into several reported lines", lines("paymentPolicies:", "  \"a\\nb\":", "    instrument: ''")},
 		{"resid_payment_policy_null_entry", "loader", "a null entry is the zero policy", lines("paymentPolicies:", "  p: null")},
 		{"resid_payment_policy_blank_instrument", "loader", "white space is not an instrument", lines("paymentPolicies:", "  p:", "    instrument: '  '", "    allowed_merchants: [acme]")},
 		{"resid_payment_policy_no_limits", "loader", "an instrument alone constrains nothing", []byte(policy)},
@@ -395,7 +396,9 @@ func residInputs() []input {
 		{"resid_validate_error_order", "loader", "audit, clipboard, payment and Argon2id errors in Go's order after the agent ones", lines("vaultDir: '  '", "agents:", "  x:", "    allowedPaths: ['[']", "    paymentPolicy: q", "audit:", "  maxSizeMb: 0", "clipboard:", "  auto_clear_duration: -2", "paymentPolicies:", "  p: {}", "vault:", "  argon2id_time: 1")},
 
 		// Deprecation warnings: cliout.Warnf on stderr, once per Load, after
-		// the document decoded and before it is merged. --quiet silences them.
+		// the document decoded and before it is merged. --quiet does NOT
+		// silence them: Go copies QuietMode into cliout before cobra parses
+		// the persistent flag (the quiet cases below record exactly that).
 		{"resid_warn_env_whitelist", "accepted", "envWhitelist warns", lines("envWhitelist: [a]")},
 		{"resid_warn_env_whitelist_empty", "accepted", "an empty envWhitelist is a non-nil list and warns", lines("envWhitelist: []")},
 		{"resid_warn_env_whitelist_null", "accepted", "a null envWhitelist is nil and does not warn", lines("envWhitelist: null")},
@@ -802,7 +805,8 @@ func buildCase(goBinary string, item input) (fixtureCase, error) {
 }
 
 // quietCases also record `config validate --quiet`: the deprecation warnings
-// the loader prints are cliout.Warnf messages, which --quiet suppresses.
+// the loader prints are cliout.Warnf messages, and --quiet does not silence
+// them (cliout reads QuietMode before cobra has parsed the persistent flag).
 var quietCases = map[string]bool{
 	"resid_warn_env_whitelist":                   true,
 	"resid_warn_mcp_approval_required":           true,

@@ -19,7 +19,7 @@
       "internal/health/doctor_vault.go"
     ],
     "source_digest": "dedb3d9b231e0772642fc36e4dc2f823468b330882e7e7fb8cf1c8e8d4bb36ea",
-    "generator_digest": "e96797375b409360dff2866e4e0651dd1d01bfa4fa17d9e19eb090e1f3b4e7a1"
+    "generator_digest": "99477e199a7104fa0b6e209c4090bb7baf3f1412d8125eb3f251a4b7b1684127"
   },
   "doctor_ids": [
     "vault.config.parses",
@@ -19945,6 +19945,92 @@
             "name": "Vault config validates",
             "status": "warn",
             "message": "config validation error: agents.x.paymentPolicy: policy \"abc\" not found in paymentPolicies",
+            "hint": "run `symvault doctor --fix` to auto-correct common issues",
+            "fixable": true
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "resid_payment_policy_name_newline",
+      "class": "loader",
+      "description": "a policy name containing a newline splits into several reported lines",
+      "config_hex": "7061796d656e74506f6c69636965733a0a202022615c6e62223a0a20202020696e737472756d656e743a2027270a",
+      "config_text": "\"paymentPolicies:\\n  \\\"a\\\\nb\\\":\\n    instrument: ''\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "Configuration is invalid (__CONFIG__):\n  ✗ paymentPolicies.a\n  ✗ b.instrument: must not be empty\n",
+          "stderr": "Error: config validation failed: paymentPolicies.a\nb.instrument: must not be empty\nError: config validation failed: paymentPolicies.a\nb.instrument: must not be empty\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"errors\":[\"paymentPolicies.a\",\"b.instrument: must not be empty\"],\"valid\":false}\n",
+          "stderr": "Error: config validation failed: paymentPolicies.a\nb.instrument: must not be empty\nError: config validation failed: paymentPolicies.a\nb.instrument: must not be empty\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "warn",
+            "message": "config validation error: paymentPolicies.a (+1 more)",
             "hint": "run `symvault doctor --fix` to auto-correct common issues",
             "fixable": true
           },

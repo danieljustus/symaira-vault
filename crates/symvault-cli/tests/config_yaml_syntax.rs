@@ -110,10 +110,10 @@ struct Fixture {
 }
 
 /// Cases whose Go output the native CLI must reproduce byte for byte.
-const MATCHING_CASES: usize = 249;
+const MATCHING_CASES: usize = 250;
 /// Comparisons the replay executes: every recorded config observation, one
 /// `doctor` run per case and the `agent list` runs.
-const REPLAYED_COMPARISONS: usize = 957;
+const REPLAYED_COMPARISONS: usize = 960;
 /// The `load_*` cases (CONFIG-LOAD-001): what the loader and validator accept
 /// or reject once the bytes parse as YAML.
 const LOAD_CASES: usize = 90;
