@@ -287,12 +287,15 @@ fn install_agent(vault_dir: &str, selection: &AgentSelection) -> Result<(), Stri
         } else {
             vec!["*".to_owned()]
         };
+        // Go's wizard creates the token through the token store, which stamps
+        // `auth.CurrentToolRegistryHash` like every other issuer.
+        let tool_registry_hash = crate::agent_install_commands::tool_registry_hash()?;
         let request = NewToken {
             label: &selection.agent_type,
             allowed_tools,
             agent_name: &selection.agent_type,
             ttl: None,
-            tool_registry_hash: crate::agent_install_commands::PINNED_TOOL_REGISTRY_HASH,
+            tool_registry_hash: &tool_registry_hash,
         };
         token_registry::create(root, &request, OffsetDateTime::now_utc())
             .map_err(|error| format!("create token: {error}"))?;
@@ -518,6 +521,41 @@ mod tests {
         let mut errors = Vec::new();
         apply_agents(&state, &mut errors);
         assert!(errors[0].starts_with("install agent nope: unsupported agent \"nope\""));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn http_agent_token_carries_the_current_tool_registry_hash() {
+        let root = scratch("agents-http");
+        let state = WizardState {
+            vault_dir: root.to_string_lossy().into_owned(),
+            selected_agents: vec![AgentSelection {
+                agent_type: "codex".into(),
+                transport: "http".into(),
+                scope: "*".into(),
+                read_only: false,
+            }],
+            ..WizardState::default()
+        };
+        let mut errors = Vec::new();
+        apply_agents(&state, &mut errors);
+        let registry: serde_json::Value = serde_json::from_slice(
+            &fs::read(root.join("mcp-tokens.json")).expect("token registry"),
+        )
+        .expect("registry json");
+        let current = symvault_mcp::toolhash::current_tool_registry_hash().expect("hash");
+        let stamped: Vec<&str> = registry["tokens"]
+            .as_object()
+            .expect("registry tokens object")
+            .values()
+            .filter(|token| token["agent_name"] == "codex")
+            .map(|token| token["tool_registry_hash"].as_str().unwrap_or_default())
+            .collect();
+        assert_eq!(
+            stamped,
+            [current.as_str()],
+            "wizard token must match Go's stamp"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }
