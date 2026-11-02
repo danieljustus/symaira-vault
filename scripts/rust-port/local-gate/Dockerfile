@@ -40,10 +40,12 @@ RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-to
  && mkdir -p /home/dev/.cargo/registry /home/dev/go /home/dev/target
 
 # Area process contracts (make local-area, Linux lane): the workflows' own
-# apt-get steps -- rust-cli-artifacts.yml (zsh, fish; bash ships with the base)
-# and rust-tui.yml (xvfb, xclip) -- plus python3-venv for the TUI harness venv
-# (pyte is installed into a venv under the target volume at run time).
-# Appended last so the layers above stay cached.
-RUN sudo apt-get update \
- && sudo apt-get install -y --no-install-recommends zsh fish xvfb xclip python3-venv \
+# setup -- rust-cli-artifacts.yml (zsh, fish; bash ships with the base),
+# rust-tui.yml (xvfb, xclip) and setup-python 3.13 (tui_contract.py asserts
+# it; Ubuntu 24.04 ships 3.12, so python3.13 comes from deadsnakes). pyte goes
+# into a venv under the target volume at run time. Appended last so the layers
+# above stay cached.
+RUN sudo add-apt-repository -y ppa:deadsnakes/ppa \
+ && sudo apt-get update \
+ && sudo apt-get install -y --no-install-recommends python3.13 python3.13-venv zsh fish xvfb xclip \
  && sudo rm -rf /var/lib/apt/lists/*

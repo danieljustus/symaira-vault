@@ -969,14 +969,24 @@ local-area-list:
 
 AREA_EVIDENCE ?= $(CARGO_TARGET_DIR)/area-evidence
 AREA_ENV := GOWORK=off TZ=UTC PYTHONDONTWRITEBYTECODE=1 SYMVAULT_TEST_KEYRING=memory
-AREA_CHECK := python3 -B scripts/rust-port/gate_area_check.py
+AREA_CHECK := $(AREA_PYTHON) -B scripts/rust-port/gate_area_check.py
 AREA_VENV := $(AREA_EVIDENCE)/tui-venv
 AREA_PROBES := $(CARGO_TARGET_DIR)/debug/examples
-# HTTP contracts pin the oracle toolchain the http workflows used; the other
-# area workflows ran go1.26.10.
+# HTTP and MCP-process contracts pin the oracle toolchain their workflows used
+# (the MCP oracle refuses anything but an actual go1.26.6); the other area
+# workflows ran go1.26.10.
 AREA_HTTP_GO := GOTOOLCHAIN=$(GO_TOOLCHAIN)
 AREA_GO := GOTOOLCHAIN=$(BUILD_GO_TOOLCHAIN)
-AREA_BUILD_CLI := $(CARGO) build -p symvault-cli --bin symvault --locked
+# The contracts hash the binary before and after a run, and another build in
+# the shared cargo target dir (a concurrent gate lane) replaces it mid-run, so
+# they run against a private copy under the evidence directory.
+AREA_BIN := $(AREA_EVIDENCE)/bin
+AREA_CLI := $(AREA_BIN)/symvault
+AREA_BUILD_CLI := $(CARGO) build -p symvault-cli --bin symvault --locked && mkdir -p "$(AREA_BIN)" && cp -f "$(RUST_BINARY)" "$(AREA_CLI)"
+# Python 3.13 is what the workflows pinned (setup-python); tui_contract.py
+# asserts it, and a python.org 3.14 on macOS lacks the CA bundle the shell
+# completion check needs for its one download.
+AREA_PYTHON := $(or $(shell command -v python3.13),python3)
 # The contracts build their Go oracle through this runner; the workflows build
 # it into target/ before the first contract that needs it.
 AREA_ORACLE_RUNNER := $(AREA_EVIDENCE)/oraclebuild
@@ -987,99 +997,100 @@ area-oracle-runner:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_GO) $(GO) test -count=1 ./scripts/rust-port/internal/diff
 	$(AREA_GO) $(GO) build -trimpath -o "$(AREA_ORACLE_RUNNER)" ./scripts/rust-port/cmd/oraclebuild
-	$(AREA_ENV) $(AREA_ORACLE) python3 -B scripts/rust-port/test_oracle_build.py
+	$(AREA_ENV) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/test_oracle_build.py
 
 http-framing-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) python3 scripts/rust-port/http_framing_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-http-framing.json"
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_framing_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-framing.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-framing.json"
 
 http-head-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) python3 scripts/rust-port/http_head_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-http-head.json"
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_head_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-head.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-head.json"
 
 http-origin-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) python3 scripts/rust-port/http_origin_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-http-origin.json"
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_origin_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-origin.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-origin.json"
 
 # rust-http-read-deadlines.yml
 http-slow-peer-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) python3 scripts/rust-port/http_slow_peer_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-http-read-deadlines.json"
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_slow_peer_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-read-deadlines.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-read-deadlines.json"
 
 http-timeout-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) python3 scripts/rust-port/http_timeout_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-http-timeouts.json"
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_timeout_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-timeouts.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-timeouts.json"
 
 http-tls-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) python3 scripts/rust-port/http_tls_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-http-tls.json"
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_tls_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-tls.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-tls.json"
 
 # rust-http-write.yml: negative controls, TLS backpressure probe and its
 # mutation, then the full write contract.
 http-write-contract: area-oracle-runner
-	$(AREA_ENV) python3 scripts/rust-port/test_http_write_contract.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_write_contract.py
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) python3 -B scripts/rust-port/http_write_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-tls-output.json" --tls-output-probe-only
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) python3 -B scripts/rust-port/http_write_mutation.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-tls-output-mutation.json"
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) python3 scripts/rust-port/http_write_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-http-write.json"
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/http_write_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-tls-output.json" --tls-output-probe-only
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/http_write_mutation.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-tls-output-mutation.json"
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) scripts/rust-port/http_write_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-write.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-write.json"
 
 # rust-http-oauth.yml
 http-oauth-contract: area-oracle-runner
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) python3 scripts/rust-port/http_oauth_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-http-oauth.json"
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) scripts/rust-port/http_oauth_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-oauth.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-oauth.json"
 
 # rust-mcp-http-process.yml
 http-process-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_ENV) python3 scripts/rust-port/test_http_process_contract.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_process_contract.py
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_GO) python3 scripts/rust-port/http_process_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-http-process.json"
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/http_process_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-process.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-process.json"
 
 # rust-mcp-process.yml (unit controls, ordered approval fixtures, contract).
 mcp-process-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_ENV) python3 scripts/rust-port/test_mcp_oracle.py
-	$(AREA_ENV) python3 scripts/rust-port/test_mcp_process_contract.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_mcp_oracle.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_mcp_process_contract.py
 	$(MAKE) mcp-ordered-fixtures-check
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_GO) python3 scripts/rust-port/mcp_process_contract.py \
-		--reference mcp-anomaly-ordered-v1 --rust "$(RUST_BINARY)" \
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/mcp_process_contract.py \
+		--reference mcp-anomaly-ordered-v1 --rust "$(AREA_CLI)" \
 		--receipt "$(AREA_EVIDENCE)/native-mcp-process.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-mcp-process.json"
 
 # rust-api-transport.yml
 api-transport-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_ENV) python3 scripts/rust-port/test_api_transport_contract.py -v
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_api_transport_contract.py -v
 	$(CARGO) build -p symvault-mcp --example api_transport_probe --locked
-	$(AREA_ENV) $(AREA_GO) python3 scripts/rust-port/api_transport_contract.py \
-		--rust-probe "$(AREA_PROBES)/api_transport_probe" \
+	mkdir -p "$(AREA_BIN)" && cp -f "$(AREA_PROBES)/api_transport_probe" "$(AREA_BIN)/"
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/api_transport_contract.py \
+		--rust-probe "$(AREA_BIN)/api_transport_probe" \
 		--receipt "$(AREA_EVIDENCE)/native-api-transport.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-api-transport.json" --parity go:rust:8
 
@@ -1087,8 +1098,9 @@ api-transport-contract:
 broker-connect-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(CARGO) build -p symvault-mcp --example connect_contract_probe --locked
-	$(AREA_ENV) $(AREA_GO) python3 scripts/rust-port/connect_contract.py \
-		--rust "$(AREA_PROBES)/connect_contract_probe" \
+	mkdir -p "$(AREA_BIN)" && cp -f "$(AREA_PROBES)/connect_contract_probe" "$(AREA_BIN)/"
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/connect_contract.py \
+		--rust "$(AREA_BIN)/connect_contract_probe" \
 		--receipt "$(AREA_EVIDENCE)/native-connect.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-connect.json" --parity go:rust:3
 
@@ -1096,11 +1108,12 @@ broker-connect-contract:
 broker-egress-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(CARGO) build -p symvault-cli --bin symvault -p symvault-mcp --example egress_contract_probe --locked
-	$(AREA_ENV) $(AREA_GO) python3 scripts/rust-port/egress_contract.py \
-		--rust-cli "$(RUST_BINARY)" --rust-probe "$(AREA_PROBES)/egress_contract_probe" \
+	mkdir -p "$(AREA_BIN)" && cp -f "$(RUST_BINARY)" "$(AREA_CLI)" && cp -f "$(AREA_PROBES)/egress_contract_probe" "$(AREA_BIN)/"
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/egress_contract.py \
+		--rust-cli "$(AREA_CLI)" --rust-probe "$(AREA_BIN)/egress_contract_probe" \
 		--receipt "$(AREA_EVIDENCE)/native-egress.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-egress.json" --parity go:rust:19 --parity go_cli:rust_cli:14
-	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(RUST_BINARY)" \
+	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(AREA_CLI)" \
 		--output "$(AREA_EVIDENCE)/native-broker-gaps.json"
 	$(AREA_CHECK) gaps "$(AREA_EVIDENCE)/native-broker-gaps.json" \
 		--prefix "symvault broker" --prefix "symvault run" --min-paths 134:100
@@ -1116,15 +1129,15 @@ cli-artifacts-contract:
 		TestManpageLiteralText TestManualConfigPathIsLiteralAndDescriptionsAreRestored \
 		TestManualLiteralPathDoesNotRewriteOtherDescriptions
 	$(MAKE) port-fixtures-check
-	$(AREA_ENV) python3 scripts/rust-port/manual_path_contract_test.py
-	$(AREA_ENV) python3 scripts/rust-port/test_cli_artifacts_contract.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/manual_path_contract_test.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_cli_artifacts_contract.py
 	$(AREA_BUILD_CLI)
 	$(AREA_ENV) $(AREA_GO) $(if $(wildcard /opt/homebrew/bin/bash),CLI_ARTIFACTS_BASH=/opt/homebrew/bin/bash) \
-		python3 scripts/run_go_tests.py $(CARGO) -- python3 scripts/rust-port/cli_artifacts_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-cli-artifacts.json" \
+		$(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(AREA_PYTHON) scripts/rust-port/cli_artifacts_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-cli-artifacts.json" \
 		--captured-output "$(AREA_EVIDENCE)/native-cli-go-artifacts.json" --require-native-shells
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-cli-artifacts.json"
-	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(RUST_BINARY)" \
+	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(AREA_CLI)" \
 		--output "$(AREA_EVIDENCE)/native-cli-artifact-gaps.json"
 	$(AREA_CHECK) gaps "$(AREA_EVIDENCE)/native-cli-artifact-gaps.json" --no-missing-paths --min-paths 134:100
 
@@ -1132,10 +1145,10 @@ cli-artifacts-contract:
 intake-cli-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_GO) python3 scripts/run_go_tests.py $(CARGO) -- python3 scripts/rust-port/intake_watch_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-intake-cli.json"
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(AREA_PYTHON) scripts/rust-port/intake_watch_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-intake-cli.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-intake-cli.json" --parity go:rust
-	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(RUST_BINARY)" \
+	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(AREA_CLI)" \
 		--output "$(AREA_EVIDENCE)/native-intake-gaps.json"
 	$(AREA_CHECK) gaps "$(AREA_EVIDENCE)/native-intake-gaps.json" --prefix "symvault intake"
 
@@ -1143,10 +1156,10 @@ intake-cli-contract:
 serve-cli-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_GO) python3 scripts/rust-port/serve_contract.py \
-		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-serve-cli.json"
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/serve_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-serve-cli.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-serve-cli.json" --parity go:rust
-	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(RUST_BINARY)" \
+	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(AREA_CLI)" \
 		--output "$(AREA_EVIDENCE)/native-serve-gaps.json"
 	$(AREA_CHECK) gaps "$(AREA_EVIDENCE)/native-serve-gaps.json" --prefix "symvault serve"
 
@@ -1154,8 +1167,8 @@ serve-cli-contract:
 # differential needs is built for that one cargo command only).
 kdf-resource-policy-contract:
 	@mkdir -p "$(AREA_EVIDENCE)/kdf-policy"
-	$(AREA_ENV) python3 scripts/rust-port/check_argon2_upstream.py
-	$(AREA_ENV) python3 scripts/rust-port/kdf_policy_fixtures.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/check_argon2_upstream.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/kdf_policy_fixtures.py
 	$(CARGO) test --manifest-path third_party/argon2/Cargo.toml --all-features --locked
 	$(AREA_ENV) $(AREA_GO) $(GO) test -race ./internal/crypto -count=1 -json > "$(AREA_EVIDENCE)/kdf-go.jsonl"
 	$(AREA_ENV) $(AREA_GO) $(GO) test -race ./internal/vault -run '^TestKDFPolicyMigration' -count=1 -json >> "$(AREA_EVIDENCE)/kdf-go.jsonl"
@@ -1183,7 +1196,7 @@ kdf-resource-policy-contract:
 # vault-read-resource-policy.yml
 read-resource-policy-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_ENV) $(AREA_GO) python3 scripts/run_go_tests.py $(CARGO) -- $(GO) test -race -json \
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(GO) test -race -json \
 		./internal/vault ./internal/template ./internal/mcp/server -run TestResourcePolicy -count=1 \
 		> "$(AREA_EVIDENCE)/go-read-policy.jsonl"
 	$(AREA_CHECK) go-json "$(AREA_EVIDENCE)/go-read-policy.jsonl" \
@@ -1192,7 +1205,7 @@ read-resource-policy-contract:
 		TestResourcePolicyRecoveryRejectsOversizeBeforeMutation \
 		TestResourcePolicyTemplateResolutionsShareOneAllowance \
 		TestResourcePolicyCommandRefsShareOneAllowance
-	$(AREA_ENV) $(AREA_GO) python3 scripts/rust-port/refresh-read-policy-fixtures.py --check \
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/refresh-read-policy-fixtures.py --check \
 		--receipt "$(AREA_EVIDENCE)/native-read-policy.json"
 	$(CARGO) test -p symvault-store --lib --all-features > "$(AREA_EVIDENCE)/rust-read-store.log" 2>&1 || { cat "$(AREA_EVIDENCE)/rust-read-store.log"; exit 1; }
 	$(CARGO) test -p symvault-cli --bin symvault template_resolutions_share_the_operation_allowance \
@@ -1207,10 +1220,10 @@ read-resource-policy-contract:
 # mcp-http-shutdown.yml (live Go -race tests of the frozen oracle).
 mcp-http-shutdown-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_ENV) $(AREA_GO) python3 scripts/run_go_tests.py $(CARGO) -- $(GO) test -race -json \
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(GO) test -race -json \
 		./internal/mcp/serverbootstrap ./internal/secureui ./internal/approval ./internal/policy -count=1 \
 		> "$(AREA_EVIDENCE)/native-http-shutdown.jsonl"
-	$(AREA_ENV) $(AREA_GO) python3 scripts/run_go_tests.py $(CARGO) -- $(GO) test -race -json \
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(GO) test -race -json \
 		./internal/mcp/server -count=1 \
 		-run "TestApprovalCancellation|TestApprovalUninterruptible|^TestAuthorize|TestScopeCheckHook|TestHandleGet_OutsideScope|TestHandleDelete_OutsideScope|TestHandleGetMetadata_OutsideScope" \
 		>> "$(AREA_EVIDENCE)/native-http-shutdown.jsonl"
@@ -1227,7 +1240,7 @@ mcp-http-shutdown-contract:
 # rust-tui.yml. Validation tools (pyte) live in a venv under the evidence dir.
 $(AREA_VENV)/.ready: scripts/rust-port/tui-validation-requirements.txt
 	@mkdir -p "$(AREA_EVIDENCE)"
-	python3 -m venv "$(AREA_VENV)"
+	$(AREA_PYTHON) -m venv "$(AREA_VENV)"
 	"$(AREA_VENV)/bin/pip" install --quiet --disable-pip-version-check -r scripts/rust-port/tui-validation-requirements.txt
 	@touch "$@"
 
@@ -1243,13 +1256,13 @@ tui-contract: $(AREA_VENV)/.ready
 	$(AREA_BUILD_CLI)
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_harness_test.py
 	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
-		--rust-cli "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json"
+		--rust-cli "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json"
 	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
-		--rust-cli "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json" --validate-receipt \
+		--rust-cli "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json" --validate-receipt \
 		--candidate "$$(git rev-parse HEAD)" \
 		--expected-receipt-sha256 "$$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$(AREA_EVIDENCE)/tui/native-tui.json")"
 	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_mutation_test.py \
-		--rust-cli "$(RUST_BINARY)" --native-receipt "$(AREA_EVIDENCE)/tui/native-tui.json" \
+		--rust-cli "$(AREA_CLI)" --native-receipt "$(AREA_EVIDENCE)/tui/native-tui.json" \
 		--receipt "$(AREA_EVIDENCE)/tui/native-mutation.json"
 
 rust-gates-core: store-differential audit-differential
