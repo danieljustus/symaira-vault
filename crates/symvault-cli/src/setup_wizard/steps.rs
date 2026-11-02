@@ -580,7 +580,7 @@ pub(super) fn validate_passphrase_pair(pass: &str, confirm: &str) -> Result<(), 
 
 /// `crypto.GenerateDicewarePassphrase`: uniform picks from the 7776-word EFF
 /// list, joined by single spaces.
-pub(super) fn generate_diceware(word_count: usize) -> Result<String, String> {
+pub(super) fn generate_diceware(word_count: usize) -> Result<Zeroizing<String>, String> {
     if word_count < 1 {
         return Err(format!(
             "diceware: word count must be at least 1, got {word_count}"
@@ -604,7 +604,8 @@ pub(super) fn generate_diceware(word_count: usize) -> Result<String, String> {
         }
         picked.push(words[(value % max) as usize]);
     }
-    Ok(picked.join(" "))
+    // The joined phrase is the passphrase: wipe it when the caller drops it.
+    Ok(Zeroizing::new(picked.join(" ")))
 }
 
 // --------------------------------------------------------------------- auth
