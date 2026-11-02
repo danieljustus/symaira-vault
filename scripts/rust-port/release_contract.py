@@ -8,7 +8,7 @@ no push) with `dist:` moved outside the repository, then verifies:
     missing file, and any extra file (a deb/mcpb/sbom/archive for an
     unsupported platform, a stray file or directory), is a failure. Only
     GoReleaser's own bookkeeping (artifacts.json, config.yaml, metadata.json,
-    man/, per-build output dirs) is tolerated
+    CHANGELOG.md, man/, per-build output dirs) is tolerated
   * archive names `symaira-vault_<ver>_<os>_<arch>.tar.gz` for exactly
     darwin/arm64, linux/amd64, linux/arm64 and their members
   * checksums file lists exactly the archives, packages and SBOMs, and every
@@ -72,7 +72,7 @@ ARCHIVE_MEMBERS = ["symvault", "LICENSE", "README.md", "completions/symvault.bas
 EXPECTED_MAN = {"symvault.1"}  # every archive must ship at least these pages under docs/man
 # Files GoReleaser itself leaves in dist/. Anything else not in the expected
 # release set is a failure.
-GORELEASER_INTERNAL_FILES = {"artifacts.json", "config.yaml", "metadata.json"}
+GORELEASER_INTERNAL_FILES = {"artifacts.json", "config.yaml", "metadata.json", "CHANGELOG.md"}
 BUILD_DIR_RE = re.compile(r"symvault-(static|darwin)_[A-Za-z0-9_.\-]+")
 REQUIRED_SBOM_CRATES = {"symvault-cli", "symvault-core", "age", "clap", "zeroize"}
 SMOKE_SECRET = "Xk9-correct-horse-Battery"
