@@ -41,10 +41,16 @@ remove_tree() {
   git worktree prune
 }
 
+child=""
 # shellcheck disable=SC2329 # invoked by the traps
 guard() { # exit status of the guarded run in $1
   local ec="$1"
   trap - EXIT INT TERM
+  if [ -n "$child" ]; then # a signal arrived while the mutation run was live
+    pkill -TERM -P "$child" 2>/dev/null
+    kill -TERM "$child" 2>/dev/null
+    wait "$child" 2>/dev/null
+  fi
   remove_tree
   if ! git -C "$live" diff --quiet HEAD -- "$mutated"; then
     git -C "$live" checkout -- "$mutated"
@@ -74,7 +80,10 @@ echo "http-write-mutation: live binary sha256 before: $(sed -n 2p <<<"$before")"
   # shellcheck disable=SC2086 # CMD_WORDS is a list of VAR=value words and an interpreter
   env $cmd_words -B scripts/rust-port/http_write_mutation.py \
     --rust "$target/debug/symvault" --receipt "$receipt"
-)
+) &
+child=$!
+wait "$child"
 ec=$?
+child=""
 echo "http-write-mutation: live binary sha256 after:  $(sed -n 2p <<<"$(fingerprint)")"
 exit "$ec"
