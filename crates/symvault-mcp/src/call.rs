@@ -110,6 +110,30 @@ pub trait ToolCallRuntime: Send + Sync {
         String::new()
     }
 
+    /// Go's `validateToolAccess` order for a scoped-token caller: availability
+    /// and profile tier, then the token's tool scope, the registry-drift
+    /// refusal, entry policy, and finally the handler's own capability checks.
+    /// `token_denied` is the caller's decision that the authenticated token
+    /// scope excludes `name`. Runtimes with several phases override this; the
+    /// default only supports policy-free runtimes and applies the token and
+    /// drift refusals after [`Self::authorize`].
+    fn authorize_with_token_scope(
+        &self,
+        name: &str,
+        arguments: &Value,
+        token_denied: bool,
+        drift: bool,
+    ) -> Result<(), ToolCallResult> {
+        self.authorize(name, arguments)?;
+        if token_denied {
+            return Err(token_scope_refusal(name));
+        }
+        if drift {
+            return Err(registry_drift_refusal(&self.registry_drift_agent()));
+        }
+        Ok(())
+    }
+
     /// `authorize` plus Go's call-time tool-registry drift refusal for a token
     /// issued against a different registry hash. Runtimes that gate on policy
     /// override this so the refusal lands between the tier checks and the
@@ -150,6 +174,11 @@ pub trait ToolCallRuntime: Send + Sync {
         context.check()?;
         self.call(name, arguments)
     }
+}
+
+/// Go's `errors.ToolNotAllowed(name, "token_scope", "")` tool result.
+pub(crate) fn token_scope_refusal(name: &str) -> ToolCallResult {
+    ToolCallResult::error(format!("Tool {name:?} requires tier \"token_scope\""))
 }
 
 /// Go's drift refusal result, an error tool result (not a JSON-RPC error).
@@ -382,6 +411,11 @@ pub(crate) struct SecureInputPreflight {
     pub approval_mode: String,
 }
 
+pub(crate) struct AutotypePreflight {
+    pub path: String,
+    pub field: String,
+}
+
 pub(crate) struct ClipboardPreflight {
     pub path: String,
     pub approval_mode: String,
@@ -495,8 +529,14 @@ fn collect_string_values(value: &Value, values: &mut Vec<String>) {
     }
 }
 
-impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
-    fn authorize(&self, name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
+impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
+    /// First authorization phase, Go's `validateToolAccess` up to and including
+    /// the tier/exposure restriction: the explicit operator allowlist, actual
+    /// host availability, then the profile's tier and value-exposure rules.
+    /// A scoped token and the registry-drift refusal are decided after this
+    /// phase, so a tool hidden by the profile reports the profile reason even
+    /// when a token also excludes it.
+    pub(crate) fn authorize_access(&self, name: &str) -> Result<(), ToolCallResult> {
         if let Some(config) = &self.config.tool_list_config
             && !config.allowed_tools.is_empty()
             && !config.allowed_tools.iter().any(|allowed| allowed == name)
@@ -534,6 +574,23 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
                 "Tool \"{name}\" requires tier \"{required}\""
             )));
         }
+        // Go's `ExposeValueTools` safeguard is part of the same tier check.
+        if !self.config.available_tools.iter().any(|tool| tool == name)
+            && let Some(tool) = self
+                .config
+                .unavailable_tools
+                .iter()
+                .find(|tool| tool.name == name && tool.code == "blocked_by_agent")
+        {
+            return Err(ToolCallResult::error(tool.reason.clone()));
+        }
+        Ok(())
+    }
+
+    /// Second authorization phase: what Go's handlers decide after token, drift
+    /// and entry-policy checks have passed. Command capability denials keep
+    /// Go's JSON-RPC internal-error classification.
+    pub(crate) fn authorize_dispatch(&self, name: &str) -> Result<(), ToolCallResult> {
         if matches!(
             name,
             "run_command" | "execute_with_secret" | "execute_api_request"
@@ -552,23 +609,6 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             return Err(error);
         }
         if self.config.available_tools.iter().any(|tool| tool == name) {
-            let approval_mode =
-                if self.config.approval_mode.is_empty() && self.config.require_approval {
-                    "prompt"
-                } else {
-                    self.config.approval_mode.as_str()
-                };
-            if name == "get_entry_value"
-                && !self.config.can_read_values
-                && !matches!(approval_mode, "none" | "auto")
-            {
-                let message = if approval_mode == "deny" {
-                    "get_entry_value denied: approval mode is 'deny'"
-                } else {
-                    "get_entry_value requires approval but no interactive approval is available"
-                };
-                return Err(ToolCallResult::error(message));
-            }
             return Ok(());
         }
         let unavailable = self
@@ -580,6 +620,38 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             .map(|tool| tool.reason.clone())
             .unwrap_or_else(|| format!("tool {name:?} is not allowed"));
         Err(ToolCallResult::error(message))
+    }
+
+    /// Go's `handleGetValue` approval gate. It follows argument validation,
+    /// scope and the quarantine check, so malformed calls report the argument
+    /// error first. A profile without value capability needs an explicit
+    /// `none`/`auto` approval policy (ADR 0016: an empty configuration does not
+    /// imply consent to expose values).
+    fn value_read_gate(&self) -> Option<ToolCallResult> {
+        if self.config.can_read_values {
+            return None;
+        }
+        let approval_mode = if self.config.approval_mode.is_empty() && self.config.require_approval
+        {
+            "prompt"
+        } else {
+            self.config.approval_mode.as_str()
+        };
+        if matches!(approval_mode, "none" | "auto") {
+            return None;
+        }
+        Some(ToolCallResult::error(if approval_mode == "deny" {
+            "get_entry_value denied: approval mode is 'deny'"
+        } else {
+            "get_entry_value requires approval but no interactive approval is available"
+        }))
+    }
+}
+
+impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
+    fn authorize(&self, name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
+        self.authorize_access(name)?;
+        self.authorize_dispatch(name)
     }
 
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
@@ -666,6 +738,64 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             None => Ok(ToolCallResult::error("password field not found")),
             Some(Value::String(password)) => Ok(ToolCallResult::text(password.clone())),
             Some(_) => Ok(ToolCallResult::error("password field is not a string")),
+        }
+    }
+
+    /// Go `handleAutotype` up to (not including) reading the entry: capability,
+    /// required `path`, optional `field` (default `password`; a non-string value
+    /// falls back to the default like `GetString`), scope, then the approval
+    /// refusal (autotype cannot be approved interactively).
+    pub(crate) fn autotype_preflight(
+        &self,
+        arguments: &Value,
+    ) -> Result<AutotypePreflight, SecureInputPreflightError> {
+        if !self.config.can_use_autotype {
+            return Err(SecureInputPreflightError::Handler(
+                "autotype operations not permitted for this agent".into(),
+            ));
+        }
+        let path = required_string(arguments, "path")
+            .map_err(SecureInputPreflightError::Tool)?
+            .to_owned();
+        let field = arguments
+            .get("field")
+            .and_then(Value::as_str)
+            .unwrap_or("password")
+            .to_owned();
+        if !self.scope_allows(&path) {
+            return Err(SecureInputPreflightError::Handler(format!(
+                "access denied: path {} outside allowed scope",
+                symvault_core::go_quote(&path)
+            )));
+        }
+        if self.requires_approval() {
+            return Err(SecureInputPreflightError::Handler(
+                "autotype denied: approval required but cannot be granted".into(),
+            ));
+        }
+        Ok(AutotypePreflight { path, field })
+    }
+
+    /// The string field Go's autotype handler types; the text never becomes a
+    /// protocol result.
+    pub(crate) fn autotype_value(&self, path: &str, field: &str) -> Result<ToolCallResult, String> {
+        let Some(entry) = self
+            .store
+            .get(path)
+            .map_err(|error| format!("read entry: {error}"))?
+        else {
+            return Ok(ToolCallResult::error("Entry \"\" not found"));
+        };
+        match entry.fields.get(field) {
+            None => Ok(ToolCallResult::error(format!(
+                "field {} not found in entry {path}",
+                symvault_core::go_quote(field)
+            ))),
+            Some(Value::String(value)) => Ok(ToolCallResult::text(value.clone())),
+            Some(_) => Ok(ToolCallResult::error(format!(
+                "field {} is not a string",
+                symvault_core::go_quote(field)
+            ))),
         }
     }
 
@@ -1772,6 +1902,9 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             return Ok(ToolCallResult::error(
                 "entry is in quarantine — run 'symvault import review promote' to make it accessible",
             ));
+        }
+        if let Some(denied) = self.value_read_gate() {
+            return Ok(denied);
         }
         let Some(mut entry) = self
             .store

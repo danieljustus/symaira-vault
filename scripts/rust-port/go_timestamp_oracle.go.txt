@@ -1,0 +1,64 @@
+// Records whether Go 1.26.6 `encoding/json` accepts each raw JSON value as a
+// *time.Time field (Time.UnmarshalJSON -> time.Parse(RFC3339), raw bytes, no
+// unescaping). Input: a JSON array of raw JSON value texts. Output: JSON array
+// of {raw, go: accept|reject|syntax, has_time, display, after_zero}. For an
+// accepted non-null value `display` is what `agent token list` (expires) and
+// `agent list` (last seen) print, time.Time.Format("2006-01-02 15:04") of the
+// parsed value (wall clock of the offset as written, whatever the process
+// zone), and `after_zero` is `t.After(time.Time{})` (`agent list` only
+// considers a last-used time that is).
+// Do not run by hand: scripts/rust-port/go_timestamp_fixtures.py (make
+// timestamp-fixtures-generate / timestamp-fixtures-check) records
+// crates/symvault-store/tests/fixtures/go_timestamp_cases.json ([raw, accepts]
+// pairs) and go_timestamp_display_cases.json from it.
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"time"
+)
+
+type entry struct {
+	ExpiresAt *time.Time `json:"expires_at"`
+}
+type file struct {
+	Tokens map[string]entry `json:"tokens"`
+}
+
+func main() {
+	var cases []string
+	data, _ := os.ReadFile(os.Args[1])
+	if err := json.Unmarshal(data, &cases); err != nil {
+		panic(err)
+	}
+	type out struct {
+		Raw       string `json:"raw"`
+		Go        string `json:"go"`
+		HasTime   bool   `json:"has_time"`
+		Display   string `json:"display"`
+		AfterZero bool   `json:"after_zero"`
+	}
+	var res []out
+	for _, raw := range cases {
+		doc := `{"tokens":{"a":{"expires_at":` + raw + `}}}`
+		var f file
+		r := "accept"
+		if !json.Valid([]byte(doc)) {
+			r = "syntax"
+		} else if err := json.Unmarshal([]byte(doc), &f); err != nil {
+			r = "reject"
+		}
+		o := out{Raw: raw, Go: r}
+		if r == "accept" && f.Tokens["a"].ExpiresAt != nil {
+			t := *f.Tokens["a"].ExpiresAt
+			o.HasTime = true
+			o.Display = t.Format("2006-01-02 15:04")
+			o.AfterZero = t.After(time.Time{})
+		}
+		res = append(res, o)
+	}
+	b, _ := json.MarshalIndent(res, "", " ")
+	fmt.Println(string(b))
+}

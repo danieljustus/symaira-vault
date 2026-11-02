@@ -37,6 +37,9 @@ pub mod search_index_store;
 /// Go-compatible MCP share metadata and atomic lifecycle updates.
 pub mod sharing;
 
+/// Go-compatible decoding of the MCP token registry file.
+pub mod go_registry;
+
 /// Go-compatible agent-scoped MCP token registry mutations.
 pub mod token_registry;
 
@@ -670,7 +673,7 @@ impl Store {
         #[cfg(unix)]
         {
             let mut result = Vec::new();
-            for item in rooted::walk_with_limits(
+            for item in rooted::walk_vault_root_with_limits(
                 &self.root_cap,
                 &self.root,
                 Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
@@ -1363,7 +1366,7 @@ fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, Stor
         }
         Err(error) => return Err(error),
     };
-    let legacy_entries = rooted::walk_with_limits(
+    let legacy_entries = rooted::walk_vault_root_with_limits(
         root_cap,
         root,
         Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),

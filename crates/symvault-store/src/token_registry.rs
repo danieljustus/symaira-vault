@@ -702,8 +702,16 @@ fn is_expired(entry: &TokenRecord, now: OffsetDateTime) -> bool {
         .is_some_and(|value| parse_rfc3339(value).is_ok_and(|expires_at| now > expires_at))
 }
 
+/// Parses a registry timestamp exactly as Go's `time.Time` JSON decoding does
+/// (see `go_registry::parse_go_rfc3339`); anything Go rejects is an error here.
 fn parse_rfc3339(value: &str) -> Result<OffsetDateTime, time::error::Parse> {
-    OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+    crate::go_registry::parse_go_rfc3339(value)
+        .ok_or(())
+        .or_else(|()| {
+            // `time` has no public constructor for its parse error; the empty
+            // string always yields one.
+            OffsetDateTime::parse("", &time::format_description::well_known::Rfc3339)
+        })
 }
 
 fn open_root(root: &Path) -> Result<fs::File, StoreError> {
@@ -730,11 +738,15 @@ fn read(path: &Path) -> Result<BTreeMap<String, TokenRecord>, StoreError> {
     if bytes.is_empty() {
         return Ok(BTreeMap::new());
     }
-    let raw: RawFile = serde_json::from_slice(&bytes).map_err(|error| {
+    // Go's json.Unmarshal semantics: duplicate members, case-insensitive field
+    // names and invalid UTF-8 are accepted or rejected exactly as Go does.
+    let parse_error = |error: &dyn std::fmt::Display| {
         StoreError::Config(format!(
             "load token registry: parse token registry: {error}"
         ))
-    })?;
+    };
+    let value = crate::go_registry::decode_go_registry(&bytes).map_err(|e| parse_error(&e))?;
+    let raw: RawFile = serde_json::from_value(value).map_err(|e| parse_error(&e))?;
     Ok(raw
         .tokens
         .unwrap_or_default()

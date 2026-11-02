@@ -265,11 +265,26 @@ fn get_entry_value_fails_closed_without_capability_or_interactive_approval() {
         },
         config,
     );
-    let error = runtime
+    // Go's handler checks arguments, scope and quarantine before it asks for
+    // approval (`handleGetValue`), so the gate lives at the value boundary, not
+    // in the pre-dispatch authorization.
+    runtime
         .authorize("get_entry_value", &serde_json::json!({"path": "secret"}))
-        .expect_err("prompt approval must fail closed without an approval bridge");
-    assert!(error.is_error);
+        .expect("approval is decided by the handler, after argument validation");
+    let missing = runtime
+        .call("get_entry_value", &serde_json::json!({}))
+        .expect("argument error is a tool result");
+    assert!(missing.is_error);
+    assert_eq!(missing.text, "missing string argument \"path\"");
+    let error = runtime
+        .call("get_entry_value", &serde_json::json!({"path": "secret"}))
+        .expect("approval refusal is a tool result");
+    assert!(
+        error.is_error,
+        "prompt approval must fail closed without an approval bridge"
+    );
     assert!(error.text.contains("requires approval"));
+    assert!(!error.text.contains("testpass"));
 }
 
 #[test]

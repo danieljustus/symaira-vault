@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-generate ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages release-contract release-contract-selftest rust-cli manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-generate ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
 
 # Variables
 BINARY_NAME := symvault
@@ -182,22 +182,47 @@ install: build
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -m 755 $(BINARY_NAME) $(DESTDIR)$(PREFIX)/bin/$(BINARY_NAME)
 
+# Rust symvault CLI for the host, built in the release profile. The release
+# pipeline (.goreleaser.yml) and the generators below use it; SYMVAULT_VERSION
+# is the only build-time stamp the Rust CLI reads (crates/symvault-cli/src/main.rs).
+RUST_RELEASE_BINARY := $(CARGO_TARGET_DIR)/release/symvault
+SYMVAULT_VERSION ?= $(patsubst v%,%,$(VERSION))
+
+.PHONY: rust-cli
+rust-cli:
+	SYMVAULT_VERSION="$(SYMVAULT_VERSION)" $(CARGO) build --release --locked -p symvault-cli --bin symvault
+
 # Generate shell completions
-completions: build
+completions: rust-cli
 	@mkdir -p completions
-	./$(BINARY_NAME) completion bash > completions/symvault.bash
-	./$(BINARY_NAME) completion zsh > completions/symvault.zsh
-	./$(BINARY_NAME) completion fish > completions/symvault.fish
+	$(RUST_RELEASE_BINARY) completion bash > completions/symvault.bash
+	$(RUST_RELEASE_BINARY) completion zsh > completions/symvault.zsh
+	$(RUST_RELEASE_BINARY) completion fish > completions/symvault.fish
 
 # Generate manual pages
-manpages: build
+manpages: rust-cli
 	@mkdir -p docs/man
-	./$(BINARY_NAME) generate manpages docs/man
+	$(RUST_RELEASE_BINARY) generate manpages docs/man
 
 # Generate release manuals in ignored output so GoReleaser does not dirty docs/man.
-release-manpages: build
-	@mkdir -p dist/man
-	./$(BINARY_NAME) generate manpages dist/man
+# MAN_DIR is overridden by `make release-contract`, which keeps dist/ outside the repo.
+MAN_DIR ?= dist/man
+release-manpages: rust-cli
+	@mkdir -p $(MAN_DIR)
+	$(RUST_RELEASE_BINARY) generate manpages $(MAN_DIR)
+
+# DIST-001/002: snapshot the release pipeline into an external dist dir and
+# check names, members, checksums, packages, MCPB, SBOM and native runs.
+RELEASE_CONTRACT_DIST ?= /Volumes/1TB_NVMe_SN850X/Dev/Symaira_Dev/builds/symaira-vault/dist
+.PHONY: release-contract
+release-contract:
+	python3 scripts/rust-port/release_contract.py --dist "$(RELEASE_CONTRACT_DIST)"
+
+# Self-test of the checker on a synthetic dist (no build, no docker, no disk):
+# it must accept a well-formed dist and reject every tamper control.
+release-contract-selftest:
+	python3 scripts/rust-port/test_release_contract.py
+	python3 scripts/test_supported_platforms.py
 
 # Go-oracle fixtures and neutral black-box harness for the staged Rust port.
 PORT_ORACLE_COMMIT ?= caadd5e
@@ -758,7 +783,7 @@ setup-wizard-differential:
 store004-isolation-check:
 	PYTHONDONTWRITEBYTECODE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/test_store004_isolation.py
 
-port-contract: cfg-overrides-fixtures-check mcp-oauth-contract store004-isolation-check update-fixtures-check
+port-contract: timestamp-fixtures-check cfg-overrides-fixtures-check mcp-oauth-contract store004-isolation-check update-fixtures-check
 
 .PHONY: update-fixtures-check
 update-fixtures-check:
@@ -790,12 +815,21 @@ mcp-http-replay-contract:
 		--rust "$(RUST_BINARY)" \
 		--receipt "$(CARGO_TARGET_DIR)/http-replay-contract.json" $(HTTP_CONTRACT_ARGS)
 
-mcp-http-token-contract:
+mcp-http-token-contract: timestamp-fixtures-check
 	python3 -B scripts/rust-port/test_http_replay_contract.py
 	$(CARGO) build -p symvault-cli --bin symvault --locked
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/http_token_contract.py \
 		--rust "$(RUST_BINARY)" \
 		--receipt "$(CARGO_TARGET_DIR)/http-token-contract.json" $(HTTP_CONTRACT_ARGS)
+
+# Go-recorded RFC3339 acceptance + table display (scripts/rust-port/go_timestamp_fixtures.py).
+# -check re-records in memory and never writes; -generate is the only writer.
+.PHONY: timestamp-fixtures-generate timestamp-fixtures-check
+timestamp-fixtures-generate:
+	GO_TOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/go_timestamp_fixtures.py --generate
+
+timestamp-fixtures-check:
+	GO_TOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/go_timestamp_fixtures.py --check
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:
@@ -1929,8 +1963,19 @@ mcp-oracle-controls:
 mcp-ordered-fixtures-check: mcp-oracle-controls
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)"
 
-mcp-call-differential: mcp-call-fixtures-check mcp-copy-clipboard-differential mcp-secure-input-differential mcp-execute-api-https-differential mcp-execute-with-secret-differential mcp-write-tty-approval-differential mcp-execute-api-request-differential api-templates-differential
+mcp-call-differential: mcp-call-fixtures-check mcp-authz-differential mcp-copy-clipboard-differential mcp-secure-input-differential mcp-execute-api-https-differential mcp-execute-with-secret-differential mcp-write-tty-approval-differential mcp-execute-api-request-differential api-templates-differential
 	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --test tools_secret_unseal --locked
+
+# MCP-002/MCP-003: Go-recorded tools/call outcome of every tool under 22 agent
+# profiles and three token scopes, replayed through the production CLI assembly.
+# The check rebuilds the corrected Go oracle out of tree (non-CGO,
+# -buildvcs=false) and requires byte equality with the committed fixture.
+.PHONY: mcp-authz-fixtures-check mcp-authz-differential
+mcp-authz-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_authz_matrix.py --check
+
+mcp-authz-differential: mcp-authz-fixtures-check
+	SYMVAULT_SECUREUI=none $(CARGO) test -p symvault-cli --test mcp_authz_matrix --locked authorization_matrix -- --nocapture
 
 .PHONY: export-cli-fixtures-check
 export-cli-fixtures-check:

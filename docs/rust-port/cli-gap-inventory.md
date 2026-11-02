@@ -717,3 +717,33 @@ Go reference entry points for the clusters that are self-contained enough to
 port without the platform/broker slices: `cmd/auth/auth.go`,
 `cmd/auth/auth_rotate.go`, `cmd/admin/audit.go`, the `cmd/config*.go` validate
 path, `cmd/agent*.go`/`cmd/mcp/agent_install.go`, and `cmd/update*.go`.
+
+## Token registry decoder (HTTP-A, `go_registry`)
+
+`symvault_store::go_registry::decode_go_registry` reproduces Go's `encoding/json`
+decoding of `mcp-tokens.json` for the serving loader, the store reader and the
+CLI reader (`agent list`, `agent whoami`, `agent token ls`, `doctor` MCP token
+checks). Matched and covered by Go-recorded cases: case-insensitive field
+binding, duplicate keys (every occurrence type-checked, last good value wins,
+root `tokens` merge), per-byte invalid-UTF-8 replacement, lone `\u` surrogates
+(U+FFFD), nesting up to 10000, root `null` (empty registry) and RFC3339
+timestamps on the raw bytes (953 recorded Go 1.26.6 outcomes).
+
+Reload caveat that applies to every row below: when Rust rejects a document the
+live registry keeps its **last good state**, while Go (which accepts the same
+document) adopts it. A Rust-stricter rejection is therefore a real behavioural
+difference on reload (for example an un-applied revocation or an un-applied new
+token), not only a startup refusal.
+
+| Divergence | Go | Rust | Direction | Status |
+| --- | --- | --- | --- | --- |
+| Repeated `allowed_tools` array containing a `null` element (`"allowed_tools":["a"],"allowed_tools":[null]`) | decodes the second array onto the first slice, so a `null` element keeps or re-exposes the earlier element | document rejected | stricter | declared; Go's slice overlay is not modelled |
+
+No other divergence is declared: lone surrogates, depth (10000), root `null` and
+timestamp leftovers (one-digit hour, `,` fraction, `+24:00`, `+00:60`, years
+`0000`-`9999`, fraction digits beyond nine) are matched, not documented away.
+Residual risk: the matched timestamp grammar is a port of `time.Parse`
+(`parse_go_rfc3339`) checked against the recorded cases, not against every
+possible string; re-record with `scripts/rust-port/go_timestamp_oracle.go.txt`
+if Go's toolchain changes. The `time` crate is only used to hold the parsed
+instant.
