@@ -262,6 +262,7 @@ authMethod entries of `config_sections_contract` are gone (the loader matches Go
   `config.yaml passes validation` for `audit.maxSizeMb: 0` where Go warns about `audit.maxFileSize`
   (`config validate` itself agrees; recorded as the open divergence `load_audit_max_size_mb_zero`, which
   replaced the two entries `agents_scalar` and `alias_value_for_string_field` that this change closed).
+  (Closed by CONFIG-RESID: the typed config carries the audit size, so the doctor check agrees.)
 - A typed-decode error whose quoted value is cut inside a multi-byte character is rendered with
   U+FFFD by the loader (`String::from_utf8_lossy`); `config set` still prints Go's raw bytes.
 - A non-string scalar in a string field decodes to its text in Go. (Closed by CONFIG-SECTIONS-001:
@@ -334,7 +335,8 @@ configs; 344 of 4,767 comparisons before).
 
 ### Residuals (probed, not fixed)
 
-- The sweep's 59 remaining differences are all outside the section parsers: 41 inputs Go rejects and
+- (All of the following except `profiles: {p: null}` are closed by CONFIG-RESID, below.) The sweep's 59
+  remaining differences are all outside the section parsers: 41 inputs Go rejects and
   native accepts — `paymentPolicies` (Config.Validate's instrument / limit / agent-reference checks are
   not ported: the native `Config` has no `paymentPolicies` section; open divergences
   `load_payment_policy_without_instrument`, `load_agent_payment_policy_unknown`) and `audit.maxSizeMb:
@@ -357,9 +359,10 @@ configs; 344 of 4,767 comparisons before).
   agent) name, Go attributes the written fields to that other section. The native tree only withholds them
   from the section the alias resolves to (the case Go's own lookup reaches), so a second, real section named
   like the anchor does not inherit them.
-- `agents.*.perToolRedactFields`, `dynamicProviders`, `pre_call_hooks`, `post_call_hooks`, `paymentPolicy`,
+- `agents.*.perToolRedactFields`, `dynamicProviders`, `pre_call_hooks`, `post_call_hooks`,
   `scan_patterns`, `mcp.perplexity` are decoded and type-checked but not carried by the native
-  `AgentProfile`/`McpConfig` (unchanged).
+  `AgentProfile`/`McpConfig` (unchanged; `paymentPolicy` and `paymentPolicies` are carried since
+  CONFIG-RESID).
 - A key written both as an integer and as the same text under a merge (`1: a` own, `"1"` merged) is one
   key here and two in Go's `mergedFields` (interface-typed keys).
 - An explicitly empty or null `vault.authMethod` loads as `""` in Go and `passphrase` in Rust. No command
@@ -373,6 +376,69 @@ configs; 344 of 4,767 comparisons before).
   with key "x"` (exit 1) where Go loads it (exit 0); `config validate` and `agent list` agree with Go.
 - `get`/`set` observations of `custom_tag_on_value` (node layer, `textCommands`) are no longer recorded
   with the promoted case; they were never part of the `accepted` class.
+
+## CONFIG-RESID: audit and paymentPolicies validation, deprecation warnings, 2026-11-02
+
+Closes the residuals the CONFIG-SECTIONS-001 sweep left (136 differences over its 1,589 configs x 3
+commands = 4,767 comparisons: 82 inputs Go rejects and native accepted, 51 that differed only in
+stderr, 3 `profiles: {p: null}`).
+
+- **`Config::validate` checks `audit` and `paymentPolicies`.** `Config` now carries
+  `audit_max_file_size` (`maxSizeMb` x 1 MiB in wrapping `int64`, present only when the file has an
+  `audit` mapping; a written `maxSizeMb` that is `null` or empty decodes to zero, as in Go),
+  `payment_policies` and `AgentProfile::payment_policy`, all read from the yaml.v3-coerced tree
+  (`parse_audit_max_file_size`, `parse_payment_policies`). The checks, their texts and their order are
+  `validatePaymentPolicies` / `validateDecimalString` / `validateAgentPaymentPolicies` of
+  `config_validate.go`, placed where Go's `Validate` puts them (audit before clipboard; payment policy,
+  then agent reference, before Argon2id). `config validate`, `--json`, the doctor check
+  `vault.config.validates` and the KDF migration all go through the one validator;
+  `config_fix.rs` no longer inserts the audit error itself and keeps the audit size in the core config
+  in step when `--fix` repairs it. Go ranges over the policy and agent maps in random order and returns
+  the first failing entry; the native validator reports the first in name order (like the existing
+  agent loops), and no recorded case has two failing entries in one map.
+- **Deprecation warnings reach stderr.** `symvault_core::config::set_warn_hook` is Go's
+  `config.SetWarnFunc`; the CLI installs `config::warn_sink` (Go's `cliout.Warnf`: the message plus a
+  newline on stderr, colour 220 only when stderr and stdout are terminals and `NO_COLOR` is empty) after
+  argument parsing. With a sink installed `Config::load` / `Config::load_from_bytes` emit each warning
+  in load order (`envWhitelist`, then `mcp.approval_required`, then `clipboard.printByDefault`, the last
+  once per process) **even when the load then fails**, as Go does. Without a sink (library users, unit
+  tests) the loaders still drop them. Recorded Go behaviour that is easy to get wrong: `--quiet` does
+  **not** silence them (Go hands `ctx.QuietMode` to `cliout` before cobra parses the flags, so the
+  persistent flag never reaches `cliout.Warnf`; `--color` does not either), a null `envWhitelist` and
+  `approval_required: false` do not warn, a merged `approval_required: true` does, a rejected or
+  undecodable document warns about nothing it did not reach.
+- **Deliberate deviation: `profiles: {p: null}`.** Go dereferences the nil `*Profile` in
+  `mergeTopLevel` (`config_merge.go:106`) and crashes: `panic: runtime error: invalid memory address or
+  nil pointer dereference [signal SIGSEGV ...]` in `config.mergeTopLevel` <- `LoadFromBytes`
+  (`config_load.go:189`) <- `Load`, exit 2 with a goroutine trace on stderr. The native CLI refuses the
+  document (`profiles.p: profile must not be null`, exit 6, `agent list` exit 1). A crash is not
+  behaviour to reproduce and the trace is not a stable byte contract (it carries build paths), so no
+  fixture records it; the refusal is pinned by the core unit test of the loader.
+
+Evidence: `testdata/port/cli/config-yaml-syntax.json` (now 249 cases, 29 open divergences, 957
+comparisons; the 183 earlier cases are byte-identical, only `oracle.generator_digest` changed; the four
+open divergences `load_audit_max_size_mb_zero`, `load_audit_max_size_mb_null`,
+`load_payment_policy_without_instrument` and `load_agent_payment_policy_unknown` became cases) gained 66
+cases recorded from the pinned Go binary (`resid_*`: the audit and payment-policy checks and every
+message of `validateDecimalString`, the validation order, Go's integer coercions for `maxSizeMb` and
+policy names, and the warnings on `config validate`, `--json`, `--quiet`, `agent list` and `doctor`).
+`config_resid_outcomes_are_pinned_to_what_go_prints` names the outcomes and mutates three expectations
+to prove the replay notices a missing check or warning. Re-measured with the CONFIG-SECTIONS sweep
+(1,589 configs x 3 commands = 4,767 comparisons, plus 353 adversarial inputs x 3 and the 26 fix-round
+inputs x 3): **0** Go-rejects/native-accepts, **0** stderr-only differences, the only remaining
+difference is `profiles: {p: null}` (3 comparisons, above).
+
+### Residuals (probed, not fixed)
+
+- `symvault doctor` prints every warning 8 times where Go prints it 9 times (each check that loads the
+  config prints its warnings; Go's doctor makes one more load than the native one, not located). Commands
+  with a single load (`agent list`, `agent profile show`, `config set`'s post-update reload,
+  `config validate`) match.
+- `doctor --fix` and `config validate --fix` save through writers that do not write `paymentPolicies`
+  or an agent's `paymentPolicy` (the typed writer has no such keys), so repairing an unrelated error
+  drops them from the file. Go's `SaveTo` writes it. The doctor fixer also lacks Go's fixes for `audit.maxFileSize` and
+  `clipboard.autoClearDuration` (the check is now `warn`, fixable, and the fix leaves it unchanged);
+  `config validate --fix` repairs the audit size.
 
 ## SET-003 fix round: vault-open errors, hidden reads, piped input
 

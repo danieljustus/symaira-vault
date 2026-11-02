@@ -87,7 +87,12 @@ impl Extras {
         let mut extras = Self::default();
         if let Some(section) = document.get("audit").and_then(|v| v.as_mapping()) {
             let mut audit = Audit::default();
-            let field = |name: &str| section.get(name).and_then(serde_yaml_ng::Value::as_i64);
+            // A key the operator wrote with no value (`maxSizeMb:` or `null`)
+            // decodes to zero in Go and still replaces the default.
+            let field = |name: &str| match section.get(name) {
+                Some(serde_yaml_ng::Value::Null) => Some(0),
+                other => other.and_then(serde_yaml_ng::Value::as_i64),
+            };
             if let Some(megabytes) = field("maxSizeMb") {
                 audit.max_file_size = megabytes.wrapping_mul(MIB);
             }
@@ -154,37 +159,20 @@ pub(crate) fn load(path: &Path) -> Result<Loaded, String> {
             .map_err(|error| super::format_go_path_error("open", &read_path, &error))?
     };
     let config = Config::load_from_bytes(&bytes).map_err(|error| error.to_string())?;
-    Ok(Loaded {
-        config,
-        extras: Extras::from_bytes(&bytes),
-    })
+    let mut extras = Extras::from_bytes(&bytes);
+    // The loader's own reading of `audit.maxSizeMb` (coerced the way yaml.v3
+    // decodes it) is the one `Validate` judges; the extras carry it for the
+    // writer.
+    if let (Some(bytes), Some(audit)) = (config.audit_max_file_size, extras.audit.as_mut()) {
+        audit.max_file_size = bytes;
+    }
+    Ok(Loaded { config, extras })
 }
 
-/// Go's `Config.Validate`, including the `audit.maxFileSize` check that the
-/// typed config cannot make. The message sits where Go's `errors.Join`
-/// emits it: after the agent checks, before the clipboard and Argon2id ones.
+/// Go's `Config.Validate`. `audit.maxFileSize` and `paymentPolicies` are
+/// checked by the core validator, which sees them as typed config fields.
 pub(crate) fn validate(loaded: &Loaded) -> Vec<String> {
-    let mut errors = loaded.config.validate();
-    if loaded
-        .extras
-        .audit
-        .as_ref()
-        .is_some_and(|audit| audit.max_file_size <= 0)
-    {
-        let at = errors
-            .iter()
-            .position(|line| {
-                line.starts_with("clipboard.autoClearDuration")
-                    || line.starts_with("vault.argon2id")
-            })
-            .unwrap_or(errors.len());
-        errors.insert(
-            at,
-            "audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)"
-                .to_owned(),
-        );
-    }
-    errors
+    loaded.config.validate()
 }
 
 /// The `--fix` flow after the first `Load` of `configValidateCmd`.
@@ -338,6 +326,7 @@ fn apply_auto_fixes(loaded: &mut Loaded, load_error: Option<&str>, validation_er
                 max_age_days: 0,
             })
             .max_file_size = AUDIT_DEFAULT_MAX_BYTES;
+        loaded.config.audit_max_file_size = Some(AUDIT_DEFAULT_MAX_BYTES);
         modified = true;
     }
     if mentions("clipboard.autoClearDuration")
@@ -585,6 +574,7 @@ fn home_dir() -> String {
 
 const SUCCESS_256: u8 = 82;
 const ERROR_256: u8 = 203;
+const WARN_256: u8 = 220;
 
 /// Go styles through lipgloss' default renderer, which profiles *stdout*, and
 /// only when stderr is a terminal and `NO_COLOR` is empty. Background
@@ -610,6 +600,7 @@ fn style(text: &str, color: u8) -> String {
             // 16-colour profile: the bright variant termenv picks for the palette.
             match color {
                 SUCCESS_256 => "92".to_owned(),
+                WARN_256 => "93".to_owned(),
                 _ => "91".to_owned(),
             }
         };
@@ -619,6 +610,18 @@ fn style(text: &str, color: u8) -> String {
 fn hintf(message: &str) {
     let mut err = io::stderr().lock();
     let _ = writeln!(err, "{}", style(message, SUCCESS_256));
+}
+
+/// Go's `cliout.Warnf` on stderr: the sink the loader hands its deprecation
+/// warnings to (Go installs the same function with `config.SetWarnFunc`).
+///
+/// `--quiet` does not silence it. Go copies `ctx.QuietMode` into `cliout`
+/// before cobra has parsed any flag, so the persistent flag never reaches
+/// `cliout.isQuiet`, and neither does `--color`: the output is the plain
+/// auto-colour one.
+pub(crate) fn warnf(message: &str) {
+    let mut err = io::stderr().lock();
+    let _ = writeln!(err, "{}", style(message, WARN_256));
 }
 
 fn errorf(message: &str) {
@@ -873,6 +876,7 @@ mod tests {
                     auto_clear_duration: -1,
                     copy_by_default: true,
                 }),
+                audit_max_file_size: Some(-MIB),
                 ..Config::default()
             },
             extras: Extras::from_bytes(b"audit:\n  maxSizeMb: -1\n"),

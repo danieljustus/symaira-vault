@@ -898,6 +898,12 @@ fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
     }
 }
 
+/// The sink for the loader's deprecation warnings (Go's
+/// `config.SetWarnFunc(cliout.Warnf)`).
+pub(crate) fn warn_sink(message: &str) {
+    self::fix::warnf(message);
+}
+
 /// Implements `symvault config validate [path]`.
 ///
 /// Mirrors Go's `config validate`: load, then run

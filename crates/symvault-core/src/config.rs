@@ -9,7 +9,10 @@ use std::{
     collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 
@@ -51,6 +54,17 @@ static PROCESS_WARNINGS: WarningState = WarningState {
     print_by_default: AtomicBool::new(false),
 };
 
+/// Go's `config.SetWarnFunc`: where a load reports its deprecation warnings.
+static WARN_HOOK: OnceLock<fn(&str)> = OnceLock::new();
+
+/// Installs the process-wide warning sink for [`Config::load`] and
+/// [`Config::load_from_bytes`], the way the Go CLI installs
+/// `config.SetWarnFunc` at start-up. Returns false when a sink is already
+/// installed. Without a sink those two loaders drop their warnings.
+pub fn set_warn_hook(hook: fn(&str)) -> bool {
+    WARN_HOOK.set(hook).is_ok()
+}
+
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("read config: {0}")]
@@ -90,6 +104,31 @@ pub struct Config {
     pub mcp: Option<McpConfig>,
     pub update: Option<UpdateConfig>,
     pub clipboard: Option<ClipboardConfig>,
+    /// Go's `audit.maxFileSize` in bytes (`maxSizeMb` times 1 MiB, wrapping as
+    /// Go's `int64` product does), present exactly when the file carries an
+    /// `audit` mapping. Only `Validate` reads it here: the rest of the audit
+    /// section is not modelled by this crate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audit_max_file_size: Option<i64>,
+    /// Go's `paymentPolicies`, keyed by policy name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub payment_policies: BTreeMap<String, PaymentPolicy>,
+}
+
+/// Go's `PaymentMaxAmount`: decimal limits kept as text.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PaymentMaxAmount {
+    pub per_transaction: String,
+    pub per_day: String,
+}
+
+/// Go's `PaymentPolicy`, as far as `Validate` looks at it.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PaymentPolicy {
+    pub instrument: String,
+    pub allowed_merchants: Vec<String>,
+    pub max_amount: PaymentMaxAmount,
+    pub currency: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -148,6 +187,10 @@ pub struct AgentProfile {
     pub prompt_injection_mode: String,
     pub skill_path: String,
     pub skill_version: String,
+    /// Go's `paymentPolicy`: the name of the `paymentPolicies` entry the
+    /// profile is bound to. `None` is a nil pointer (never written).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payment_policy: Option<String>,
 }
 
 impl AgentProfile {
@@ -517,6 +560,8 @@ impl Default for Config {
             mcp: None,
             update: None,
             clipboard: None,
+            audit_max_file_size: None,
+            payment_policies: BTreeMap::new(),
         }
     }
 }
@@ -559,9 +604,12 @@ impl Config {
     /// valid, and the Rust `AuthMethod` enum cannot hold anything else. A
     /// `vault.authMethod` that does not normalize is the one case Go's
     /// `Validate` can still reject, and it is carried in
-    /// [`VaultConfig::invalid_auth_method`]. Go's `audit.maxFileSize` and
-    /// `paymentPolicies` checks are omitted because this port does not yet
-    /// model those config sections at all.
+    /// [`VaultConfig::invalid_auth_method`]. The `audit.maxFileSize` check
+    /// and the `paymentPolicies` checks run on the two fields that carry just
+    /// what they need ([`Config::audit_max_file_size`],
+    /// [`Config::payment_policies`]). Go walks its maps in random order, so
+    /// when several entries are wrong it reports whichever it meets first;
+    /// this port reports the first in name order.
     #[must_use]
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
@@ -618,6 +666,13 @@ impl Config {
             }
         }
 
+        if self.audit_max_file_size.is_some_and(|bytes| bytes <= 0) {
+            errors.push(
+                "audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)"
+                    .to_owned(),
+            );
+        }
+
         if let Some(clipboard) = &self.clipboard
             && clipboard.auto_clear_duration < 0
         {
@@ -626,6 +681,12 @@ impl Config {
                     .to_owned(),
             );
         }
+
+        errors.extend(validate_payment_policies(&self.payment_policies));
+        errors.extend(validate_agent_payment_policies(
+            &self.agents,
+            &self.payment_policies,
+        ));
 
         errors.extend(validate_argon2id_config(self.vault.as_ref()));
         errors
@@ -636,15 +697,27 @@ impl Config {
         Self::load_from_bytes(&bytes)
     }
 
-    /// Loads a config and drops the warnings.
+    /// Loads a config and hands its warnings to the sink [`set_warn_hook`]
+    /// installed, or drops them when none is.
     ///
-    /// The once-per-process `clipboard.printByDefault` guard is deliberately
-    /// not consumed here: a load that shows the operator nothing has not told
-    /// them anything, so it must not use up the message a later load that does
-    /// show warnings is entitled to.
+    /// With a sink the warnings go out whether or not the load then succeeds
+    /// (Go prints a deprecation notice and may still reject the document
+    /// afterwards), in the order they were raised, and the once-per-process
+    /// `clipboard.printByDefault` guard is the process-wide one. Without a
+    /// sink the guard is deliberately not consumed: a load that shows the
+    /// operator nothing has not told them anything, so it must not use up the
+    /// message a later load that does show warnings is entitled to.
     pub fn load_from_bytes(bytes: &[u8]) -> Result<Self, ConfigError> {
-        Self::load_from_bytes_with_warnings_in(bytes, &WarningState::default())
-            .map(|(config, _)| config)
+        let Some(hook) = WARN_HOOK.get() else {
+            return Self::load_from_bytes_with_warnings_in(bytes, &WarningState::default())
+                .map(|(config, _)| config);
+        };
+        let mut warnings = Vec::new();
+        let result = Self::parse_document(bytes, &mut warnings, &PROCESS_WARNINGS);
+        for warning in &warnings {
+            hook(warning);
+        }
+        result
     }
 
     /// Loads a config and returns the warnings the loader raised.
@@ -661,9 +734,9 @@ impl Config {
     /// [`Config::load_from_bytes_with_warnings`] against an explicit warning
     /// state, so a caller (or a test) can model a fresh process.
     ///
-    /// A warning raised before a later rejection is lost: Go emits it and then
-    /// fails, Rust returns only the error. The text is not part of the error
-    /// contract either way.
+    /// A warning raised before a later rejection is lost here: Go emits it and
+    /// then fails, this returns only the error. [`Config::load_from_bytes`]
+    /// with a sink installed keeps it.
     pub fn load_from_bytes_with_warnings_in(
         bytes: &[u8],
         state: &WarningState,
@@ -898,6 +971,12 @@ impl Config {
         }
         if let Some(v) = root.get(key("clipboard")).filter(|v| !v.is_null()) {
             config.clipboard = Some(parse_clipboard(v, warnings, state)?);
+        }
+        if let Some(v) = root.get(key("audit")).filter(|v| !v.is_null()) {
+            config.audit_max_file_size = Some(parse_audit_max_file_size(v)?);
+        }
+        if let Some(v) = scalar(root, "paymentPolicies") {
+            config.payment_policies = parse_payment_policies(v)?;
         }
         // Go ends every load by recording the resolved method as the flag.
         config.use_touch_id = Some(config.auth_method == AuthMethod::Touchid);
@@ -1629,6 +1708,9 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
         if let Some(v) = set("skillVersion") {
             profile.skill_version = string_field(v, "skillVersion")?;
         }
+        if let Some(v) = set("paymentPolicy") {
+            profile.payment_policy = Some(string_field(v, "paymentPolicy")?);
+        }
         if !wrote("approvalMode") && wrote("requireApproval") && set("requireApproval").is_some() {
             profile.approval_mode = Some(
                 if profile.require_approval {
@@ -1655,6 +1737,119 @@ fn string_list(
         }
         Some(_) => Err(ConfigError::Parse(format!("{field} must be a sequence"))),
     }
+}
+
+/// Go's `validateDecimalString`: at most 30 bytes of an optional leading minus
+/// sign, digits and one decimal point, with at least one digit.
+fn validate_decimal_string(text: &str, field: &str) -> Result<(), String> {
+    let quoted = || crate::go_quote(text);
+    if text.is_empty() || text.len() > 30 {
+        return Err(format!(
+            "{field}: {} is not a valid decimal amount",
+            quoted()
+        ));
+    }
+    let mut saw_dot = false;
+    let mut has_digit = false;
+    for (index, ch) in text.char_indices() {
+        match ch {
+            '-' => {
+                if index != 0 {
+                    return Err(format!(
+                        "{field}: {} is not a valid decimal amount (minus sign must be leading)",
+                        quoted()
+                    ));
+                }
+            }
+            '.' => {
+                if saw_dot {
+                    return Err(format!(
+                        "{field}: {} is not a valid decimal amount (multiple decimal points)",
+                        quoted()
+                    ));
+                }
+                saw_dot = true;
+            }
+            '0'..='9' => has_digit = true,
+            _ => {
+                return Err(format!(
+                    "{field}: {} is not a valid decimal amount",
+                    quoted()
+                ));
+            }
+        }
+    }
+    if !has_digit {
+        return Err(format!(
+            "{field}: {} is not a valid decimal amount (no digits)",
+            quoted()
+        ));
+    }
+    // Go finishes with `big.Rat.SetString`, which accepts every string that
+    // got this far (a sign, digits and at most one point).
+    Ok(())
+}
+
+/// Go's `validatePaymentPolicies`: the first failing policy, in name order.
+fn validate_payment_policies(policies: &BTreeMap<String, PaymentPolicy>) -> Option<String> {
+    for (name, policy) in policies {
+        if policy.instrument.trim().is_empty() {
+            return Some(format!(
+                "paymentPolicies.{name}.instrument: must not be empty"
+            ));
+        }
+        let has_allowlist = !policy.allowed_merchants.is_empty();
+        let has_limits =
+            !policy.max_amount.per_transaction.is_empty() || !policy.max_amount.per_day.is_empty();
+        if !has_allowlist && !has_limits {
+            return Some(format!(
+                "paymentPolicies.{name}: must have at least one allowed_merchant or max_amount limit"
+            ));
+        }
+        if has_limits && policy.currency.trim().is_empty() {
+            return Some(format!(
+                "paymentPolicies.{name}.currency: required when max_amount limits are set"
+            ));
+        }
+        if !policy.max_amount.per_transaction.is_empty()
+            && let Err(error) = validate_decimal_string(
+                &policy.max_amount.per_transaction,
+                &format!("paymentPolicies.{name}.max_amount.per_transaction"),
+            )
+        {
+            return Some(error);
+        }
+        if !policy.max_amount.per_day.is_empty()
+            && let Err(error) = validate_decimal_string(
+                &policy.max_amount.per_day,
+                &format!("paymentPolicies.{name}.max_amount.per_day"),
+            )
+        {
+            return Some(error);
+        }
+    }
+    None
+}
+
+/// Go's `validateAgentPaymentPolicies`: the first profile, in name order,
+/// that names a policy `paymentPolicies` does not define.
+fn validate_agent_payment_policies(
+    agents: &BTreeMap<String, AgentProfile>,
+    policies: &BTreeMap<String, PaymentPolicy>,
+) -> Option<String> {
+    for (name, profile) in agents {
+        let policy_name = profile.payment_policy.as_deref().unwrap_or("");
+        if policy_name.is_empty() {
+            continue;
+        }
+        if !policies.contains_key(policy_name) {
+            return Some(format!(
+                "agents.{name}.paymentPolicy: policy {} not found in paymentPolicies",
+                crate::go_quote(policy_name)
+            ));
+        }
+    }
+    None
 }
 
 /// Mirrors Go's `validateArgon2idConfig`: an explicit zero means "use the
@@ -1988,6 +2183,60 @@ fn parse_mcp(
     }
     Ok(out)
 }
+/// Go's `mergeAuditConfig` for the one field `Validate` reads: a written
+/// `maxSizeMb` (a `null` decodes to zero) replaces the 100 MiB default and is
+/// scaled to bytes with `int64` wrap-around.
+fn parse_audit_max_file_size(value: &serde_yaml_ng::Value) -> Result<i64, ConfigError> {
+    const MIB: i64 = 1024 * 1024;
+    let map = mapping(value)?;
+    match written(map, "maxSizeMb") {
+        Some(v) => Ok(int_field(v, "maxSizeMb")?.wrapping_mul(MIB)),
+        None => Ok(100 * MIB),
+    }
+}
+
+/// Go's `map[string]PaymentPolicy`: a `null` map is nil, a `null` entry the
+/// zero policy.
+fn parse_payment_policies(
+    value: &serde_yaml_ng::Value,
+) -> Result<BTreeMap<String, PaymentPolicy>, ConfigError> {
+    let mut policies = BTreeMap::new();
+    let Some(map) = value.as_mapping() else {
+        return Ok(policies);
+    };
+    let empty = serde_yaml_ng::Mapping::new();
+    for (name, value) in entries(map) {
+        let fields = value.as_mapping().unwrap_or(&empty);
+        let text = |field: &str| match scalar(fields, field) {
+            Some(v) => string_field(v, field),
+            None => Ok(String::new()),
+        };
+        let max_amount = scalar(fields, "max_amount")
+            .and_then(serde_yaml_ng::Value::as_mapping)
+            .unwrap_or(&empty);
+        let amount = |field: &str| match scalar(max_amount, field) {
+            Some(v) => string_field(v, field),
+            None => Ok(String::new()),
+        };
+        policies.insert(
+            name.to_owned(),
+            PaymentPolicy {
+                instrument: text("instrument")?,
+                allowed_merchants: string_list(
+                    scalar(fields, "allowed_merchants"),
+                    "allowed_merchants",
+                )?,
+                max_amount: PaymentMaxAmount {
+                    per_transaction: amount("per_transaction")?,
+                    per_day: amount("per_day")?,
+                },
+                currency: text("currency")?,
+            },
+        );
+    }
+    Ok(policies)
+}
+
 fn parse_update(value: &serde_yaml_ng::Value) -> Result<UpdateConfig, ConfigError> {
     let map = mapping(value)?;
     let mut out = UpdateConfig::default();
@@ -2962,6 +3211,128 @@ mod tests {
                 default
             );
         }
+    }
+
+    #[test]
+    fn validate_checks_audit_size_and_payment_policies_like_go() {
+        let errors = |source: &str| load(source).validate();
+        // audit.maxFileSize: null and zero are zero bytes, the product wraps.
+        for source in [
+            "audit:\n  maxSizeMb: null\n",
+            "audit:\n  maxSizeMb:\n",
+            "audit:\n  maxSizeMb: 0\n",
+            "audit:\n  maxSizeMb: -3\n",
+            "audit:\n  maxSizeMb: 9223372036854775807\n",
+            "audit:\n  maxSizeMb: 17592186044416\n",
+        ] {
+            assert_eq!(
+                errors(source),
+                [
+                    "audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)"
+                ],
+                "{source}"
+            );
+        }
+        for source in [
+            "audit:\n  maxSizeMb: 5\n",
+            "audit: {}\n",
+            "audit: null\n",
+            "audit:\n  maxBackups: null\n",
+            "base: &b\n  maxSizeMb: 0\naudit:\n  <<: *b\n",
+        ] {
+            assert!(errors(source).is_empty(), "{source}");
+        }
+        let policy = |body: &str| {
+            errors(&format!(
+                "paymentPolicies:\n  p:\n    instrument: card\n    currency: EUR\n{body}"
+            ))
+        };
+        assert_eq!(
+            errors("paymentPolicies:\n  p: {}\n"),
+            ["paymentPolicies.p.instrument: must not be empty"]
+        );
+        assert_eq!(
+            errors("paymentPolicies:\n  p:\n    instrument: ' '\n    allowed_merchants: [a]\n"),
+            ["paymentPolicies.p.instrument: must not be empty"]
+        );
+        assert_eq!(
+            policy(""),
+            ["paymentPolicies.p: must have at least one allowed_merchant or max_amount limit"]
+        );
+        assert_eq!(
+            errors(
+                "paymentPolicies:\n  p:\n    instrument: card\n    max_amount:\n      per_day: '1'\n"
+            ),
+            ["paymentPolicies.p.currency: required when max_amount limits are set"]
+        );
+        for (amount, reason) in [
+            ("abc", ""),
+            ("1.2.3", " (multiple decimal points)"),
+            ("5-1", " (minus sign must be leading)"),
+            ("-", " (no digits)"),
+            (".", " (no digits)"),
+            ("+5", ""),
+            ("1e3", ""),
+            ("1234567890123456789012345678901", ""),
+        ] {
+            assert_eq!(
+                policy(&format!(
+                    "    max_amount:\n      per_transaction: '{amount}'\n"
+                )),
+                [format!(
+                    "paymentPolicies.p.max_amount.per_transaction: \"{amount}\" is not a valid decimal amount{reason}"
+                )],
+                "{amount}"
+            );
+        }
+        assert_eq!(
+            policy("    max_amount:\n      per_transaction: '5'\n      per_day: x\n"),
+            ["paymentPolicies.p.max_amount.per_day: \"x\" is not a valid decimal amount"]
+        );
+        for amount in ["5.", ".5", "-0.25", "123456789012345678901234567890"] {
+            assert!(
+                policy(&format!("    max_amount:\n      per_day: '{amount}'\n")).is_empty(),
+                "{amount}"
+            );
+        }
+        // An agent's reference must name a defined policy, case-sensitively.
+        assert_eq!(
+            errors("agents:\n  x:\n    paymentPolicy: abc\n"),
+            ["agents.x.paymentPolicy: policy \"abc\" not found in paymentPolicies"]
+        );
+        assert!(errors("agents:\n  x:\n    paymentPolicy: ''\n").is_empty());
+        assert!(errors("agents:\n  x:\n    paymentPolicy: null\n").is_empty());
+        assert_eq!(
+            errors(
+                "paymentPolicies:\n  p:\n    instrument: c\n    allowed_merchants: [a]\nagents:\n  x:\n    paymentPolicy: P\n"
+            ),
+            ["agents.x.paymentPolicy: policy \"P\" not found in paymentPolicies"]
+        );
+        assert!(
+            errors(
+                "paymentPolicies:\n  5:\n    instrument: c\n    allowed_merchants: [a]\nagents:\n  x:\n    paymentPolicy: 5\n"
+            )
+            .is_empty()
+        );
+        // The checks keep Go's order: audit, clipboard, payment, agent
+        // reference, Argon2id.
+        let order = errors(
+            "audit:\n  maxSizeMb: 0\nclipboard:\n  auto_clear_duration: -2\npaymentPolicies:\n  p: {}\nagents:\n  x:\n    paymentPolicy: q\nvault:\n  argon2id_time: 1\n",
+        );
+        let prefixes: Vec<&str> = order
+            .iter()
+            .map(|line| line.split(':').next().unwrap_or(""))
+            .collect();
+        assert_eq!(
+            prefixes,
+            [
+                "audit.maxFileSize",
+                "clipboard.autoClearDuration",
+                "paymentPolicies.p.instrument",
+                "agents.x.paymentPolicy",
+                "vault.argon2id_time"
+            ]
+        );
     }
 
     #[test]
