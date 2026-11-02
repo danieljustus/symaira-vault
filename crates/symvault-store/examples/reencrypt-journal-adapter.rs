@@ -88,7 +88,15 @@ fn run() -> Result<(), String> {
     let path = argument(&args, "--path")?;
     match action.as_str() {
         "read" => {
-            let store = Store::open(&root, &identity).map_err(|error| error.to_string())?;
+            // Differential adapters test store semantics against Go, not decision D1 (the
+            // pre-mutation backup): the root is declared Rust-created so the gate does not
+            // refuse the Go-created vault. The `.symvault-rust` marker is a declared D1
+            // artifact and is ignored by tree comparisons.
+            let store = Store::open(
+                symvault_store::data_safety::test_support_pre_marked(&root),
+                &identity,
+            )
+            .map_err(|error| error.to_string())?;
             let entry: Entry = store
                 .get(&path, &identity)
                 .map_err(|error| error.to_string())?;

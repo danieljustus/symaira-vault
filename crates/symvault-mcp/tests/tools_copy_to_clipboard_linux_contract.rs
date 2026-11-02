@@ -303,7 +303,11 @@ fn copy_to_clipboard_matches_go_linux_command_clipboard() {
         .unwrap();
         fs::create_dir(vault.path().join("entries")).unwrap();
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(vault.path(), &identity).expect("open synthetic store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(vault.path()),
+            &identity,
+        )
+        .expect("open synthetic store");
         store
             .write_new_entry(
                 "github",

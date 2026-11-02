@@ -44,7 +44,11 @@ fn fixture(config: ReadOnlyRuntimeConfig, with_autotype: bool) -> Fixture {
     fs::write(root.path().join("identity.age"), b"fixture identity").unwrap();
     fs::create_dir(root.path().join("entries")).unwrap();
     let identity = generate_identity();
-    let store = Store::open(root.path(), &identity).unwrap();
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .unwrap();
     store
         .write_new_entry(
             "public/site",

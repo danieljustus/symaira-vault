@@ -272,7 +272,11 @@ fn perplexity_replays_go_fixture_against_loopback_tls_mock() {
         .unwrap();
         fs::create_dir(root.path().join("entries")).unwrap();
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).expect("open synthetic store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .expect("open synthetic store");
         for entry in case.entries.iter().flatten() {
             store
                 .write_new_entry(

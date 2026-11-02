@@ -221,6 +221,12 @@ func indexBuildTree(t *testing.T, root string) map[string]indexBuildFile {
 		if name == ".search-index" {
 			return nil
 		}
+		// Declared D1 artifact (data-safety gate): the Rust adapter marks the
+		// Go-created root before its first mutation; the marker is not part of
+		// the store semantics compared here.
+		if name == ".symvault-rust" {
+			return nil
+		}
 		var data []byte
 		if !info.IsDir() {
 			data, err = os.ReadFile(path)

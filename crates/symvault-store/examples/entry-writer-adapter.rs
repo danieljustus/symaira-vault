@@ -23,7 +23,15 @@ fn run() -> Result<(), String> {
     let request: Request =
         serde_json::from_reader(io::stdin()).map_err(|error| error.to_string())?;
     let identity = parse_identity(&request.identity).map_err(|error| error.to_string())?;
-    let store = Store::open(&request.root, &identity).map_err(|error| error.to_string())?;
+    // Differential adapters test store semantics against Go, not decision D1 (the
+    // pre-mutation backup): the root is declared Rust-created so the gate does not
+    // refuse the Go-created vault. The `.symvault-rust` marker is a declared D1
+    // artifact and is ignored by tree comparisons.
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&request.root),
+        &identity,
+    )
+    .map_err(|error| error.to_string())?;
     let result = match request.action.as_str() {
         "write" => {
             store

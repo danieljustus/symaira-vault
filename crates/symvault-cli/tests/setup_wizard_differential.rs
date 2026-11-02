@@ -712,6 +712,44 @@ fn normalized_name(rel: &str) -> String {
     rel.to_owned()
 }
 
+/// Declared D1 difference (DIST-005): Rust takes a verified backup before the
+/// first mutation of an unmarked vault, so a Rust run leaves the `.symvault-rust`
+/// marker in the vault and the archive below `$HOME/.local/state/symvault`.
+/// Go does neither; the data-safety contract
+/// (`make data-safety-differential`) verifies them, so the Go-parity tree
+/// comparisons look past exactly these paths.
+fn d1_artifact(path: &Path) -> bool {
+    if path
+        .file_name()
+        .is_some_and(|name| name == ".symvault-rust")
+    {
+        return true;
+    }
+    // The store's write lock: the gate takes it on a Go-created vault (the marker
+    // says it ran there); Go's own writers leave no such file.
+    if path.file_name().is_some_and(|name| name == ".lock")
+        && path.parent().is_some_and(|dir| {
+            fs::read_to_string(dir.join(".symvault-rust"))
+                .is_ok_and(|marker| marker.contains("go-vault-backup"))
+        })
+    {
+        return true;
+    }
+    let text = path.to_string_lossy();
+    if text.ends_with(".local/state/symvault") || text.contains(".local/state/symvault/") {
+        return true;
+    }
+    // `.local` and `.local/state` exist only because the backup created them.
+    let only = |dir: &Path, child: &str| {
+        fs::read_dir(dir).is_ok_and(|entries| {
+            let names: Vec<_> = entries.flatten().map(|e| e.file_name()).collect();
+            names.len() == 1 && names[0] == child
+        })
+    };
+    (text.ends_with("/.local") && only(path, "state") && only(&path.join("state"), "symvault"))
+        || (text.ends_with("/.local/state") && only(path, "symvault"))
+}
+
 fn manifest(root: &Path, roots: &Roots) -> BTreeMap<String, ManifestEntry> {
     let mut out = BTreeMap::new();
     let mut stack = vec![root.to_path_buf()];
@@ -727,7 +765,7 @@ fn manifest(root: &Path, roots: &Roots) -> BTreeMap<String, ManifestEntry> {
                 .expect("under root")
                 .to_string_lossy()
                 .into_owned();
-            if top_level_skipped(&rel) {
+            if top_level_skipped(&rel) || d1_artifact(&path) {
                 continue;
             }
             let meta = fs::symlink_metadata(&path).expect("lstat");

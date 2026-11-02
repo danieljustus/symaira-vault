@@ -129,6 +129,11 @@ pub(super) fn init_vault(
         .map_err(|error| format!("save identity: {error}"))?;
     safeio::write_atomic(&root.join("identity.age"), &encrypted)
         .map_err(|error| format!("save identity: {error}"))?;
+    // A vault Rust creates needs no pre-migration backup (D1); without the
+    // marker the later token-registry write would be refused as an unmarked
+    // vault (same as `vault_commands::init`).
+    symvault_store::data_safety::mark_created(root)
+        .map_err(|error| format!("write rust marker: {error}"))?;
     Ok(recipient_string(&identity))
 }
 

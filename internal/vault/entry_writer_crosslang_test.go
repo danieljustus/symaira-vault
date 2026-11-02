@@ -227,6 +227,10 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 					if err != nil {
 						return err
 					}
+					// Declared D1 artifact (data-safety gate), not entry-write state.
+					if rel == ".symvault-rust" {
+						return nil
+					}
 					info, err := d.Info()
 					if err != nil {
 						return err

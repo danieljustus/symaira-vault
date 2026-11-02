@@ -293,7 +293,12 @@ fn replay(goos: &str, fixture_text: &str) {
         fs::write(root.join("identity.age"), b"synthetic identity marker").unwrap();
         fs::create_dir(root.join("entries")).unwrap();
         let identity = generate_identity();
-        let store = Store::open(&root, &identity).expect("open synthetic encrypted store");
+        // A synthetic Rust-created fixture: the authz matrix does not test the D1 backup.
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .expect("open synthetic encrypted store");
         store
             .write_new_entry(
                 "public/fixture",
