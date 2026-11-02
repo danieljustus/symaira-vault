@@ -11,7 +11,7 @@ fn auto_commit_entry_records_message_and_affected_paths() {
     let root = tempdir().expect("external synthetic git fixture tempdir");
     fs::write(
         root.path().join("config.yaml"),
-        "git:\n  auto_push: false\n  auto_pull: false\n  auto_pull_interval: 0\n  commit_template: ''\n",
+        "git:\n  auto_push: false\n  auto_pull: false\n  auto_pull_interval: 0s\n  commit_template: ''\n",
     )
     .expect("git-enabled fixture config");
     fs::write(root.path().join("identity.age"), b"fixture identity marker")
