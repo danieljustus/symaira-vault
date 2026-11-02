@@ -743,6 +743,17 @@ manpages-differential:
 cli-help-differential: manpages-differential
 	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_HELP_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_help --test cli_get_list_help_differential --test cli_dynamic_setup_help --test cli_update_help --locked
 
+# SETUP-001: `symvault setup` through a real PTY against a no-cgo Go oracle built
+# from this checked-out source (a no-cgo build cannot see Touch ID; see
+# docs/rust-port/setup-wizard.md). Not part of port-contract: it needs a PTY and
+# the recording is darwin's. The replay without Go is part of `cargo test`.
+SETUP_GO_BINARY := target/port/symvault-setup-go
+.PHONY: setup-wizard-differential
+setup-wizard-differential:
+	@mkdir -p "$(dir $(SETUP_GO_BINARY))"
+	CGO_ENABLED=0 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=true -trimpath -o "$(SETUP_GO_BINARY)" .
+	SYMVAULT_GO_BINARY="$(abspath $(SETUP_GO_BINARY))" $(CARGO) test -p symvault-cli --test setup_wizard_differential --locked
+
 .PHONY: store004-isolation-check
 store004-isolation-check:
 	PYTHONDONTWRITEBYTECODE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/test_store004_isolation.py
