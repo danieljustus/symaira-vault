@@ -163,7 +163,11 @@ fn snapshot_of(config: &Config) -> Snapshot {
             path: v.path.clone(),
             default_recipients: v.default_recipients.clone(),
             confirm_remove: v.confirm_remove,
-            auth_method: v.auth_method.as_str().to_owned(),
+            // Go keeps a vault method it cannot normalize as written.
+            auth_method: v
+                .invalid_auth_method
+                .clone()
+                .unwrap_or_else(|| v.auth_method.as_str().to_owned()),
             use_touch_id: v.use_touch_id,
             legacy_mode: v.legacy_mode,
             search_index: v.search_index,
@@ -249,28 +253,6 @@ fn mask_adjudicated(snapshot: &mut Snapshot) {
     }
 }
 
-/// Inputs Go accepts and Rust deliberately rejects.
-///
-/// Go's merge ignores an `authMethod` it cannot normalize, so a typo such as
-/// `retina` silently runs the vault with a passphrase. That is the same silent
-/// discard CFG-003 step two closed for session durations, and Rust's method
-/// type cannot carry the raw text either. The stricter side is kept and the
-/// difference recorded; the Go behavior is a separate oracle change.
-///
-/// The same family covers non-string scalars: yaml.v3 decodes a non-null
-/// `authMethod: 5`, `true` or `1.5` into the string field as text, which the
-/// merge then ignores as an unknown method, while Rust rejects the wrong type.
-const ADJUDICATED_STRICTER: [&str; 8] = [
-    "auth_top_invalid",
-    "auth_vault_invalid",
-    "auth_top_integer",
-    "auth_top_bool",
-    "auth_top_float",
-    "auth_vault_integer",
-    "auth_vault_bool",
-    "auth_vault_float",
-];
-
 /// Residual ordering divergence, asserted exactly.
 ///
 /// Go checks `mcp.bind` only after every section has merged, so a document
@@ -320,14 +302,6 @@ fn sections_match_go_oracle() {
             };
             let result = Config::load_from_bytes_with_warnings_in(document.as_bytes(), &state);
             let label = format!("{} (load {index})", case.name);
-            if ADJUDICATED_STRICTER.contains(&case.name.as_str()) {
-                assert!(!expected.rejected, "{label}: Go is expected to accept it");
-                assert!(
-                    result.is_err(),
-                    "{label}: the adjudicated rejection closed or widened"
-                );
-                continue;
-            }
             if expected.rejected {
                 assert!(
                     result.is_err(),

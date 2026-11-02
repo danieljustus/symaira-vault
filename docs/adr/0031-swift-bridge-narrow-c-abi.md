@@ -130,10 +130,11 @@ Use the narrow C ABI.
      than Go's: rust-age appends a random `*-grease` stanza to every X25519
      header, Go's age does not. They are valid age files that Go decrypts
      (proved in both directions); only an exact length cannot match.
-  2. `OpenVaultWithPassphrase` on a config whose top level is not a mapping
-     returns the config loader's wording instead of yaml.v3's
-     `unmarshal errors` text (`config-type-mismatch`; owner: the
-     `symvault-core` config loader, CFG rows).
+  2. (closed by CONFIG-LOAD-001) `OpenVaultWithPassphrase` on a config whose
+     top level is not a mapping used to return the config loader's wording
+     instead of yaml.v3's `unmarshal errors` text (`config-type-mismatch`). The
+     `symvault-core` loader now runs the typed decode first and the case
+     matches Go; its entry is gone from `known-divergences.json`.
   3. **D-SYMLINK, approved by the owner 2026-11-01.** `symvault-store` never follows a
      symlink inside the vault tree (`O_NOFOLLOW` traversal, STORE hardening);
      Go follows them. 24 recorded cases (`symlink-hardening`: symlinked

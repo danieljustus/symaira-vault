@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = Path("scripts/rust-port/gen_config_schema.py")
-TABLE = Path("crates/symvault-cli/src/config_schema.rs")
+TABLE = Path("crates/symvault-core/src/config_schema.rs")
 ANCHOR = '\tPort                int               `yaml:"port,omitempty"`\n'
 
 

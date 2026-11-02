@@ -187,7 +187,7 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Confi
         rendered.push('\n');
     }
     // Go re-encodes the whole document with a two-space indent.
-    let rendered = crate::config_typed::tag_merge_keys(&reindent_two_spaces(&rendered));
+    let rendered = symvault_core::config_typed::tag_merge_keys(&reindent_two_spaces(&rendered));
     atomic_write(path, rendered.as_bytes())?;
     // Go rejects traversal on its post-write reload, even when Windows
     // resolves the raw rename destination through a parent component.
@@ -201,7 +201,7 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Confi
     }
     // Go reloads the file into the typed config; yaml.v3's type errors come
     // before any validation of the decoded values.
-    if let Some(cause) = crate::config_typed::unmarshal_errors(&rendered) {
+    if let Some(cause) = symvault_core::config_typed::unmarshal_errors(&rendered) {
         let mut message = b"config is invalid after update: ".to_vec();
         message.extend_from_slice(&cause);
         message.extend_from_slice(b": ");

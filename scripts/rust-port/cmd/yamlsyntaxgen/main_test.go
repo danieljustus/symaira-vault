@@ -19,13 +19,13 @@ func TestCorpusIsWellFormed(t *testing.T) {
 		}
 		seen[item.name] = true
 		switch item.class {
-		case "scanner", "parser", "reader", "node", "loader", "accepted":
+		case "scanner", "parser", "reader", "node", "loader", "decode", "accepted":
 			classes[item.class]++
 		default:
 			t.Fatalf("%s: unknown class %q", item.name, item.class)
 		}
 	}
-	for _, class := range []string{"scanner", "parser", "reader", "node", "loader", "accepted"} {
+	for _, class := range []string{"scanner", "parser", "reader", "node", "loader", "decode", "accepted"} {
 		if classes[class] == 0 {
 			t.Fatalf("corpus has no %s case", class)
 		}

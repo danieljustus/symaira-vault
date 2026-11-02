@@ -24,8 +24,6 @@ mod completion_protocol;
 mod config;
 #[cfg(test)]
 mod config_override_tests;
-mod config_schema;
-mod config_typed;
 mod daemon_commands;
 mod deprecated_stubs;
 mod device;

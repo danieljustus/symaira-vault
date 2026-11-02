@@ -195,14 +195,12 @@ Fixed, each pinned against the real Go binary (oracle `bf7f687b`) in
 - Config reads and `agent profile export -o` print ENOTDIR, ELOOP, ENAMETOOLONG (and every other
   create failure) as Go's `open <path>: <cause>`.
 
-Still open (probed, not fixed; see the CFG-003 and CLI-005 rows of the contract matrix):
+Still open (probed, not fixed; see the CFG-003 and CLI-005 rows of the contract matrix; the `vault.authMethod` and `sessionTimeout: null` rows that stood here are closed, see CONFIG-LOAD-001 below):
 
 | Class | Go | Rust |
 | --- | --- | --- |
-| `Config::load`: `vault.authMethod: 12` / `abc` | accepted by the typed reload | `must be a string` / `invalid authMethod` |
 | `Config::load`: `mcp.port: 1.5`, `!!float 3` | accepted | `port must be an integer` |
 | `Config::load`: `useTouchID: y`, `approval_required: n` | accepted (YAML 1.1 words) | `must be a boolean` |
-| `Config::load`: `sessionTimeout: null` | `must be greater than 0, got 0s (default: 15m, …)` | `parse config: sessionTimeout must be a string` |
 | `Config::load`: custom or non-specific tags on scalars | accepted | serde_yaml_ng enum error |
 | `Config::load`: recursive alias under an unread key | accepted | `recursion limit exceeded` |
 | `Config::load`: duplicate keys in an unread mapping (`m: {a: 1, a: 2}`, `"<<"` plus `'<<'`) | accepted | `duplicate entry` |
@@ -216,6 +214,68 @@ Still open (probed, not fixed; see the CFG-003 and CLI-005 rows of the contract 
 | root that is not a mapping | `root node is a scalar, not a mapping` (or `a sequence`) | `document has no root to descend into` |
 | typed decode, anchors | the preceding definition of a redefined anchor; the anchor's line even behind a comment | the last definition; the collection's line |
 | typed decode, `!!binary` into `time.Time` | raw decoded bytes in the `parsing time` text | lossy UTF-8 (U+FFFD) for a non-UTF-8 payload |
+
+## CONFIG-LOAD-001: loader and validator parity, 2026-11-02
+
+`config validate` reproduced six divergences from `config.Load` / `Config.Validate` (found while
+reviewing `--fix`; every one also showed without `--fix`). All six were one root cause each in the
+shared core loader (`crates/symvault-core/src/config.rs`), so every command that loads a config
+changed, not only `config validate`:
+
+| Input | Go (oracle `0cc78062`) | Native before | Now |
+| --- | --- | --- | --- |
+| `vaultDir: ''` (or `null`) | valid: the merge keeps the resolved default (an empty text is not a value) | `vaultDir: must not be empty` | valid; the message survives only where no default resolves (no home, no `SYMVAULT_VAULT`) |
+| `promptInjectionMode: weird` | load error `agent "x": invalid promptInjectionMode "weird" (valid: off, log-only, wrap, deny)` (after the `approvalMode` loop, which wins) | accepted | same load error |
+| `audit.maxSizeMb: abc` | load error `yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64` | accepted | same |
+| `logging.level: [1]` | load error `... cannot unmarshal !!seq into string` | accepted | same |
+| `authMethod: bogus` | loads and validates: the merge drops a method that does not normalize, but the key still counts as written (`useTouchID: true` then selects nothing); `vault.authMethod: bogus` loads and `Validate` rejects it, quoting it as written | load error `invalid authMethod` | same as Go, including the non-string spellings (`5`, `true`) |
+| `sessionTimeout: 0s` | `sessionTimeout: must be greater than 0, got 0s (default: 15m, ...)`; both durations are reported (joined by `\n`); `null` decodes to `0s`; an integer is a typed-decode error | no `, got 0s`; first field only; `null` was `must be a string` | same as Go (`go_duration_string` is `time.Duration.String`) |
+
+Root causes: (1) the typed decode of yaml.v3 into `config.Config` — which Go runs over the whole
+first document before it merges anything — only existed in the CLI (`config set`'s post-write reload).
+`config_typed.rs` and the generated `config_schema.rs` moved into `symvault-core`
+(`scripts/rust-port/gen_config_schema.py` now writes `crates/symvault-core/src/config_schema.rs`;
+`symvault-core` gained the `yaml-edit` and `symvault-gojson` dependencies, `Cargo.lock` moved by those
+two edges only) and `Config::load_from_bytes` calls it right after the syntax and multiple-document
+checks. The sections the port does not model (`audit`, `logging`, `security`, `scan_patterns`, ...)
+are therefore type-checked like Go. This also closed `agents_scalar` (an open divergence, now the
+`decode`-class case) and the FFI `OpenVaultWithPassphrase/config-type-mismatch` pin. (2) The merge
+rules above. (3) `ConfigError::Parse` / `::Invalid` carried the prefixes `parse config:` /
+`invalid config:`; Go returns its causes bare and each caller adds its own wrapper (`cannot load
+config from <path>: X: X`, `load config: X`, `config load failed: X`), so the variants now render bare
+(the `go_text` stripper of the `--fix` flow is gone).
+
+Evidence: `testdata/port/cli/config-yaml-syntax.json` (now 128 cases, 31 open divergences, 554
+comparisons; the 94 earlier cases and 30 of the 32 earlier open divergences are byte-identical to the
+previous fixture) gained 32 `load_*` cases, the `decode`-class `agents_scalar` and the promoted
+`alias_value_for_string_field`, all recorded from the pinned
+Go binary through `yamlsyntaxgen` (`config validate` text and `--json`, `doctor`'s five loader checks
+and, for 9 cases, `agent list` — the "normal command"; `internal/config/config_merge.go` and
+`config_validate.go` joined the digest-bound sources). `make yaml-syntax-cli-differential` re-verifies
+and replays them; core contract tests that used to accept substrings of the Rust text now compare the
+recorded Go diagnostic exactly (`config_session_contract`), and the eight `ADJUDICATED_STRICTER`
+authMethod entries of `config_sections_contract` are gone (the loader matches Go on all of them).
+
+### Intentional deviations (decided, not gaps)
+
+| Where | Go | Native | Pinned by |
+| --- | --- | --- | --- |
+| `config validate --fix` with `clipboard.copyByDefault: false` | `CopyByDefault bool` is `omitempty`, so `SaveTo` drops the key and the next load reads the default `true`: an unrelated repair silently turns the opt-out into an opt-in | the writer prints `copyByDefault: false`, so the opt-out survives; everything else the repair writes is byte-identical | `intentional_deviation_copy_by_default_false_survives_fix` (recorded Go bytes, plus the live oracle when `SYMVAULT_GO_BINARY` is set) and its negative control `copy_by_default_deviation_is_exactly_one_line` in `config_fix_differential.rs` |
+| several agent profiles that are all invalid | `validateAgents` ranges over a map, so which profile is named is random (the `approvalMode` loop still runs before the `promptInjectionMode` loop) | profiles are checked in name order | not pinned (Go is nondeterministic); `load_agent_enum_order` pins the one deterministic fact |
+
+### Residuals (probed, not fixed)
+
+- The doctor check `vault.config.validates` calls only the typed `Config::validate`, so it reports
+  `config.yaml passes validation` for `audit.maxSizeMb: 0` where Go warns about `audit.maxFileSize`
+  (`config validate` itself agrees; recorded as the open divergence `load_audit_max_size_mb_zero`, which
+  replaced the two entries `agents_scalar` and `alias_value_for_string_field` that this change closed).
+- A typed-decode error whose quoted value is cut inside a multi-byte character is rendered with
+  U+FFFD by the loader (`String::from_utf8_lossy`); `config set` still prints Go's raw bytes.
+- A non-string scalar in a string field decodes to its text in Go. The native merge does that for
+  `vaultDir`, `defaultAgent`, `promptInjectionMode`, `authMethod` and `vault.authMethod` only (the
+  other string fields still report `must be a string`), and renders a number the way `serde_yaml_ng`
+  prints it, so `vault.authMethod: 0x10` is quoted as `"16"` where Go says `"0x10"` (same for `1.50`,
+  `True`).
 
 ## Historical measurement, 2026-09-27
 

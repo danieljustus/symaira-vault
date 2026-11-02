@@ -22,6 +22,8 @@ use std::{
     process::{Command, Stdio},
 };
 
+use symvault_core::config::Config;
+
 const PROMPT: &str = "(y/N): ";
 const OK_CFG: &str = "vaultDir: /tmp/x\n";
 const CLIP_BAD: &str = "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n";
@@ -952,4 +954,102 @@ fn rust_flow_matches_recorded_go_output() {
             CLIP_PROMPT
         )
     );
+}
+
+/// The clipboard section Go prints for `copyByDefault: false` after the
+/// clipboard auto-fix, and the line the native writer adds to it.
+const COPY_OFF_BAD: &str =
+    "clipboard:\n  auto_clear_duration: -5\n  copyByDefault: false\nvaultDir: /tmp/x\n";
+const GO_COPY_OFF_CLIPBOARD: &str = "clipboard:\n    auto_clear_duration: 30\n";
+const RUST_COPY_OFF_LINE: &str = "    copyByDefault: false\n";
+
+fn copy_off_scenario() -> Scenario {
+    sc(
+        "intentional_deviation_copy_by_default_false",
+        COPY_OFF_BAD,
+        &["y"],
+        Editor::None,
+    )
+}
+
+/// INTENTIONAL DEVIATION (not a gap): `config validate --fix` keeps an
+/// explicit `clipboard.copyByDefault: false`.
+///
+/// Go's `ClipboardConfig.CopyByDefault` is a plain `bool` tagged `omitempty`,
+/// so `SaveTo` leaves the key out when it is false, and the next load reads the
+/// absent key as the default `true`: an operator who opted out of copying
+/// secrets to the clipboard is silently opted back in by an unrelated repair.
+/// The native writer prints `copyByDefault: false`, so the opt-out survives.
+/// Everything else the repair writes is byte-identical to Go; the scenario is
+/// deliberately not part of `scenarios()`, which asserts equality. The deviation
+/// is recorded in `docs/rust-port/cli-gap-inventory.md`.
+#[test]
+fn intentional_deviation_copy_by_default_false_survives_fix() {
+    assert!(
+        python_available(),
+        "python3 with the pty module is required"
+    );
+    let scenario = copy_off_scenario();
+    let native = run_pty(&rust_binary(), &scenario).expect("scenario runs");
+    assert_eq!(native.exit, "0", "{native:#?}");
+    assert_eq!(native.steps_done, 1, "the clipboard prompt was answered");
+
+    // Bytes recorded from the Go oracle for the same scenario: the opt-out is
+    // dropped. This half runs without the oracle.
+    let go_saved = format!("{GO_SAVED_AGENTS}{GO_COPY_OFF_CLIPBOARD}{GO_SAVED_TAIL}");
+    let native_saved = native.cfg.clone().expect("repaired config");
+    let kept =
+        format!("{GO_SAVED_AGENTS}{GO_COPY_OFF_CLIPBOARD}{RUST_COPY_OFF_LINE}{GO_SAVED_TAIL}");
+    assert_eq!(native_saved, kept, "the opt-out must be written back");
+    assert_eq!(
+        native_saved.replace(RUST_COPY_OFF_LINE, ""),
+        go_saved,
+        "apart from that one line the repair is byte-identical to Go"
+    );
+    assert_eq!(
+        Config::load_from_bytes(native_saved.as_bytes())
+            .expect("repaired config loads")
+            .clipboard
+            .map(|clipboard| clipboard.copy_by_default),
+        Some(false),
+        "reloading the native file keeps the opt-out"
+    );
+    assert_eq!(
+        Config::load_from_bytes(go_saved.as_bytes())
+            .expect("Go's repaired config loads")
+            .clipboard
+            .map(|clipboard| clipboard.copy_by_default),
+        Some(true),
+        "reloading Go's file flips the opt-out to opt-in"
+    );
+
+    let Some(go) = go_binary() else {
+        eprintln!("recorded Go bytes only: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let Some(oracle) = run_pty(&go, &scenario) else {
+        eprintln!("skipping the live Go half: needs an unprivileged user");
+        return;
+    };
+    assert_eq!(
+        oracle.cfg.as_deref(),
+        Some(go_saved.as_str()),
+        "{oracle:#?}"
+    );
+    let mut expected = native;
+    expected.cfg = expected.cfg.map(|cfg| cfg.replace(RUST_COPY_OFF_LINE, ""));
+    assert_eq!(expected, oracle, "everything but the one line matches Go");
+}
+
+/// Negative control: a native repair that dropped the opt-out like Go does, or
+/// that changed anything else, must not satisfy the deviation test above.
+#[test]
+fn copy_by_default_deviation_is_exactly_one_line() {
+    let go_saved = format!("{GO_SAVED_AGENTS}{GO_COPY_OFF_CLIPBOARD}{GO_SAVED_TAIL}");
+    let kept =
+        format!("{GO_SAVED_AGENTS}{GO_COPY_OFF_CLIPBOARD}{RUST_COPY_OFF_LINE}{GO_SAVED_TAIL}");
+    assert_ne!(kept, go_saved);
+    assert_eq!(kept.replace(RUST_COPY_OFF_LINE, ""), go_saved);
+    let changed = kept.replace("auto_clear_duration: 30", "auto_clear_duration: 31");
+    assert_ne!(changed.replace(RUST_COPY_OFF_LINE, ""), go_saved);
 }

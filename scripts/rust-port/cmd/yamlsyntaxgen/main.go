@@ -9,6 +9,13 @@
 // stderr are recorded byte for byte.
 // The Rust integration test replays the identical cases against the native CLI.
 //
+// The corpus also freezes what `config.Load` and `Config.Validate` accept and
+// reject once the bytes parse (the `load_*` cases): the typed-decode failures
+// of sections the port does not model, the merge guards, the session-duration
+// rule, `authMethod` normalization and the agent-profile enums. Those cases
+// pin the wording of the loader's errors too, which Go returns bare: no
+// `parse config:` / `invalid config:` prefix reaches any command.
+//
 // Expected output always comes from the pinned Go binary; nothing is derived
 // from the Rust side. The `open_divergences` list records inputs on which the
 // native CLI is known to differ from Go, together with the Go bytes of every
@@ -54,6 +61,8 @@ var productionSources = []string{
 	"go.sum",
 	"internal/cli/cli.go",
 	"internal/config/config_load.go",
+	"internal/config/config_merge.go",
+	"internal/config/config_validate.go",
 	"internal/config/dottedpath.go",
 	"internal/errors/errors.go",
 	"internal/health/doctor_mcp.go",
@@ -143,10 +152,11 @@ type input struct {
 // inputs lists the corpus. class is the libyaml stage that rejects the input
 // ("scanner", "parser", "reader"), "node" for yaml.v3's own node builder (an
 // alias to an anchor that was never defined; libyaml accepts it), "loader" for
-// the loader's own multi-document rejection, or "accepted" for an input the
-// loader must keep accepting.
+// the loader's own multi-document rejection, "decode" for a document that
+// parses but that yaml.v3 cannot decode into the typed config, or "accepted"
+// for an input the loader must keep accepting.
 func inputs() []input {
-	return []input{
+	all := []input{
 		{"flow_sequence_unterminated", "parser", "flow sequence ends at end of input", []byte("vaultDir: [\n")},
 		{"flow_mapping_unterminated", "parser", "flow mapping ends at end of input", []byte("vaultDir: {a: 1\n")},
 		{"flow_sequence_unterminated_later_line", "parser", "unterminated flow sequence on a later line", []byte("a:\n  b: 1\n  c: [\n")},
@@ -242,6 +252,65 @@ func inputs() []input {
 		{"whitespace_mixed_unicode", "accepted", "ASCII and Unicode white space mixed", []byte(" \t\r\n\v\f\u00a0\u0085\u3000 \n")},
 		{"empty_flow_mapping_root", "accepted", "a document that is an empty flow mapping", []byte("{}\n")},
 	}
+	all = append(all, decodeInputs()...)
+	return append(all, loadInputs()...)
+}
+
+// decodeInputs are documents that parse but that yaml.v3 cannot decode into the
+// typed config. Unlike the "accepted" and "loader" classes they record `config
+// get` and `config set` too: those commands read the node tree, so they decide
+// for themselves whether the same bytes are an error.
+func decodeInputs() []input {
+	return []input{
+		{"agents_scalar", "decode", "a scalar where the agents mapping belongs: yaml.v3's decode error `cannot unmarshal !!str `x` into map[string]config.AgentProfile`", []byte("agents: x\n")},
+	}
+}
+
+// loadInputs are configs that parse as YAML and are accepted or rejected by
+// the loader's own rules (CONFIG-LOAD-001). "loader" here means Go exits 6 with
+// the loader's or validator's text, "accepted" means it exits 0.
+func loadInputs() []input {
+	return []input{
+		// vaultDir: an empty text is not a value, so the resolved default stays.
+		{"load_vault_dir_empty", "accepted", "an empty vaultDir keeps the resolved default: Config.Validate sees a non-empty path", []byte("vaultDir: ''\n")},
+		{"load_vault_dir_null", "accepted", "a null vaultDir decodes to the empty string and keeps the default too", []byte("vaultDir: null\n")},
+		// Agent profile enums, checked while the file loads.
+		{"load_prompt_injection_mode_invalid", "loader", "an unknown promptInjectionMode is rejected by the loader, not by validate", []byte("agents:\n  x:\n    promptInjectionMode: weird\n")},
+		{"load_prompt_injection_mode_valid", "accepted", "every promptInjectionMode the loader allows, the empty string included", []byte("agents:\n  a:\n    promptInjectionMode: log-only\n  b:\n    promptInjectionMode: wrap\n  c:\n    promptInjectionMode: deny\n  d:\n    promptInjectionMode: off\n  e:\n    promptInjectionMode: ''\n")},
+		{"load_approval_mode_invalid", "loader", "an unknown approvalMode is rejected by the loader with its own text", []byte("agents:\n  x:\n    approvalMode: bogus\n")},
+		{"load_agent_enum_order", "loader", "an invalid promptInjectionMode in one profile and an invalid approvalMode in another: the approvalMode loop runs first", []byte("agents:\n  a:\n    promptInjectionMode: weird\n  b:\n    approvalMode: bogus\n")},
+		{"load_prompt_injection_mode_null", "accepted", "a null promptInjectionMode is a nil pointer and leaves the profile alone", []byte("agents:\n  x:\n    promptInjectionMode: null\n")},
+		// Sections the typed Config decodes before it merges anything.
+		{"load_audit_max_size_mb_string", "loader", "a word where audit.maxSizeMb wants an integer", []byte("audit:\n  maxSizeMb: abc\n")},
+		{"load_audit_section_scalar", "loader", "a scalar where the audit section belongs", []byte("audit: 5\n")},
+		{"load_logging_level_sequence", "loader", "a sequence where logging.level wants a string", []byte("logging:\n  level: [1]\n")},
+		{"load_logging_valid", "accepted", "logging.level and logging.format as strings", []byte("logging:\n  level: debug\n  format: json\n")},
+		{"load_security_flag_string", "loader", "a word where security.disable_env_passphrase wants a boolean", []byte("security:\n  disable_env_passphrase: maybe\n")},
+		{"alias_value_for_string_field", "accepted", "an alias to a scalar anchor used as the value of a string field: yaml.v3 decodes the alias into the field (closed by CONFIG-LOAD-001; was an open divergence)", []byte("a: &x 1\nvaultDir: *x\n")},
+		{"load_vault_dir_integer", "accepted", "a non-string scalar decodes into a string field as its text", []byte("vaultDir: 12\n")},
+		{"load_default_agent_integer", "accepted", "an integer defaultAgent is the text 7, and ensureAgentDefaults creates that profile", []byte("defaultAgent: 7\n")},
+		{"load_prompt_injection_mode_integer", "loader", "an integer promptInjectionMode is the text 5 and not a valid mode", []byte("agents:\n  x:\n    promptInjectionMode: 5\n")},
+		{"load_vault_dir_sequence", "loader", "a sequence where vaultDir wants a string", []byte("vaultDir: [a]\n")},
+		// authMethod: an unknown method is swallowed by the merge.
+		{"load_auth_method_unknown", "accepted", "an unknown top-level authMethod is dropped by the merge and validates", []byte("authMethod: bogus\n")},
+		{"load_auth_method_unknown_with_touch_id_flag", "accepted", "an unknown authMethod still counts as written, so useTouchID: true selects nothing", []byte("authMethod: bogus\nuseTouchID: true\n")},
+		{"load_auth_method_integer", "accepted", "a non-string authMethod decodes as text and is dropped the same way", []byte("authMethod: 5\n")},
+		{"load_auth_method_alias", "accepted", "a method spelled in capitals with padding normalizes", []byte("authMethod: ' BIOMETRIC '\n")},
+		{"load_vault_auth_method_unknown", "loader", "an unknown vault.authMethod loads and validate rejects it, quoting it as written", []byte("vault:\n  authMethod: ' Bogus '\n")},
+		{"load_vault_auth_method_integer", "loader", "a non-string vault.authMethod is rejected by validate as text", []byte("vault:\n  authMethod: 5\n")},
+		// Session durations: zero and negative values are rejected with the value.
+		{"load_session_timeout_zero", "loader", "sessionTimeout 0s names the parsed value", []byte("sessionTimeout: 0s\n")},
+		{"load_session_timeout_bare_zero", "loader", "a quoted bare 0 is a valid time.ParseDuration input and a zero duration", []byte("sessionTimeout: '0'\n")},
+		{"load_session_timeout_negative", "loader", "a negative sessionTimeout is rendered the way Go prints a Duration", []byte("sessionTimeout: -5m\n")},
+		{"load_session_timeout_negative_millis", "loader", "a negative sub-minute duration with a fraction", []byte("sessionTimeout: -1500ms\n")},
+		{"load_session_timeout_null", "loader", "a present but null sessionTimeout decodes to zero", []byte("sessionTimeout: null\n")},
+		{"load_session_timeout_integer", "loader", "an integer is not a time.Duration for yaml.v3", []byte("sessionTimeout: 0\n")},
+		{"load_session_max_lifetime_zero", "loader", "sessionMaxLifetime 0s", []byte("sessionMaxLifetime: 0s\n")},
+		{"load_session_durations_both_invalid", "loader", "both session durations wrong: Go joins the two messages", []byte("sessionTimeout: 0s\nsessionMaxLifetime: -90m\n")},
+		{"load_session_timeout_fraction", "accepted", "a fractional positive duration loads", []byte("sessionTimeout: 1.5h\n")},
+		// mcp.bind: an empty bind is a loader rejection.
+		{"load_mcp_bind_empty", "loader", "an empty mcp.bind is rejected by the loader", []byte("mcp:\n  bind: ''\n")},
+	}
 }
 
 // Divergence kinds. "wording": both sides fail or succeed alike, with the same
@@ -315,8 +384,6 @@ func openInputs() []openEntry {
 			kindBehavior, []string{"validate"}, "yaml.v3 decodes UTF-16 and accepts the empty stream; libyaml in serde_yaml_ng rejects the stream as invalid UTF-8"},
 		{input{"bom_after_first_line", "scanner", "a UTF-8 byte order mark at the start of a later line", []byte("a: 1\n\xef\xbb\xbfb: 2\n")},
 			kindBehavior, []string{"validate"}, "yaml.v3 skips the mark and accepts the stream; libyaml counts it as a column and rejects the mapping key"},
-		{input{"alias_value_for_string_field", "accepted", "an alias to a scalar anchor used as the value of a string field", []byte("a: &x 1\nvaultDir: *x\n")},
-			kindBehavior, []string{"validate", "set_nested", "doctor", "agent_list"}, "yaml.v3 decodes the alias into the string field and accepts the config (so validate, doctor and agent list succeed and config set of a nested key succeeds); the native loader reads the alias through serde_yaml_ng and rejects 'vaultDir must be a string', and config set writes the file before that post-update load fails"},
 		{input{"custom_tag_on_value", "accepted", "a local tag on a plain scalar", []byte("a: !t x\n")},
 			kindBehavior, textCommands, "yaml.v3 ignores a local tag it does not know and decodes the value; serde_yaml_ng keeps it as a tagged value that the native loader rejects"},
 		// yaml.v3 decode and node layers, not syntax errors.
@@ -324,8 +391,9 @@ func openInputs() []openEntry {
 			kindWording, append(append([]string(nil), textCommands...), "set_nested", "agent_list"), "the failure comes from yaml.v3's decoder and node layers, not from libyaml: validate says 'yaml: unmarshal errors: line 1: cannot unmarshal !!str `just a ...` into config.Config', get 'parent is a scalar node, not a mapping', set 'root node is a scalar, not a mapping'; the native CLI fails the same commands with the same exit status and leaves the file alone, with different text"},
 		{input{"sequence_root", "accepted", "a document that is a block sequence", []byte("- 1\n- 2\n")},
 			kindWording, append(append([]string(nil), textCommands...), "set_nested", "agent_list"), "yaml.v3 decoder and node layers again: 'cannot unmarshal !!seq into config.Config', 'parent is a sequence node, not a mapping', 'root node is a sequence, not a mapping'; same exit status and unchanged file natively, different text"},
-		{input{"agents_scalar", "accepted", "a scalar where the agents mapping belongs", []byte("agents: x\n")},
-			kindWording, append(append([]string(nil), textCommands...), "agent_list"), "yaml.v3 decode error 'cannot unmarshal !!str `x` into map[string]config.AgentProfile'; get reports the key text differently, and set rewrites the file before the post-update load fails on both sides"},
+		// Config.Validate reaches into sections the native Config does not model.
+		{input{"load_audit_max_size_mb_zero", "loader", "audit.maxSizeMb 0 loads and fails validation (audit.maxFileSize)", []byte("audit:\n  maxSizeMb: 0\n")},
+			kindWording, []string{"validate", "validate_json", "doctor"}, "`config validate` reports audit.maxFileSize from the audit section it keeps beside the typed config (`config_fix.rs` `Extras`) and agrees with Go; the doctor check `vault.config.validates` calls only the typed `Config::validate`, which has no audit section, so it reports `config.yaml passes validation` where Go warns `config validation error: audit.maxFileSize: must be greater than 0 ...` and offers a fix"},
 		{input{"null_root", "accepted", "a document that is the scalar null", []byte("null\n")},
 			kindWording, []string{"get", "set"}, "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with 'parent is a scalar node, not a mapping' and 'root node is a scalar, not a mapping', the native CLI with 'key \"vaultDir\" not found' and 'document has no root to descend into'"},
 		{input{"comment_only", "accepted", "a config that contains only a comment", []byte("# nothing\n")},
@@ -498,11 +566,22 @@ func buildCase(goBinary string, item input) (fixtureCase, error) {
 // agentListCases are the failures that also record `agent list`, a loader
 // caller outside the config and doctor commands (`load config: <error>`).
 var agentListCases = map[string]bool{
-	"mapping_value_nested":       true,
-	"flow_sequence_unterminated": true,
-	"control_character":          true,
-	"multiple_documents":         true,
-	"unknown_anchor_value":       true,
+	"mapping_value_nested":         true,
+	"flow_sequence_unterminated":   true,
+	"control_character":            true,
+	"multiple_documents":           true,
+	"unknown_anchor_value":         true,
+	"agents_scalar":                true,
+	"alias_value_for_string_field": true,
+	// A normal command that loads the config reports the loader's error bare
+	// behind `load config:`.
+	"load_prompt_injection_mode_invalid":  true,
+	"load_approval_mode_invalid":          true,
+	"load_audit_max_size_mb_string":       true,
+	"load_logging_level_sequence":         true,
+	"load_session_timeout_zero":           true,
+	"load_session_durations_both_invalid": true,
+	"load_mcp_bind_empty":                 true,
 }
 
 func buildDivergences(goBinary string) ([]openDivergence, error) {

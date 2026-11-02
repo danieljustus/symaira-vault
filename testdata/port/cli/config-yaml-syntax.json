@@ -10,14 +10,16 @@
       "go.sum",
       "internal/cli/cli.go",
       "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/config_validate.go",
       "internal/config/dottedpath.go",
       "internal/errors/errors.go",
       "internal/health/doctor_mcp.go",
       "internal/health/doctor_session.go",
       "internal/health/doctor_vault.go"
     ],
-    "source_digest": "2dcc63c1eaca1c45b64d530a9423385b6057a90aebd0aad2db214a34a8440cc8",
-    "generator_digest": "749f4de04cce17392e3e954650e836444f9af14138835e9448593b36074913b6"
+    "source_digest": "dedb3d9b231e0772642fc36e4dc2f823468b330882e7e7fb8cf1c8e8d4bb36ea",
+    "generator_digest": "4caafa2a6fd1da14c9cd6c94c6e03ef03f5b0396844e4006bdd1e50480d2973c"
   },
   "doctor_ids": [
     "vault.config.parses",
@@ -10326,6 +10328,3066 @@
           }
         ]
       }
+    },
+    {
+      "name": "agents_scalar",
+      "class": "decode",
+      "description": "a scalar where the agents mapping belongs: yaml.v3's decode error `cannot unmarshal !!str `x` into map[string]config.AgentProfile`",
+      "config_hex": "6167656e74733a20780a",
+      "config_text": "\"agents: x\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unmarshal errors:\\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nError: config load failed: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: key \"vaultDir\" not found\nError: key \"vaultDir\" not found: key \"vaultDir\" not found\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": false
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nError: load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\n"
+      }
+    },
+    {
+      "name": "load_vault_dir_empty",
+      "class": "accepted",
+      "description": "an empty vaultDir keeps the resolved default: Config.Validate sees a non-empty path",
+      "config_hex": "7661756c744469723a2027270a",
+      "config_text": "\"vaultDir: ''\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_vault_dir_null",
+      "class": "accepted",
+      "description": "a null vaultDir decodes to the empty string and keeps the default too",
+      "config_hex": "7661756c744469723a206e756c6c0a",
+      "config_text": "\"vaultDir: null\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_prompt_injection_mode_invalid",
+      "class": "loader",
+      "description": "an unknown promptInjectionMode is rejected by the loader, not by validate",
+      "config_hex": "6167656e74733a0a2020783a0a2020202070726f6d7074496e6a656374696f6e4d6f64653a2077656972640a",
+      "config_text": "\"agents:\\n  x:\\n    promptInjectionMode: weird\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny): agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)\nError: cannot load config from __CONFIG__: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny): agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"agent \\\"x\\\": invalid promptInjectionMode \\\"weird\\\" (valid: off, log-only, wrap, deny)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)\nError: config load failed: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)\nError: load config: agent \"x\": invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)\n"
+      }
+    },
+    {
+      "name": "load_prompt_injection_mode_valid",
+      "class": "accepted",
+      "description": "every promptInjectionMode the loader allows, the empty string included",
+      "config_hex": "6167656e74733a0a2020613a0a2020202070726f6d7074496e6a656374696f6e4d6f64653a206c6f672d6f6e6c790a2020623a0a2020202070726f6d7074496e6a656374696f6e4d6f64653a20777261700a2020633a0a2020202070726f6d7074496e6a656374696f6e4d6f64653a2064656e790a2020643a0a2020202070726f6d7074496e6a656374696f6e4d6f64653a206f66660a2020653a0a2020202070726f6d7074496e6a656374696f6e4d6f64653a2027270a",
+      "config_text": "\"agents:\\n  a:\\n    promptInjectionMode: log-only\\n  b:\\n    promptInjectionMode: wrap\\n  c:\\n    promptInjectionMode: deny\\n  d:\\n    promptInjectionMode: off\\n  e:\\n    promptInjectionMode: ''\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_approval_mode_invalid",
+      "class": "loader",
+      "description": "an unknown approvalMode is rejected by the loader with its own text",
+      "config_hex": "6167656e74733a0a2020783a0a20202020617070726f76616c4d6f64653a20626f6775730a",
+      "config_text": "\"agents:\\n  x:\\n    approvalMode: bogus\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt): agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)\nError: cannot load config from __CONFIG__: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt): agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"agent \\\"x\\\": invalid approvalMode \\\"bogus\\\" (valid: none, deny, prompt)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)\nError: config load failed: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)\nError: load config: agent \"x\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)\n"
+      }
+    },
+    {
+      "name": "load_agent_enum_order",
+      "class": "loader",
+      "description": "an invalid promptInjectionMode in one profile and an invalid approvalMode in another: the approvalMode loop runs first",
+      "config_hex": "6167656e74733a0a2020613a0a2020202070726f6d7074496e6a656374696f6e4d6f64653a2077656972640a2020623a0a20202020617070726f76616c4d6f64653a20626f6775730a",
+      "config_text": "\"agents:\\n  a:\\n    promptInjectionMode: weird\\n  b:\\n    approvalMode: bogus\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt): agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)\nError: cannot load config from __CONFIG__: agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt): agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"agent \\\"b\\\": invalid approvalMode \\\"bogus\\\" (valid: none, deny, prompt)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)\nError: config load failed: agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: agent \"b\": invalid approvalMode \"bogus\" (valid: none, deny, prompt)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_prompt_injection_mode_null",
+      "class": "accepted",
+      "description": "a null promptInjectionMode is a nil pointer and leaves the profile alone",
+      "config_hex": "6167656e74733a0a2020783a0a2020202070726f6d7074496e6a656374696f6e4d6f64653a206e756c6c0a",
+      "config_text": "\"agents:\\n  x:\\n    promptInjectionMode: null\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_audit_max_size_mb_string",
+      "class": "loader",
+      "description": "a word where audit.maxSizeMb wants an integer",
+      "config_hex": "61756469743a0a20206d617853697a654d623a206162630a",
+      "config_text": "\"audit:\\n  maxSizeMb: abc\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unmarshal errors:\\n  line 2: cannot unmarshal !!str `abc` into int64\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64\nError: config load failed: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64\nError: load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `abc` into int64\n"
+      }
+    },
+    {
+      "name": "load_audit_section_scalar",
+      "class": "loader",
+      "description": "a scalar where the audit section belongs",
+      "config_hex": "61756469743a20350a",
+      "config_text": "\"audit: 5\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unmarshal errors:\\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig\nError: config load failed: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `5` into config.AuditConfig",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_logging_level_sequence",
+      "class": "loader",
+      "description": "a sequence where logging.level wants a string",
+      "config_hex": "6c6f6767696e673a0a20206c6576656c3a205b315d0a",
+      "config_text": "\"logging:\\n  level: [1]\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unmarshal errors:\\n  line 2: cannot unmarshal !!seq into string\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string\nError: config load failed: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string\nError: load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!seq into string\n"
+      }
+    },
+    {
+      "name": "load_logging_valid",
+      "class": "accepted",
+      "description": "logging.level and logging.format as strings",
+      "config_hex": "6c6f6767696e673a0a20206c6576656c3a2064656275670a2020666f726d61743a206a736f6e0a",
+      "config_text": "\"logging:\\n  level: debug\\n  format: json\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_security_flag_string",
+      "class": "loader",
+      "description": "a word where security.disable_env_passphrase wants a boolean",
+      "config_hex": "73656375726974793a0a202064697361626c655f656e765f706173737068726173653a206d617962650a",
+      "config_text": "\"security:\\n  disable_env_passphrase: maybe\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unmarshal errors:\\n  line 2: cannot unmarshal !!str `maybe` into bool\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool\nError: config load failed: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `maybe` into bool",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "alias_value_for_string_field",
+      "class": "accepted",
+      "description": "an alias to a scalar anchor used as the value of a string field: yaml.v3 decodes the alias into the field (closed by CONFIG-LOAD-001; was an open divergence)",
+      "config_hex": "613a20267820310a7661756c744469723a202a780a",
+      "config_text": "\"a: &x 1\\nvaultDir: *x\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "AGENT          TIER       TOKEN      SKILL        LAST SEEN\n----------------------------------------------------------------------\nclaude-code               none       missing      -\ncodex                     none       missing      -\ndefault                   none       missing      -\nhermes                    none       missing      -\nopenclaw                  none       missing      -\nopencode                  none       missing      -\n"
+      }
+    },
+    {
+      "name": "load_vault_dir_integer",
+      "class": "accepted",
+      "description": "a non-string scalar decodes into a string field as its text",
+      "config_hex": "7661756c744469723a2031320a",
+      "config_text": "\"vaultDir: 12\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_default_agent_integer",
+      "class": "accepted",
+      "description": "an integer defaultAgent is the text 7, and ensureAgentDefaults creates that profile",
+      "config_hex": "64656661756c744167656e743a20370a",
+      "config_text": "\"defaultAgent: 7\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_prompt_injection_mode_integer",
+      "class": "loader",
+      "description": "an integer promptInjectionMode is the text 5 and not a valid mode",
+      "config_hex": "6167656e74733a0a2020783a0a2020202070726f6d7074496e6a656374696f6e4d6f64653a20350a",
+      "config_text": "\"agents:\\n  x:\\n    promptInjectionMode: 5\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny): agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny)\nError: cannot load config from __CONFIG__: agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny): agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"agent \\\"x\\\": invalid promptInjectionMode \\\"5\\\" (valid: off, log-only, wrap, deny)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny)\nError: config load failed: agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: agent \"x\": invalid promptInjectionMode \"5\" (valid: off, log-only, wrap, deny)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_vault_dir_sequence",
+      "class": "loader",
+      "description": "a sequence where vaultDir wants a string",
+      "config_hex": "7661756c744469723a205b615d0a",
+      "config_text": "\"vaultDir: [a]\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unmarshal errors:\\n  line 1: cannot unmarshal !!seq into string\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string\nError: config load failed: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into string",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_auth_method_unknown",
+      "class": "accepted",
+      "description": "an unknown top-level authMethod is dropped by the merge and validates",
+      "config_hex": "617574684d6574686f643a20626f6775730a",
+      "config_text": "\"authMethod: bogus\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_auth_method_unknown_with_touch_id_flag",
+      "class": "accepted",
+      "description": "an unknown authMethod still counts as written, so useTouchID: true selects nothing",
+      "config_hex": "617574684d6574686f643a20626f6775730a757365546f75636849443a20747275650a",
+      "config_text": "\"authMethod: bogus\\nuseTouchID: true\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_auth_method_integer",
+      "class": "accepted",
+      "description": "a non-string authMethod decodes as text and is dropped the same way",
+      "config_hex": "617574684d6574686f643a20350a",
+      "config_text": "\"authMethod: 5\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_auth_method_alias",
+      "class": "accepted",
+      "description": "a method spelled in capitals with padding normalizes",
+      "config_hex": "617574684d6574686f643a20272042494f4d455452494320270a",
+      "config_text": "\"authMethod: ' BIOMETRIC '\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_vault_auth_method_unknown",
+      "class": "loader",
+      "description": "an unknown vault.authMethod loads and validate rejects it, quoting it as written",
+      "config_hex": "7661756c743a0a2020617574684d6574686f643a202720426f67757320270a",
+      "config_text": "\"vault:\\n  authMethod: ' Bogus '\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "Configuration is invalid (__CONFIG__):\n  ✗ invalid authMethod \" Bogus \" (valid: passphrase, touchid)\n",
+          "stderr": "Error: config validation failed: invalid authMethod \" Bogus \" (valid: passphrase, touchid)\nError: config validation failed: invalid authMethod \" Bogus \" (valid: passphrase, touchid)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"errors\":[\"invalid authMethod \\\" Bogus \\\" (valid: passphrase, touchid)\"],\"valid\":false}\n",
+          "stderr": "Error: config validation failed: invalid authMethod \" Bogus \" (valid: passphrase, touchid)\nError: config validation failed: invalid authMethod \" Bogus \" (valid: passphrase, touchid)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "warn",
+            "message": "config validation error: invalid authMethod \" Bogus \" (valid: passphrase, touchid)",
+            "hint": "run `symvault doctor --fix` to auto-correct common issues",
+            "fixable": true
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_vault_auth_method_integer",
+      "class": "loader",
+      "description": "a non-string vault.authMethod is rejected by validate as text",
+      "config_hex": "7661756c743a0a2020617574684d6574686f643a20350a",
+      "config_text": "\"vault:\\n  authMethod: 5\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "Configuration is invalid (__CONFIG__):\n  ✗ invalid authMethod \"5\" (valid: passphrase, touchid)\n",
+          "stderr": "Error: config validation failed: invalid authMethod \"5\" (valid: passphrase, touchid)\nError: config validation failed: invalid authMethod \"5\" (valid: passphrase, touchid)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"errors\":[\"invalid authMethod \\\"5\\\" (valid: passphrase, touchid)\"],\"valid\":false}\n",
+          "stderr": "Error: config validation failed: invalid authMethod \"5\" (valid: passphrase, touchid)\nError: config validation failed: invalid authMethod \"5\" (valid: passphrase, touchid)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "warn",
+            "message": "config validation error: invalid authMethod \"5\" (valid: passphrase, touchid)",
+            "hint": "run `symvault doctor --fix` to auto-correct common issues",
+            "fixable": true
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_session_timeout_zero",
+      "class": "loader",
+      "description": "sessionTimeout 0s names the parsed value",
+      "config_hex": "73657373696f6e54696d656f75743a2030730a",
+      "config_text": "\"sessionTimeout: 0s\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml): sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nError: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml): sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nError: config load failed: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nError: load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\n"
+      }
+    },
+    {
+      "name": "load_session_timeout_bare_zero",
+      "class": "loader",
+      "description": "a quoted bare 0 is a valid time.ParseDuration input and a zero duration",
+      "config_hex": "73657373696f6e54696d656f75743a202730270a",
+      "config_text": "\"sessionTimeout: '0'\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml): sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nError: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml): sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nError: config load failed: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_session_timeout_negative",
+      "class": "loader",
+      "description": "a negative sessionTimeout is rendered the way Go prints a Duration",
+      "config_hex": "73657373696f6e54696d656f75743a202d356d0a",
+      "config_text": "\"sessionTimeout: -5m\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml): sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml)\nError: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml): sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml)\nError: config load failed: sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got -5m0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_session_timeout_negative_millis",
+      "class": "loader",
+      "description": "a negative sub-minute duration with a fraction",
+      "config_hex": "73657373696f6e54696d656f75743a202d313530306d730a",
+      "config_text": "\"sessionTimeout: -1500ms\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml): sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml)\nError: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml): sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml)\nError: config load failed: sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got -1.5s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_session_timeout_null",
+      "class": "loader",
+      "description": "a present but null sessionTimeout decodes to zero",
+      "config_hex": "73657373696f6e54696d656f75743a206e756c6c0a",
+      "config_text": "\"sessionTimeout: null\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml): sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nError: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml): sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nError: config load failed: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_session_timeout_integer",
+      "class": "loader",
+      "description": "an integer is not a time.Duration for yaml.v3",
+      "config_hex": "73657373696f6e54696d656f75743a20300a",
+      "config_text": "\"sessionTimeout: 0\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unmarshal errors:\\n  line 1: cannot unmarshal !!int `0` into time.Duration\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration\nError: config load failed: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!int `0` into time.Duration",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_session_max_lifetime_zero",
+      "class": "loader",
+      "description": "sessionMaxLifetime 0s",
+      "config_hex": "73657373696f6e4d61784c69666574696d653a2030730a",
+      "config_text": "\"sessionMaxLifetime: 0s\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml): sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml)\nError: cannot load config from __CONFIG__: sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml): sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml)\nError: config load failed: sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: sessionMaxLifetime: must be greater than 0, got 0s (default: 8h, configure sessionMaxLifetime in config.yaml)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_session_durations_both_invalid",
+      "class": "loader",
+      "description": "both session durations wrong: Go joins the two messages",
+      "config_hex": "73657373696f6e54696d656f75743a2030730a73657373696f6e4d61784c69666574696d653a202d39306d0a",
+      "config_text": "\"sessionTimeout: 0s\\nsessionMaxLifetime: -90m\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml): sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)\nError: cannot load config from __CONFIG__: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml): sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)\nError: config load failed: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)\nError: load config: sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\nsessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)\n"
+      }
+    },
+    {
+      "name": "load_session_timeout_fraction",
+      "class": "accepted",
+      "description": "a fractional positive duration loads",
+      "config_hex": "73657373696f6e54696d656f75743a20312e35680a",
+      "config_text": "\"sessionTimeout: 1.5h\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "load_mcp_bind_empty",
+      "class": "loader",
+      "description": "an empty mcp.bind is rejected by the loader",
+      "config_hex": "6d63703a0a202062696e643a2027270a",
+      "config_text": "\"mcp:\\n  bind: ''\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: mcp.bind must not be empty: mcp.bind must not be empty\nError: cannot load config from __CONFIG__: mcp.bind must not be empty: mcp.bind must not be empty\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"mcp.bind must not be empty\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: mcp.bind must not be empty\nError: config load failed: mcp.bind must not be empty\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: mcp.bind must not be empty",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: mcp.bind must not be empty",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: mcp.bind must not be empty",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: mcp.bind must not be empty",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: mcp.bind must not be empty",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: mcp.bind must not be empty\nError: load config: mcp.bind must not be empty\n"
+      }
     }
   ],
   "open_divergences": [
@@ -11920,108 +14982,6 @@
       ]
     },
     {
-      "name": "alias_value_for_string_field",
-      "description": "an alias to a scalar anchor used as the value of a string field",
-      "kind": "behavior",
-      "reason": "yaml.v3 decodes the alias into the string field and accepts the config (so validate, doctor and agent list succeed and config set of a nested key succeeds); the native loader reads the alias through serde_yaml_ng and rejects 'vaultDir must be a string', and config set writes the file before that post-update load fails",
-      "config_hex": "613a20267820310a7661756c744469723a202a780a",
-      "config_text": "\"a: &x 1\\nvaultDir: *x\\n\"",
-      "observations": [
-        {
-          "command": "validate",
-          "args": [
-            "config",
-            "validate",
-            "__CONFIG__"
-          ],
-          "exit_code": 0,
-          "stdout": "Configuration is valid (__CONFIG__)\n",
-          "stderr": ""
-        },
-        {
-          "command": "set_nested",
-          "args": [
-            "config",
-            "set",
-            "agents.x.canWrite",
-            "true",
-            "--file",
-            "__CONFIG__"
-          ],
-          "exit_code": 0,
-          "stdout": "Set agents.x.canWrite = true\n",
-          "stderr": "",
-          "config_unchanged": false
-        }
-      ],
-      "doctor": {
-        "args": [
-          "--vault",
-          "__VAULT__",
-          "doctor",
-          "--only",
-          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
-          "--json",
-          "--no-network"
-        ],
-        "exit_code": 0,
-        "results": [
-          {
-            "id": "vault.config.parses",
-            "name": "Vault config parses",
-            "status": "ok",
-            "message": "config.yaml loads without errors",
-            "hint": "",
-            "fixable": false
-          },
-          {
-            "id": "vault.config.validates",
-            "name": "Vault config validates",
-            "status": "ok",
-            "message": "config.yaml passes validation",
-            "hint": "",
-            "fixable": false
-          },
-          {
-            "id": "auth.passphrase.rotation",
-            "name": "Passphrase rotation",
-            "status": "warn",
-            "message": "passphrase never rotated — rotation is recommended for security hygiene",
-            "hint": "run `symvault auth rotate-passphrase` to rotate",
-            "fixable": false
-          },
-          {
-            "id": "mcp.dynamic.engines",
-            "name": "Dynamic secret engines",
-            "status": "ok",
-            "message": "no dynamic providers configured",
-            "hint": "",
-            "fixable": false
-          },
-          {
-            "id": "mcp.agents",
-            "name": "MCP agents configured",
-            "status": "ok",
-            "message": "claude-code, codex, opencode, hermes, openclaw configured",
-            "hint": "",
-            "fixable": false
-          }
-        ]
-      },
-      "agent_list": {
-        "command": "agent_list",
-        "args": [
-          "--vault",
-          "__VAULT__",
-          "agent",
-          "list"
-        ],
-        "exit_code": 0,
-        "stdout": "",
-        "stderr": "AGENT          TIER       TOKEN      SKILL        LAST SEEN\n----------------------------------------------------------------------\nclaude-code               none       missing      -\ncodex                     none       missing      -\ndefault                   none       missing      -\nhermes                    none       missing      -\nopenclaw                  none       missing      -\nopencode                  none       missing      -\n"
-      }
-    },
-    {
       "name": "custom_tag_on_value",
       "description": "a local tag on a plain scalar",
       "kind": "behavior",
@@ -12385,12 +15345,12 @@
       }
     },
     {
-      "name": "agents_scalar",
-      "description": "a scalar where the agents mapping belongs",
+      "name": "load_audit_max_size_mb_zero",
+      "description": "audit.maxSizeMb 0 loads and fails validation (audit.maxFileSize)",
       "kind": "wording",
-      "reason": "yaml.v3 decode error 'cannot unmarshal !!str `x` into map[string]config.AgentProfile'; get reports the key text differently, and set rewrites the file before the post-update load fails on both sides",
-      "config_hex": "6167656e74733a20780a",
-      "config_text": "\"agents: x\\n\"",
+      "reason": "`config validate` reports audit.maxFileSize from the audit section it keeps beside the typed config (`config_fix.rs` `Extras`) and agrees with Go; the doctor check `vault.config.validates` calls only the typed `Config::validate`, which has no audit section, so it reports `config.yaml passes validation` where Go warns `config validation error: audit.maxFileSize: must be greater than 0 ...` and offers a fix",
+      "config_hex": "61756469743a0a20206d617853697a654d623a20300a",
+      "config_text": "\"audit:\\n  maxSizeMb: 0\\n\"",
       "observations": [
         {
           "command": "validate",
@@ -12400,36 +15360,20 @@
             "__CONFIG__"
           ],
           "exit_code": 6,
-          "stdout": "",
-          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+          "stdout": "Configuration is invalid (__CONFIG__):\n  ✗ audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\n",
+          "stderr": "Error: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nError: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
         },
         {
-          "command": "get",
+          "command": "validate_json",
           "args": [
             "config",
-            "get",
-            "vaultDir",
-            "--file",
-            "__CONFIG__"
+            "validate",
+            "__CONFIG__",
+            "--json"
           ],
           "exit_code": 6,
-          "stdout": "",
-          "stderr": "Error: key \"vaultDir\" not found: key \"vaultDir\" not found\nError: key \"vaultDir\" not found: key \"vaultDir\" not found\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
-        },
-        {
-          "command": "set",
-          "args": [
-            "config",
-            "set",
-            "vaultDir",
-            "changed",
-            "--file",
-            "__CONFIG__"
-          ],
-          "exit_code": 6,
-          "stdout": "",
-          "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
-          "config_unchanged": false
+          "stdout": "{\"errors\":[\"audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\"],\"valid\":false}\n",
+          "stderr": "Error: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nError: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
         }
       ],
       "doctor": {
@@ -12447,56 +15391,44 @@
           {
             "id": "vault.config.parses",
             "name": "Vault config parses",
-            "status": "fail",
-            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
-            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
             "fixable": false
           },
           {
             "id": "vault.config.validates",
             "name": "Vault config validates",
-            "status": "fail",
-            "message": "failed to load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
-            "hint": "inspect __VAULT__/config.yaml for syntax errors",
-            "fixable": false
+            "status": "warn",
+            "message": "config validation error: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)",
+            "hint": "run `symvault doctor --fix` to auto-correct common issues",
+            "fixable": true
           },
           {
             "id": "auth.passphrase.rotation",
             "name": "Passphrase rotation",
             "status": "warn",
-            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
-            "hint": "",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
             "fixable": false
           },
           {
             "id": "mcp.dynamic.engines",
             "name": "Dynamic secret engines",
-            "status": "warn",
-            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "status": "ok",
+            "message": "no dynamic providers configured",
             "hint": "",
             "fixable": false
           },
           {
             "id": "mcp.agents",
             "name": "MCP agents configured",
-            "status": "warn",
-            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
             "hint": "",
             "fixable": false
           }
         ]
-      },
-      "agent_list": {
-        "command": "agent_list",
-        "args": [
-          "--vault",
-          "__VAULT__",
-          "agent",
-          "list"
-        ],
-        "exit_code": 1,
-        "stdout": "",
-        "stderr": "Error: load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nError: load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\n"
       }
     },
     {
