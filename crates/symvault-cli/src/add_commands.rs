@@ -70,13 +70,16 @@ pub fn read_stdin_values<R: BufRead>(
 }
 
 fn read_line<R: BufRead>(input: &mut R, flag: &str) -> Result<String, String> {
-    let mut line = String::new();
+    // Go reads the raw bytes; its JSON encoder later turns each invalid byte
+    // into U+FFFD, which `go_string` does here.
+    let mut bytes = zeroize::Zeroizing::new(Vec::new());
     input
-        .read_line(&mut line)
+        .read_until(b'\n', &mut bytes)
         .map_err(|error| format!("read {flag}: {error}"))?;
-    if line.is_empty() {
+    if bytes.is_empty() {
         return Err(format!("read {flag}: EOF"));
     }
+    let line = crate::stdin_input::go_string(&bytes);
     Ok(line.trim_end_matches(['\r', '\n']).to_owned())
 }
 

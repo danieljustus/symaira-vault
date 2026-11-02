@@ -37,6 +37,7 @@ mod export_commands;
 mod file_commands;
 mod help_commands;
 mod history_commands;
+mod identity_error;
 mod import_commands;
 mod import_review_commands;
 mod intake_commands;
@@ -57,6 +58,7 @@ mod session_input;
 mod set_input;
 mod share_commands;
 mod startup_profile_commands;
+mod stdin_input;
 mod sync_commands;
 mod template_commands;
 mod tui;
@@ -1388,6 +1390,7 @@ fn run_cli() -> ExitCode {
     };
 
     session_input::set_quiet(cli.quiet);
+    session_input::set_no_pipe_warning(cli._no_pipe_warning);
 
     match cli.command {
         Some(Command::Ui {
@@ -1518,7 +1521,7 @@ fn run_cli() -> ExitCode {
                 }
                 Ok::<(), String>(())
             })();
-            finish_vault_result(result)
+            finish_vault_result_doubled_exit3(result)
         }
         Some(Command::List { prefix, extra }) => {
             if extra.is_empty() {
@@ -2926,7 +2929,7 @@ fn run_add(
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled_exit3(result)
 }
 
 fn run_verify(
@@ -3321,20 +3324,6 @@ fn run_auth_set(
     finish_vault_result_exit_1(result)
 }
 
-/// Go's `load identity` failure for an identity file the passphrase cannot
-/// open: an Argon2id envelope reports the zero-key recovery outcome.
-pub(crate) fn load_identity_error(vault: &Path, envelope: &[u8]) -> &'static str {
-    if symvault_crypto::detect_envelope(envelope) == symvault_crypto::EnvelopeFormat::Argon2id {
-        if vault.join("recipients.txt").is_file() {
-            "load identity: zero-key recovery failed"
-        } else {
-            "load identity: zero-key recovery requires a trusted recipients.txt"
-        }
-    } else {
-        "load identity: decryption failed"
-    }
-}
-
 fn run_auth_rotate_passphrase(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
@@ -3357,8 +3346,13 @@ fn run_auth_rotate_passphrase(
         let identity =
             match decrypt_identity(&original, &SecretBytes::new(old_passphrase.as_bytes())) {
                 Ok(identity) => identity,
-                Err(_) => {
-                    let load_error = load_identity_error(&vault, &original);
+                Err(error) => {
+                    let load_error = identity_error::load_identity_error(
+                        &vault,
+                        &original,
+                        old_passphrase.as_bytes(),
+                        error.class(),
+                    );
                     return Err(format!("current passphrase is incorrect: {load_error}"));
                 }
             };
@@ -3700,7 +3694,7 @@ fn run_list(
         let format = if json { "json" } else { output };
         vault_commands::write_list(&mut io::stdout().lock(), &entries, format, quiet)
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled_exit3(result)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3725,22 +3719,20 @@ fn run_get(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
-        let identity = device::unlock_vault(&vault)?;
+        // Go unlocks `get` without prompting (`WithVaultForScripting`) once
+        // stdin is not a terminal.
+        let identity =
+            device::unlock_vault_for_transport(&vault, io::IsTerminal::is_terminal(&io::stdin()))?;
         let result = vault_commands::get(&vault, &identity, query);
         if length || digest || metadata {
             let value = match result {
                 Ok(vault_commands::GetResult::Field { value, .. }) => value,
                 _ => {
-                    // Go reports this from the command and again from
-                    // ExecuteRoot; the caller below prints it once, so emit the
-                    // command-level line here to keep the pair identical to Go.
-                    let _ = writeln!(
-                        io::stderr(),
-                        "Error: field is required for --length, --digest, or --metadata"
-                    );
-                    return Err(
-                        "field is required for --length, --digest, or --metadata".to_owned()
-                    );
+                    return Err(reported(
+                        9,
+                        "field is required for --length, --digest, or --metadata",
+                        None,
+                    ));
                 }
             };
             let str_value = match &value {
@@ -3824,7 +3816,7 @@ fn run_get(
             &mut io::stderr(),
         )
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled_exit3(result)
 }
 
 /// Go's `emitExposureAudit`: `get --print` records that plaintext left the
@@ -4080,7 +4072,7 @@ fn run_find(
         }
         Ok(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled_exit3(result)
 }
 
 /// Go's root executor prints every error twice and, for exit 3, the init hint
@@ -4108,9 +4100,13 @@ pub(crate) fn write_not_initialized(error: &str) {
 const READ_PASSPHRASE_PREFIX: &str = "read passphrase: ";
 
 pub(crate) fn report_failed_passphrase_read(error: &str, unlock_command: bool) -> Option<ExitCode> {
-    if !error.starts_with(READ_PASSPHRASE_PREFIX) {
-        return None;
-    }
+    error
+        .starts_with(READ_PASSPHRASE_PREFIX)
+        .then(|| report_exit_locked(error, unlock_command))
+}
+
+/// An `ExitLocked` error: `Error:` twice, the locked hint, exit status 4.
+fn report_exit_locked(error: &str, unlock_command: bool) -> ExitCode {
     print_error_like_go(error);
     let hint = if unlock_command {
         "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) \u{2014} the passphrase variable alone is ignored."
@@ -4118,7 +4114,7 @@ pub(crate) fn report_failed_passphrase_read(error: &str, unlock_command: bool) -
         "Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) \u{2014} the passphrase variable alone is ignored."
     };
     let _ = writeln!(io::stderr(), "{hint}");
-    Some(ExitCode::from(4))
+    ExitCode::from(4)
 }
 
 fn finish_execution_result(result: Result<(), String>) -> ExitCode {
@@ -4192,6 +4188,10 @@ fn finish_vault_result_doubled_exit3(result: Result<(), String>) -> ExitCode {
                 write_not_initialized(&error);
                 return ExitCode::from(3);
             }
+            if error.starts_with("vault locked:") {
+                // Go's `ExitLocked` error: printed twice, then the locked hint.
+                return report_exit_locked(&error, false);
+            }
             print_error_like_go(&error);
             ExitCode::from(1)
         }
@@ -4213,11 +4213,7 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
                 return ExitCode::from(3);
             }
             let _ = writeln!(io::stderr(), "Error: {error}");
-            if error == "field is required for --length, --digest, or --metadata" {
-                ExitCode::from(9)
-            } else {
-                ExitCode::from(1)
-            }
+            ExitCode::from(1)
         }
     }
 }
@@ -5145,7 +5141,7 @@ fn run_set(
         let target_field = if field.is_empty() { "password" } else { field };
         let mut value = value;
         if stdin_value {
-            let mut bytes = Vec::new();
+            let mut bytes = zeroize::Zeroizing::new(Vec::new());
             io::stdin()
                 .lock()
                 .read_until(b'\n', &mut bytes)
@@ -5153,7 +5149,7 @@ fn run_set(
             if bytes.is_empty() {
                 return Err(reported(1, "read --stdin-value: EOF", None));
             }
-            let line = String::from_utf8_lossy(&bytes);
+            let line = stdin_input::go_string(&bytes);
             // Go overwrites `SetValue`, so a terminal stdin warns here too.
             value = Some(line.trim_end_matches(['\r', '\n']).to_owned());
         }
@@ -5287,7 +5283,7 @@ fn run_delete(
         }
         Ok::<(), String>(())
     })();
-    finish_vault_result(result)
+    finish_vault_result_doubled_exit3(result)
 }
 
 /// `symvault import review <list|promote>` — the word dispatch mirrors

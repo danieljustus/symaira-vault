@@ -217,6 +217,41 @@ Still open (probed, not fixed; see the CFG-003 and CLI-005 rows of the contract 
 | typed decode, anchors | the preceding definition of a redefined anchor; the anchor's line even behind a comment | the last definition; the collection's line |
 | typed decode, `!!binary` into `time.Time` | raw decoded bytes in the `parsing time` text | lossy UTF-8 (U+FFFD) for a non-UTF-8 payload |
 
+## SET-003 fix round: vault-open errors, hidden reads, piped input
+
+Fixed, each pinned against the Go oracle in `crates/symvault-cli/tests/set_differential.rs` (228 piped
+cases, 28 prompt-driven terminal cases):
+
+- The `open vault: load identity: …` text follows Go's chain (`identity_error.rs`): an Argon2id envelope
+  goes through `trustedZeroKeyAuthorities` first (`recipients.txt` missing, symlinked, a directory or
+  unreadable: `requires a trusted recipients.txt`; empty, garbled, comment-only:
+  `requires valid recipients.txt authority`; valid: `zero-key recovery failed: decryption failed`); any
+  other envelope is `decryption failed: ` plus the age header parser's message (quoting the bytes, base64
+  offsets, scrypt stanza checks, `identity did not match any of the recipients: …`). An empty passphrase is
+  `open vault: passphrase is empty`, before the identity is read.
+- `get`, `list`, `find`, `add`, `delete` and `edit` print a returned error twice (cobra, then `ExecuteRoot`)
+  like `set`; `vault locked:` errors add the locked hint and exit 4. `get` unlocks without prompting once
+  stdin is not a terminal (`WithVaultForScripting`).
+- A hidden terminal read ends its line on stderr (Go's `fmt.Fprintln(os.Stderr)`), not on the terminal; the
+  read is `term.ReadPassword` on stdin (echo off, no `ECHONL`).
+- `--no-pipe-warning` suppresses the pipe warning on every prompting path.
+- Piped prompt values are bytes: each invalid UTF-8 byte is stored as U+FFFD, like Go's JSON encoding.
+- Go's `bufio.Reader` over stdin (the one `set` hands to its prompts) takes what is piped, up to 4096 bytes
+  per `read(2)`, so a passphrase prompt after the `set` prompts finds end of input; the Rust prompts share an
+  equivalent buffer. Unbuffered `ReadLineFromStdin` reads one byte at a time.
+
+Still open:
+
+| Class | Go | Rust |
+| --- | --- | --- |
+| read-only commands (`get`, `list`, `find`, `delete` without a match) after a successful open | leave `.lock` and `manifest.age` in the vault | write neither (the prompt differential ignores the two names for these commands) |
+| vault-open failure of `verify` (probed; `run` matches, the rest were not probed) | `Error:` twice | once (only `set` and the six commands above were re-pinned) |
+| legacy zero-key vault (identity wrapped under the pre-#476 bug, valid `recipients.txt`) | heals the file and opens | refuses with `zero-key recovery failed: decryption failed` |
+| non-UTF-8 passphrase bytes at the unlock prompt | raw bytes are the passphrase | each invalid byte is U+FFFD |
+| age header larger than 2 MiB; `%q` of exotic Unicode in the quoted intro | `header exceeds 2 MiB`; `strconv.Quote` | not ported; an approximation of `unicode.IsPrint` |
+| Go's `bufio` fill when the writer is slower than the reader | takes one `read(2)` of whatever arrived | same model, so the same timing dependence |
+| Windows hidden read | `term.ReadPassword` | `rpassword` plus the stderr line feed (no native run) |
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate

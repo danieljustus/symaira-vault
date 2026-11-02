@@ -2,13 +2,14 @@
 //! (cmd/crud/set.go) and `cli.CollectEntryData` (internal/cli/input).
 use std::{
     collections::BTreeMap,
-    io::{self, BufRead, IsTerminal, Write},
+    io::{self, IsTerminal, Write},
 };
 
 use serde_json::Value;
 use symvault_core::password;
+use zeroize::Zeroizing;
 
-use crate::{session_input, write_commands::sensitive_field};
+use crate::{session_input, stdin_input, write_commands::sensitive_field};
 
 /// A failed interactive read, classified by Go's exit code.
 pub(crate) enum InputError {
@@ -34,7 +35,7 @@ pub(crate) fn read_confirmed_field_value(
     field: &str,
     allow_empty: bool,
 ) -> Result<String, InputError> {
-    let value = session_input::read_passphrase(&format!("Enter value for {field}: "))
+    let value = session_input::read_passphrase_buffered(&format!("Enter value for {field}: "))
         .map_err(|error| InputError::General(format!("read value: {error}")))?;
     if sensitive_field(field) {
         if value.is_empty() && !allow_empty {
@@ -44,7 +45,7 @@ pub(crate) fn read_confirmed_field_value(
         }
         if !value.is_empty() {
             let confirmation =
-                session_input::read_passphrase(&format!("Confirm value for {field}: "))
+                session_input::read_passphrase_buffered(&format!("Confirm value for {field}: "))
                     .map_err(|error| InputError::General(format!("read confirmation: {error}")))?;
             if confirmation.is_empty() {
                 return Err(InputError::Invalid(
@@ -56,15 +57,17 @@ pub(crate) fn read_confirmed_field_value(
             }
         }
     }
-    Ok(value.as_str().to_owned())
+    // The value moves on into the entry; nothing else keeps a copy.
+    let mut value = value;
+    Ok(std::mem::take(&mut *value))
 }
 
-/// One line from stdin, delimiter included; `None` at end of input.
-fn read_raw_line() -> Option<String> {
-    let mut bytes = Vec::new();
-    match io::stdin().lock().read_until(b'\n', &mut bytes) {
-        Ok(_) if bytes.is_empty() => None,
-        Ok(_) => Some(String::from_utf8_lossy(&bytes).into_owned()),
+/// One line from the shared `bufio.Reader` over stdin, delimiter included;
+/// `None` at end of input. Invalid UTF-8 is stored the way Go's JSON does.
+fn read_raw_line() -> Option<Zeroizing<String>> {
+    match stdin_input::read_buffered_line() {
+        Ok((bytes, _)) if bytes.is_empty() => None,
+        Ok((bytes, _)) => Some(stdin_input::go_string(&bytes)),
         Err(_) => None,
     }
 }
@@ -89,7 +92,7 @@ pub(crate) fn collect_entry_data(
         data.insert("username".to_owned(), Value::String(username.to_owned()));
     }
 
-    let password = session_input::read_passphrase("Password: ")
+    let password = session_input::read_passphrase_buffered("Password: ")
         .map_err(|error| format!("read password: {error}"))?;
     if !password.is_empty() {
         data.insert(
