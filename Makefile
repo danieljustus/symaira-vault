@@ -881,6 +881,21 @@ ffi-ios-simulator-test: ffi-xcframework
 # own parallel job: Miri accounts for roughly two thirds of the aggregate gate
 # wall clock (see docs/rust-port/ci-runtime.md), and it needs a different
 # toolchain and target directory than every other gate.
+# Differential and fixture targets that neither ci.yml (rust-native,
+# port-contract, rust-gates-core) nor an area workflow's make step reaches.
+# The local gate runs them on both legs (docs/rust-port/local-first.md).
+LOCAL_AREA_TARGETS := signal-process-differential \
+	mcp-init-differential mcp-stdio-differential mcp-list-differential \
+	mcp-call-differential mcp-clipboard-signals-differential \
+	mcp-execute-api-policy-differential mcp-oauth-contract api-templates-differential \
+	config-profile-differential config-session-differential cfg-overrides-fixtures-check \
+	device-list-differential device-session-differential pairing-differential \
+	git-offline-differential git-winner-differential rust-007-differential \
+	store004-isolation-check update-fixtures-check
+
+.PHONY: local-area
+local-area: $(LOCAL_AREA_TARGETS)
+
 rust-gates-core: store-differential audit-differential
 	$(MAKE) rust-lint
 	$(MAKE) rust-check
