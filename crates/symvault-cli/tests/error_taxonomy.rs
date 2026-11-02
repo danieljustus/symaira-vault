@@ -1730,11 +1730,7 @@ fn known_divergence_pin_detects_unrelated_changes() {
     ];
     mutations.push((
         "now equal to Go",
-        (
-            go.exit_code,
-            go.stdout.clone(),
-            go.stderr.clone(),
-        ),
+        (go.exit_code, go.stdout.clone(), go.stderr.clone()),
     ));
     for (label, mutated) in mutations {
         assert!(!check(&mutated).is_empty(), "{label} was not detected");
