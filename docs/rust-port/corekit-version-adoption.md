@@ -90,3 +90,25 @@ binary is the full Vault CLI while the Rust binary is only the staged version
 slice, so their sizes and startup times are not a like-for-like product
 comparison. No RSS result, clean/warm build distribution, or before/after
 performance improvement is claimed here.
+
+## CoreKit v0.19.0 (Rust-only) assessment
+
+CoreKit `v0.19.0` (tag commit `c214f67f7ab2fbc720e0eda898238844849a9b5a`,
+released 2026-11-02) removes the Go library from CoreKit `main` (CoreKit ADR
+0005). Assessment for this repository, with no code change:
+
+- **Rust pin stays at `27177f25f551cecefa7bd6c4524abf175b3a75c7`.** The GitHub
+  compare `27177f2...v0.19.0` touches no file under
+  `rust/symaira-core-version/`, the only CoreKit crate Vault consumes, so the
+  pinned contract is identical to the released one. Raise the pin together
+  with the first additional CoreKit crate adoption, not on its own.
+- **Go stays on `v0.18.x`.** `go.mod` keeps `v0.18.2`; tags after `v0.18.x`
+  contain no Go packages. `v0.18.3` carries `golang.org/x/net` v0.62.0 /
+  `golang.org/x/sys` v0.49.0 security updates and an `mcpserver` stdout-failure
+  fix; take it only if another Go release ships before the Rust-only cutover.
+- **New shared Rust crates** (`symaira-core-exit`, `-fs`, `-log`, `-update`,
+  `-mcp`, `-config`, `-env`, `-secretref`, `-sqlite`, `-llm`, `-mcpcfg`) are
+  candidates for post-cutover deduplication, slice by slice with parity
+  evidence. They are not adopted mid-migration. The removed Go-only packages
+  (`auditkit`, `evidencekit`, `domkit`, `vectorkit/turboquant`, `ollamakit`)
+  have no shared Rust crate; any Vault use stays consumer-local.
