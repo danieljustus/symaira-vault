@@ -33,6 +33,11 @@ use crate::{archive, backup_writer};
 /// a vault that has no Rust marker.
 pub fn install() {
     let _ = install_guard(Box::new(BackupGuard));
+    // Vault `config.yaml` rewrites go through `Config::save_to`, which lives in
+    // a crate below the store: route them through the same gate.
+    let _ = symvault_core::config::set_pre_save_hook(|path| {
+        symvault_store::data_safety::ensure_marker_for_path(path).map_err(|error| error.to_string())
+    });
 }
 
 /// The production guard: default backup directory, full verification.

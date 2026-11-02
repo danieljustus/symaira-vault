@@ -304,6 +304,14 @@ impl GitRepository {
                 ..Default::default()
             };
         }
+        // A pull rewrites the working tree: D1 backup first for an unmarked vault.
+        if let Err(error) = symvault_store::data_safety::ensure_marker(&self.root) {
+            return PullResult {
+                remote_url,
+                error: Some(error.to_string()),
+                ..Default::default()
+            };
+        }
         let before = self.head().ok();
         let branch = self.branch_name();
         let snapshots = match self.snapshot_dirty_candidates() {

@@ -22,6 +22,7 @@
 //! the marker without a backup because there is nothing to lose.
 
 use std::{
+    cell::Cell,
     fs,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -67,6 +68,27 @@ pub trait PreMutationGuard: Send + Sync {
 }
 
 static GUARD: OnceLock<Box<dyn PreMutationGuard>> = OnceLock::new();
+
+thread_local! {
+    /// Set while the guard runs on this thread: the backup and its scratch
+    /// restore write files of their own and must not re-enter the gate.
+    static ACTIVE: Cell<bool> = const { Cell::new(false) };
+}
+
+struct Active;
+
+impl Active {
+    fn enter() -> Self {
+        ACTIVE.with(|flag| flag.set(true));
+        Self
+    }
+}
+
+impl Drop for Active {
+    fn drop(&mut self) {
+        ACTIVE.with(|flag| flag.set(false));
+    }
+}
 
 /// Installs the process-wide guard. Returns `false` when one is already
 /// installed (the first one stays).
@@ -184,7 +206,7 @@ fn now() -> String {
 /// * otherwise: backup, restore check, then the marker; any failure refuses the
 ///   mutation and writes no marker.
 pub(crate) fn ensure_locked(root: &Path) -> Result<(), StoreError> {
-    if marker_present(root)? {
+    if ACTIVE.with(Cell::get) || marker_present(root)? {
         return Ok(());
     }
     if !has_vault_state(root) {
@@ -196,6 +218,7 @@ pub(crate) fn ensure_locked(root: &Path) -> Result<(), StoreError> {
              backup guard is not installed in this binary; refusing to modify it",
         ));
     };
+    let _active = Active::enter();
     let receipt = guard.backup_and_verify(root).map_err(|reason| {
         refuse(format!(
             "pre-migration backup failed, the vault was not modified: {reason}"
@@ -218,10 +241,20 @@ pub(crate) fn ensure_locked(root: &Path) -> Result<(), StoreError> {
 /// # Errors
 /// [`StoreError::DataSafety`] when the backup or its verification fails.
 pub fn ensure_marker(root: &Path) -> Result<(), StoreError> {
-    let root = root.canonicalize().map_err(|source| StoreError::Read {
-        path: root.to_path_buf(),
-        source,
-    })?;
+    if ACTIVE.with(Cell::get) {
+        return Ok(());
+    }
+    let root = match root.canonicalize() {
+        Ok(root) => root,
+        // No directory, no vault: nothing to protect.
+        Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => {
+            return Err(StoreError::Read {
+                path: root.to_path_buf(),
+                source,
+            });
+        }
+    };
     if marker_present(&root)? || !has_vault_state(&root) {
         return Ok(());
     }
@@ -232,6 +265,30 @@ pub fn ensure_marker(root: &Path) -> Result<(), StoreError> {
     // Taking the lock runs the gate (open_root_write_lock calls `ensure_locked`).
     let lock = open_root_write_lock(&cap, &root)?;
     let _ = lock.unlock();
+    Ok(())
+}
+
+/// How far above a written path a vault root is looked for.
+const VAULT_SEARCH_DEPTH: usize = 6;
+
+/// Runs the gate for the vault that contains `path`, found as the nearest
+/// ancestor (at most six levels up) holding an `identity.age`. A path outside
+/// any vault, or a vault that is still being created, needs nothing. This is
+/// the choke point for the helpers that write vault files by path
+/// (`symvault_sync::safeio`): recipients, device and pairing files, policies,
+/// approval queues, identity rewrites.
+///
+/// # Errors
+/// [`StoreError::DataSafety`] when the backup or its verification fails.
+pub fn ensure_marker_for_path(path: &Path) -> Result<(), StoreError> {
+    if ACTIVE.with(Cell::get) {
+        return Ok(());
+    }
+    for ancestor in path.ancestors().skip(1).take(VAULT_SEARCH_DEPTH) {
+        if fs::symlink_metadata(ancestor.join(IDENTITY_FILE)).is_ok() {
+            return ensure_marker(ancestor);
+        }
+    }
     Ok(())
 }
 

@@ -4465,6 +4465,12 @@ fn run_restore(
 ) -> ExitCode {
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
+        // Restore overwrites vault files in place: an existing vault without a
+        // Rust marker is backed up first (a missing archive keeps Go's error).
+        if fs::metadata(archive).is_ok() {
+            symvault_store::data_safety::ensure_marker(&vault)
+                .map_err(|error| error.to_string())?;
+        }
         backup_commands::restore(&vault, archive)?;
         require_initialized(&vault)?;
         if !quiet {

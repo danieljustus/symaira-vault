@@ -204,6 +204,10 @@ def restore_and_compare(sandbox, rust, archive, pre_tree, label, pre_audit=b""):
     # log is append-only: the backup may hold lines appended since `pre_tree`.
     restored.pop(".lock", None)
     expected = {k: v for k, v in pre_tree.items() if k != ".lock"}
+    # Go's Open also creates the empty `.symvault-migrated` before any write.
+    if restored.get(".symvault-migrated", ("", 0, EMPTY_SHA))[2] == EMPTY_SHA:
+        restored.pop(".symvault-migrated", None)
+        expected.pop(".symvault-migrated", None)
     if AUDIT in restored and AUDIT in expected:
         check((fresh / AUDIT).read_bytes().startswith(pre_audit or b""),
               f"{label}: restored audit log is not an extension of the pre-mutation log")
@@ -308,6 +312,70 @@ def run_zero_key(base, rust, go):
     return sandbox
 
 
+POLICY = (
+    "version: v1\ndescription: Applied policy\nrules:\n"
+    "  - name: allow-read\n    priority: 10\n    action: allow\n"
+)
+
+
+def sweep_cases(inputs):
+    """(name, rust args, oracle setup args, must_mutate_tree)."""
+    kdf = json.loads((ROOT / "testdata/port/crypto/age-kdf.json").read_text())
+    recipient = kdf["zero_key_cases"][0]["expected_recipient"]
+    inputs.mkdir(exist_ok=True)
+    (inputs / "policy.yaml").write_text(POLICY)
+    (inputs / "attach.bin").write_bytes(b"attachment bytes")
+    (inputs / "import.csv").write_text("title,username,password\nimported/a,user,StrongPassword123!\n")
+    return [
+        ("set", ["set", "sweep/new", "--value", STRONG], None, True),
+        ("delete", ["delete", "top", "--yes"], None, True),
+        ("file add", ["file", "add", "sweep/file", "--field", "blob", "--from", str(inputs / "attach.bin")],
+         None, True),
+        ("recipients add", ["recipients", "add", recipient], None, True),
+        ("recipients remove", ["recipients", "remove", recipient, "--yes", "--no-reencrypt"],
+         ["recipients", "add", recipient], True),
+        ("policy apply", ["policy", "apply", str(inputs / "policy.yaml")], None, True),
+        ("agent token new", ["agent", "token", "new", "cli"], None, True),
+        ("migrate pseudonymize", ["migrate", "pseudonymize", "--yes"], None, True),
+        ("device pair", ["device", "pair"], None, True),
+        ("import csv", ["import", str(inputs / "import.csv"), "--format", "csv"], None, True),
+    ]
+
+
+def run_sweep(base, rust, go):
+    """Every Rust command that changes a Go-created vault must have taken the
+    verified backup first: tree changed => marker + exactly one backup that
+    restores to the pre-command tree."""
+    ignored = GO_READ_SIDE_EFFECTS | {".lock", MARKER}
+    names = [case[0] for case in sweep_cases(Path(base, "sweep-names"))]
+    outcomes = []
+    for index, name in enumerate(names):
+        label = "sweep-" + name.replace(" ", "-")
+        sandbox = Sandbox(base, label)
+        _, args, setup, must_mutate = sweep_cases(sandbox.base / "inputs")[index]
+        materialize_ffi_seed(sandbox)
+        if setup:
+            out = sandbox.run(go, setup, SEED_PASS)
+            check(out.returncode == 0, f"{label}: oracle setup {setup} failed: {out.stderr.strip()[:200]}")
+        pre = tree(sandbox.vault)
+        audit = sandbox.vault / AUDIT
+        pre_audit = audit.read_bytes() if audit.exists() else b""
+        out = sandbox.run(rust, args, SEED_PASS)
+        post = tree(sandbox.vault)
+        changed = [k for k in diff_trees(pre, post) if k not in ignored]
+        if must_mutate:
+            check(out.returncode == 0 and changed,
+                  f"{label}: expected a successful mutation, rc={out.returncode} changed={changed} "
+                  f"err={out.stderr.strip()[-200:]}")
+        if changed:
+            check((sandbox.vault / MARKER).exists(), f"{label}: tree changed ({changed[:3]}) without a marker")
+            backups = sandbox.backups()
+            check(len(backups) == 1, f"{label}: expected one backup, found {len(backups)}")
+            restore_and_compare(sandbox, rust, backups[0], pre, label, pre_audit)
+        outcomes.append(f"{name}:{'mutated' if changed else 'unchanged'}")
+    return outcomes
+
+
 def negative_unwritable_backup_dir(base, rust):
     sandbox = Sandbox(base, "neg-unwritable")
     materialize_ffi_seed(sandbox)
@@ -380,6 +448,7 @@ def main():
                  lambda s: go_init(s, go, [("work/github.password", STRONG), ("notes/a", STRONG)]),
                  INIT_PASS, "work/github", [])
         run_zero_key(base, rust, go)
+        swept = run_sweep(base, rust, go)
         negative_unwritable_backup_dir(base, rust)
         negative_probe(base, rust, probe)
     except Failure as failure:
@@ -388,7 +457,8 @@ def main():
         return 1
     if not args.keep:
         shutil.rmtree(base, ignore_errors=True)
-    print(f"data-safety contract: PASS ({cases} checks, 3 seed vaults, 3 negative controls)")
+    print(f"mutator sweep: {', '.join(swept)}")
+    print(f"data-safety contract: PASS ({cases} checks, 3 seed vaults, {len(swept)} mutators, 3 negative controls)")
     return 0
 
 
