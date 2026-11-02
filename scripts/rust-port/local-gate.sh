@@ -11,7 +11,11 @@
 # Env: LOCAL_GATE_LOG_DIR / LOCAL_GATE_RECEIPTS (defaults below), RUN_MIRI=1,
 #      LOCAL_AREA_ONLY (subset of local-area targets, see local-gate-area.sh),
 #      ALLOW_DIRTY=1 (receipt is then marked dirty and is not evidence),
-#      MAKE_PREFIX (e.g. a build launcher such as dev-external).
+#      MAKE_PREFIX (e.g. a build launcher such as dev-external),
+#      LOCAL_GATE_MOUNT_AS (linux lane: absolute path to mount this worktree
+#      at inside the container, and to derive the cargo target volume from;
+#      point it at another worktree's path to reuse that worktree's existing
+#      volume instead of creating a new multi-GB one when disk is tight).
 set -euo pipefail
 
 mode="${1:-all}"
@@ -97,8 +101,9 @@ run_macos() {
 linux_docker() { # shell command run inside the container
   docker build -q -t "$image" scripts/rust-port/local-gate >/dev/null
   common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
-  target_volume="symvault-gate-target-$(printf '%s' "$root" | shasum -a 256 | cut -c1-12)"
-  docker run --rm -v "$root:$root" -v "$common:$common" -w "$root" \
+  mount="${LOCAL_GATE_MOUNT_AS:-$root}"
+  target_volume="symvault-gate-target-$(printf '%s' "$mount" | shasum -a 256 | cut -c1-12)"
+  docker run --rm -v "$root:$mount" -v "$common:$common" -w "$mount" \
     -v symvault-gate-registry:/home/dev/.cargo/registry \
     -v symvault-gate-go:/home/dev/go \
     -v "$target_volume:/home/dev/target" \
