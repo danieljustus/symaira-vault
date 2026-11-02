@@ -698,7 +698,323 @@ func buildCases() []restoreCase {
 				return patchHeader(data, 5, hf.offset, hf.field)
 			}))
 	}
+	// Header residuals (IO-002): how Go resolves a member name from the header
+	// prefix, a GNU long name and a PAX path, and what it checks in the
+	// extension headers themselves. The patched member is block 5 as above; the
+	// extension blocks are inserted in front of it, after the patch, so the
+	// checksum of the real header stays valid.
+	const gnuDemote = "zzzzzzzzzzz\x00" // invalid GNU atime: demotes the format, the overlapping prefix is read
+	withHeader := func(label string, edits func([]byte) []byte, ext ...[]byte) {
+		cases = append(cases, runAt("header-resid/"+label, "gzip", tar.FormatUnknown,
+			with(regm("entries/fieldcase", "x")), true, nil, "", "vault", false,
+			func(data []byte) []byte {
+				if edits != nil {
+					data = edits(data)
+				}
+				insert := bytes.Join(ext, nil)
+				return append(append(append([]byte{}, data[:5*512]...), insert...), data[5*512:]...)
+			}))
+	}
+	gnuDemoted := func(data []byte) []byte {
+		data = patchHeader(data, 5, 257, gnuMagic)
+		return patchHeader(data, 5, 345, gnuDemote)
+	}
+	for _, c := range []struct {
+		label   string
+		content string
+	}{
+		{"gnu-demoted/longname-equal-to-header-name", "entries/fieldcase\x00"},
+		{"gnu-demoted/longname-without-nul", "entries/fieldcase"},
+		{"gnu-demoted/longname-other", "entries/other\x00"},
+		{"gnu-demoted/longname-empty", ""},
+		{"gnu-demoted/longname-all-nul", "\x00\x00\x00"},
+		{"gnu-demoted/longname-embedded-nul", "entries/a\x00entries/b\x00"},
+		{"gnu-demoted/longname-leading-nul", "\x00entries/b\x00"},
+	} {
+		withHeader(c.label, gnuDemoted, extBlocks('L', []byte(c.content), nil))
+	}
+	withHeader("gnu-demoted/no-override", gnuDemoted)
+	withHeader("gnu-demoted/pax-path-equal-to-header-name", gnuDemoted, extBlocks('x', paxRecords("path", "entries/fieldcase"), nil))
+	withHeader("gnu-demoted/pax-path-other", gnuDemoted, extBlocks('x', paxRecords("path", "entries/paxed"), nil))
+	withHeader("gnu-demoted/pax-path-empty", gnuDemoted, extBlocks('x', paxRecords("path", ""), nil))
+	withHeader("gnu-demoted/pax-other-key-only", gnuDemoted, extBlocks('x', paxRecords("comment", "x"), nil))
+	withHeader("gnu-demoted/longname-and-pax-path", gnuDemoted,
+		extBlocks('L', []byte("entries/fromgnu\x00"), nil), extBlocks('x', paxRecords("path", "entries/frompax"), nil))
+	withHeader("gnu-demoted/pax-path-then-longname", gnuDemoted,
+		extBlocks('x', paxRecords("path", "entries/frompax"), nil), extBlocks('L', []byte("entries/fromgnu\x00"), nil))
+	withHeader("gnu/two-longnames-last-wins", nil,
+		extBlocks('L', []byte("entries/first\x00"), nil), extBlocks('L', []byte("entries/second\x00"), nil))
+	withHeader("gnu/two-pax-headers-last-wins", nil,
+		extBlocks('x', paxRecords("path", "entries/first"), nil), extBlocks('x', paxRecords("path", "entries/second"), nil))
+	withHeader("gnu/longlink-ignored-for-regular", nil, extBlocks('K', []byte("target\x00"), nil))
+	withHeader("gnu/longname-longlink-both", nil,
+		extBlocks('L', []byte("entries/named\x00"), nil), extBlocks('K', []byte("target\x00"), nil))
+	withHeader("pax/duplicate-path-last-wins", nil,
+		extBlocks('x', append(paxRecords("path", "entries/first"), paxRecords("path", "entries/second")...), nil))
+	withHeader("pax/malformed-record", nil, extBlocks('x', []byte("garbage"), nil))
+	withHeader("pax/record-length-wrong", nil, extBlocks('x', []byte("99 path=entries/x\n"), nil))
+	withHeader("pax/size-override-shorter", nil, extBlocks('x', paxRecords("size", "0"), nil))
+	withHeader("pax/size-invalid", nil, extBlocks('x', paxRecords("size", "zz"), nil))
+	withHeader("pax/mtime-invalid", nil, extBlocks('x', paxRecords("mtime", "zz"), nil))
+	withHeader("pax/uid-invalid", nil, extBlocks('x', paxRecords("uid", "zz"), nil))
+	withHeader("pax/global-then-member", nil, extBlocks('g', paxRecords("comment", "g"), nil))
+	withHeader("pax/longname-only-in-name-field-prefix", func(data []byte) []byte {
+		data = patchHeader(data, 5, 0, "fieldcase"+strings.Repeat("\x00", 91))
+		return patchHeader(data, 5, 345, "entries\x00")
+	})
+
+	// USTAR / STAR / V7 / GNU prefix handling (the 155-byte USTAR prefix versus
+	// the 131-byte STAR prefix that precedes the atime/ctime fields).
+	ustarPrefix := func(prefix string) func([]byte) []byte {
+		return func(data []byte) []byte {
+			data = patchHeader(data, 5, 0, "fieldcase"+strings.Repeat("\x00", 91))
+			return patchHeader(data, 5, 345, prefix)
+		}
+	}
+	starPrefix := func(prefix, times string) func([]byte) []byte {
+		return func(data []byte) []byte {
+			data = patchHeader(data, 5, 0, "fieldcase"+strings.Repeat("\x00", 91))
+			data = patchHeader(data, 5, 345, prefix+strings.Repeat("\x00", 131-len(prefix)))
+			data = patchHeader(data, 5, 508, "tar\x00")
+			return patchHeader(data, 5, 476, times)
+		}
+	}
+	const starTimes = "00000000001\x0000000000002\x00"
+	withHeader("ustar-prefix/short", ustarPrefix("entries\x00"))
+	withHeader("ustar-prefix/long-155-no-nul", ustarPrefix(strings.Repeat("p", 155)))
+	withHeader("ustar-prefix/non-ascii", ustarPrefix("entri\xc3\xa9s\x00"))
+	withHeader("ustar-prefix/version-not-00", func(data []byte) []byte {
+		return patchHeader(ustarPrefix("entries\x00")(data), 5, 263, "zz")
+	})
+	withHeader("ustar-prefix/version-blank", func(data []byte) []byte {
+		return patchHeader(ustarPrefix("entries\x00")(data), 5, 263, "  ")
+	})
+	withHeader("ustar-prefix/v7-magic-ignored", func(data []byte) []byte {
+		return patchHeader(ustarPrefix("entries\x00")(data), 5, 257, v7Magic)
+	})
+	withHeader("ustar-prefix/gnu-magic-prefix-ignored", func(data []byte) []byte {
+		return patchHeader(ustarPrefix("entries\x00")(data), 5, 257, gnuMagic)
+	})
+	withHeader("ustar-prefix/gnu-magic-wrong-version", func(data []byte) []byte {
+		return patchHeader(ustarPrefix("entries\x00")(data), 5, 257, "ustar  \x01")
+	})
+	withHeader("star-prefix/short", starPrefix("entries", starTimes))
+	withHeader("star-prefix/131-no-nul", starPrefix(strings.Repeat("p", 131), starTimes))
+	withHeader("star-prefix/130", starPrefix(strings.Repeat("q", 130), starTimes))
+	withHeader("star-prefix/131-with-blank-times", starPrefix(strings.Repeat("p", 131), strings.Repeat("\x00", 24)))
+	withHeader("star-prefix/131-with-space-times", starPrefix(strings.Repeat("p", 131), strings.Repeat(" ", 24)))
+	withHeader("star-prefix/131-then-longname", starPrefix(strings.Repeat("p", 131), starTimes),
+		extBlocks('L', []byte("entries/fieldcase\x00"), nil))
+	withHeader("star-prefix/131-then-pax-path", starPrefix(strings.Repeat("p", 131), starTimes),
+		extBlocks('x', paxRecords("path", "entries/fieldcase"), nil))
+
+	// Numeric fields of the extension headers themselves (Go's readHeader
+	// parses every header block, including L, K, x and g).
+	for _, f := range []struct {
+		label  string
+		offset int
+		field  string
+		magic  string
+	}{
+		{"uid-invalid", 108, "zzzzzzz\x00", ""},
+		{"gid-invalid", 116, "0000z00\x00", ""},
+		{"mode-invalid", 100, "zzzzzzz\x00", ""},
+		{"size-invalid", 124, "0000000000z\x00", ""},
+		{"mtime-invalid", 136, "1234567890z\x00", ""},
+		{"devmajor-invalid", 329, "0000008\x00", ""},
+		{"devminor-invalid", 337, "zz\x00\x00\x00\x00\x00\x00", ""},
+		{"uid-space-padded", 108, "  1750  ", ""},
+		{"mode-base256", 100, "\x80\x00\x00\x00\x00\x00\x01\xa4", ""},
+		{"gnu-atime-invalid-ignored", 345, "zzzzzzzzzzz\x00", gnuMagic},
+		{"v7-devmajor-ignored", 329, "0000008\x00", v7Magic},
+		{"checksum-bad", 148, "0000000\x00", ""},
+	} {
+		f := f
+		patchExt := func(ext []byte) []byte {
+			if f.magic != "" {
+				ext = patchHeader(ext, 0, 257, f.magic)
+			}
+			if f.label == "checksum-bad" {
+				out := append([]byte{}, ext...)
+				copy(out[148:156], f.field+" ")
+				return out
+			}
+			return patchHeader(ext, 0, f.offset, f.field)
+		}
+		withHeader("ext-header/longname/"+f.label, nil, patchExt(extBlocks('L', []byte("entries/fieldcase\x00"), nil)))
+		withHeader("ext-header/longlink/"+f.label, nil, patchExt(extBlocks('K', []byte("t\x00"), nil)))
+		withHeader("ext-header/pax/"+f.label, nil, patchExt(extBlocks('x', paxRecords("comment", "c"), nil)))
+		withHeader("ext-header/pax-global/"+f.label, nil, patchExt(extBlocks('g', paxRecords("comment", "g"), nil)))
+	}
+	withHeader("ext-header/longname-size-over-1mib", nil,
+		patchHeader(extBlocks('L', []byte("x"), nil), 0, 124, "00004000001\x00"))
+	withHeader("ext-header/pax-size-over-1mib", nil,
+		patchHeader(extBlocks('x', []byte("x"), nil), 0, 124, "00004000001\x00"))
+	withHeader("ext-header/longname-over-1mib-body", nil, extBlocks('L', bytes.Repeat([]byte("a"), 1<<20+1), nil))
+	withHeader("ext-header/pax-over-1mib-body", nil, extBlocks('x', bytes.Repeat([]byte("a"), 1<<20+1), nil))
+	withHeader("ext-header/longname-exactly-1mib-body", nil, extBlocks('L', append(bytes.Repeat([]byte("a"), 1<<20-1), 0), nil))
+	withHeader("ext-header/longname-truncated-body", nil,
+		extBlocks('L', []byte(strings.Repeat("a", 600)), nil)[:512+100])
+
+	// Sparse members (Go's reader expands PAX sparse files and rejects the old
+	// GNU 'S' type in RestoreBackup after validating the map). The raw members
+	// are appended after the fixed prelude (blocks 0-4), before the trailer.
+	sparse := func(label string, build func() []byte) {
+		cases = append(cases, runAt("header-resid/sparse/"+label, "gzip", tar.FormatUnknown,
+			requiredMembers, true, nil, "", "vault", false,
+			func(data []byte) []byte {
+				return append(append(append([]byte{}, data[:5*512]...), build()...), data[5*512:]...)
+			}))
+	}
+	padBlocks := func(b []byte) []byte {
+		return append(append([]byte{}, b...), make([]byte, (512-len(b)%512)%512)...)
+	}
+	regRaw := func(name string, size int64, body []byte, flag byte) []byte {
+		h := rawHeader(member{Name: name, Type: "reg", Mode: 0o600}, size)
+		out := patchHeader(h, 0, 156, string([]byte{flag}))
+		return append(out, padBlocks(body)...)
+	}
+	rec := func(parts ...string) []byte {
+		var out []byte
+		for i := 0; i+1 < len(parts); i += 2 {
+			out = append(out, paxRecords(parts[i], parts[i+1])...)
+		}
+		return out
+	}
+	const spData = "AAAAABBB"
+	paxSparse := func(records []byte, size int64, body string) func() []byte {
+		return func() []byte {
+			return append(extBlocks('x', records, nil), regRaw("entries/sparse-header", size, []byte(body), '0')...)
+		}
+	}
+	base01 := func(extra ...string) []byte {
+		return rec(append([]string{"GNU.sparse.major", "0", "GNU.sparse.minor", "1", "GNU.sparse.name", "entries/spfile"}, extra...)...)
+	}
+	sparse("pax-0.1-ok", paxSparse(base01("GNU.sparse.numblocks", "2", "GNU.sparse.map", "0,5,10,3", "GNU.sparse.size", "20"), 8, spData))
+	sparse("pax-0.1-realsize", paxSparse(base01("GNU.sparse.numblocks", "2", "GNU.sparse.map", "0,5,10,3", "GNU.sparse.realsize", "20"), 8, spData))
+	sparse("pax-0.1-no-name", paxSparse(rec("GNU.sparse.major", "0", "GNU.sparse.minor", "1", "GNU.sparse.numblocks", "2", "GNU.sparse.map", "0,5,10,3", "GNU.sparse.size", "20"), 8, spData))
+	sparse("pax-0.1-guessed-version", paxSparse(rec("GNU.sparse.numblocks", "2", "GNU.sparse.map", "0,5,10,3", "GNU.sparse.size", "20", "GNU.sparse.name", "entries/spfile"), 8, spData))
+	sparse("pax-0.1-empty-map", paxSparse(base01("GNU.sparse.numblocks", "0", "GNU.sparse.map", "", "GNU.sparse.size", "4"), 0, ""))
+	sparse("pax-0.1-numblocks-mismatch", paxSparse(base01("GNU.sparse.numblocks", "3", "GNU.sparse.map", "0,5,10,3", "GNU.sparse.size", "20"), 8, spData))
+	sparse("pax-0.1-overlap", paxSparse(base01("GNU.sparse.numblocks", "2", "GNU.sparse.map", "0,5,3,3", "GNU.sparse.size", "20"), 8, spData))
+	sparse("pax-0.1-beyond-size", paxSparse(base01("GNU.sparse.numblocks", "2", "GNU.sparse.map", "0,5,18,5", "GNU.sparse.size", "20"), 8, spData))
+	sparse("pax-0.1-negative", paxSparse(base01("GNU.sparse.numblocks", "2", "GNU.sparse.map", "0,-5,10,3", "GNU.sparse.size", "20"), 8, spData))
+	sparse("pax-0.1-garbage", paxSparse(base01("GNU.sparse.numblocks", "2", "GNU.sparse.map", "a,b,c,d", "GNU.sparse.size", "20"), 8, spData))
+	sparse("pax-0.1-odd-count", paxSparse(base01("GNU.sparse.numblocks", "1", "GNU.sparse.map", "0,5,10", "GNU.sparse.size", "20"), 8, spData))
+	sparse("pax-0.1-size-invalid", paxSparse(base01("GNU.sparse.numblocks", "2", "GNU.sparse.map", "0,5,10,3", "GNU.sparse.size", "zz"), 8, spData))
+	sparse("pax-0.1-numblocks-invalid", paxSparse(base01("GNU.sparse.numblocks", "zz", "GNU.sparse.map", "0,5,10,3", "GNU.sparse.size", "20"), 8, spData))
+	sparse("pax-0.1-data-too-short", paxSparse(base01("GNU.sparse.numblocks", "2", "GNU.sparse.map", "0,5,10,3", "GNU.sparse.size", "20"), 6, spData[:6]))
+	sparse("pax-0.1-data-too-long", paxSparse(base01("GNU.sparse.numblocks", "2", "GNU.sparse.map", "0,5,10,3", "GNU.sparse.size", "20"), 12, spData+"XXXX"))
+	sparse("pax-0.1-all-hole", paxSparse(base01("GNU.sparse.numblocks", "0", "GNU.sparse.map", "", "GNU.sparse.size", "600"), 0, ""))
+	sparse("pax-unknown-version", paxSparse(rec("GNU.sparse.major", "2", "GNU.sparse.minor", "0", "GNU.sparse.name", "entries/spfile"), 8, spData))
+	sparse("pax-0.0-ok", paxSparse(rec("GNU.sparse.numblocks", "2", "GNU.sparse.offset", "0", "GNU.sparse.numbytes", "5", "GNU.sparse.offset", "10", "GNU.sparse.numbytes", "3", "GNU.sparse.size", "20", "GNU.sparse.name", "entries/spfile"), 8, spData))
+	sparse("pax-0.0-bad-order", paxSparse(rec("GNU.sparse.numblocks", "2", "GNU.sparse.numbytes", "5", "GNU.sparse.offset", "0"), 8, spData))
+	sparse("pax-0.0-comma-value", paxSparse(rec("GNU.sparse.numblocks", "1", "GNU.sparse.offset", "0,1", "GNU.sparse.numbytes", "5"), 8, spData))
+	oneZero := func(mapText string, body string, size int64) func() []byte {
+		records := rec("GNU.sparse.major", "1", "GNU.sparse.minor", "0", "GNU.sparse.name", "entries/spfile", "GNU.sparse.realsize", "20")
+		return func() []byte {
+			full := append(padBlocks([]byte(mapText)), []byte(body)...)
+			return append(extBlocks('x', records, nil), regRaw("entries/sparse-header", size, full, '0')...)
+		}
+	}
+	sparse("pax-1.0-ok", oneZero("2\n0\n5\n10\n3\n", spData, 512+8))
+	sparse("pax-1.0-bad-count", oneZero("x\n0\n5\n", spData, 512+8))
+	sparse("pax-1.0-negative-count", oneZero("-1\n", spData, 512+8))
+	sparse("pax-1.0-too-few-tokens", oneZero("3\n0\n5\n", spData, 512+8))
+	sparse("pax-1.0-bad-offset", oneZero("1\nzz\n5\n", spData, 512+8))
+	sparse("pax-1.0-short-data", oneZero("2\n0\n5\n10\n3\n", "AAA", 512+3))
+	sparse("pax-1.0-no-newline", func() []byte {
+		records := rec("GNU.sparse.major", "1", "GNU.sparse.minor", "0", "GNU.sparse.realsize", "20")
+		return append(extBlocks('x', records, nil), regRaw("entries/sparse-header", 512, bytes.Repeat([]byte("7"), 512), '0')...)
+	})
+
+	// Old GNU sparse ('S'): the map sits in the header (4 entries, then
+	// extension blocks of 21); RestoreBackup rejects the type afterwards.
+	oct12 := func(v int64) string { return fmt.Sprintf("%011o\x00", v) }
+	gnuSparse := func(entries [][2]int64, realSize int64, mutate func([]byte) []byte) func() []byte {
+		return func() []byte {
+			h := rawHeader(member{Name: "entries/oldsparse", Type: "reg", Mode: 0o600}, 8)
+			h = patchHeader(h, 0, 156, "S")
+			h = patchHeader(h, 0, 257, gnuMagic)
+			h = patchHeader(h, 0, 483, oct12(realSize))
+			var extension []byte
+			for i, e := range entries {
+				if i < 4 {
+					h = patchHeader(h, 0, 386+i*24, oct12(e[0])+oct12(e[1]))
+				}
+			}
+			if len(entries) > 4 {
+				h = patchHeader(h, 0, 482, "\x01")
+				rest := entries[4:]
+				for len(rest) > 0 {
+					block := make([]byte, 512)
+					n := min(len(rest), 21)
+					for k := 0; k < n; k++ {
+						copy(block[k*24:], oct12(rest[k][0])+oct12(rest[k][1]))
+					}
+					rest = rest[n:]
+					if len(rest) > 0 {
+						block[504] = 1
+					}
+					extension = append(extension, block...)
+				}
+			}
+			if mutate != nil {
+				h = mutate(h)
+			}
+			return append(append(h, extension...), padBlocks([]byte(spData))...)
+		}
+	}
+	two := [][2]int64{{0, 5}, {10, 3}}
+	sparse("old-gnu-s-unsupported", gnuSparse(two, 20, nil))
+	sparse("old-gnu-s-empty-map", gnuSparse(nil, 20, nil))
+	sparse("old-gnu-s-extended", gnuSparse([][2]int64{{0, 1}, {2, 1}, {4, 1}, {6, 1}, {8, 1}, {10, 1}}, 20, nil))
+	sparse("old-gnu-s-overlap", gnuSparse([][2]int64{{0, 5}, {3, 3}}, 20, nil))
+	sparse("old-gnu-s-beyond-size", gnuSparse([][2]int64{{0, 5}, {18, 5}}, 20, nil))
+	sparse("old-gnu-s-bad-realsize", gnuSparse(two, 20, func(h []byte) []byte { return patchHeader(h, 0, 483, "zzzzzzzzzzz\x00") }))
+	sparse("old-gnu-s-bad-entry", gnuSparse(two, 20, func(h []byte) []byte { return patchHeader(h, 0, 398, "zzzzzzzzzzz\x00") }))
+	sparse("old-gnu-s-ustar-magic", gnuSparse(two, 20, func(h []byte) []byte { return patchHeader(h, 0, 257, "ustar\x0000") }))
+	sparse("old-gnu-s-extended-flag-no-block", gnuSparse(two, 20, func(h []byte) []byte {
+		return append(patchHeader(h, 0, 482, "\x01"), make([]byte, 0)...)
+	}))
+
 	return cases
+}
+
+// extBlocks hand-assembles an extension header (GNU long name/link, PAX
+// local/global) followed by its padded content. The header uses the GNU magic
+// that GNU tar writes for long names; its numeric fields are plain octal.
+func extBlocks(flag byte, content []byte, _ []byte) []byte {
+	block := make([]byte, 512)
+	copy(block[0:100], "././@LongLink")
+	copy(block[100:108], "0000644\x00")
+	copy(block[108:116], "0000000\x00")
+	copy(block[116:124], "0000000\x00")
+	copy(block[124:136], fmt.Sprintf("%011o\x00", len(content)))
+	copy(block[136:148], "00000000000\x00")
+	block[156] = flag
+	copy(block[257:265], "ustar  \x00")
+	for i := 148; i < 156; i++ {
+		block[i] = ' '
+	}
+	sum := 0
+	for _, b := range block {
+		sum += int(b)
+	}
+	copy(block[148:156], fmt.Sprintf("%06o\x00 ", sum))
+	padded := make([]byte, (len(content)+511)/512*512)
+	copy(padded, content)
+	return append(block, padded...)
+}
+
+// paxRecords formats one PAX record ("<len> <key>=<value>\n", len includes itself).
+func paxRecords(key, value string) []byte {
+	body := " " + key + "=" + value + "\n"
+	n := len(body) + 1
+	for len(fmt.Sprint(n))+len(body) != n {
+		n = len(fmt.Sprint(n)) + len(body)
+	}
+	return []byte(fmt.Sprintf("%d%s", n, body))
 }
 
 func hasSymlink(items []pre) bool {

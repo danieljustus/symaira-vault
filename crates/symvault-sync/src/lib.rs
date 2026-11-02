@@ -11,6 +11,7 @@ pub mod devices;
 pub mod export;
 pub mod git;
 mod goflate;
+mod gotar;
 pub mod gotemplate;
 mod gozip;
 mod gzip_multistream;

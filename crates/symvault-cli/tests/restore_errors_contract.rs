@@ -52,6 +52,16 @@ struct Case {
 const GO_PARTIAL_FILES: &[(&str, &str)] = &[
     ("truncated-member-data", "vault/entries/cut"),
     ("exact-limit-member-truncated", "vault/entries/big"),
+    // A sparse member whose data section ends before the map is satisfied:
+    // Go has already written the bytes it could expand.
+    (
+        "header-resid/sparse/pax-0.1-data-too-short",
+        "vault/entries/spfile",
+    ),
+    (
+        "header-resid/sparse/pax-1.0-short-data",
+        "vault/entries/spfile",
+    ),
 ];
 
 #[derive(Deserialize)]
@@ -351,7 +361,7 @@ fn restore_errors_and_side_effects_match_go_corpus() {
         "../../../testdata/port/sync/restore-errors.json"
     ))
     .unwrap();
-    assert_eq!(fixture.cases.len(), 149, "corpus size changed");
+    assert_eq!(fixture.cases.len(), 281, "corpus size changed");
     let mut failures = Vec::new();
     let mut executed = 0;
     for case in &fixture.cases {
@@ -369,8 +379,8 @@ fn restore_errors_and_side_effects_match_go_corpus() {
             failures.push(message);
         }
     }
-    // 149 recorded cases, 14 of them Unix-only: 135 run on Windows, all 149 on Unix.
-    assert!(executed >= 135, "only {executed} cases executed");
+    // 281 recorded cases, 14 of them Unix-only: 267 run on Windows, all 281 on Unix.
+    assert!(executed >= 267, "only {executed} cases executed");
     assert!(
         failures.is_empty(),
         "{} of {} cases diverge from Go:\n{}",
