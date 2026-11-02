@@ -1202,6 +1202,10 @@ pub(super) fn join(
         .map_err(|e| format!("save identity: {e}"))?;
     safeio::write_atomic(&vault.join("identity.age"), &enc_id)
         .map_err(|e| format!("save identity: {e}"))?;
+    // A vault Rust creates needs no pre-migration backup (D1); unmarked, the
+    // recipients write below would be refused (or back up the empty vault).
+    symvault_store::data_safety::mark_created(vault)
+        .map_err(|e| format!("write rust marker: {e}"))?;
 
     let recipients_content = format!(
         "# Symaira Vault vault recipients\n# Added by device join\n{}\n",
@@ -1402,6 +1406,10 @@ pub(super) fn add(
         .map_err(|e| format!("save identity: {e}"))?;
     safeio::write_atomic(&vault.join("identity.age"), &enc_id)
         .map_err(|e| format!("save identity: {e}"))?;
+    // A vault Rust creates needs no pre-migration backup (D1); unmarked, the
+    // recipients write below would be refused (or back up the empty vault).
+    symvault_store::data_safety::mark_created(vault)
+        .map_err(|e| format!("write rust marker: {e}"))?;
 
     let recipients_content = format!(
         "# Symaira Vault vault recipients\n# Added by device add --pair\n{}\n",
