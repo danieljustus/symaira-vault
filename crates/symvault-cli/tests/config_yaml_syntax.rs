@@ -101,15 +101,18 @@ struct Fixture {
 }
 
 /// Cases whose Go output the native CLI must reproduce byte for byte.
-const MATCHING_CASES: usize = 128;
+const MATCHING_CASES: usize = 176;
 /// Comparisons the replay executes: every recorded config observation, one
-/// `doctor` run per case and the fourteen `agent list` runs.
-const REPLAYED_COMPARISONS: usize = 554;
+/// `doctor` run per case and the `agent list` runs.
+const REPLAYED_COMPARISONS: usize = 712;
 /// The `load_*` cases (CONFIG-LOAD-001): what the loader and validator accept
 /// or reject once the bytes parse as YAML.
-const LOAD_CASES: usize = 32;
+const LOAD_CASES: usize = 79;
+/// The CONFIG-SECTIONS-001 cases among them: what the typed decode makes of
+/// each kind of scalar and how the section merge treats it.
+const SECTION_CASES: usize = 47;
 /// Inputs on which the native CLI is known to differ from Go.
-const OPEN_DIVERGENCES: usize = 31;
+const OPEN_DIVERGENCES: usize = 33;
 
 fn fixture() -> Fixture {
     const CONTENT: &[u8] = include_bytes!("../../../testdata/port/cli/config-yaml-syntax.json");
@@ -786,4 +789,178 @@ fn mutated_load_expectation_is_detected() {
         .replace("__CONFIG__: ", "__CONFIG__: parse config: ");
     assert_ne!(prefixed.stderr, validate.stderr, "mutation changed nothing");
     assert!(run_config_observation(&bytes, &prefixed).is_some());
+}
+
+/// CONFIG-SECTIONS-001: the Go-coerced values the section parsers read. The
+/// replay above already compares every byte; this names the classes, pins the
+/// Go outcome the coercion decides (a message that quotes the coerced text, a
+/// range check on the coerced number, an index shifted by a dropped null) and
+/// proves a replay notices a wrong coercion.
+#[test]
+fn section_coercions_are_pinned_to_what_go_prints() {
+    let fixture = fixture();
+    let sections: Vec<&Case> = fixture
+        .cases
+        .iter()
+        .filter(|case| {
+            case.name.starts_with("load_")
+                && !fixture.cases[..128]
+                    .iter()
+                    .any(|earlier| earlier.name == case.name)
+        })
+        .collect();
+    assert_eq!(sections.len(), SECTION_CASES);
+    let validate = |name: &str| -> Observation {
+        sections
+            .iter()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("{name} is not a section case"))
+            .observations
+            .iter()
+            .find(|observation| observation.command == "validate")
+            .expect("validate observation")
+            .clone()
+    };
+    for (name, exit_code, text) in [
+        // Strings keep their source text.
+        (
+            "load_vault_auth_method_hex",
+            6,
+            "invalid authMethod \"0x10\"",
+        ),
+        (
+            "load_approval_mode_integer",
+            6,
+            "invalid approvalMode \"5\"",
+        ),
+        (
+            "load_approval_mode_bool",
+            6,
+            "invalid approvalMode \"true\"",
+        ),
+        (
+            "load_prompt_injection_mode_hex",
+            6,
+            "invalid promptInjectionMode \"0x10\"",
+        ),
+        // Ints truncate floats and read YAML 1.1 spellings.
+        (
+            "load_vault_argon2id_time_float",
+            6,
+            "argon2id_time: 1 is below",
+        ),
+        (
+            "load_vault_argon2id_time_exponent",
+            6,
+            "argon2id_time: 1000 exceeds",
+        ),
+        (
+            "load_vault_argon2id_time_underscore",
+            6,
+            "argon2id_time: 1000 exceeds",
+        ),
+        (
+            "load_vault_argon2id_time_old_octal",
+            6,
+            "argon2id_time: 64 exceeds",
+        ),
+        (
+            "load_vault_argon2id_time_octal_prefix",
+            0,
+            "Configuration is valid",
+        ),
+        (
+            "load_clipboard_auto_clear_negative_float",
+            6,
+            "must be non-negative",
+        ),
+        (
+            "load_clipboard_auto_clear_truncates_to_zero",
+            0,
+            "Configuration is valid",
+        ),
+        // A null list item is dropped; other scalars are kept as text.
+        (
+            "load_agent_null_items_dropped",
+            6,
+            "allowedPaths[0]: invalid glob",
+        ),
+        (
+            "load_agent_non_string_items_index",
+            6,
+            "allowedPaths[2]: invalid glob",
+        ),
+        // Pointer fields, durations and nulls.
+        ("load_agent_null_pointers", 0, "Configuration is valid"),
+        ("load_agents_null", 0, "Configuration is valid"),
+        (
+            "load_section_negative_durations",
+            0,
+            "Configuration is valid",
+        ),
+        (
+            "load_agent_approval_timeout_integer",
+            6,
+            "into time.Duration",
+        ),
+        // The merge gates.
+        (
+            "load_agent_merged_prompt_injection_mode",
+            6,
+            "invalid promptInjectionMode \"weird\"",
+        ),
+        (
+            "load_agent_merged_approval_mode_ignored",
+            0,
+            "Configuration is valid",
+        ),
+        (
+            "load_mcp_section_alias_ignored",
+            0,
+            "Configuration is valid",
+        ),
+        (
+            "load_session_timeout_zero_via_merge",
+            0,
+            "Configuration is valid",
+        ),
+    ] {
+        let observation = validate(name);
+        assert_eq!(observation.exit_code, exit_code, "{name}");
+        assert!(
+            observation.stdout.contains(text) || observation.stderr.contains(text),
+            "{name}: {observation:?}"
+        );
+    }
+
+    // Negative control: the one detail a wrong coercion would change must
+    // fail the replay (`0x10` read as the number 16, a float rejected, a null
+    // item kept).
+    for (name, from, to) in [
+        ("load_vault_auth_method_hex", "0x10", "16"),
+        (
+            "load_vault_argon2id_time_float",
+            "1 is below",
+            "1.5 is below",
+        ),
+        (
+            "load_agent_null_items_dropped",
+            "allowedPaths[0]",
+            "allowedPaths[1]",
+        ),
+    ] {
+        let case = sections
+            .iter()
+            .find(|case| case.name == name)
+            .expect("section case");
+        let bytes = decode_hex(&case.config_hex);
+        let mut expected = validate(name);
+        assert_eq!(run_config_observation(&bytes, &expected), None, "{name}");
+        expected.stdout = expected.stdout.replace(from, to);
+        expected.stderr = expected.stderr.replace(from, to);
+        assert!(
+            run_config_observation(&bytes, &expected).is_some(),
+            "{name}: a wrong coercion went unnoticed"
+        );
+    }
 }

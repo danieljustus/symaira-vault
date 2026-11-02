@@ -292,3 +292,31 @@ fn policy_migration_accepts_null_vault_configuration() {
     let rendered = fs::read_to_string(root.path().join("config.yaml")).unwrap();
     assert!(rendered.contains("custom: retained") && rendered.contains("argon2id_time: 3"));
 }
+
+/// Go's `prepareResourceMigrationConfig` wraps each stage as
+/// `<stage> migration config: %w`; nothing is written when a stage fails.
+#[test]
+fn policy_migration_wraps_config_failures_like_go() {
+    for (config, expected) in [
+        (&b"vault: [malformed\n"[..], "load migration config: "),
+        (
+            &b"sessionTimeout: 0s\n"[..],
+            "load migration config: sessionTimeout: must be greater than 0, got 0s",
+        ),
+        (
+            &b"vault:\n  argon2id_time: 99\n"[..],
+            "validate migration config: vault.argon2id_time: 99 exceeds maximum ceiling of 16",
+        ),
+    ] {
+        let (root, passphrase, original, _) = policy_fixture();
+        fs::write(root.path().join("config.yaml"), config).unwrap();
+        let error = migrate_resource_policy(root.path(), &passphrase).unwrap_err();
+        assert!(error.starts_with(expected), "{error}");
+        assert_eq!(
+            fs::read(root.path().join("identity.age")).unwrap(),
+            original
+        );
+        assert_eq!(fs::read(root.path().join("config.yaml")).unwrap(), config);
+        assert!(!root.path().join("identity.age.bak").exists());
+    }
+}

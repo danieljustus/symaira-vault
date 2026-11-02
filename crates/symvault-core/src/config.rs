@@ -701,7 +701,7 @@ impl Config {
         // wrote a restriction there must not believe it is in force. Go rejects
         // it with the same message.
         let mut documents = serde_yaml_ng::Deserializer::from_slice(bytes);
-        let first = documents
+        documents
             .next()
             .ok_or_else(|| ConfigError::Parse("empty YAML stream".to_owned()))?;
         // Go counts a later document only when it decodes: a syntax error in
@@ -726,35 +726,29 @@ impl Config {
                 String::from_utf8_lossy(&cause).into_owned(),
             ));
         }
-        let profiles = ProfileFields::deserialize(first)
-            .map_err(|error| ConfigError::Parse(error.to_string()))?;
-        let fields: serde_yaml_ng::Mapping = profiles
-            .fields
-            .into_iter()
-            .map(|(name, value)| (key(&name), value))
-            .collect();
-        let root = &fields;
+        // Every value below is read from the tree yaml.v3's typed decode
+        // leaves (`config_typed::coerced_document`): the coercions of the Go
+        // field types happen there and nowhere else.
+        let document = std::str::from_utf8(bytes)
+            .ok()
+            .and_then(crate::config_typed::coerced_document)
+            .ok_or_else(|| {
+                ConfigError::Parse("top-level YAML document must be a mapping".into())
+            })?;
+        let root = mapping(&document)?;
         let mut config = Self::default();
         let mut auth_method_explicit = false;
         // Go merges `vaultDir` only when the text is non-empty, so `vaultDir:
         // ''` (like `null`) keeps the resolved default; whether that default
         // is empty is `validate`'s business, not the loader's.
         if let Some(v) = scalar(root, "vaultDir") {
-            let text = if v.is_null() {
-                String::new()
-            } else {
-                text_scalar(v, "vaultDir")?
-            };
+            let text = string_field(v, "vaultDir")?;
             if !text.is_empty() {
                 config.vault_dir = text;
             }
         }
         if let Some(v) = scalar(root, "defaultAgent") {
-            let text = if v.is_null() {
-                String::new()
-            } else {
-                text_scalar(v, "defaultAgent")?
-            };
+            let text = string_field(v, "defaultAgent")?;
             if !text.is_empty() {
                 config.default_agent = text;
             }
@@ -769,14 +763,16 @@ impl Config {
             ("sessionTimeout", "15m", &mut config.session_timeout),
             ("sessionMaxLifetime", "8h", &mut config.session_max_lifetime),
         ] {
-            let Some(v) = scalar(root, name) else {
-                continue;
+            let nanos = match scalar(root, name) {
+                Some(v) => session_duration_nanos(v, name)?,
+                None => 0,
             };
-            match session_duration_nanos(v, name)? {
-                nanos if nanos > 0 => {
-                    *target = Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX));
-                }
-                nanos => duration_errors.push(non_positive_duration_message(name, nanos, default)),
+            // The error needs the key written by the operator; a value a
+            // `<<` merge supplies only counts when it is positive.
+            if written(root, name).is_some() && nanos <= 0 {
+                duration_errors.push(non_positive_duration_message(name, nanos, default));
+            } else if nanos > 0 {
+                *target = Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX));
             }
         }
         if !duration_errors.is_empty() {
@@ -791,7 +787,7 @@ impl Config {
         // and the vault block from selecting the method. A null or `""` method
         // leaves both free to.
         if let Some(v) = scalar(root, "authMethod").filter(|v| !v.is_null()) {
-            let text = text_scalar(v, "authMethod")?;
+            let text = string_field(v, "authMethod")?;
             if !text.is_empty() {
                 if let Ok(method) = AuthMethod::parse(&text) {
                     config.auth_method = method;
@@ -801,22 +797,29 @@ impl Config {
         }
         // `useTouchID` is a `*bool` in Go: null stays nil and selects nothing.
         if let Some(v) = scalar(root, "useTouchID").filter(|v| !v.is_null()) {
-            config.use_touch_id = Some(boolean(v, "useTouchID")?);
+            config.use_touch_id = Some(bool_field(v, "useTouchID")?);
         }
-        config.default_profile = profiles.default_profile.unwrap_or_default();
-        config.profiles = profiles.profiles.map(|profiles| {
-            profiles
-                .into_iter()
-                .map(|(name, profile)| {
-                    (
-                        name,
-                        Profile {
-                            vault_path: profile.vault_path(),
-                        },
-                    )
-                })
-                .collect()
-        });
+        if let Some(v) = scalar(root, "defaultProfile") {
+            config.default_profile = string_field(v, "defaultProfile")?;
+        }
+        // A `profiles` that is null stays nil in Go, `{}` is an empty map.
+        if let Some(profiles) = scalar(root, "profiles").and_then(serde_yaml_ng::Value::as_mapping)
+        {
+            let mut loaded = BTreeMap::new();
+            for (name, value) in entries(profiles) {
+                // Go dereferences the nil profile a null entry decodes to and
+                // crashes; there is no behavior to match, so refuse it.
+                let fields = value.as_mapping().ok_or_else(|| {
+                    ConfigError::Parse(format!("profiles.{name}: profile must not be null"))
+                })?;
+                let vault_path = match scalar(fields, "vault") {
+                    Some(v) => string_field(v, "profiles.vault")?,
+                    None => String::new(),
+                };
+                loaded.insert(name.to_owned(), Profile { vault_path });
+            }
+            config.profiles = Some(loaded);
+        }
         // Go applies a top-level `useTouchID: true` as the method only when
         // the operator wrote no `authMethod`; a false value never selects
         // anything. The vault block may still override it below.
@@ -825,14 +828,10 @@ impl Config {
         }
         // Go warns for the deprecated key once the document has decoded and
         // the durations have passed, ahead of every merge. A null list is nil
-        // there and neither warns nor overrides; any other value must be a
-        // list. Neither key is consumed by a Rust caller today, so they are
-        // validated and not carried.
-        if let Some(v) = root.get(key("envAllowlist")) {
-            string_list(v, "envAllowlist")?;
-        }
-        if let Some(v) = root.get(key("envWhitelist")).filter(|v| !v.is_null()) {
-            string_list(v, "envWhitelist")?;
+        // there and neither warns nor overrides; the typed decode has already
+        // checked the shape of both lists. Neither key is consumed by a Rust
+        // caller today, so they are not carried.
+        if scalar(root, "envWhitelist").is_some_and(|v| !v.is_null()) {
             warnings.push(ENV_WHITELIST_WARNING.to_owned());
         }
         if let Some(v) = root.get(key("agents")) {
@@ -1099,14 +1098,36 @@ fn mapping(value: &serde_yaml_ng::Value) -> Result<&serde_yaml_ng::Mapping, Conf
         .as_mapping()
         .ok_or_else(|| ConfigError::Parse("top-level YAML document must be a mapping".into()))
 }
+/// The value `name` has after Go's decode (merged keys included).
 fn scalar<'a>(map: &'a serde_yaml_ng::Mapping, name: &str) -> Option<&'a serde_yaml_ng::Value> {
     map.get(key(name))
 }
-fn string(value: &serde_yaml_ng::Value, field: &str) -> Result<String, ConfigError> {
-    value
-        .as_str()
-        .map(str::to_owned)
-        .ok_or_else(|| ConfigError::Parse(format!("{field} must be a string")))
+static NULL: serde_yaml_ng::Value = serde_yaml_ng::Value::Null;
+/// The value of `name` when the operator wrote the key in this mapping itself
+/// (not through a `<<` merge or an alias), which is what Go's field-presence
+/// walk (`loadSectionFields`, `loadAgentFields`) counts and the section merges
+/// are gated on.
+fn written<'a>(map: &'a serde_yaml_ng::Mapping, name: &str) -> Option<&'a serde_yaml_ng::Value> {
+    map.get(key(crate::config_typed::OWN_KEYS))
+        .and_then(serde_yaml_ng::Value::as_sequence)
+        .is_some_and(|keys| keys.iter().any(|written| written.as_str() == Some(name)))
+        .then(|| scalar(map, name).unwrap_or(&NULL))
+}
+/// A decoded `agents`/`profiles` map's entries, without the bookkeeping key.
+fn entries(map: &serde_yaml_ng::Mapping) -> impl Iterator<Item = (&str, &serde_yaml_ng::Value)> {
+    map.iter().filter_map(|(name, value)| {
+        name.as_str()
+            .filter(|name| *name != crate::config_typed::OWN_KEYS)
+            .map(|name| (name, value))
+    })
+}
+/// A decoded string field; `null` is the empty string.
+fn string_field(value: &serde_yaml_ng::Value, field: &str) -> Result<String, ConfigError> {
+    match value {
+        serde_yaml_ng::Value::Null => Ok(String::new()),
+        serde_yaml_ng::Value::String(text) => Ok(text.clone()),
+        _ => Err(ConfigError::Parse(format!("{field} must be a string"))),
+    }
 }
 /// Resolves a boolean the way the Go loader does.
 ///
@@ -1186,25 +1207,7 @@ pub fn go_duration_string(nanos: i128) -> String {
 /// A session duration as the operator wrote it, in nanoseconds. A key that is
 /// present but null decodes to zero in Go.
 fn session_duration_nanos(value: &serde_yaml_ng::Value, field: &str) -> Result<i128, ConfigError> {
-    if value.is_null() {
-        return Ok(0);
-    }
-    let text = string(value, field)?;
-    parse_go_duration(&text)
-        .map(i128::from)
-        .map_err(|error| ConfigError::Parse(format!("{field}: {error}")))
-}
-
-/// The text yaml.v3 puts into a string field: any scalar decodes into it, a
-/// number or boolean as its spelling (rendered the way `serde_yaml_ng` prints
-/// it, so `0x10` reads `16` and `True` reads `true`). Only the fields where the
-/// spelling is harmless or reaches a message use it.
-fn text_scalar(value: &serde_yaml_ng::Value, field: &str) -> Result<String, ConfigError> {
-    match value {
-        serde_yaml_ng::Value::Number(number) => Ok(number.to_string()),
-        serde_yaml_ng::Value::Bool(flag) => Ok(flag.to_string()),
-        other => string(other, field),
-    }
+    Ok(i128::from(nanos_field(value, field)?))
 }
 
 /// Go's `NormalizeAuthMethod` rejection, quoting the method as written.
@@ -1215,82 +1218,44 @@ fn invalid_auth_method_message(method: &str) -> String {
     )
 }
 
-/// Like [`duration`], but reports a syntactically valid non-positive duration
-/// as `Ok(None)` instead of an error.
+/// A decoded `time.Duration`, in nanoseconds; `null` is zero.
+fn nanos_field(value: &serde_yaml_ng::Value, field: &str) -> Result<i64, ConfigError> {
+    match value {
+        serde_yaml_ng::Value::Null => Ok(0),
+        serde_yaml_ng::Value::Number(number) => number
+            .as_i64()
+            .ok_or_else(|| ConfigError::Parse(format!("{field} must be a duration"))),
+        _ => Err(ConfigError::Parse(format!("{field} must be a duration"))),
+    }
+}
+/// A decoded `time.Duration` in the unsigned [`Duration`] the config models.
 ///
-/// Go's YAML decoder parses `-5m` into a negative Duration which the merge then
-/// drops. Rust's Duration is unsigned, so the sign is detected in the text.
-fn duration_allowing_negative(
-    value: &serde_yaml_ng::Value,
-    field: &str,
-) -> Result<Option<Duration>, ConfigError> {
-    if let Some(number) = value.as_i64() {
-        if number < 0 {
-            return Ok(None);
-        }
-        return u64::try_from(number)
-            .map(Duration::from_nanos)
-            .map(Some)
-            .map_err(|_| ConfigError::Parse(format!("{field} has a negative duration")));
-    }
-    let text = string(value, field)?;
-    let nanos = parse_duration_nanos(&text)
-        .ok_or_else(|| ConfigError::Parse(format!("{field} has invalid duration {text:?}")))?;
-    if nanos < 0 {
-        return Ok(None);
-    }
-    Ok(Some(Duration::from_nanos(nanos as u64)))
+/// Go keeps a negative value as written; every consumer of the section
+/// durations (listing cache, update cache, pull interval, approval timeout,
+/// network timeouts) treats a non-positive one as "use the default" or as
+/// already expired, which zero says as well.
+fn duration_field(value: &serde_yaml_ng::Value, field: &str) -> Result<Duration, ConfigError> {
+    Ok(Duration::from_nanos(
+        u64::try_from(nanos_field(value, field)?).unwrap_or(0),
+    ))
 }
-
-fn boolean(value: &serde_yaml_ng::Value, field: &str) -> Result<bool, ConfigError> {
-    if let Some(flag) = value.as_bool() {
-        return Ok(flag);
+/// A decoded bool field; `null` is false.
+fn bool_field(value: &serde_yaml_ng::Value, field: &str) -> Result<bool, ConfigError> {
+    match value {
+        serde_yaml_ng::Value::Null => Ok(false),
+        serde_yaml_ng::Value::Bool(flag) => Ok(*flag),
+        _ => Err(ConfigError::Parse(format!("{field} must be a boolean"))),
     }
-    if let Some(text) = value.as_str() {
-        match text.to_ascii_lowercase().as_str() {
-            "yes" | "on" => return Ok(true),
-            "no" | "off" => return Ok(false),
-            _ => {}
-        }
-    }
-    Err(ConfigError::Parse(format!("{field} must be a boolean")))
 }
-fn integer(value: &serde_yaml_ng::Value, field: &str) -> Result<i64, ConfigError> {
-    value
-        .as_i64()
-        .ok_or_else(|| ConfigError::Parse(format!("{field} must be an integer")))
-}
-fn duration(value: &serde_yaml_ng::Value, field: &str) -> Result<Duration, ConfigError> {
-    if let Some(number) = value.as_i64() {
-        return u64::try_from(number)
-            .map(Duration::from_nanos)
-            .map_err(|_| ConfigError::Parse(format!("{field} has a negative duration")));
+/// A decoded int field; `null` is zero.
+fn int_field(value: &serde_yaml_ng::Value, field: &str) -> Result<i64, ConfigError> {
+    match value {
+        serde_yaml_ng::Value::Null => Ok(0),
+        serde_yaml_ng::Value::Number(number) => number
+            .as_i64()
+            .ok_or_else(|| ConfigError::Parse(format!("{field} must be an integer"))),
+        _ => Err(ConfigError::Parse(format!("{field} must be an integer"))),
     }
-    let text = string(value, field)?;
-    let nanos = parse_duration_nanos(&text)
-        .ok_or_else(|| ConfigError::Parse(format!("{field} has invalid duration {text:?}")))?;
-    if nanos < 0 {
-        return Err(ConfigError::Parse(format!(
-            "{field} has a negative duration"
-        )));
-    }
-    Ok(Duration::from_nanos(nanos as u64))
-}
-
-fn network_timeout_duration(
-    value: &serde_yaml_ng::Value,
-    field: &str,
-) -> Result<Duration, ConfigError> {
-    if value.is_null() {
-        return Ok(Duration::ZERO);
-    }
-    let nanos = if let Some(number) = value.as_i64() {
-        number
-    } else {
-        let text = string(value, field)?;
-        parse_go_duration(&text).map_err(|error| ConfigError::Parse(format!("{field}: {error}")))?
-    };
-    Ok(Duration::from_nanos(nanos.max(0) as u64))
 }
 /// Parses Go's `time.ParseDuration` grammar and returns nanoseconds.
 ///
@@ -1536,78 +1501,6 @@ fn format_duration(value: Duration) -> String {
     format!("{}.{:09}s", secs, nanos)
 }
 
-// Decode string-typed YAML fields directly from the source events. Converting
-// Value::Number/Bool back to strings loses Go's lexical scalar representation.
-#[derive(Deserialize)]
-struct ProfileFields {
-    #[serde(rename = "defaultProfile")]
-    default_profile: Option<String>,
-    #[serde(default, deserialize_with = "optional_unique_map")]
-    profiles: Option<BTreeMap<String, ProfileYaml>>,
-    #[serde(flatten, deserialize_with = "unique_map")]
-    fields: BTreeMap<String, serde_yaml_ng::Value>,
-}
-
-#[derive(Deserialize)]
-struct ProfileYaml {
-    vault: Option<String>,
-    #[serde(rename = "<<")]
-    merge: Option<Box<ProfileYaml>>,
-}
-
-impl ProfileYaml {
-    fn vault_path(self) -> String {
-        self.vault.unwrap_or_else(|| {
-            self.merge
-                .map_or_else(String::new, |profile| profile.vault_path())
-        })
-    }
-}
-
-fn unique_map<'de, D, T>(deserializer: D) -> Result<BTreeMap<String, T>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    struct Visitor<T>(std::marker::PhantomData<T>);
-    impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for Visitor<T> {
-        type Value = BTreeMap<String, T>;
-        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.write_str("a mapping with unique keys")
-        }
-        fn visit_map<M: serde::de::MapAccess<'de>>(
-            self,
-            mut map: M,
-        ) -> Result<Self::Value, M::Error> {
-            let mut values = BTreeMap::new();
-            while let Some(key) = map.next_key::<String>()? {
-                if values.contains_key(&key) {
-                    return Err(serde::de::Error::custom("duplicate mapping key"));
-                }
-                values.insert(key, map.next_value()?);
-            }
-            Ok(values)
-        }
-    }
-    deserializer.deserialize_map(Visitor(std::marker::PhantomData))
-}
-
-fn optional_unique_map<'de, D, T>(deserializer: D) -> Result<Option<BTreeMap<String, T>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    #[derive(Deserialize)]
-    struct Map<T>(
-        #[serde(
-            deserialize_with = "unique_map",
-            bound(deserialize = "T: Deserialize<'de>")
-        )]
-        BTreeMap<String, T>,
-    );
-    Option::<Map<T>>::deserialize(deserializer).map(|value| value.map(|map| map.0))
-}
-
 /// Applies a tier preset to a loaded agent profile, mirroring Go's
 /// `config.ApplyTierPreset`.
 ///
@@ -1637,26 +1530,35 @@ pub fn apply_tier_preset_to_profile(profile: &mut AgentProfile, tier: &str) -> b
     true
 }
 
+/// Go's `mergeAgentProfiles`. Pointer fields (`*bool`, `*int`, `*string`,
+/// `*time.Duration`) merge whenever the decoded value is not nil, merged keys
+/// included; the slice and mode fields, `tier` and `exposeValueTools` merge only
+/// when the operator wrote the key in the profile itself (`loadAgentFields`).
 fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(), ConfigError> {
-    let agents = mapping(value)?;
-    for (name, value) in agents {
-        let name = name
-            .as_str()
-            .ok_or_else(|| ConfigError::Parse("agent name must be a string".into()))?;
-        let fields = mapping(value)?;
-        let explicit_require_approval = fields
-            .get(key("requireApproval"))
-            .filter(|value| !value.is_null());
+    // A null `agents` is a nil map.
+    let Some(agents) = value.as_mapping() else {
+        return Ok(());
+    };
+    let empty = serde_yaml_ng::Mapping::new();
+    for (name, value) in entries(agents) {
+        // A null profile decodes to the zero profile: nothing written, no
+        // pointer set.
+        let fields = value.as_mapping().unwrap_or(&empty);
+        let wrote = |field: &str| written(fields, field).is_some();
+        // A non-nil pointer in the decoded profile.
+        let set = |field: &str| scalar(fields, field).filter(|value| !value.is_null());
         let mut profile = config
             .agents
             .get(name)
             .cloned()
             .unwrap_or_else(AgentProfile::default);
-        if !fields.contains_key(key("tier")) && !fields.contains_key(key("exposeValueTools")) {
+        if !wrote("tier") && !wrote("exposeValueTools") {
             profile.expose_value_tools = true;
         }
-        if let Some(v) = fields.get(key("tier")) {
-            let tier = string(v, "tier")?;
+        if wrote("tier")
+            && let Some(v) = set("tier")
+        {
+            let tier = string_field(v, "tier")?;
             // The preset is applied before the explicit fields below, so an
             // explicitly written permission still overrides what the tier
             // grants. Go does the same, in the same order. Without this the
@@ -1665,23 +1567,21 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
             apply_tier_preset_to_profile(&mut profile, &tier);
             profile.tier = Some(tier);
         }
-        if let Some(v) = fields.get(key("approvalMode")) {
-            profile.approval_mode = if v.is_null() {
-                None
-            } else {
-                Some(string(v, "approvalMode")?)
-            };
+        if wrote("approvalMode") {
+            profile.approval_mode = set("approvalMode")
+                .map(|v| string_field(v, "approvalMode"))
+                .transpose()?;
         }
-        if let Some(v) = fields.get(key("allowedPaths")) {
-            profile.allowed_paths = string_list(v, "allowedPaths")?;
+        if wrote("allowedPaths") {
+            profile.allowed_paths = string_list(scalar(fields, "allowedPaths"), "allowedPaths")?;
         }
-        if let Some(v) = fields.get(key("redactFields")) {
-            profile.redact_fields = string_list(v, "redactFields")?;
+        if wrote("redactFields") {
+            profile.redact_fields = string_list(scalar(fields, "redactFields"), "redactFields")?;
         }
         macro_rules! bool_field {
             ($key:literal, $field:ident) => {
-                if let Some(v) = fields.get(key($key)) {
-                    profile.$field = boolean(v, $key)?;
+                if let Some(v) = set($key) {
+                    profile.$field = bool_field(v, $key)?;
                 }
             };
         }
@@ -1694,44 +1594,45 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
         bool_field!("exposeValueTools", expose_value_tools);
         bool_field!("exposePaymentValues", expose_payment_values);
         bool_field!("autoUnseal", auto_unseal);
-        if let Some(v) = explicit_require_approval {
-            profile.require_approval = boolean(v, "requireApproval")?;
+        bool_field!("requireApproval", require_approval);
+        if let Some(v) = set("approvalTimeout") {
+            profile.approval_timeout = duration_field(v, "approvalTimeout")?;
         }
-        if let Some(v) = fields.get(key("approvalTimeout")) {
-            profile.approval_timeout = duration(v, "approvalTimeout")?;
-        }
-        if let Some(v) = fields.get(key("allowed_tools")) {
-            profile.allowed_tools = string_list(v, "allowed_tools")?;
-        }
-        if let Some(v) = fields.get(key("max_reads_per_hour")) {
-            profile.max_reads_per_hour = integer(v, "max_reads_per_hour")?;
-        }
-        if let Some(v) = fields.get(key("max_reads_per_day")) {
-            profile.max_reads_per_day = integer(v, "max_reads_per_day")?;
-        }
-        if let Some(v) = fields.get(key("max_secrets_in_session")) {
-            profile.max_secrets_in_session = integer(v, "max_secrets_in_session")?;
-        }
-        if let Some(v) = fields.get(key("allowedEnvVars")) {
-            profile.allowed_env_vars = string_list(v, "allowedEnvVars")?;
-        }
-        if let Some(v) = fields.get(key("allowedExecutables")) {
-            profile.allowed_executables = string_list(v, "allowedExecutables")?;
-        }
-        // A `*string` in Go: null stays nil and leaves the current mode.
-        if let Some(v) = fields
-            .get(key("promptInjectionMode"))
-            .filter(|v| !v.is_null())
+        if wrote("allowed_tools")
+            && let Some(v) = set("allowed_tools")
         {
-            profile.prompt_injection_mode = text_scalar(v, "promptInjectionMode")?;
+            profile.allowed_tools = string_list(Some(v), "allowed_tools")?;
         }
-        if let Some(v) = fields.get(key("skillPath")) {
-            profile.skill_path = string(v, "skillPath")?;
+        macro_rules! int_field {
+            ($key:literal, $field:ident) => {
+                if let Some(v) = set($key) {
+                    profile.$field = int_field(v, $key)?;
+                }
+            };
         }
-        if let Some(v) = fields.get(key("skillVersion")) {
-            profile.skill_version = string(v, "skillVersion")?;
+        int_field!("max_reads_per_hour", max_reads_per_hour);
+        int_field!("max_reads_per_day", max_reads_per_day);
+        int_field!("max_secrets_in_session", max_secrets_in_session);
+        if wrote("allowedEnvVars")
+            && let Some(v) = set("allowedEnvVars")
+        {
+            profile.allowed_env_vars = string_list(Some(v), "allowedEnvVars")?;
         }
-        if explicit_require_approval.is_some() && !fields.contains_key(key("approvalMode")) {
+        if wrote("allowedExecutables")
+            && let Some(v) = set("allowedExecutables")
+        {
+            profile.allowed_executables = string_list(Some(v), "allowedExecutables")?;
+        }
+        if let Some(v) = set("promptInjectionMode") {
+            profile.prompt_injection_mode = string_field(v, "promptInjectionMode")?;
+        }
+        if let Some(v) = set("skillPath") {
+            profile.skill_path = string_field(v, "skillPath")?;
+        }
+        if let Some(v) = set("skillVersion") {
+            profile.skill_version = string_field(v, "skillVersion")?;
+        }
+        if !wrote("approvalMode") && wrote("requireApproval") && set("requireApproval").is_some() {
             profile.approval_mode = Some(
                 if profile.require_approval {
                     "prompt"
@@ -1745,20 +1646,18 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
     }
     Ok(())
 }
-fn string_list(value: &serde_yaml_ng::Value, field: &str) -> Result<Vec<String>, ConfigError> {
-    // A key that is present but null is an explicitly empty list, not an
-    // error. Go does this for every list field, and it is how YAML expresses
-    // "this setting exists and is deliberately nothing" — which for an
-    // allowlist is a meaningful, restrictive statement rather than an absence.
-    if value.is_null() {
-        return Ok(Vec::new());
+/// A decoded `[]string`; a nil (null or absent) list is empty.
+fn string_list(
+    value: Option<&serde_yaml_ng::Value>,
+    field: &str,
+) -> Result<Vec<String>, ConfigError> {
+    match value {
+        None | Some(serde_yaml_ng::Value::Null) => Ok(Vec::new()),
+        Some(serde_yaml_ng::Value::Sequence(items)) => {
+            items.iter().map(|item| string_field(item, field)).collect()
+        }
+        Some(_) => Err(ConfigError::Parse(format!("{field} must be a sequence"))),
     }
-    value
-        .as_sequence()
-        .ok_or_else(|| ConfigError::Parse(format!("{field} must be a sequence")))?
-        .iter()
-        .map(|v| string(v, field))
-        .collect()
 }
 
 /// Mirrors Go's `validateArgon2idConfig`: an explicit zero means "use the
@@ -1871,42 +1770,15 @@ fn is_valid_glob_pattern(pattern: &str) -> bool {
     true
 }
 
-/// A section field's value, with the decoder's treatment of an explicit `null`.
-///
-/// yaml.v3 decodes `null` into a scalar field as that field's zero value, and
-/// the section merge applies a field because its key is *present*, not because
-/// its value is non-zero. A `null` therefore overrides the default with zero —
-/// false, 0, `""` or a zero duration — exactly as an explicit `false` or `0`
-/// does.
-fn present<T>(
-    value: &serde_yaml_ng::Value,
-    zero: T,
-    decode: impl FnOnce(&serde_yaml_ng::Value) -> Result<T, ConfigError>,
-) -> Result<T, ConfigError> {
-    if value.is_null() {
-        Ok(zero)
-    } else {
-        decode(value)
-    }
-}
-fn bool_field(value: &serde_yaml_ng::Value, field: &str) -> Result<bool, ConfigError> {
-    present(value, false, |v| boolean(v, field))
-}
-fn int_field(value: &serde_yaml_ng::Value, field: &str) -> Result<i64, ConfigError> {
-    present(value, 0, |v| integer(v, field))
-}
-fn string_field(value: &serde_yaml_ng::Value, field: &str) -> Result<String, ConfigError> {
-    present(value, String::new(), |v| string(v, field))
-}
-fn duration_field(value: &serde_yaml_ng::Value, field: &str) -> Result<Duration, ConfigError> {
-    present(value, Duration::ZERO, |v| duration(v, field))
-}
-
 /// Parses the `vault` section.
 ///
 /// The second value is the method Go's vault merge feeds to the top level when
 /// the operator wrote no top-level `authMethod`: the vault block's own method,
-/// else `useTouchID`. An explicitly empty `authMethod` feeds nothing.
+/// else its `useTouchID`. An explicitly empty `authMethod` feeds nothing.
+///
+/// Go merges a field only when the section itself carries the key
+/// (`loadSectionFields`), so every read below goes through [`written`]; the
+/// value is what the typed decode left, a null being the field's zero value.
 fn parse_vault(
     value: &serde_yaml_ng::Value,
 ) -> Result<(VaultConfig, Option<AuthMethod>), ConfigError> {
@@ -1921,22 +1793,18 @@ fn parse_vault(
     };
     let mut fed_auth = None;
     let mut auth_present = false;
-    if let Some(v) = map.get(key("path")) {
+    if let Some(v) = written(map, "path") {
         out.path = string_field(v, "vault.path")?;
     }
-    if let Some(v) = map.get(key("default_recipients")) {
-        out.default_recipients = string_list(v, "default_recipients")?;
+    if let Some(v) = written(map, "default_recipients").filter(|v| !v.is_null()) {
+        out.default_recipients = string_list(Some(v), "default_recipients")?;
     }
-    if let Some(v) = map.get(key("confirm_remove")) {
+    if let Some(v) = written(map, "confirm_remove") {
         out.confirm_remove = bool_field(v, "confirm_remove")?;
     }
-    if let Some(v) = map.get(key("authMethod")) {
+    if let Some(v) = written(map, "authMethod") {
         auth_present = true;
-        let text = if v.is_null() {
-            String::new()
-        } else {
-            text_scalar(v, "vault.authMethod")?
-        };
+        let text = string_field(v, "vault.authMethod")?;
         if !text.is_empty() {
             // Go keeps a method that does not normalize as written and lets
             // `Validate` reject it; it feeds nothing to the top level.
@@ -1949,50 +1817,47 @@ fn parse_vault(
             }
         }
     }
-    if let Some(v) = map.get(key("useTouchID")) {
+    if let Some(v) = written(map, "useTouchID") {
         out.use_touch_id = bool_field(v, "vault.useTouchID")?;
     }
     if !auth_present && out.use_touch_id {
         fed_auth = Some(AuthMethod::Touchid);
     }
     // Go copies a present, non-null `legacy_mode`; a null stays unset.
-    if let Some(v) = map.get(key("legacy_mode")).filter(|v| !v.is_null()) {
-        out.legacy_mode = Some(boolean(v, "legacy_mode")?);
+    if let Some(v) = written(map, "legacy_mode").filter(|v| !v.is_null()) {
+        out.legacy_mode = Some(bool_field(v, "legacy_mode")?);
     }
-    if let Some(v) = map.get(key("search_index")) {
+    if let Some(v) = written(map, "search_index") {
         out.search_index = bool_field(v, "search_index")?;
     }
-    if let Some(v) = map.get(key("search_workers")) {
+    if let Some(v) = written(map, "search_workers") {
         out.search_workers = int_field(v, "search_workers")?;
     }
-    if let Some(v) = map.get(key("search_index_cache")) {
+    if let Some(v) = written(map, "search_index_cache") {
         out.search_index_cache = bool_field(v, "search_index_cache")?;
     }
-    if let Some(v) = map.get(key("config_cache_entries")) {
+    if let Some(v) = written(map, "config_cache_entries") {
         out.config_cache_entries = int_field(v, "config_cache_entries")?;
     }
-    if let Some(v) = map.get(key("pseudonymize_paths")) {
+    if let Some(v) = written(map, "pseudonymize_paths") {
         out.pseudonymize_paths = bool_field(v, "pseudonymize_paths")?;
     }
-    if let Some(v) = map.get(key("scrypt_work_factor")) {
+    if let Some(v) = written(map, "scrypt_work_factor") {
         out.scrypt_work_factor = int_field(v, "scrypt_work_factor")?;
     }
-    if let Some(v) = map.get(key("auto_migrate_kdf")) {
+    if let Some(v) = written(map, "auto_migrate_kdf") {
         out.auto_migrate_kdf = bool_field(v, "auto_migrate_kdf")?;
     }
-    if let Some(v) = map.get(key("auto_heal_zero_key")) {
+    if let Some(v) = written(map, "auto_heal_zero_key") {
         out.auto_heal_zero_key = bool_field(v, "auto_heal_zero_key")?;
     }
     // `last_rotated` is a `time.Time` in Go: null decodes to the zero time,
     // which is the same as absent, and so does a mapping (a struct with no
     // exported field ignores every key).
-    if let Some(v) = map
-        .get(key("last_rotated"))
-        .filter(|v| !v.is_null() && !v.is_mapping())
-    {
-        out.last_rotated = Some(string(v, "last_rotated")?);
+    if let Some(v) = written(map, "last_rotated").filter(|v| !v.is_null() && !v.is_mapping()) {
+        out.last_rotated = Some(string_field(v, "last_rotated")?);
     }
-    if let Some(v) = map.get(key("format_version")) {
+    if let Some(v) = written(map, "format_version") {
         out.format_version = int_field(v, "format_version")?;
     }
     for (k, field) in [
@@ -2001,17 +1866,18 @@ fn parse_vault(
         ("argon2id_threads", &mut out.argon2id_threads),
         ("manifest_generation", &mut out.manifest_generation),
     ] {
-        if let Some(v) = map.get(key(k)) {
+        if let Some(v) = written(map, k) {
             *field = int_field(v, k)?;
         }
     }
-    if let Some(v) = map.get(key("listing_cache_ttl")) {
+    if let Some(v) = written(map, "listing_cache_ttl") {
         out.listing_cache_ttl = duration_field(v, "listing_cache_ttl")?;
     }
-    if let Some(v) = map.get(key("sync")).filter(|v| !v.is_null()) {
+    // The sync block is propagated whenever the decoded section holds one,
+    // written by the operator or not.
+    if let Some(v) = scalar(map, "sync").filter(|v| !v.is_null()) {
         let sync_map = mapping(v)?;
-        let method = sync_map
-            .get(key("method"))
+        let method = scalar(sync_map, "method")
             .map(|value| string_field(value, "sync.method"))
             .transpose()?
             .unwrap_or_default();
@@ -2022,16 +1888,16 @@ fn parse_vault(
 fn parse_git(value: &serde_yaml_ng::Value) -> Result<GitConfig, ConfigError> {
     let map = mapping(value)?;
     let mut out = GitConfig::default();
-    if let Some(v) = map.get(key("auto_push")) {
+    if let Some(v) = written(map, "auto_push") {
         out.auto_push = bool_field(v, "auto_push")?;
     }
-    if let Some(v) = map.get(key("auto_pull")) {
+    if let Some(v) = written(map, "auto_pull") {
         out.auto_pull = bool_field(v, "auto_pull")?;
     }
-    if let Some(v) = map.get(key("auto_pull_interval")) {
+    if let Some(v) = written(map, "auto_pull_interval") {
         out.auto_pull_interval = duration_field(v, "auto_pull_interval")?;
     }
-    if let Some(v) = map.get(key("commit_template")) {
+    if let Some(v) = written(map, "commit_template") {
         out.commit_template = string_field(v, "commit_template")?;
     }
     Ok(out)
@@ -2042,22 +1908,23 @@ fn parse_mcp(
 ) -> Result<McpConfig, ConfigError> {
     let map = mapping(value)?;
     let mut out = McpConfig::default();
-    // Go warns for a true value before it merges anything else in the block.
-    if let Some(v) = map.get(key("approval_required"))
+    // Go warns for a true value before it merges anything else in the block,
+    // whether or not the section wrote the key itself.
+    if let Some(v) = scalar(map, "approval_required")
         && bool_field(v, "approval_required")?
     {
         warnings.push(APPROVAL_REQUIRED_WARNING.to_owned());
     }
-    if let Some(v) = map.get(key("port")) {
+    if let Some(v) = written(map, "port") {
         out.port = int_field(v, "port")?;
     }
-    if let Some(v) = map.get(key("bind")) {
+    if let Some(v) = written(map, "bind") {
         out.bind = string_field(v, "bind")?;
     }
-    if let Some(v) = map.get(key("stdio")) {
+    if let Some(v) = written(map, "stdio") {
         out.stdio = bool_field(v, "stdio")?;
     }
-    if let Some(v) = map.get(key("httpTokenFile")) {
+    if let Some(v) = written(map, "httpTokenFile") {
         out.http_token_file = string_field(v, "httpTokenFile")?;
     }
     for (k, d) in [
@@ -2066,20 +1933,20 @@ fn parse_mcp(
         ("write_timeout", &mut out.write_timeout),
         ("shutdown_timeout", &mut out.shutdown_timeout),
     ] {
-        if let Some(v) = map.get(key(k)) {
+        if let Some(v) = written(map, k) {
             // Go's server applies only positive network timeout overrides.
             // Preserve non-positive values as zero in this unsigned model;
             // the transport selects its safe default rather than disabling I/O.
-            *d = network_timeout_duration(v, k)?;
+            *d = duration_field(v, k)?;
         }
     }
-    if let Some(v) = map.get(key("approval_timeout")) {
+    if let Some(v) = written(map, "approval_timeout") {
         out.approval_timeout = duration_field(v, "approval_timeout")?;
     }
-    if let Some(v) = map.get(key("rate_limit")) {
+    if let Some(v) = written(map, "rate_limit") {
         out.rate_limit = int_field(v, "rate_limit")?;
     }
-    if let Some(v) = map.get(key("metrics_auth_required")) {
+    if let Some(v) = written(map, "metrics_auth_required") {
         out.metrics_auth_required = bool_field(v, "metrics_auth_required")?;
     }
     for (key_name, target) in [
@@ -2087,7 +1954,7 @@ fn parse_mcp(
         ("tls_key_file", &mut out.tls_key_file),
         ("tls_client_ca_file", &mut out.tls_client_ca_file),
     ] {
-        if let Some(v) = map.get(key(key_name)) {
+        if let Some(v) = written(map, key_name) {
             *target = string_field(v, key_name)?;
         }
     }
@@ -2095,23 +1962,22 @@ fn parse_mcp(
         ("mtls_enabled", &mut out.mtls_enabled),
         ("allow_insecure_bind", &mut out.allow_insecure_bind),
     ] {
-        if let Some(v) = map.get(key(key_name)) {
+        if let Some(v) = written(map, key_name) {
             *target = bool_field(v, key_name)?;
         }
     }
-    if let Some(value) = map.get(key("oauth")).filter(|value| !value.is_null()) {
+    if let Some(value) = written(map, "oauth").filter(|value| !value.is_null()) {
         let fields = mapping(value)?;
         let mut oauth = OAuthConfig::default();
         for (name, target) in [
             ("access_token_ttl", &mut oauth.access_token_ttl),
             ("refresh_token_ttl", &mut oauth.refresh_token_ttl),
         ] {
-            if let Some(value) = fields.get(key(name)).filter(|value| !value.is_null()) {
-                // Go's positive-only config merge retains defaults for zero
-                // and syntactically valid negative durations.
-                if let Some(duration) = duration_allowing_negative(value, name)?
-                    && !duration.is_zero()
-                {
+            // Go's positive-only config merge retains defaults for zero
+            // and negative durations.
+            if let Some(value) = written(fields, name) {
+                let duration = duration_field(value, name)?;
+                if !duration.is_zero() {
                     *target = duration;
                 }
             }
@@ -2123,7 +1989,7 @@ fn parse_mcp(
 fn parse_update(value: &serde_yaml_ng::Value) -> Result<UpdateConfig, ConfigError> {
     let map = mapping(value)?;
     let mut out = UpdateConfig::default();
-    if let Some(v) = map.get(key("cache_ttl")) {
+    if let Some(v) = written(map, "cache_ttl") {
         out.cache_ttl = duration_field(v, "cache_ttl")?;
     }
     Ok(out)
@@ -2135,12 +2001,12 @@ fn parse_clipboard(
 ) -> Result<ClipboardConfig, ConfigError> {
     let map = mapping(value)?;
     let mut out = ClipboardConfig::default();
-    if let Some(v) = map.get(key("auto_clear_duration")) {
+    if let Some(v) = written(map, "auto_clear_duration") {
         out.auto_clear_duration = int_field(v, "auto_clear_duration")?;
     }
-    if let Some(v) = map.get(key("copyByDefault")) {
+    if let Some(v) = written(map, "copyByDefault") {
         out.copy_by_default = bool_field(v, "copyByDefault")?;
-    } else if let Some(v) = map.get(key("printByDefault")) {
+    } else if let Some(v) = written(map, "printByDefault") {
         // The deprecated key is honored, and warns once per process. Go
         // decodes the document before it merges, so a value that does not
         // decode is rejected without ever reaching the once-only guard:
@@ -2564,6 +2430,123 @@ fn write_clipboard(out: &mut String, v: &ClipboardConfig) -> Result<(), ConfigEr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn load(source: &str) -> Config {
+        Config::load_from_bytes(source.as_bytes())
+            .unwrap_or_else(|error| panic!("{source}: {error}"))
+    }
+
+    fn reject(source: &str) -> String {
+        Config::load_from_bytes(source.as_bytes())
+            .expect_err(source)
+            .to_string()
+    }
+
+    #[test]
+    fn sections_read_the_values_yaml_v3_decodes() {
+        let config = load(
+            "vault:\n  path: 5\n  search_workers: 1.5\n  argon2id_time: 0o10\n  listing_cache_ttl: -1s\n  sync:\n    method: 0x10\ngit:\n  commit_template: true\n  auto_push: yes\n  auto_pull_interval: -5m\nmcp:\n  port: 1_000\n  bind: 1.5\n  rate_limit: 017\n  approval_timeout: -1s\nupdate:\n  cache_ttl: -1h\nclipboard:\n  auto_clear_duration: -0.5\n",
+        );
+        let vault = config.vault.as_ref().expect("vault");
+        assert_eq!(vault.path, "5");
+        assert_eq!(vault.search_workers, 1);
+        assert_eq!(vault.argon2id_time, 8);
+        assert_eq!(vault.listing_cache_ttl, Duration::ZERO);
+        assert_eq!(vault.sync.as_ref().map(|s| s.method.as_str()), Some("0x10"));
+        let git = config.git.as_ref().expect("git");
+        assert_eq!(git.commit_template, "true");
+        assert!(git.auto_push);
+        assert_eq!(git.auto_pull_interval, Duration::ZERO);
+        let mcp = config.mcp.as_ref().expect("mcp");
+        assert_eq!((mcp.port, mcp.rate_limit), (1000, 15));
+        assert_eq!(mcp.bind, "1.5");
+        assert_eq!(mcp.approval_timeout, Duration::ZERO);
+        assert_eq!(
+            config.update.as_ref().expect("update").cache_ttl,
+            Duration::ZERO
+        );
+        assert_eq!(
+            config
+                .clipboard
+                .as_ref()
+                .expect("clipboard")
+                .auto_clear_duration,
+            0
+        );
+        assert!(config.validate().is_empty());
+    }
+
+    #[test]
+    fn agents_take_nulls_and_non_string_scalars_like_go() {
+        let config = load(
+            "agents:\n  a:\n    tier: 5\n    skillPath: 0x10\n    max_reads_per_hour: 1e3\n    canWrite: yes\n  b:\n    canWrite: null\n    tier: null\n    skillPath: null\n    max_reads_per_hour: null\n    allowedPaths: [null, 5]\n  c: null\n",
+        );
+        let a = &config.agents["a"];
+        assert_eq!(a.tier.as_deref(), Some("5"));
+        assert_eq!(a.skill_path, "0x10");
+        assert_eq!(a.max_reads_per_hour, 1000);
+        assert!(a.can_write);
+        let b = &config.agents["b"];
+        assert_eq!((b.tier.clone(), b.skill_path.as_str()), (None, ""));
+        assert!(!b.can_write);
+        assert_eq!(b.allowed_paths, ["5"]);
+        // `tier: null` was written, so the profile is not made to expose the
+        // value tools, while an untouched null profile is.
+        assert!(!b.expose_value_tools);
+        assert!(config.agents["c"].expose_value_tools);
+        assert!(config.agents.contains_key("default"));
+        load("agents: null\n");
+        load("agents: ~\n");
+    }
+
+    #[test]
+    fn merged_values_follow_the_gates_of_the_go_merge() {
+        // A pointer field comes in through `<<`; approvalMode is gated on the
+        // profile writing it, so a merged one is dropped.
+        let config = load(
+            "base: &base\n  canWrite: true\n  approvalMode: bogus\nagents:\n  x:\n    <<: *base\n",
+        );
+        assert!(config.agents["x"].can_write);
+        assert_eq!(config.agents["x"].approval_mode, None);
+        assert!(
+            reject("base: &base\n  promptInjectionMode: weird\nagents:\n  x:\n    <<: *base\n")
+                .contains("invalid promptInjectionMode \"weird\"")
+        );
+        // A merged `bind` is not a key the section wrote.
+        load("base: &base\n  bind: ''\nmcp:\n  <<: *base\n");
+        load("base: &base\n  bind: ''\nmcp: *base\n");
+        // A merged zero session timeout was not written by the operator.
+        load("base: &base\n  sessionTimeout: 0s\n<<: *base\n");
+        assert!(
+            reject("sessionTimeout: 0s\n")
+                .contains("sessionTimeout: must be greater than 0, got 0s")
+        );
+    }
+
+    #[test]
+    fn coerced_values_show_in_the_loader_and_validator_messages() {
+        assert!(
+            reject("agents:\n  x:\n    approvalMode: 0x10\n")
+                .contains("invalid approvalMode \"0x10\"")
+        );
+        assert!(
+            reject("agents:\n  x:\n    approvalMode: 5\n").contains("invalid approvalMode \"5\"")
+        );
+        let config = load("vault:\n  authMethod: 0x10\n");
+        assert_eq!(
+            config.validate(),
+            ["invalid authMethod \"0x10\" (valid: passphrase, touchid)"]
+        );
+        let config = load("vault:\n  argon2id_time: 1.5\n");
+        assert_eq!(
+            config.validate(),
+            ["vault.argon2id_time: 1 is below minimum floor of 2"]
+        );
+        let config = load("agents:\n  x:\n    allowedPaths: [null, '[']\n");
+        assert!(config.validate()[0].starts_with("agents.x.allowedPaths[0]:"));
+        let config = load("clipboard:\n  auto_clear_duration: -1.5\n");
+        assert!(config.validate()[0].starts_with("clipboard.autoClearDuration:"));
+    }
 
     /// A file or symlink planted at a temporary-looking name next to the
     /// config must never be opened or followed (the old fixed `config.yaml.tmp`

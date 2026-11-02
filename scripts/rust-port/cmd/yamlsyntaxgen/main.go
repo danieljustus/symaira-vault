@@ -253,7 +253,8 @@ func inputs() []input {
 		{"empty_flow_mapping_root", "accepted", "a document that is an empty flow mapping", []byte("{}\n")},
 	}
 	all = append(all, decodeInputs()...)
-	return append(all, loadInputs()...)
+	all = append(all, loadInputs()...)
+	return append(all, sectionInputs()...)
 }
 
 // decodeInputs are documents that parse but that yaml.v3 cannot decode into the
@@ -310,6 +311,112 @@ func loadInputs() []input {
 		{"load_session_timeout_fraction", "accepted", "a fractional positive duration loads", []byte("sessionTimeout: 1.5h\n")},
 		// mcp.bind: an empty bind is a loader rejection.
 		{"load_mcp_bind_empty", "loader", "an empty mcp.bind is rejected by the loader", []byte("mcp:\n  bind: ''\n")},
+	}
+}
+
+// lines joins config lines into a document, one newline after each.
+func lines(rows ...string) []byte { return []byte(strings.Join(rows, "\n") + "\n") }
+
+// sectionInputs are the CONFIG-SECTIONS-001 cases: what yaml.v3's typed decode
+// makes of a scalar in each kind of config field (string, bool, int, pointer,
+// duration, string list) and how the loader's merge then treats it. Each
+// coercion class has the accepted input and a rejected sibling, and the cases
+// are chosen so that the coerced value shows in a message where Go prints one.
+func sectionInputs() []input {
+	return []input{
+		// A string field holds the scalar's source text.
+		{"load_vault_auth_method_hex", "loader", "vault.authMethod 0x10 is the text 0x10, which validate quotes as written", lines("vault:", "  authMethod: 0x10")},
+		{"load_approval_mode_integer", "loader", "an integer approvalMode is the text 5", lines("agents:", "  x:", "    approvalMode: 5")},
+		{"load_approval_mode_bool", "loader", "a boolean approvalMode is the text true", lines("agents:", "  x:", "    approvalMode: true")},
+		{"load_approval_mode_hex", "loader", "a hexadecimal approvalMode keeps its source text", lines("agents:", "  x:", "    approvalMode: 0x10")},
+		{"load_prompt_injection_mode_hex", "loader", "a hexadecimal promptInjectionMode keeps its source text", lines("agents:", "  x:", "    promptInjectionMode: 0x10")},
+		{"load_default_agent_hex", "accepted", "a hexadecimal defaultAgent names the profile 0x10", lines("defaultAgent: 0x10")},
+		{"load_section_string_fields_non_string", "accepted", "scalars of every kind in the string fields of the vault, git and mcp sections", lines(
+			"vault:", "  path: 5", "git:", "  commit_template: true",
+			"mcp:", "  bind: 1.5", "  httpTokenFile: 7", "  tls_cert_file: true", "  tls_key_file: 0x10", "  tls_client_ca_file: 1e3")},
+		{"load_agent_string_pointers_non_string", "accepted", "scalars of every kind in the *string fields tier, skillPath and skillVersion", lines(
+			"agents:", "  x:", "    tier: 5", "    skillPath: true", "    skillVersion: 0x10")},
+		{"load_profile_strings_non_string", "accepted", "scalars in defaultProfile and a profile's vault path", lines(
+			"defaultProfile: 5", "profiles:", "  p:", "    vault: 6")},
+		{"load_vault_dir_mapping", "loader", "a mapping where a string field belongs is still refused", lines("vaultDir:", "  a: 1")},
+
+		// An int field truncates a float and reads YAML 1.1 spellings.
+		{"load_vault_argon2id_time_float", "loader", "1.5 truncates to 1 and falls below the argon2id_time floor", lines("vault:", "  argon2id_time: 1.5")},
+		{"load_vault_argon2id_time_exponent", "loader", "1e3 is the integer 1000 for an int field", lines("vault:", "  argon2id_time: 1e3")},
+		{"load_vault_argon2id_time_underscore", "loader", "1_000 reads as 1000", lines("vault:", "  argon2id_time: 1_000")},
+		{"load_vault_argon2id_time_old_octal", "loader", "0100 is octal 64", lines("vault:", "  argon2id_time: 0100")},
+		{"load_vault_argon2id_time_octal_prefix", "accepted", "0o10 is octal 8, inside the argon2id_time range", lines("vault:", "  argon2id_time: 0o10")},
+		{"load_clipboard_auto_clear_negative_float", "loader", "-1.5 truncates to -1, which validate refuses", lines("clipboard:", "  auto_clear_duration: -1.5")},
+		{"load_clipboard_auto_clear_truncates_to_zero", "accepted", "-0.5 truncates to 0, which validate accepts", lines("clipboard:", "  auto_clear_duration: -0.5")},
+		{"load_section_int_fields_float_and_exponent", "accepted", "floats and exponents in the int fields of the vault, mcp and clipboard sections", lines(
+			"vault:", "  search_workers: 1.5", "  config_cache_entries: 1e3", "  scrypt_work_factor: 1.5", "  format_version: 2.9", "  manifest_generation: 1e3",
+			"mcp:", "  port: 1.5", "  rate_limit: 1e3", "clipboard:", "  auto_clear_duration: 1e3")},
+		{"load_mcp_int_underscore_and_octal", "accepted", "1_000 and 017 are integers for mcp.port and mcp.rate_limit", lines("mcp:", "  port: 1_000", "  rate_limit: 017")},
+		{"load_agent_int_pointers", "accepted", "a float, an exponent and an octal in the *int fields of a profile", lines(
+			"agents:", "  x:", "    max_reads_per_hour: 1.5", "    max_reads_per_day: 1e3", "    max_secrets_in_session: 0100")},
+		{"load_mcp_port_overflow", "loader", "an integer beyond int64 is refused by the typed decode", lines("mcp:", "  port: 99999999999999999999")},
+		{"load_mcp_port_word", "loader", "a word where mcp.port wants an integer", lines("mcp:", "  port: abc")},
+
+		// null: a pointer stays nil, any other scalar field is zero.
+		{"load_agent_null_pointers", "accepted", "null in every pointer field of a profile leaves it unset", lines(
+			"agents:", "  x:", "    tier: null", "    approvalMode: null", "    canWrite: null", "    canRunCommands: null", "    canManageConfig: null",
+			"    canUseClipboard: null", "    canUseAutotype: null", "    canReadValues: null", "    exposeValueTools: null", "    autoUnseal: null",
+			"    requireApproval: null", "    approvalTimeout: null", "    max_reads_per_hour: null", "    max_reads_per_day: null",
+			"    max_secrets_in_session: null", "    promptInjectionMode: null", "    skillPath: null", "    skillVersion: null",
+			"    exposePaymentValues: null", "    paymentPolicy: null")},
+		{"load_agent_null_lists", "accepted", "null in every list field of a profile", lines(
+			"agents:", "  x:", "    allowedPaths: null", "    redactFields: null", "    allowed_tools: null", "    allowedEnvVars: null", "    allowedExecutables: null")},
+		{"load_agent_null_items_dropped", "loader", "a null list item is dropped, so the bad glob after it is entry 0", lines("agents:", "  x:", "    allowedPaths: [null, '[']")},
+		{"load_agent_non_string_items_index", "loader", "non-string list items are kept as text, so the bad glob after them is entry 2", lines("agents:", "  x:", "    allowedPaths: [5, true, '[']")},
+		{"load_agent_non_string_items", "accepted", "numbers and booleans as the items of every string list of a profile", lines(
+			"agents:", "  x:", "    allowedPaths: [5, true]", "    redactFields: [1.5]", "    allowed_tools: [0x10]", "    allowedEnvVars: [7]", "    allowedExecutables: [x, null]")},
+		{"load_agent_profile_null", "accepted", "a null profile is the zero profile", lines("agents:", "  x: null", "  y: ~")},
+		{"load_agents_null", "accepted", "a null agents section is a nil map", lines("agents: null")},
+		{"load_agents_tilde", "accepted", "a ~ agents section is a nil map", lines("agents: ~")},
+		{"load_section_scalars_null", "accepted", "null in the scalar fields of every section is the zero value", lines(
+			"vault:", "  path: null", "  confirm_remove: null", "  legacy_mode: null", "  search_index: null", "  search_workers: null", "  argon2id_time: null", "  listing_cache_ttl: null",
+			"git:", "  auto_push: null", "  commit_template: null", "  auto_pull_interval: null",
+			"mcp:", "  port: null", "  stdio: null", "  rate_limit: null", "  approval_timeout: null",
+			"update:", "  cache_ttl: null", "clipboard:", "  auto_clear_duration: null")},
+		{"load_mcp_bind_null", "loader", "a null mcp.bind is the empty string, which the loader refuses", lines("mcp:", "  bind: null")},
+
+		// Durations in the sections are kept as written, negative included.
+		{"load_section_negative_durations", "accepted", "negative durations in the vault, git, mcp and update sections", lines(
+			"vault:", "  listing_cache_ttl: -1s", "git:", "  auto_pull_interval: -5m",
+			"mcp:", "  approval_timeout: -1s", "  read_timeout: -2s", "  oauth:", "    access_token_ttl: -1s",
+			"update:", "  cache_ttl: -1h")},
+		{"load_agent_negative_approval_timeout", "accepted", "a negative approvalTimeout is kept", lines("agents:", "  x:", "    approvalTimeout: -1s")},
+		{"load_agent_approval_timeout_integer", "loader", "an integer is not a duration for approvalTimeout", lines("agents:", "  x:", "    approvalTimeout: 5")},
+		{"load_mcp_approval_timeout_integer", "loader", "an integer is not a duration for mcp.approval_timeout", lines("mcp:", "  approval_timeout: 5")},
+
+		// A bool field takes the YAML 1.1 spellings.
+		{"load_section_bool_fields_yaml11", "accepted", "yes/no/on/off/y/n in the bool fields of the git, vault, mcp and clipboard sections", lines(
+			"git:", "  auto_push: yes", "  auto_pull: Off", "vault:", "  confirm_remove: n", "  search_index: On", "mcp:", "  stdio: ON", "clipboard:", "  copyByDefault: y")},
+		{"load_agent_bool_pointers_yaml11", "accepted", "the same spellings in the *bool fields of a profile", lines(
+			"agents:", "  x:", "    canWrite: yes", "    canRunCommands: no", "    autoUnseal: on", "    requireApproval: Off")},
+		{"load_git_bool_integer", "loader", "an integer where git.auto_push wants a boolean", lines("git:", "  auto_push: 5")},
+		{"load_agent_bool_pointer_integer", "loader", "an integer where canWrite wants a boolean", lines("agents:", "  x:", "    canWrite: 5")},
+
+		// A merge supplies decoded values, but the loader's field walk sees
+		// only keys the mapping wrote itself.
+		{"load_agent_merged_prompt_injection_mode", "loader", "a pointer field merged in through << is applied and validated", lines(
+			"base: &base", "  promptInjectionMode: weird", "agents:", "  x:", "    <<: *base")},
+		{"load_agent_merged_approval_mode_ignored", "accepted", "approvalMode is gated on the profile writing it, so a merged one is ignored", lines(
+			"base: &base", "  approvalMode: bogus", "agents:", "  x:", "    <<: *base")},
+		{"load_agents_alias_profile_ignored", "accepted", "a profile that is an alias has no written fields, so its approvalMode is ignored", lines(
+			"base: &base", "  approvalMode: bogus", "agents:", "  x: *base")},
+		{"load_mcp_bind_empty_via_merge", "accepted", "a bind merged in through << is not a field mcp wrote", lines(
+			"base: &base", "  bind: ''", "mcp:", "  <<: *base")},
+		{"load_mcp_section_alias_ignored", "accepted", "a section that is an alias has no written fields", lines(
+			"base: &base", "  bind: ''", "mcp: *base")},
+		{"load_session_timeout_zero_via_merge", "accepted", "a zero sessionTimeout merged in through << was not written, so it is not refused", lines(
+			"base: &base", "  sessionTimeout: 0s", "<<: *base")},
+
+		// A local tag yaml.v3 does not know is ignored; the value decodes.
+		{"custom_tag_on_value", "accepted", "a local tag on a plain scalar", lines("a: !t x")},
+
+		// Only the first document is decoded.
+		{"load_second_document_syntax_error_ignored", "accepted", "a syntax error in a later document does not reach the first", lines("vaultDir: a", "---", "[")},
 	}
 }
 
@@ -384,8 +491,6 @@ func openInputs() []openEntry {
 			kindBehavior, []string{"validate"}, "yaml.v3 decodes UTF-16 and accepts the empty stream; libyaml in serde_yaml_ng rejects the stream as invalid UTF-8"},
 		{input{"bom_after_first_line", "scanner", "a UTF-8 byte order mark at the start of a later line", []byte("a: 1\n\xef\xbb\xbfb: 2\n")},
 			kindBehavior, []string{"validate"}, "yaml.v3 skips the mark and accepts the stream; libyaml counts it as a column and rejects the mapping key"},
-		{input{"custom_tag_on_value", "accepted", "a local tag on a plain scalar", []byte("a: !t x\n")},
-			kindBehavior, textCommands, "yaml.v3 ignores a local tag it does not know and decodes the value; serde_yaml_ng keeps it as a tagged value that the native loader rejects"},
 		// yaml.v3 decode and node layers, not syntax errors.
 		{input{"scalar_root", "accepted", "a document that is a single scalar", []byte("just a scalar\n")},
 			kindWording, append(append([]string(nil), textCommands...), "set_nested", "agent_list"), "the failure comes from yaml.v3's decoder and node layers, not from libyaml: validate says 'yaml: unmarshal errors: line 1: cannot unmarshal !!str `just a ...` into config.Config', get 'parent is a scalar node, not a mapping', set 'root node is a scalar, not a mapping'; the native CLI fails the same commands with the same exit status and leaves the file alone, with different text"},
@@ -410,6 +515,14 @@ func openInputs() []openEntry {
 			kindWording, []string{"get", "set"}, "validate and doctor agree (defaults); config get and set differ in the node-layer wording of an empty document, exit status and unchanged file agree"},
 		{input{"zero_width_space_root", "accepted", "a document that is only U+200B: not white space for Go, a plain scalar", []byte("\u200b\n")},
 			kindWording, textCommands, "same decode-layer wording gap as scalar_root: yaml.v3 says 'cannot unmarshal !!str `\u200b` into config.Config', the native loader 'invalid type: string'; exit status and the unchanged file agree"},
+		// Sections of Config.Validate the native Config does not model
+		// (CONFIG-SECTIONS-001 residuals).
+		{input{"load_audit_max_size_mb_null", "loader", "audit.maxSizeMb null decodes to 0 and fails validation (audit.maxFileSize)", []byte("audit:\n  maxSizeMb: null\n")},
+			kindBehavior, []string{"validate", "validate_json", "doctor"}, "the audit section is not part of the native Config: `config validate` takes audit.maxFileSize from the numeric value of the key (`config_fix.rs` `Extras`), which reads null as absent, so it reports the config valid where Go refuses a zero maximum size; the doctor check has no audit section at all (see load_audit_max_size_mb_zero)"},
+		{input{"load_payment_policy_without_instrument", "loader", "a payment policy with no instrument", []byte("paymentPolicies:\n  p: {}\n")},
+			kindBehavior, []string{"validate", "validate_json", "doctor"}, "Config.Validate's paymentPolicies checks (instrument, limits, agent references) are not ported: the native Config has no paymentPolicies section, so the native CLI accepts a policy Go refuses"},
+		{input{"load_agent_payment_policy_unknown", "loader", "an agent that names a payment policy no section defines", []byte("agents:\n  x:\n    paymentPolicy: abc\n")},
+			kindBehavior, []string{"validate", "validate_json", "doctor"}, "the agent -> paymentPolicies reference check of Config.Validate is not ported (see load_payment_policy_without_instrument), so the native CLI accepts the reference"},
 	}
 }
 
@@ -582,6 +695,21 @@ var agentListCases = map[string]bool{
 	"load_session_timeout_zero":           true,
 	"load_session_durations_both_invalid": true,
 	"load_mcp_bind_empty":                 true,
+	// CONFIG-SECTIONS-001: loader callers outside the config commands.
+	"load_approval_mode_integer":              true,
+	"load_default_agent_hex":                  true,
+	"load_agent_string_pointers_non_string":   true,
+	"load_agent_int_pointers":                 true,
+	"load_agent_null_pointers":                true,
+	"load_agent_null_items_dropped":           true,
+	"load_agent_profile_null":                 true,
+	"load_agent_negative_approval_timeout":    true,
+	"load_agent_approval_timeout_integer":     true,
+	"load_agent_bool_pointers_yaml11":         true,
+	"load_agent_merged_prompt_injection_mode": true,
+	"load_agent_merged_approval_mode_ignored": true,
+	"load_mcp_port_overflow":                  true,
+	"load_mcp_bind_null":                      true,
 }
 
 func buildDivergences(goBinary string) ([]openDivergence, error) {
