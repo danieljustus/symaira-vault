@@ -114,9 +114,11 @@ pub fn init_vault(vault_dir: &str, passphrase: &[u8]) -> R<()> {
 /// The directory is created `0700`; excluding it from iCloud backup is the
 /// host's responsibility.
 pub fn set_backup_dir(dir: &str) -> R<()> {
-    symvault_sync::data_safety::set_backup_dir(
-        (!dir.is_empty()).then(|| std::path::PathBuf::from(dir)),
-    );
+    let dir = (!dir.is_empty()).then(|| std::path::PathBuf::from(dir));
+    if dir.as_ref().is_some_and(|d| !d.is_absolute()) {
+        return Err("backup directory must be an absolute path".to_string());
+    }
+    symvault_sync::data_safety::set_backup_dir(dir);
     Ok(())
 }
 
