@@ -648,6 +648,11 @@ impl Store {
     /// filesystem mutation, after validation, so a rejected request leaves no
     /// backup behind. A no-op once the vault carries the Rust marker.
     fn data_safety_gate(&self) -> Result<(), StoreError> {
+        // Looked up through the retained root capability (see
+        // `marker_via_capability`) before any path-based work.
+        if data_safety::marker_via_capability(&self.root_cap, &self.root)? {
+            return Ok(());
+        }
         data_safety::ensure_marker(&self.root)
     }
 
@@ -2388,7 +2393,7 @@ impl Store {
         // the D1 gate: a vault without a Rust marker is backed up first.
         // Creating the empty migration marker alone is not.
         if entries.iter().any(|candidate| !candidate.fresh) {
-            data_safety::ensure_marker(&self.root)?;
+            self.data_safety_gate()?;
         }
         let fresh_root = self.root.join(ENTRIES_DIR);
         #[cfg(unix)]
@@ -3509,7 +3514,7 @@ fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, St
                 // The lock is held from here to the caller's unlock: the
                 // pre-migration backup and the marker happen inside it. On
                 // refusal the file drops, which releases the lock.
-                data_safety::ensure_locked(root)?;
+                data_safety::ensure_locked(root_cap, root)?;
                 return Ok(file);
             }
             Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {

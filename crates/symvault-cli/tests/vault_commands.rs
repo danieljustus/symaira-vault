@@ -27,7 +27,11 @@ fn initialize_round_trip_and_read_only_commands() {
         symvault_crypto::recipient_string(&identity)
     );
 
-    let store = Store::open(&root, &identity).expect("open");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .expect("open");
     let mut data = BTreeMap::new();
     data.insert("password".to_owned(), serde_json::json!("secret"));
     data.insert("username".to_owned(), serde_json::json!("alice"));

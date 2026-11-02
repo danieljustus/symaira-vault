@@ -75,6 +75,31 @@ thread_local! {
     static ACTIVE: Cell<bool> = const { Cell::new(false) };
 }
 
+/// The store crate's own unit tests build hundreds of throw-away vaults with
+/// the store API and no marker; they run with the gate off unless a test turns
+/// it on with [`enforce_in_unit_test`]. Integration tests and every other
+/// crate see the real gate.
+#[cfg(test)]
+thread_local! {
+    static ENFORCE: Cell<bool> = const { Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn enforce_in_unit_test() {
+    ENFORCE.with(|flag| flag.set(true));
+}
+
+fn bypassed() -> bool {
+    #[cfg(test)]
+    {
+        !ENFORCE.with(Cell::get)
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
+}
+
 struct Active;
 
 impl Active {
@@ -147,7 +172,47 @@ fn marker_present(root: &Path) -> Result<bool, StoreError> {
         path: path.clone(),
         source,
     })?;
-    Ok(serde_json::from_slice::<Marker>(&bytes).is_ok_and(|marker| marker.schema >= 1))
+    // A marker that arrived through git sync from another device describes
+    // that device's backup. The marker is kept out of git (see
+    // `exclude_marker_from_git`), and a backup this machine does not have never
+    // counts as one.
+    Ok(marker_bytes_valid(&bytes))
+}
+
+/// A parseable marker of a known schema whose backup (if any) still exists.
+pub(crate) fn marker_bytes_valid(bytes: &[u8]) -> bool {
+    serde_json::from_slice::<Marker>(bytes).is_ok_and(|marker| {
+        marker.schema >= 1
+            && marker
+                .backup
+                .as_ref()
+                .is_none_or(|backup| fs::symlink_metadata(&backup.path).is_ok())
+    })
+}
+
+/// Looks for the marker through the retained root capability, so a directory
+/// swapped in under the path can neither satisfy nor receive the gate. Without
+/// a marker the capability must still be the directory the path names, else
+/// the root changed under us and the mutation is refused.
+pub(crate) fn marker_via_capability(root_cap: &fs::File, root: &Path) -> Result<bool, StoreError> {
+    #[cfg(unix)]
+    {
+        let name = Path::new(MARKER_FILE);
+        if let Ok(bytes) = crate::rooted::read(root_cap, name, &root.join(name))
+            && marker_bytes_valid(&bytes)
+        {
+            return Ok(true);
+        }
+        if crate::root_identity_from_file(root_cap)? != crate::root_identity(root)? {
+            return Err(StoreError::RootChanged(root.to_path_buf()));
+        }
+        Ok(false)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = root_cap;
+        marker_present(root)
+    }
 }
 
 fn write_marker(root: &Path, marker: &Marker) -> Result<(), StoreError> {
@@ -180,6 +245,7 @@ fn write_marker(root: &Path, marker: &Marker) -> Result<(), StoreError> {
         file.sync_all().map_err(|e| write(e, &temporary))?;
         drop(file);
         fs::rename(&temporary, &target).map_err(|e| write(e, &target))?;
+        exclude_marker_from_git(root);
         #[cfg(unix)]
         if let Ok(dir) = fs::File::open(root) {
             let _ = dir.sync_all();
@@ -190,6 +256,31 @@ fn write_marker(root: &Path, marker: &Marker) -> Result<(), StoreError> {
         let _ = fs::remove_file(&temporary);
     }
     result
+}
+
+/// Keeps the marker out of `git add --all`: it is per machine, and a marker
+/// pushed to a peer would make that peer skip its own backup. Uses the
+/// repository-local `.git/info/exclude`, so no tracked file (and no Go-created
+/// `.gitignore`) is modified. Best effort: a vault without a `.git` directory
+/// has nothing to exclude from, and `git init` calls this again.
+pub fn exclude_marker_from_git(root: &Path) {
+    let info = root.join(".git").join("info");
+    if !root.join(".git").is_dir() || fs::create_dir_all(&info).is_err() {
+        return;
+    }
+    let exclude = info.join("exclude");
+    let line = format!("/{MARKER_FILE}");
+    let existing = fs::read_to_string(&exclude).unwrap_or_default();
+    if existing.lines().any(|l| l.trim() == line) {
+        return;
+    }
+    let mut text = existing;
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&line);
+    text.push('\n');
+    let _ = fs::write(&exclude, text);
 }
 
 fn now() -> String {
@@ -205,8 +296,8 @@ fn now() -> String {
 ///   protect and nothing to mark (the vault creator calls [`mark_created`]);
 /// * otherwise: backup, restore check, then the marker; any failure refuses the
 ///   mutation and writes no marker.
-pub(crate) fn ensure_locked(root: &Path) -> Result<(), StoreError> {
-    if ACTIVE.with(Cell::get) || marker_present(root)? {
+pub(crate) fn ensure_locked(root_cap: &fs::File, root: &Path) -> Result<(), StoreError> {
+    if bypassed() || ACTIVE.with(Cell::get) || marker_via_capability(root_cap, root)? {
         return Ok(());
     }
     if !has_vault_state(root) {
@@ -241,7 +332,7 @@ pub(crate) fn ensure_locked(root: &Path) -> Result<(), StoreError> {
 /// # Errors
 /// [`StoreError::DataSafety`] when the backup or its verification fails.
 pub fn ensure_marker(root: &Path) -> Result<(), StoreError> {
-    if ACTIVE.with(Cell::get) {
+    if bypassed() || ACTIVE.with(Cell::get) {
         return Ok(());
     }
     let root = match root.canonicalize() {
@@ -266,6 +357,16 @@ pub fn ensure_marker(root: &Path) -> Result<(), StoreError> {
     let lock = open_root_write_lock(&cap, &root)?;
     let _ = lock.unlock();
     Ok(())
+}
+
+/// Test fixtures build vaults with the store API and never ran `init`; they
+/// are Rust-created by construction. Marks `root` (errors, such as a missing
+/// directory, are ignored so negative tests keep their original failure) and
+/// returns it for use inside an expression.
+#[doc(hidden)]
+pub fn test_support_pre_marked<P: AsRef<Path>>(root: P) -> P {
+    let _ = mark_created(root.as_ref());
+    root
 }
 
 /// How far above a written path a vault root is looked for.
@@ -334,10 +435,99 @@ mod tests {
         }
     }
 
+    thread_local! {
+        static MODE: Cell<u8> = const { Cell::new(0) };
+        static CALLS: Cell<u32> = const { Cell::new(0) };
+    }
+
+    struct Fake;
+
+    impl PreMutationGuard for Fake {
+        fn backup_and_verify(&self, vault: &Path) -> Result<BackupReceipt, String> {
+            CALLS.with(|c| c.set(c.get() + 1));
+            if MODE.with(Cell::get) == 1 {
+                return Err("disk full".to_owned());
+            }
+            let path = vault.join("fake-backup.tar.gz");
+            fs::write(&path, b"x").unwrap();
+            Ok(BackupReceipt {
+                path,
+                sha256: "00".into(),
+                bytes: 1,
+                files: 1,
+            })
+        }
+    }
+
+    fn enforced_vault() -> tempfile::TempDir {
+        enforce_in_unit_test();
+        install_guard(Box::new(Fake));
+        CALLS.with(|c| c.set(0));
+        MODE.with(|m| m.set(0));
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join("identity.age"), b"x").unwrap();
+        dir
+    }
+
+    #[test]
+    fn first_mutation_backs_up_then_marks_and_later_ones_skip_the_guard() {
+        let dir = enforced_vault();
+        let root = dir.path().canonicalize().unwrap();
+        ensure_marker(&root).expect("gate");
+        assert_eq!(CALLS.with(Cell::get), 1);
+        let marker: Marker =
+            serde_json::from_slice(&fs::read(root.join(MARKER_FILE)).unwrap()).unwrap();
+        assert_eq!(marker.kind, "go-vault-backup");
+        assert_eq!(marker.backup.unwrap().path, root.join("fake-backup.tar.gz"));
+        ensure_marker(&root).expect("marked");
+        assert_eq!(CALLS.with(Cell::get), 1);
+    }
+
+    #[test]
+    fn a_failed_backup_refuses_and_writes_no_marker() {
+        let dir = enforced_vault();
+        MODE.with(|m| m.set(1));
+        let error = ensure_marker(dir.path()).expect_err("must refuse");
+        assert!(matches!(error, StoreError::DataSafety(ref m) if m.contains("disk full")));
+        assert!(!dir.path().join(MARKER_FILE).exists());
+    }
+
+    #[test]
+    fn a_marker_whose_backup_is_gone_does_not_count() {
+        let dir = enforced_vault();
+        let root = dir.path().canonicalize().unwrap();
+        ensure_marker(&root).expect("gate");
+        fs::remove_file(root.join("fake-backup.tar.gz")).unwrap();
+        ensure_marker(&root).expect("gate again");
+        assert_eq!(CALLS.with(Cell::get), 2);
+    }
+
+    #[test]
+    fn path_gate_finds_the_enclosing_vault_and_ignores_other_paths() {
+        let dir = enforced_vault();
+        fs::create_dir(dir.path().join("sub")).unwrap();
+        ensure_marker_for_path(&dir.path().join("sub/file")).expect("gate");
+        assert_eq!(CALLS.with(Cell::get), 1);
+        let other = tempfile::tempdir().unwrap();
+        ensure_marker_for_path(&other.path().join("x")).expect("no vault");
+        assert_eq!(CALLS.with(Cell::get), 1);
+    }
+
+    #[test]
+    fn marker_is_excluded_from_git() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".git")).unwrap();
+        mark_created(dir.path()).unwrap();
+        mark_created(dir.path()).unwrap();
+        let text = fs::read_to_string(dir.path().join(".git/info/exclude")).unwrap();
+        assert_eq!(text.matches("/.symvault-rust").count(), 1);
+    }
+
     #[test]
     fn empty_directory_needs_no_backup() {
         let dir = tempfile::tempdir().expect("tempdir");
-        ensure_locked(dir.path()).expect("nothing to protect");
+        let cap = fs::File::open(dir.path()).unwrap();
+        ensure_locked(&cap, dir.path()).expect("nothing to protect");
         assert!(!dir.path().join(MARKER_FILE).exists());
     }
 }

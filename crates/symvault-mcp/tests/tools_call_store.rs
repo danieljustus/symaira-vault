@@ -365,7 +365,11 @@ fn write_synthetic_vault() -> (tempfile::TempDir, symvault_crypto::Identity) {
     fs::create_dir(root.path().join("entries")).expect("synthetic entries directory");
 
     let identity = generate_identity();
-    let store = Store::open(root.path(), &identity).expect("open synthetic vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open synthetic vault");
     let mut data = BTreeMap::new();
     data.insert("password".into(), Value::String("testpass123".into()));
     data.insert("username".into(), Value::String("testuser".into()));
@@ -403,7 +407,11 @@ fn write_get_value_vault() -> (tempfile::TempDir, symvault_crypto::Identity) {
     fs::create_dir(root.path().join("entries")).expect("synthetic entries directory");
 
     let identity = generate_identity();
-    let store = Store::open(root.path(), &identity).expect("open synthetic get-value vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open synthetic get-value vault");
     let mut secret_data = BTreeMap::new();
     secret_data.insert("password".into(), Value::String("testpass123".into()));
     store

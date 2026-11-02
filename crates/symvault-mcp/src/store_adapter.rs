@@ -4423,18 +4423,21 @@ mod tests {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        Store::open(directory.path(), &identity)
-            .expect("open temporary vault")
-            .write_new_entry(
-                "github",
-                &Entry {
-                    path: "github".into(),
-                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
-                    ..Entry::default()
-                },
-                &identity,
-            )
-            .expect("write source-shaped secret entry");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open temporary vault")
+        .write_new_entry(
+            "github",
+            &Entry {
+                path: "github".into(),
+                data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write source-shaped secret entry");
         let config = ReadOnlyRuntimeConfig {
             available_tools: vec!["execute_with_secret".into()],
             can_run_commands: true,
@@ -4479,18 +4482,21 @@ mod tests {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        Store::open(directory.path(), &identity)
-            .expect("open temporary vault")
-            .write_new_entry(
-                "github",
-                &Entry {
-                    path: "github".into(),
-                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
-                    ..Entry::default()
-                },
-                &identity,
-            )
-            .expect("write source-shaped secret entry");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open temporary vault")
+        .write_new_entry(
+            "github",
+            &Entry {
+                path: "github".into(),
+                data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write source-shaped secret entry");
         let base_config = ReadOnlyRuntimeConfig {
             available_tools: vec!["execute_with_secret".into()],
             can_run_commands: true,
@@ -4527,18 +4533,21 @@ mod tests {
         )
         .expect("identity marker");
         let prompt_identity = symvault_crypto::generate_identity();
-        Store::open(prompt_directory.path(), &prompt_identity)
-            .expect("open prompt vault")
-            .write_new_entry(
-                "github",
-                &Entry {
-                    path: "github".into(),
-                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
-                    ..Entry::default()
-                },
-                &prompt_identity,
-            )
-            .expect("write source-shaped secret entry");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(prompt_directory.path()),
+            &prompt_identity,
+        )
+        .expect("open prompt vault")
+        .write_new_entry(
+            "github",
+            &Entry {
+                path: "github".into(),
+                data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                ..Entry::default()
+            },
+            &prompt_identity,
+        )
+        .expect("write source-shaped secret entry");
         let prompt_config = ReadOnlyRuntimeConfig {
             approval_mode: "prompt".into(),
             ..base_config
@@ -4614,7 +4623,11 @@ mod tests {
             .expect("vault config");
         fs::write(root.join("identity.age"), b"fixture marker").expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        Store::open(root, &identity).expect("open temporary vault");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root),
+            &identity,
+        )
+        .expect("open temporary vault");
         StoreReadOnlyRuntime::open(root, identity, config, None, None)
             .expect("runtime")
             .with_approval_seam(approval)
@@ -4794,7 +4807,11 @@ mod tests {
         )
         .expect("write synthetic API template");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root, &identity).expect("open temporary API vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root),
+            &identity,
+        )
+        .expect("open temporary API vault");
         if include_entry {
             store
                 .write_new_entry(
@@ -5106,18 +5123,21 @@ mod tests {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        Store::open(directory.path(), &identity)
-            .expect("open temporary vault")
-            .write_new_entry(
-                "service",
-                &Entry {
-                    path: "service".into(),
-                    data: BTreeMap::from([("token".into(), json!("synthetic-secret"))]),
-                    ..Entry::default()
-                },
-                &identity,
-            )
-            .expect("write source-shaped secret entry");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open temporary vault")
+        .write_new_entry(
+            "service",
+            &Entry {
+                path: "service".into(),
+                data: BTreeMap::from([("token".into(), json!("synthetic-secret"))]),
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write source-shaped secret entry");
         let config = ReadOnlyRuntimeConfig {
             available_tools: vec!["run_command".into()],
             can_run_commands: true,
@@ -5156,21 +5176,24 @@ mod tests {
         let identity = symvault_crypto::generate_identity();
         let binary = vec![0x50, 0x4b, 0x03, 0x04, 0x00, 0xff, 0x10];
         let encoded = base64::engine::general_purpose::STANDARD.encode(&binary);
-        Store::open(directory.path(), &identity)
-            .expect("open store")
-            .write_new_entry(
-                "service",
-                &Entry {
-                    path: "service".into(),
-                    data: BTreeMap::from([
-                        ("pin".into(), json!("synthetic-file-pin")),
-                        ("certificate".into(), json!(encoded)),
-                    ]),
-                    ..Entry::default()
-                },
-                &identity,
-            )
-            .expect("write source entry");
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open store")
+        .write_new_entry(
+            "service",
+            &Entry {
+                path: "service".into(),
+                data: BTreeMap::from([
+                    ("pin".into(), json!("synthetic-file-pin")),
+                    ("certificate".into(), json!(encoded)),
+                ]),
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write source entry");
         let expected_files = BTreeMap::from([
             ("CERT".into(), binary.clone()),
             ("PIN".into(), b"synthetic-file-pin".to_vec()),
@@ -5226,7 +5249,11 @@ mod tests {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(directory.path(), &identity).expect("open store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open store");
         store
             .write_new_entry(
                 "allowed/foo",
@@ -5293,7 +5320,11 @@ mod tests {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(directory.path(), &identity).expect("open store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open store");
         store
             .write_new_entry(
                 "allowed/foo",
@@ -5515,17 +5546,20 @@ mod tests {
                 json!("public-fixture".repeat((1024 * 1024) / 14)),
             )
         });
-        Store::open(directory.path(), &identity)
-            .unwrap()
-            .write_new_entry(
-                "control",
-                &Entry {
-                    data: BTreeMap::from(data),
-                    ..Default::default()
-                },
-                &identity,
-            )
-            .unwrap();
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .unwrap()
+        .write_new_entry(
+            "control",
+            &Entry {
+                data: BTreeMap::from(data),
+                ..Default::default()
+            },
+            &identity,
+        )
+        .unwrap();
         let runtime = StoreReadOnlyRuntime::open(
             directory.path(),
             identity,

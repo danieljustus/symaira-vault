@@ -119,7 +119,11 @@ fn public_manifest_keys_match_go_production_fixture() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
         materialize(root, vector.pseudonymize);
-        let store = Store::open(root, &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root),
+            &identity,
+        )
+        .unwrap();
         let mut created = None;
         assert_eq!(vector.steps.len(), 4);
         for (step, expected) in vector.steps.into_iter().enumerate() {
@@ -189,6 +193,8 @@ fn public_manifest_keys_match_go_production_fixture() {
                         .to_string_lossy()
                         .replace('\\', "/")
                 })
+                // Declared D1 difference: the pre-marked fixture carries the marker.
+                .filter(|name| name != ".symvault-rust")
                 .collect();
             files.sort();
             actual["files"] = json!(files);
@@ -210,7 +216,11 @@ fn manifest_map_keys_do_not_relax_entry_paths_or_mask_load_errors() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
         materialize(root, pseudo);
-        let store = Store::open(root, &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root),
+            &identity,
+        )
+        .unwrap();
         let malformed = b"synthetic malformed manifest";
         fs::write(root.join("manifest.age"), malformed).unwrap();
         let update_error = store

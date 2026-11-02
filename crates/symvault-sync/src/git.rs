@@ -130,6 +130,7 @@ impl GitRepository {
                 )?;
             }
         }
+        symvault_store::data_safety::exclude_marker_from_git(&repo.root);
         Ok(repo)
     }
     pub fn open(root: impl AsRef<Path>) -> Result<Self, GitError> {

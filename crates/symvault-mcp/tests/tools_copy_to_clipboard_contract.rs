@@ -122,7 +122,11 @@ fn copy_to_clipboard_replays_source_bound_go_dispatcher() {
         .expect("write synthetic identity marker");
         fs::create_dir(root.path().join("entries")).expect("create entries");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).expect("open synthetic store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .expect("open synthetic store");
         store
             .write_new_entry(
                 "github",
@@ -372,7 +376,11 @@ fn copy_to_clipboard_signal_clears_active_timer_and_continues() {
         .expect("write synthetic identity marker");
         fs::create_dir(root.path().join("entries")).expect("create entries");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).expect("open synthetic store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .expect("open synthetic store");
         store
             .write_new_entry(
                 "github",

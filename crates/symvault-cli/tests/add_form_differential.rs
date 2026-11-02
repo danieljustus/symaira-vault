@@ -422,7 +422,11 @@ fn stored_entry(root: &Path) -> Value {
     let ciphertext = fs::read(vault.join("identity.age")).expect("identity.age");
     let identity = decrypt_identity(&ciphertext, &SecretBytes::new(PASSPHRASE.as_bytes()))
         .expect("decrypt identity with the scenario passphrase");
-    let store = Store::open(&vault, &identity).expect("open vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&vault),
+        &identity,
+    )
+    .expect("open vault");
     if !store
         .entry_exists(ENTRY, &identity)
         .expect("entry_exists on the scenario vault")

@@ -65,7 +65,11 @@ fn invalid_approval_mode_fails_closed_on_the_direct_queue_path() {
     assert!(result.is_error);
     assert!(result.text.contains("unknown approval mode"));
     assert!(queue.pending().expect("inspect pending queue").is_empty());
-    let store = Store::open(root.path(), &verifier).expect("reopen invalid-mode vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &verifier,
+    )
+    .expect("reopen invalid-mode vault");
     let entry = store
         .get("github", &verifier)
         .expect("read unchanged entry");
@@ -290,7 +294,11 @@ fn set_and_delete_tty_approval_replay_go_handlers_and_mutation_order() {
             case.name
         );
 
-        let store = Store::open(root.path(), &verifier).expect("reopen synthetic vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &verifier,
+        )
+        .expect("reopen synthetic vault");
         let entry = store.get("github", &verifier);
         let exists = entry.is_ok();
         assert_eq!(exists, case.exists, "entry existence for {}", case.name);
@@ -321,7 +329,11 @@ fn synthetic_vault() -> (
         symvault_crypto::recipient_string(&verifier),
     )
     .expect("write recipient");
-    let store = Store::open(root.path(), &identity).expect("open fixture store");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open fixture store");
     let data = BTreeMap::from([
         ("password".into(), json!("StrongP@ssw0rd123")),
         ("username".into(), json!("fixture-user")),

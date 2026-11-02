@@ -137,7 +137,11 @@ fn secure_input_contract_replays_source_bound_go_handlers() {
         .expect("write identity marker");
         fs::create_dir(root.path().join("entries")).expect("create entries");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).expect("open synthetic store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .expect("open synthetic store");
         store
             .write_new_entry(
                 "allowed/service",
@@ -283,7 +287,11 @@ fn secure_input_contract_replays_source_bound_go_handlers() {
             case.name
         );
 
-        let store = Store::open(root.path(), &identity).expect("reopen synthetic vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .expect("reopen synthetic vault");
         let entry = store
             .get("allowed/service", &identity)
             .expect("read synthetic entry");
@@ -321,7 +329,11 @@ fn secure_input_signal_cancel_maps_to_go_context_canceled_without_storing() {
         .expect("write identity marker");
         fs::create_dir(root.path().join("entries")).expect("create entries");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).expect("open synthetic store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .expect("open synthetic store");
         store
             .write_new_entry(
                 "allowed/service",
@@ -385,7 +397,11 @@ fn secure_input_signal_cancel_maps_to_go_context_canceled_without_storing() {
         );
         assert_eq!(secure.requests.lock().unwrap().len(), 1, "{tool}");
 
-        let store = Store::open(root.path(), &identity).expect("reopen synthetic vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .expect("reopen synthetic vault");
         let entry = store
             .get("allowed/service", &identity)
             .expect("read synthetic entry");

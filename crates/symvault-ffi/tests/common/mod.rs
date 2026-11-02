@@ -700,6 +700,8 @@ fn check_after(after: &Value, base: &Path, root: &str) -> Result<(), String> {
     if let Some(tree) = after.get("tree").and_then(Value::as_array) {
         let mut actual: Vec<String> = Vec::new();
         collect(base, base, &mut actual);
+        // Declared D1 difference: Rust vaults carry the `.symvault-rust` marker.
+        actual.retain(|name| name != ".symvault-rust");
         actual.sort();
         let expected: Vec<String> = tree
             .iter()
@@ -833,6 +835,13 @@ pub fn replay_matching(
         }
         for mutation in case["mutations"].as_array().into_iter().flatten() {
             mutate(&vault, mutation);
+        }
+        // The replay runs in-process, where an unmarked vault would send a
+        // verified backup to the developer's real state directory. The seeds
+        // are pre-marked; the gate itself is exercised by
+        // `make data-safety-differential` with isolated HOME/XDG roots.
+        if vault.is_dir() {
+            symvault_store::data_safety::test_support_pre_marked(&vault);
         }
         for (index, step) in case["steps"].as_array().expect("steps").iter().enumerate() {
             let function = step["function"].as_str().expect("function").to_owned();

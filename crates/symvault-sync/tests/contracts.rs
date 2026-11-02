@@ -55,6 +55,8 @@ fn git_lifecycle_matches_local_bare_remote_contract() {
     repo.add_remote("origin", remote.to_str().unwrap()).unwrap();
     fs::write(local.join("identity.age"), b"private").unwrap();
     fs::write(local.join("secret.age"), b"one").unwrap();
+    // A fixture the Rust build created itself: no pre-migration backup needed.
+    symvault_store::data_safety::mark_created(&local).unwrap();
     let c = repo
         .commit(CommitOptions {
             message: "first".into(),

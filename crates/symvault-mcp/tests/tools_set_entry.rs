@@ -115,7 +115,11 @@ fn prompt_write_waits_on_the_live_queue_before_mutating_store() {
     let result = call.join().expect("join MCP write").expect("write call");
     assert!(!result.is_error, "approved write failed: {}", result.text);
 
-    let store = Store::open(root.path(), &verifier).expect("reopen approved vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &verifier,
+    )
+    .expect("reopen approved vault");
     let entry = store.get("github", &verifier).expect("read approved entry");
     assert_eq!(
         entry.data.get("username"),
@@ -164,7 +168,11 @@ fn write_synthetic_vault() -> (
         recipient_string(&verifier),
     )
     .expect("synthetic recipients");
-    let store = Store::open(root.path(), &identity).expect("open synthetic vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open synthetic vault");
     let mut data = BTreeMap::new();
     data.insert("password".into(), Value::String("StrongP@ssw0rd123".into()));
     data.insert("username".into(), Value::String("fixture-user".into()));
@@ -268,7 +276,11 @@ fn set_entry_matches_source_bound_go_fixture_and_persists() {
             .collect::<Vec<_>>();
         assert_eq!(actual, case.output, "case {}", case.name);
 
-        let store = Store::open(root.path(), &verifier).expect("reopen synthetic vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &verifier,
+        )
+        .expect("reopen synthetic vault");
         let entry = store.get("github", &verifier).expect("read updated entry");
         let history = entry
             .metadata
