@@ -1,10 +1,16 @@
 // Records whether Go 1.26.6 `encoding/json` accepts each raw JSON value as a
 // *time.Time field (Time.UnmarshalJSON -> time.Parse(RFC3339), raw bytes, no
 // unescaping). Input: a JSON array of raw JSON value texts. Output: JSON array
-// of {raw, go: accept|reject|syntax}. Re-record the fixture
+// of {raw, go: accept|reject|syntax, has_time, display, after_zero}. For an
+// accepted non-null value `display` is what `agent token list` (expires) and
+// `agent list` (last seen) print, time.Time.Format("2006-01-02 15:04") of the
+// parsed value (wall clock of the offset as written, whatever the process
+// zone), and `after_zero` is `t.After(time.Time{})` (`agent list` only
+// considers a last-used time that is).
+// Do not run by hand: scripts/rust-port/go_timestamp_fixtures.py (make
+// timestamp-fixtures-generate / timestamp-fixtures-check) records
 // crates/symvault-store/tests/fixtures/go_timestamp_cases.json ([raw, accepts]
-// pairs) with:  cp go_timestamp_oracle.go.txt /tmp/x/oracle.go &&
-//   CGO_ENABLED=0 GOWORK=off go run /tmp/x/oracle.go cases.json
+// pairs) and go_timestamp_display_cases.json from it.
 package main
 
 import (
@@ -28,8 +34,11 @@ func main() {
 		panic(err)
 	}
 	type out struct {
-		Raw string `json:"raw"`
-		Go  string `json:"go"`
+		Raw       string `json:"raw"`
+		Go        string `json:"go"`
+		HasTime   bool   `json:"has_time"`
+		Display   string `json:"display"`
+		AfterZero bool   `json:"after_zero"`
 	}
 	var res []out
 	for _, raw := range cases {
@@ -41,7 +50,14 @@ func main() {
 		} else if err := json.Unmarshal([]byte(doc), &f); err != nil {
 			r = "reject"
 		}
-		res = append(res, out{raw, r})
+		o := out{Raw: raw, Go: r}
+		if r == "accept" && f.Tokens["a"].ExpiresAt != nil {
+			t := *f.Tokens["a"].ExpiresAt
+			o.HasTime = true
+			o.Display = t.Format("2006-01-02 15:04")
+			o.AfterZero = t.After(time.Time{})
+		}
+		res = append(res, o)
 	}
 	b, _ := json.MarshalIndent(res, "", " ")
 	fmt.Println(string(b))

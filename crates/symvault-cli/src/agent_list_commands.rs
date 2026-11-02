@@ -123,10 +123,13 @@ pub(crate) fn list(
             // tokens exist. Keep Rust output reproducible; the differential
             // fixture uses one active token per agent.
             let token = active.first().copied();
-            let last_seen = active
-                .iter()
-                .filter_map(|token| token.last_used_at.as_deref())
-                .max_by_key(|timestamp| timestamp_to_epoch(timestamp));
+            // Go starts from the zero time and keeps a strictly later
+            // `LastUsedAt`, so a value at or before it never shows.
+            let last_seen = symvault_store::go_registry::latest_after_go_zero(
+                active
+                    .iter()
+                    .filter_map(|token| token.last_used_at.as_deref()),
+            );
             let skill = skill_status(home, &profile.skill_path);
             AgentListItem {
                 name,
@@ -282,9 +285,8 @@ pub(crate) fn now_epoch() -> i64 {
 }
 
 fn format_timestamp(timestamp: &str) -> String {
-    timestamp
-        .get(..16)
-        .map_or_else(|| timestamp.to_owned(), |prefix| prefix.replace('T', " "))
+    // Go: `lastSeen.Format("2006-01-02 15:04")` on the parsed time.
+    symvault_store::go_registry::format_go_minute(timestamp).unwrap_or_else(|| timestamp.to_owned())
 }
 
 fn write_text(result: &AgentListResult, output: &mut impl Write) -> Result<(), String> {

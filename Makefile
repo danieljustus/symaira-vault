@@ -758,7 +758,7 @@ setup-wizard-differential:
 store004-isolation-check:
 	PYTHONDONTWRITEBYTECODE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/test_store004_isolation.py
 
-port-contract: cfg-overrides-fixtures-check mcp-oauth-contract store004-isolation-check update-fixtures-check
+port-contract: timestamp-fixtures-check cfg-overrides-fixtures-check mcp-oauth-contract store004-isolation-check update-fixtures-check
 
 .PHONY: update-fixtures-check
 update-fixtures-check:
@@ -790,12 +790,21 @@ mcp-http-replay-contract:
 		--rust "$(RUST_BINARY)" \
 		--receipt "$(CARGO_TARGET_DIR)/http-replay-contract.json" $(HTTP_CONTRACT_ARGS)
 
-mcp-http-token-contract:
+mcp-http-token-contract: timestamp-fixtures-check
 	python3 -B scripts/rust-port/test_http_replay_contract.py
 	$(CARGO) build -p symvault-cli --bin symvault --locked
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/http_token_contract.py \
 		--rust "$(RUST_BINARY)" \
 		--receipt "$(CARGO_TARGET_DIR)/http-token-contract.json" $(HTTP_CONTRACT_ARGS)
+
+# Go-recorded RFC3339 acceptance + table display (scripts/rust-port/go_timestamp_fixtures.py).
+# -check re-records in memory and never writes; -generate is the only writer.
+.PHONY: timestamp-fixtures-generate timestamp-fixtures-check
+timestamp-fixtures-generate:
+	GO_TOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/go_timestamp_fixtures.py --generate
+
+timestamp-fixtures-check:
+	GO_TOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/go_timestamp_fixtures.py --check
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:

@@ -103,6 +103,46 @@ pub fn parse_go_rfc3339(text: &str) -> Option<OffsetDateTime> {
     )
 }
 
+/// What Go prints for a registry timestamp in the token/agent tables:
+/// `time.Time.Format("2006-01-02 15:04")` of the *parsed* value. Go keeps the
+/// offset written in the file, so this is that wall clock (zero-padded, hour
+/// `9` -> `09`, fraction and zone dropped), never the process zone and never a
+/// slice of the raw text. `None` when Go would not have parsed `text`.
+pub fn format_go_minute(text: &str) -> Option<String> {
+    let value = parse_go_rfc3339(text)?;
+    Some(format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}",
+        value.year(),
+        u8::from(value.month()),
+        value.day(),
+        value.hour(),
+        value.minute()
+    ))
+}
+
+/// Go's `time.Time{}` (0001-01-01 00:00:00 UTC) as nanoseconds since the Unix
+/// epoch.
+const GO_ZERO_TIME_NANOS: i128 = -62_135_596_800 * 1_000_000_000;
+
+/// The latest timestamp that is strictly `After(time.Time{})`, as
+/// `agent list` computes its last-seen column: it starts from the zero time and
+/// replaces it only with a strictly later instant, so a value at or before the
+/// zero instant never shows, and of two equal instants the first one wins.
+/// Unparseable values are skipped (Go would have refused the registry).
+pub fn latest_after_go_zero<'a>(timestamps: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    let mut best: Option<(&str, i128)> = None;
+    for text in timestamps {
+        let Some(value) = parse_go_rfc3339(text) else {
+            continue;
+        };
+        let nanos = value.unix_timestamp_nanos();
+        if nanos > best.map_or(GO_ZERO_TIME_NANOS, |(_, current)| current) {
+            best = Some((text, nanos));
+        }
+    }
+    best.map(|(text, _)| text)
+}
+
 /// Whether the *raw* JSON value text (as it stands in the file) is a value Go's
 /// `Time.UnmarshalJSON` accepts: `null`, or a quoted string without any
 /// escape sequence that `parse_go_rfc3339` accepts.
@@ -585,7 +625,7 @@ mod tests {
     }
 
     /// Outcomes recorded from Go 1.26.6 (`encoding/json` into a `*time.Time`
-    /// field, `scripts/rust-port/go_timestamp_oracle.go.txt`) for 953 raw JSON
+    /// field, `scripts/rust-port/go_timestamp_oracle.go.txt`) for 1055 raw JSON
     /// values: well-formed and mutated RFC3339 strings, escape sequences,
     /// fraction and offset sweeps. Rust must agree in both directions.
     #[test]
@@ -602,6 +642,57 @@ mod tests {
             }
         }
         assert!(disagreements.is_empty(), "{disagreements:?}");
+    }
+
+    /// What Go 1.26.6 prints (`Format("2006-01-02 15:04")`) for every accepted
+    /// non-null timestamp in the acceptance sweep, and whether it is
+    /// `After(time.Time{})`, recorded by `scripts/rust-port/go_timestamp_fixtures.py`.
+    fn display_cases() -> Vec<(String, String, bool)> {
+        let cases: Vec<(String, String, bool)> = serde_json::from_str(include_str!(
+            "../tests/fixtures/go_timestamp_display_cases.json"
+        ))
+        .expect("fixture");
+        assert!(cases.len() > 200);
+        cases
+            .into_iter()
+            .map(|(raw, display, after_zero)| {
+                let text: String = serde_json::from_str(&raw).expect("quoted string");
+                (text, display, after_zero)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn display_matches_recorded_go_format() {
+        let mut disagreements = Vec::new();
+        for (text, display, _) in display_cases() {
+            if format_go_minute(&text).as_deref() != Some(display.as_str()) {
+                disagreements.push((text, display));
+            }
+        }
+        assert!(disagreements.is_empty(), "{disagreements:?}");
+        assert_eq!(
+            format_go_minute("2026-01-01T1:00:00Z").as_deref(),
+            Some("2026-01-01 01:00")
+        );
+        assert_eq!(format_go_minute("2026-01-01 00:00:00Z"), None);
+    }
+
+    #[test]
+    fn last_seen_selection_matches_recorded_go_after_zero() {
+        for (text, _, after_zero) in display_cases() {
+            let picked = latest_after_go_zero([text.as_str()]);
+            assert_eq!(picked.is_some(), after_zero, "{text}");
+        }
+        // Strictly later wins; of equal instants the first one stays.
+        assert_eq!(
+            latest_after_go_zero(["2026-01-01T10:00:00Z", "2026-01-01T11:00:00+01:00"]),
+            Some("2026-01-01T10:00:00Z")
+        );
+        assert_eq!(
+            latest_after_go_zero(["2026-01-01T09:59:59Z", "2026-01-01T9:00:00-01:00"]),
+            Some("2026-01-01T9:00:00-01:00")
+        );
     }
 
     #[test]
