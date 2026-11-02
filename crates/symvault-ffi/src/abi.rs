@@ -331,6 +331,29 @@ pub unsafe extern "C" fn symvault_init_vault(
     }
 }
 
+/// Rust-only addition (no Go counterpart): sets the directory that receives the
+/// verified pre-migration backup of a Go-created vault before the first write
+/// (an empty path restores the `$XDG_STATE_HOME`/`$HOME` default). Additive, so
+/// the ABI revision stays 1. Keeping the directory out of iCloud backup is the
+/// host's responsibility.
+///
+/// # Safety
+/// Pointer/length pair must be valid; `err` null or writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_set_backup_dir(
+    dir: *const u8,
+    dir_len: usize,
+    err: *mut SvBuf,
+) -> i32 {
+    // SAFETY: forwarded contract.
+    unsafe {
+        run(std::ptr::null_mut(), err, std::ptr::null_mut(), || {
+            let dir = text(dir, dir_len, "backupDir")?;
+            Ok(api::set_backup_dir(dir).map(|()| Payload::Nothing))
+        })
+    }
+}
+
 /// `OpenVaultWithPassphrase(vaultDir, passphrase) (string, error)`.
 ///
 /// # Safety

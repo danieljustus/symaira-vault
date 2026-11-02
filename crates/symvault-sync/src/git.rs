@@ -34,6 +34,10 @@ pub enum GitError {
     /// git is a hard runtime dependency of the Rust CLI (ADR 0033).
     #[error("git is required but was not found in PATH; install git and retry")]
     GitNotFound,
+    /// The pre-migration backup of a vault without a Rust marker failed; the
+    /// operation would have rewritten `.git` or the working tree.
+    #[error("{0}")]
+    DataSafety(String),
 }
 
 /// Map a failed `git` spawn to [`GitError`]. `NotFound` means the executable is
@@ -146,6 +150,7 @@ impl GitRepository {
                 )?;
             }
         }
+        symvault_store::data_safety::exclude_marker_from_git(&repo.root);
         Ok(repo)
     }
     pub fn open(root: impl AsRef<Path>) -> Result<Self, GitError> {
@@ -157,6 +162,15 @@ impl GitRepository {
     }
     pub fn root(&self) -> &Path {
         &self.root
+    }
+    /// D1 gate for everything that rewrites the repository or the working tree
+    /// of a vault (`.git/config` through `remote add` and `push --set-upstream`,
+    /// the index and commits, `.gitignore`, a forced reset): a vault without a
+    /// Rust marker is backed up (the backup includes `.git`) before the first
+    /// such change. Read-only commands and `fetch` do not call it.
+    fn gate(&self) -> Result<(), GitError> {
+        symvault_store::data_safety::ensure_marker(&self.root)
+            .map_err(|error| GitError::DataSafety(error.to_string()))
     }
     pub fn create_gitignore(&self) -> Result<(), GitError> {
         let path = self.root.join(".gitignore");
@@ -198,6 +212,7 @@ impl GitRepository {
             .collect()
     }
     pub fn commit(&self, mut opts: CommitOptions) -> Result<Option<Commit>, GitError> {
+        self.gate()?;
         self.create_gitignore()?;
         if opts.message.is_empty() {
             opts.message = "Update from Symaira Vault".to_owned();
@@ -298,6 +313,7 @@ impl GitRepository {
     }
     pub fn add_remote(&self, name: &str, url: &str) -> Result<(), GitError> {
         validate_name(name)?;
+        self.gate()?;
         self.command(&["remote", "add", name, url]).map(|_| ())
     }
     pub fn remote_url(&self, name: &str) -> Result<Option<String>, GitError> {
@@ -317,6 +333,14 @@ impl GitRepository {
         if remote_url.is_none() {
             return PullResult {
                 skipped: true,
+                ..Default::default()
+            };
+        }
+        // A pull rewrites the working tree: D1 backup first for an unmarked vault.
+        if let Err(error) = self.gate() {
+            return PullResult {
+                remote_url,
+                error: Some(error.to_string()),
                 ..Default::default()
             };
         }
@@ -469,6 +493,14 @@ impl GitRepository {
         if remote_url.is_none() {
             return PullResult {
                 skipped: true,
+                ..Default::default()
+            };
+        }
+        // A forced pull resets the working tree: D1 backup first.
+        if let Err(error) = self.gate() {
+            return PullResult {
+                remote_url,
+                error: Some(error.to_string()),
                 ..Default::default()
             };
         }
@@ -766,6 +798,13 @@ impl GitRepository {
             return PushResult {
                 skipped: true,
                 error: Some(format!("no '{name}' remote configured")),
+                ..Default::default()
+            };
+        }
+        if push && let Err(error) = self.gate() {
+            return PushResult {
+                remote_url,
+                error: Some(error.to_string()),
                 ..Default::default()
             };
         }
@@ -1667,6 +1706,7 @@ mod tests {
     fn commit_supplies_go_identity_when_the_repository_has_none() {
         let root = tempfile::tempdir().unwrap();
         let repo = GitRepository::init(root.path()).unwrap();
+        symvault_store::data_safety::test_support_pre_marked(root.path());
         // An explicitly empty identity stands in for a host without one; the
         // repository-local value wins over any ambient developer identity.
         repo.command(&["config", "user.name", ""]).unwrap();
@@ -1691,6 +1731,7 @@ mod tests {
     fn commit_prefers_the_repository_identity_over_go_defaults() {
         let root = tempfile::tempdir().unwrap();
         let repo = GitRepository::init(root.path()).unwrap();
+        symvault_store::data_safety::test_support_pre_marked(root.path());
         repo.command(&["config", "user.name", "Vault Owner"])
             .unwrap();
         repo.command(&["config", "user.email", "owner@example.invalid"])

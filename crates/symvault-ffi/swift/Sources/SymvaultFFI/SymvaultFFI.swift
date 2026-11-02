@@ -69,6 +69,15 @@ public enum SymvaultFFI {
         }
     }
 
+    /// Where the verified pre-migration backup of a Go-created vault goes
+    /// (call before the first write; an empty string restores the default).
+    /// Keeping it out of iCloud backup is the host's responsibility.
+    public static func setBackupDir(_ dir: String) throws {
+        _ = try call([.text(dir)]) { a, _, err in
+            symvault_set_backup_dir(a[0].0, a[0].1, err)
+        }
+    }
+
     public static func openVaultWithPassphrase(vaultDir: String, passphrase: String) throws
         -> String
     {

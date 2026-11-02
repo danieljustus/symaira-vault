@@ -182,7 +182,11 @@ fn source_bound_go_execute_with_secret_contract() {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(directory.path(), &identity).expect("open fixture vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open fixture vault");
         for (path, data) in [
             (
                 "github",
@@ -315,7 +319,11 @@ fn source_bound_go_execute_with_secret_approval_contract() {
         fs::write(directory.path().join("identity.age"), b"fixture marker")
             .expect("identity marker");
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(directory.path(), &identity).expect("open fixture vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(directory.path()),
+            &identity,
+        )
+        .expect("open fixture vault");
         store
             .write_new_entry(
                 "github",

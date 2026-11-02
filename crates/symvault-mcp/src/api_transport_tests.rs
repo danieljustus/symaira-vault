@@ -206,7 +206,11 @@ fn stopping_egress_during_dns_joins_workers_and_releases_socket() {
         std::fs::write(root.path().join("templates/fixture.yaml"),
             "base_url: https://waiting-broker.example.test\nauth_type: bearer\nentry_ref: missing-entry\nallowed_methods: [GET]\nallowed_endpoints: [/safe/*]\n").unwrap();
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .unwrap();
         let broker = EgressBroker::new(root.path(), &store, &identity, EgressOptions::default())
             .unwrap()
             .with_dns_server(dns.address);

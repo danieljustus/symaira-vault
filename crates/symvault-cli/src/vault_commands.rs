@@ -137,6 +137,9 @@ pub fn initialize(root: &Path, passphrase: &SecretBytes) -> Result<Identity, Str
         let _ = std::fs::remove_dir(root.join("entries"));
         return Err(format!("save identity: {error}"));
     }
+    // A vault Rust creates needs no pre-migration backup (D1).
+    symvault_store::data_safety::mark_created(root)
+        .map_err(|error| format!("write rust marker: {error}"))?;
     Ok(identity)
 }
 

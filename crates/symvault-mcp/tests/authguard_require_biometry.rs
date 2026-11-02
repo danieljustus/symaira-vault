@@ -92,7 +92,11 @@ fn fixture(touch_id: Option<Arc<FakeTouchId>>) -> Fixture {
     .unwrap();
     fs::create_dir(root.path().join("entries")).unwrap();
     let identity = generate_identity();
-    let store = Store::open(root.path(), &identity).expect("open store");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open store");
     store
         .write_new_entry(
             "github",

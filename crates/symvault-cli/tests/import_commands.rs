@@ -61,7 +61,11 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
     let identity =
         vault_commands::initialize(&root, &SecretBytes::new(b"correct horse battery staple"))
             .expect("initialize");
-    let store = Store::open(&root, &identity).expect("open");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .expect("open");
     store
         .write_new_entry("existing", &Entry::default(), &identity)
         .expect("existing entry");
@@ -168,10 +172,13 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
     }
     assert_eq!(collision_writes, 0);
     assert!(
-        Store::open(&root, &identity)
-            .unwrap()
-            .get("existing", &identity)
-            .is_ok()
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity
+        )
+        .unwrap()
+        .get("existing", &identity)
+        .is_ok()
     );
     let _ = fs::remove_dir_all(root);
 }
@@ -197,7 +204,11 @@ fn failed_overwrite_keeps_the_existing_entry() {
     let identity =
         vault_commands::initialize(&root, &SecretBytes::new(b"correct horse battery staple"))
             .expect("initialize");
-    let store = Store::open(&root, &identity).expect("open");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .expect("open");
     store
         .write_new_entry(
             "existing",
@@ -235,10 +246,13 @@ fn failed_overwrite_keeps_the_existing_entry() {
         error,
         "cannot overwrite entry: injected replacement failure"
     );
-    let entry = Store::open(&root, &identity)
-        .unwrap()
-        .get("existing", &identity)
-        .unwrap();
+    let entry = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .unwrap()
+    .get("existing", &identity)
+    .unwrap();
     assert_eq!(entry.data["password"], "old");
     let _ = fs::remove_dir_all(root);
 }
@@ -284,7 +298,11 @@ fn cxf_import_preserves_secret_metadata_and_write_version() {
     .expect("CXF import");
     assert!(result.imported > 0);
 
-    let store = Store::open(&root, &identity).expect("open imported vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .expect("open imported vault");
     let entries: Vec<_> = store
         .list(&identity)
         .unwrap()

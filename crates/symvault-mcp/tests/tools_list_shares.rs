@@ -45,7 +45,11 @@ fn fixture_runtime_for_agent(
     .expect("Go-shaped share fixture");
 
     let identity = generate_identity();
-    Store::open(root.path(), &identity).expect("open synthetic vault");
+    Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open synthetic vault");
     let keyring = MemoryKeyring::new();
     let audit = Arc::new(Mutex::new(
         symvault_store::audit::open_with_keyring(

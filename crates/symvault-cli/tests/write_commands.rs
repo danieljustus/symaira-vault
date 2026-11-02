@@ -45,7 +45,11 @@ fn writes_preserve_other_fields_reject_corruption_and_delete() {
         .unwrap(),
     )
     .unwrap();
-    let store = Store::open(&root, &identity).unwrap();
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .unwrap();
     write_commands::set_value(
         &root,
         &identity,

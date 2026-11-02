@@ -31,7 +31,11 @@ fn deletion_stays_in_retained_root_and_rejects_special_targets() {
         };
         fs::write(root.join(relative), b"original").unwrap();
         let identity = parse_identity(IDENTITY).unwrap();
-        let store = Store::open(&root, &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         fs::rename(&root, &moved).unwrap();
         // A real replacement directory also bypasses ambient no-symlink checks.
         fs::create_dir_all(root.join("entries")).unwrap();
@@ -104,7 +108,11 @@ fn entry_and_manifest_mutations_retain_opened_root_after_path_replacement() {
         )
         .unwrap();
         fs::write(outside.join("sentinel"), b"must not change").unwrap();
-        let store = Store::open(&root, &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         let path = "nested.name/service.v1";
         store
             .write_entry_with_recipients_at(
@@ -138,7 +146,11 @@ fn entry_and_manifest_mutations_retain_opened_root_after_path_replacement() {
                 .entries
                 .contains_key(path)
         );
-        let reopened = Store::open(&moved, &identity).unwrap();
+        let reopened = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&moved),
+            &identity,
+        )
+        .unwrap();
         assert_eq!(reopened.get(path, &identity).unwrap().data, entry.data);
         assert_eq!(
             reopened.get("new.nested/fresh.v2", &identity).unwrap().data,
@@ -174,7 +186,11 @@ fn manifest_rebuild_reads_mtime_from_retained_root() {
     .unwrap();
     fs::write(root.join("identity.age"), b"presence fixture").unwrap();
     let identity = parse_identity(IDENTITY).unwrap();
-    let store = Store::open(&root, &identity).unwrap();
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .unwrap();
     store
         .write_entry_at(
             "observed",

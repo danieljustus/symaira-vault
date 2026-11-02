@@ -87,6 +87,22 @@ pub enum ConfigError {
     Invalid(String),
     #[error("serialize config: {0}")]
     Serialize(String),
+    /// A registered pre-save hook refused the write (the D1 data-safety gate).
+    #[error("{0}")]
+    Refused(String),
+}
+
+/// Called with the target path before [`Config::save_to`] writes anything. The
+/// store layer registers the data-safety gate here: `symvault-core` cannot
+/// depend on it, and every vault `config.yaml` rewrite goes through
+/// `save_to`.
+pub type PreSaveHook = fn(&Path) -> Result<(), String>;
+
+static PRE_SAVE_HOOK: std::sync::OnceLock<PreSaveHook> = std::sync::OnceLock::new();
+
+/// Registers the process-wide pre-save hook; the first registration wins.
+pub fn set_pre_save_hook(hook: PreSaveHook) -> bool {
+    PRE_SAVE_HOOK.set(hook).is_ok()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1222,6 +1238,9 @@ impl Config {
             ));
         }
         let bytes = self.to_yaml_bytes()?;
+        if let Some(hook) = PRE_SAVE_HOOK.get() {
+            hook(path).map_err(ConfigError::Refused)?;
+        }
         if let Some(parent) = path.parent() {
             create_private_dir_all(parent)?;
         }

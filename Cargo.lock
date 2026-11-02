@@ -4176,6 +4176,7 @@ dependencies = [
  "symvault-crypto",
  "symvault-gojson",
  "symvault-store",
+ "symvault-sync",
  "tempfile",
  "zeroize",
 ]
@@ -4252,6 +4253,7 @@ dependencies = [
  "sha2 0.11.1",
  "symvault-core",
  "symvault-crypto",
+ "symvault-store",
  "tempfile",
  "thiserror 2.0.21",
  "time",

@@ -25,8 +25,11 @@ fn main() -> Result<(), String> {
         &symvault_crypto::SecretBytes::new(b"correct horse battery staple"),
     )
     .map_err(|_| "unlock private fixture")?;
-    let store = symvault_store::Store::open_with_legacy_migration(&root, &identity)
-        .map_err(|_| "open private fixture")?;
+    let store = symvault_store::Store::open_with_legacy_migration(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .map_err(|_| "open private fixture")?;
     let broker = EgressBroker::new(
         &root,
         &store,

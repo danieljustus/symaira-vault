@@ -18,7 +18,7 @@ getrandom = "=0.4.3"
 serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
 sha2 = "=0.11.1"
-rustix = { version = "=1.1.5", features = ["fs"] }
+rustix = { version = "=1.1.5", features = ["fs", "process"] }
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
@@ -27,6 +27,10 @@ tempfile = "=3.27.0"
 thiserror = "=2.0.21"
 time = { version = "=0.3.55", features = ["formatting", "parsing"] }
 zip = { version = "=9.1.0", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+# Fixtures mark their throw-away vaults as Rust-created (test-only helper).
+symvault-store = { path = "../symvault-store", version = "=0.0.0", features = ["test-support"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = [

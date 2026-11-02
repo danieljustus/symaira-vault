@@ -18,7 +18,11 @@ fn auto_commit_entry_records_message_and_affected_paths() {
         .expect("identity marker");
     fs::create_dir(root.path().join("entries")).expect("entries directory");
     let identity = generate_identity();
-    let store = Store::open(root.path(), &identity).expect("open store");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open store");
     let mut data = BTreeMap::new();
     data.insert(
         "username".into(),
@@ -86,7 +90,11 @@ fn auto_commit_entry_is_noop_without_git_configuration() {
         .expect("identity marker");
     fs::create_dir(root.path().join("entries")).expect("entries directory");
     let identity = generate_identity();
-    let store = Store::open(root.path(), &identity).expect("open store");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open store");
     auto_commit_entry(&store, &identity, "github", "Delete").expect("no-op without git");
 }
 
@@ -104,7 +112,11 @@ fn auto_commit_entry_uses_existing_repository_without_git_block() {
     fs::write(root.path().join("entries/github.age"), b"ciphertext").expect("entry marker");
     fs::write(root.path().join("manifest.age"), b"manifest").expect("manifest marker");
     let identity = generate_identity();
-    let store = Store::open(root.path(), &identity).expect("open store");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open store");
     let repo = GitRepository::init(root.path()).expect("init git fixture");
     auto_commit_entry(&store, &identity, "github", "Delete").expect("auto-commit");
     assert_eq!(

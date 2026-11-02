@@ -21,7 +21,11 @@ fn vault(root: &std::path::Path) -> (symvault_crypto::Identity, Store) {
     fs::write(root.join("config.yaml"), "vault:\n  format_version: 2\n").unwrap();
     fs::write(root.join("identity.age"), b"test layout marker").unwrap();
     let identity = symvault_crypto::generate_identity();
-    let store = Store::open(root, &identity).unwrap();
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root),
+        &identity,
+    )
+    .unwrap();
     store
         .write_entry(
             "fixture",

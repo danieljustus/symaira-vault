@@ -105,7 +105,11 @@ fn fixture(
     .unwrap();
     fs::create_dir(root.path().join("entries")).unwrap();
     let identity = generate_identity();
-    let _ = Store::open(root.path(), &identity).expect("open store");
+    let _ = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(root.path()),
+        &identity,
+    )
+    .expect("open store");
     let keyring = MemoryKeyring::new();
     let logger = symvault_store::audit::open_with_keyring(
         "fixture",

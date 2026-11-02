@@ -17,6 +17,8 @@ symvault-core.workspace = true
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
+# D1 data-safety gate: the pre-mutation backup guard lives in symvault-sync.
+symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
 # Diagnostics only: the Go bridge surfaces age's exact error texts, and the
 # shared crypto crate deliberately collapses them into failure classes. This is
 # the same exact pin symvault-crypto uses.
@@ -26,6 +28,8 @@ serde_json.workspace = true
 zeroize = { version = "=1.9.1", features = ["alloc"] }
 
 [dev-dependencies]
+# Fixtures mark their throw-away vaults as Rust-created (test-only helper).
+symvault-store = { path = "../symvault-store", version = "=0.0.0", features = ["test-support"] }
 base64 = "=0.23.1"
 sha2 = "=0.11.1"
 tempfile = "=3.27.0"

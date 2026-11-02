@@ -71,7 +71,11 @@ fn migrate_pseudonymize_keeps_every_entry() {
     let logical_paths = ["example.one", "work/nested/two", "deep/a/b/c/three"];
 
     {
-        let store = Store::open(&root, &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         for path in logical_paths {
             store
                 .write_entry(path, &entry_for(path), &identity)
@@ -87,7 +91,11 @@ fn migrate_pseudonymize_keeps_every_entry() {
     )
     .unwrap();
 
-    let store = Store::open(&root, &identity).unwrap();
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .unwrap();
     let summary = store.migrate_pseudonymize(&identity).expect("migrate");
     assert_eq!(
         summary,
@@ -118,7 +126,11 @@ fn migrate_pseudonymize_keeps_every_entry() {
 fn migrate_pseudonymize_second_run_is_noop() {
     let (_temp, identity, root) = vault(false);
     {
-        let store = Store::open(&root, &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         store
             .write_entry("only.entry", &entry_for("only.entry"), &identity)
             .expect("write entry");
@@ -129,7 +141,11 @@ fn migrate_pseudonymize_second_run_is_noop() {
     )
     .unwrap();
 
-    let store = Store::open(&root, &identity).unwrap();
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .unwrap();
     let first = store.migrate_pseudonymize(&identity).expect("first run");
     assert_eq!(first.migrated, 1);
     let after_first = count_entry_files(&root);
@@ -151,12 +167,20 @@ fn migrate_pseudonymize_second_run_is_noop() {
 fn migrate_pseudonymize_requires_the_flag_first() {
     let (_temp, identity, root) = vault(false);
     {
-        let store = Store::open(&root, &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         store
             .write_entry("kept.entry", &entry_for("kept.entry"), &identity)
             .expect("write entry");
     }
-    let store = Store::open(&root, &identity).unwrap();
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .unwrap();
     let error = store.migrate_pseudonymize(&identity).unwrap_err();
     assert!(
         matches!(error, StoreError::Config(_)),

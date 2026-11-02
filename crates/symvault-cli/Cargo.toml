@@ -50,6 +50,10 @@ zeroize = { version = "=1.9.1", features = ["alloc"] }
 x509-parser = "=0.18.1"
 ctrlc = { version = "=3.5.2", features = ["termination"] }
 
+[dev-dependencies]
+# Fixtures mark their throw-away vaults as Rust-created (test-only helper).
+symvault-store = { path = "../symvault-store", version = "=0.0.0", features = ["test-support"] }
+
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.191"
 signal-hook = "=0.4.5"

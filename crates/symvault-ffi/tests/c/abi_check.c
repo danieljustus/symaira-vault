@@ -46,6 +46,7 @@ static int32_t (*const write_entry)(const uint8_t *, size_t, const uint8_t *, si
 static int32_t (*const list_entries)(const uint8_t *, size_t, const uint8_t *, size_t,
                                      const uint8_t *, size_t, SvBuf *, SvBuf *) =
     symvault_list_entries_json;
+static int32_t (*const set_backup_dir)(const uint8_t *, size_t, SvBuf *) = symvault_set_backup_dir;
 static int32_t (*const verify_manifest)(const uint8_t *, size_t, const uint8_t *, size_t, int32_t *,
                                         SvBuf *) = symvault_verify_manifest_integrity;
 
@@ -90,6 +91,14 @@ int main(int argc, char **argv) {
     SvBuf out, err;
 
     CHECK(symvault_ffi_abi_version() == 1);
+
+    /* A relative backup directory is refused; an empty one restores the default. */
+    err = empty();
+    CHECK(set_backup_dir((const uint8_t *)"rel", 3, &err) == SYMVAULT_ERR && err.len > 0);
+    symvault_buf_free(err);
+    err = empty();
+    CHECK(set_backup_dir(NULL, 0, &err) == SYMVAULT_OK && err.len == 0);
+    symvault_buf_free(err);
 
     out = empty(); err = empty();
     CHECK(generate_identity(&out, &err) == SYMVAULT_OK);

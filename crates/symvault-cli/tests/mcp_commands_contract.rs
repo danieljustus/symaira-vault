@@ -71,7 +71,11 @@ fn unix_platform_approval_pty_acceptance() {
     fs::set_permissions(&identity_path, fs::Permissions::from_mode(0o600))
         .expect("restrict synthetic identity permissions");
 
-    let store = Store::open(&vault, &identity).expect("open synthetic vault");
+    let store = Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&vault),
+        &identity,
+    )
+    .expect("open synthetic vault");
     store
         .write_new_entry(
             "fixture",
@@ -303,10 +307,13 @@ fn unix_platform_approval_pty_acceptance() {
         }
     };
     let read_fixture = || {
-        Store::open(&vault, &identity)
-            .expect("reopen synthetic vault")
-            .get("fixture", &identity)
-            .expect("read synthetic entry")
+        Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&vault),
+            &identity,
+        )
+        .expect("reopen synthetic vault")
+        .get("fixture", &identity)
+        .expect("read synthetic entry")
     };
 
     const INIT: &str = concat!(
@@ -939,7 +946,11 @@ fn run_source_bound_api_template_fixture(before_setup: impl FnOnce()) {
             .expect("write synthetic identity marker");
         fs::create_dir(root.join("entries")).expect("create synthetic entry directory");
         let identity = generate_identity();
-        let store = Store::open(&root, &identity).expect("open synthetic encrypted store");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .expect("open synthetic encrypted store");
         if with_entry {
             let entry_fields = case.entry_fields.as_ref().and_then(Value::as_object)
                 .map(|fields| fields.iter().map(|(key, value)| (key.clone(), value.clone())).collect())

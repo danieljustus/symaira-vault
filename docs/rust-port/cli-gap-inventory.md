@@ -718,6 +718,110 @@ binary cannot report Touch ID), and it SKIPs visibly without `SYMVAULT_OUTPUT_MO
   in the generator digest, the rule-9 note and the five `symvault-version.1` hashes. The unit test pins the
   shapes that must not be rewritten.
 
+## DATA-SAFETY-GATE (P30, DIST-005 / RUST-014 acceptance), 2026-11-02
+
+Maintainer decision D1: the first vault-**mutating** operation Rust performs on a vault that carries no
+Rust marker is preceded by a verified backup; reads never trigger it. Verified by
+`make data-safety-differential` (`scripts/rust-port/data_safety_contract.py`, real Rust CLI + non-CGO Go
+oracle, disposable HOME/XDG roots).
+
+**Design.**
+
+- *Marker*: `.symvault-rust` in the vault root, JSON (`schema`, `kind` = `go-vault-backup` | `rust-created`,
+  `created_at`, `vault_id`, and for the former the backup `path`, `sha256`, `bytes`, `files`). Written atomically
+  (temp file, fsync, rename, directory fsync, `0600`) only after the backup verified. `init` (CLI and FFI
+  `InitVault`) writes `rust-created` at once; an empty directory needs no
+  backup. **A marker is evidence only for the vault it was written for** (fix round 2): `vault_id` is SHA-256
+  over the canonical vault path and (Unix) the inode of the vault directory; a marker with another or no id
+  (`cp -r`, git clone, restore into a new directory, a recreated directory, hand-made) does not count. A
+  `go-vault-backup` marker also has to prove its backup: a regular file (no symlink) with the recorded size
+  and SHA-256 (hashed once per process). A `rust-created` marker must carry no backup. Anything else, or a
+  marker that does not parse, means "no marker" and the vault is backed up again. `identity.age` is
+  deliberately **not** part of the id: Rust rewrites it itself (KDF migration, password change, zero-key
+  heal), and an id that changed under those operations made the gate fire between the identity rewrite and
+  the writes that depend on it (the migrate-kdf tests caught this in the first attempt). The marker is kept out of git (`.git/info/exclude`, also on `git init`).
+- *Choke points* (`symvault-store::data_safety`): `open_root_write_lock` (every store/manifest/grant/token/journal
+  write; the write lock is held across backup, restore check and marker); `Store::data_safety_gate` before the
+  first filesystem mutation of entry publication, `write_new_entry` and delete (Go publishes entries **outside**
+  the lock, so the lock alone was not enough: the first harness run found the entry already in the backup);
+  legacy-layout migration (`migrate_legacy`, a read-triggered rename of entry files) and the zero-key heal
+  (`rewrite_identity`); `symvault_sync::safeio` (`write_atomic`, `open_append`, `secure_delete`, `create_dir_all`:
+  recipients, device/pairing files, policies, identity rewrites; the vault is the nearest ancestor with an
+  `identity.age`); `Config::save_to` through a registered pre-save hook (vault `config.yaml`); `git pull`, `git sync --force`, `GitRepository::commit` (index, `.gitignore`), `remote add` and
+  `push --set-upstream` (both rewrite `.git/config`; `symvault remote init`); the audit helpers' destructive steps
+  (legacy `audit-hmac-key` unlink, log rotation by rename, key/log retention deletes; plain appends stay
+  ungated, they only add bytes); `restore` into an existing vault. The marker is looked up through the retained root capability, so a directory swapped in
+  under the path neither satisfies nor receives the gate. Refusal is `StoreError::DataSafety` / a `Error: ...
+  pre-migration backup failed, the vault was not modified: ...` message; nothing is written.
+- *Backup*: the Go-faithful `CreateBackup` port moved from `symvault-cli` to `symvault_sync::backup_writer` (CLI
+  `backup` re-exports it), `.git` included (Go's default; only `--exclude-git` omits it). Durability and crash
+  safety (fix round 2): the archive is written as `<final>.<pid>.partial`, `fsync`ed, verified, renamed to its
+  final name, and the backup directory is `fsync`ed before the receipt (and with it the marker) exists; a
+  process killed halfway (SIGXFSZ, power loss) leaves a `.partial` or a `.verify-<pid>-*` scratch directory,
+  never an incomplete final-named archive, and the next gate sweeps those of dead pids (live ones stay). Verification is the
+  production `symvault_sync::archive::restore` into a `0700` scratch directory next to the archive, then a
+  comparison of path set, file sha256/size and file mode with the live tree; the archive is removed on failure.
+  `symvault-store` cannot depend on `symvault-sync`, so the store defines `PreMutationGuard`; CLI, MCP
+  (`StoreReadOnlyAdapter::open`) and FFI (every open/init) call `symvault_sync::data_safety::install()`. A binary
+  without the guard refuses to touch an unmarked vault (fail closed).
+- *Location*: `$XDG_STATE_HOME/symvault/backups` (default `~/.local/state/symvault/backups`), file
+  `pre-rust-<vault>-<hash8>-<UTC stamp>.tar.gz` (`0600`, directories `0700`, umask-proof). Go has no default
+  backup directory (the `backup` command takes a path); the resolved data directory of a legacy install **is** the
+  vault (`~/.symvault`), so a backup there would archive itself and, in a git-synced vault, be pushed. A backup
+  directory inside the vault is refused. A host without `$HOME`/`$XDG_STATE_HOME` (the iOS app) sets the
+  directory explicitly: `symvault_sync::data_safety::set_backup_dir`, FFI `symvault_set_backup_dir` /
+  Swift `SymvaultFFI.setBackupDir` (additive, ABI revision stays 1). Excluding that directory from iCloud
+  backup is the host's responsibility; the archive holds the same encrypted files as the vault.
+
+**Findings recorded, not hidden.**
+
+1. Go's restore (kept) retains only `mode & 0600` of a file and recreates directories `0700`; verification
+   compares file modes through that mask and directories by presence (`.git/HEAD` 0644 restores as 0600).
+2. Go's own reads create the empty `.symvault-migrated` and append to `audit-symvault.log` in the vault. They
+   stay ungated (empty file / append-only, hash-chained); the harness allows exactly those two and asserts
+   everything else is byte-identical. The audit appends of a mutating command can precede the backup; the backup
+   then contains them and the restore comparison treats the log as a prefix-extension.
+3. Not gated (derived or outside the vault): the encrypted search index, agent/config files outside the vault,
+   session caches. A mutation path that writes vault files without `safeio`, the store, `Config::save_to`,
+   `git pull` or `restore` would bypass the gate; the harness sweep (set, delete, file add, recipients add/remove,
+   policy apply, agent token new, migrate pseudonymize, device pair, import, **remote init on a git-backed Go
+   vault**) asserts "tree changed => marker + backup that restores to the pre-command tree" for the commands it
+   runs. `remote init` was an ungated `.git/config` rewrite in the first round (found by review) and is now
+   gated in `GitRepository::{add_remote, push, commit, force_pull}`. Not individually swept: auth
+   rotate-passphrase, migrate kdf/v4, intake, `device accept`, `device approval-pair` (they pass through
+   `safeio`/the store lock, same primitives as the swept `device pair`/`import`), `approval decide` (talks to
+   a running server; its queue is in memory, no vault file), `share` grants (CLI has only `revoke`, which needs
+   a grant that only the Rust MCP creates).
+4. Test isolation (fix round 2): the first round let FFI fixture replays reach the gate for a vault dir named
+   `missing` and wrote `pre-rust-missing-*` into the developer's real state directory. Every test binary that
+   can reach the gate now either pre-marks its vaults or sends backups to a throw-away directory
+   (`tests/common::isolate_backups` through `set_backup_dir`, which also asserts the resolved directory is
+   inside the sandbox); the check is run by executing the suites with a scratch `HOME` and looking for
+   `.local/state/symvault`. `test_support_pre_marked` is behind the `test-support` cargo feature, enabled only
+   by the crates' `dev-dependencies`, so no production build contains it.
+
+**Harness** (`make data-safety-differential`): seeds = frozen `mobilebind.json` vault, Go `init`+`set` vault
+(has `.git`), Go zero-key identity. Per seed: read battery leaves the tree identical (marker/backup absent);
+first `set` -> one backup + marker with matching sha256/size/mode; `restore` of that archive into a fresh dir
+reproduces the pre-mutation tree; second `set` makes no second backup; Go reads and writes afterwards (D2).
+Zero-key: `list` heals, backup precedes it and restores the zero-key identity, Go opens the healed vault. Eleven
+mutators swept (including `remote init`: the live `.git/config` has the remote, the restored backup's does
+not). Negative controls: unwritable backup directory (refused, tree untouched, retry succeeds);
+corrupted archive through `crates/symvault-sync/examples/data_safety_probe` (refused, no marker, archive removed);
+same corruption with the restore verification short-circuited (gate accepts; the harness's independent
+restore comparison must fail); marker binding (a go-vault-backup marker and a rust-created marker copied from
+other vaults, and a go-vault-backup marker whose backup is a foreign file / `/etc/hosts`, has a wrong sha256, a
+wrong size or no vault id: each one triggers a fresh backup and a valid marker); crash leftovers (`.partial`
+and `.verify-*` of a dead pid swept, a live pid's kept).
+
+**Normalizations changed (documented D1 differences).** Go-parity tree comparisons look past the
+`.symvault-rust` marker and the `home/.local/state/symvault` backup subtree: `zero_key_differential.rs`,
+`export_backup_restore_contract.rs`, `output_modes.rs` (each through a local `d1_artifact`), and the FFI replay
+(`tests/common/mod.rs`, marker only, seeds pre-marked). Store/MCP/sync/CLI test fixtures that build vaults with
+the store API are pre-marked with `symvault_store::data_safety::test_support_pre_marked` (feature
+`test-support`, dev-dependencies only); the store crate's own unit
+tests run with the gate off (`cfg(test)`) except `data_safety::tests`.
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate

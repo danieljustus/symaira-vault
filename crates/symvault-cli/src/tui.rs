@@ -855,7 +855,11 @@ mod tests {
         .unwrap();
         fs::write(root.path().join("identity.age"), b"private fixture marker").unwrap();
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root.path()),
+            &identity,
+        )
+        .unwrap();
         for path in ["alpha/login", "beta/api"] {
             let mut entry = Entry {
                 path: path.into(),

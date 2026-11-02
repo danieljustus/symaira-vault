@@ -1030,7 +1030,11 @@ mod tests {
         path: &str,
         data: BTreeMap<String, Value>,
     ) {
-        let store = Store::open(root, identity).expect("open temporary vault");
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(root),
+            identity,
+        )
+        .expect("open temporary vault");
         store
             .write_new_entry(
                 path,

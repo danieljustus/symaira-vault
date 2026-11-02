@@ -1373,6 +1373,9 @@ fn run_cli() -> ExitCode {
     // Go's `init` in internal/cli: config deprecation warnings go to stderr.
     // Installed before anything can load a config, `__complete` included.
     symvault_core::config::set_warn_hook(config::warn_sink);
+    // D1: the first mutation of a vault without a Rust marker is preceded by a
+    // verified backup; the store refuses to proceed without this guard.
+    symvault_sync::data_safety::install();
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(index) = completion_protocol::request_index(&args) {
         return completion_protocol::run(&args, index);
@@ -4542,6 +4545,12 @@ fn run_restore(
 ) -> ExitCode {
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
+        // Restore overwrites vault files in place: an existing vault without a
+        // Rust marker is backed up first (a missing archive keeps Go's error).
+        if fs::metadata(archive).is_ok() {
+            symvault_store::data_safety::ensure_marker(&vault)
+                .map_err(|error| error.to_string())?;
+        }
         backup_commands::restore(&vault, archive)?;
         require_initialized(&vault)?;
         if !quiet {

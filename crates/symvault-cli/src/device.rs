@@ -1662,6 +1662,7 @@ mod tests {
             encrypt_identity_scrypt(&identity, &SecretBytes::new(passphrase.as_bytes()), 10)
                 .unwrap();
         fs::write(root.join("identity.age"), encrypted).unwrap();
+        symvault_store::data_safety::test_support_pre_marked(&root);
         (root, identity, passphrase)
     }
 
@@ -1727,7 +1728,11 @@ mod tests {
         let backup = entries.join(".a.age.reencrypt-1-0-0.backup");
         let original = b"original ciphertext";
         let replacement = b"replacement ciphertext";
-        let store = symvault_store::Store::open(&root, &identity).unwrap();
+        let store = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         fs::write(&backup, original).unwrap();
         if after_install {
             fs::write(&target, replacement).unwrap();
@@ -1747,6 +1752,7 @@ mod tests {
                 installed: after_install,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
         assert!(
             backup.is_file(),
@@ -1795,8 +1801,13 @@ mod tests {
                 installed: true,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
-        let _store = symvault_store::Store::open(&root, &identity).unwrap();
+        let _store = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         assert_eq!(fs::read(&target).unwrap(), replacement);
         assert!(!backup.exists());
         assert!(!journal_path(&root).exists());
@@ -1836,9 +1847,14 @@ mod tests {
                     installed: false,
                 }],
             };
+            symvault_store::data_safety::test_support_pre_marked(&root);
             persist_reencrypt_journal(&root, &journal).unwrap();
 
-            symvault_store::Store::open(&root, &identity).unwrap();
+            symvault_store::Store::open(
+                symvault_store::data_safety::test_support_pre_marked(&root),
+                &identity,
+            )
+            .unwrap();
             assert_eq!(fs::read(&target).unwrap(), original);
             assert!(!temp.exists());
             assert!(!backup.exists());
@@ -1896,9 +1912,14 @@ mod tests {
                 installed: false,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
 
-        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        let error = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("no ciphertext digest"));
         assert!(target.is_file());
         assert!(backup.is_file());
@@ -1924,8 +1945,13 @@ mod tests {
                 installed: true,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
-        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        let error = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("unsafe"));
         assert_eq!(fs::read(&outside).unwrap(), b"outside original");
         let _ = fs::remove_dir_all(root);
@@ -1945,8 +1971,13 @@ mod tests {
                 installed: true,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
-        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        let error = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("unsafe"));
         assert_eq!(fs::read(&target).unwrap(), b"original");
         let _ = fs::remove_dir_all(root);
@@ -1976,8 +2007,13 @@ mod tests {
                 installed: true,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
-        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        let error = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("symlink"));
         assert_eq!(fs::read(&outside).unwrap(), b"outside original");
         let _ = fs::remove_dir_all(root);
@@ -1994,7 +2030,11 @@ mod tests {
         let replacement = b"replacement ciphertext";
         let manifest = root.join("manifest.age");
         let old_manifest = b"old manifest";
-        let store = symvault_store::Store::open(&root, &identity).unwrap();
+        let store = symvault_store::Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
         fs::write(&target, replacement).unwrap();
         fs::write(&backup, original).unwrap();
         fs::write(&manifest, old_manifest).unwrap();
@@ -2008,6 +2048,7 @@ mod tests {
                 installed: true,
             }],
         };
+        symvault_store::data_safety::test_support_pre_marked(&root);
         persist_reencrypt_journal(&root, &journal).unwrap();
         let snapshot = snapshot_file(&manifest).unwrap().unwrap();
         store
@@ -2028,7 +2069,13 @@ mod tests {
     #[test]
     fn store_write_lock_blocks_concurrent_writer() {
         let (root, identity, _passphrase) = encrypted_fixture();
-        let store = Arc::new(symvault_store::Store::open(&root, &identity).unwrap());
+        let store = Arc::new(
+            symvault_store::Store::open(
+                symvault_store::data_safety::test_support_pre_marked(&root),
+                &identity,
+            )
+            .unwrap(),
+        );
         let (held_tx, held_rx) = mpsc::channel();
         let (release_tx, release_rx) = mpsc::channel();
         let holder_store = Arc::clone(&store);
@@ -2252,6 +2299,7 @@ mod tests {
             let (temp, backup) = journaled_artifact_paths(&fixture.root, &fixture.target);
             let mut journal =
                 ReencryptJournal::new(&fixture.root, std::slice::from_ref(&fixture.file)).unwrap();
+            symvault_store::data_safety::test_support_pre_marked(&fixture.root);
             persist_reencrypt_journal(&fixture.root, &journal).unwrap();
 
             if boundary >= Boundary::OwnershipPersistedBeforeTempCreate {
@@ -2259,6 +2307,7 @@ mod tests {
                 entry.digest = digest(&fixture.file.replacement);
                 entry.temp = journal_string(&fixture.root, &temp).unwrap();
                 entry.backup = journal_string(&fixture.root, &backup).unwrap();
+                symvault_store::data_safety::test_support_pre_marked(&fixture.root);
                 persist_reencrypt_journal(&fixture.root, &journal).unwrap();
                 let durable = load_reencrypt_journal(&fixture.root).unwrap();
                 assert_eq!(durable.entries[0].temp, journal.entries[0].temp);
@@ -2293,6 +2342,7 @@ mod tests {
             }
 
             if boundary >= Boundary::SecondJournalPersisted {
+                symvault_store::data_safety::test_support_pre_marked(&fixture.root);
                 persist_reencrypt_journal(&fixture.root, &journal).unwrap();
                 // The second record is intentionally byte-identical: ownership
                 // must already be durable before the staged file is created.
@@ -2318,6 +2368,7 @@ mod tests {
             if boundary >= Boundary::InstalledJournalPersisted {
                 journal.entries[0].temp.clear();
                 journal.entries[0].installed = true;
+                symvault_store::data_safety::test_support_pre_marked(&fixture.root);
                 persist_reencrypt_journal(&fixture.root, &journal).unwrap();
             }
             if boundary >= Boundary::ArtifactsCleanedBeforeJournalRemoval {
@@ -2326,7 +2377,13 @@ mod tests {
 
             // Store::open runs the production recovery path against each
             // persisted snapshot, rather than testing a model of recovery.
-            drop(symvault_store::Store::open(&fixture.root, &fixture.identity).unwrap());
+            drop(
+                symvault_store::Store::open(
+                    symvault_store::data_safety::test_support_pre_marked(&fixture.root),
+                    &fixture.identity,
+                )
+                .unwrap(),
+            );
 
             let target_bytes = fs::read(&fixture.target).expect("recovered target exists");
             if boundary >= Boundary::ReplacementInstalledBeforeInstallJournal {
@@ -2384,6 +2441,7 @@ mod tests {
     #[test]
     fn production_reencrypt_flow_preserves_unowned_reencrypt_names() {
         let fixture = synthetic_reencrypt_vault();
+        symvault_store::data_safety::test_support_pre_marked(&fixture.root);
         let recipients = vec![
             parse_recipient(&recipient_string(&fixture.identity)).unwrap(),
             parse_recipient(&recipient_string(&fixture.new_identity)).unwrap(),

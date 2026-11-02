@@ -97,6 +97,12 @@ int32_t symvault_init_vault(const uint8_t *vault_dir, size_t vault_dir_len,
                             const uint8_t *passphrase, size_t passphrase_len,
                             SvBuf *err);
 
+/* Rust-only: directory for the verified pre-migration backup of a Go-created
+ * vault (empty path = $XDG_STATE_HOME/$HOME default). Call before the first
+ * write; a host without a usable home directory must set it. Excluding the
+ * directory from iCloud backup is the host's responsibility. */
+int32_t symvault_set_backup_dir(const uint8_t *dir, size_t dir_len, SvBuf *err);
+
 /* OpenVaultWithPassphrase(vaultDir, passphrase) (string, error) */
 int32_t symvault_open_vault_with_passphrase(const uint8_t *vault_dir, size_t vault_dir_len,
                                             const uint8_t *passphrase, size_t passphrase_len,

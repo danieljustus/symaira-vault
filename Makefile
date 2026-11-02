@@ -896,6 +896,19 @@ store-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json
 	$(CARGO) test -p symvault-store --locked
 
+# DIST-005 / RUST-014 (decision D1): the first mutation of a vault without a
+# Rust marker is preceded by a verified backup. Runs the real Rust CLI and the
+# Go oracle over Go-created seed vaults (frozen mobilebind seed, Go `init`, the
+# Go zero-key identity) and exercises the negative controls.
+DATA_SAFETY_GO_BINARY := target/port/symvault-go-data-safety
+.PHONY: data-safety-differential
+data-safety-differential:
+	@mkdir -p "$(dir $(DATA_SAFETY_GO_BINARY))"
+	CGO_ENABLED=0 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=true -o "$(DATA_SAFETY_GO_BINARY)" .
+	$(CARGO) build -p symvault-cli --bin symvault --locked
+	$(CARGO) build -p symvault-sync --example data_safety_probe --locked
+	python3 -I scripts/rust-port/data_safety_contract.py --rust "$(RUST_BINARY)" --go "$(DATA_SAFETY_GO_BINARY)" --probe "$(CARGO_TARGET_DIR)/debug/examples/data_safety_probe"
+
 audit-fixtures-generate:
 	UPDATE_AUDIT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
 
@@ -1043,6 +1056,7 @@ help:
 	@echo "  crypto-fuzz-smoke - Run the bounded Argon2id parser fuzz smoke"
 	@echo "  store-reopen-fixture  - Generate the deterministic Go↔Rust reopen fixture"
 	@echo "  store-differential - Verify Go↔Rust storage reopen and read-only fixtures"
+	@echo "  data-safety-differential - Verify the pre-Rust-mutation backup gate over Go-created vaults"
 	@echo "  audit-fixtures-generate - Generate the production-Go audit fixture"
 	@echo "  audit-fixtures-check - Verify audit fixture provenance and drift"
 	@echo "  audit-differential - Verify Go↔Rust audit chain, rotation, and export"

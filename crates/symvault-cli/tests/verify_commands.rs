@@ -15,7 +15,11 @@ fn verify_reports_missing_manifest_and_tampering_without_repairing_it() {
             .unwrap()
             .starts_with("No manifest found.")
     );
-    let store = symvault_store::Store::open(&root, &identity).unwrap();
+    let store = symvault_store::Store::open(
+        symvault_store::data_safety::test_support_pre_marked(&root),
+        &identity,
+    )
+    .unwrap();
     store
         .write_entry_with_recipients_at(
             "item",

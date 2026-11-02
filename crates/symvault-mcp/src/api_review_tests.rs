@@ -475,7 +475,7 @@ fn review_assert_substitution_echo_with_bytes(
         listener.local_addr().unwrap()
     )).unwrap();
     let identity = symvault_crypto::generate_identity();
-    let store = Store::open(root.path(), &identity).unwrap();
+    let store = Store::open(symvault_store::data_safety::test_support_pre_marked(root.path()), &identity).unwrap();
     let mut data = BTreeMap::from([
         ("credential".into(), json!(credential)),
         ("param_name".into(), json!("auth_token")),
@@ -607,7 +607,7 @@ fn api_review_entry_policy_matches_corrected_go_observations() {
         fs::write(root.path().join("config.yaml"), b"vault:\n  format_version: 2\n").unwrap();
         fs::write(root.path().join("identity.age"), b"fixture marker").unwrap();
         let identity = symvault_crypto::generate_identity();
-        let store = Store::open(root.path(), &identity).unwrap();
+        let store = Store::open(symvault_store::data_safety::test_support_pre_marked(root.path()), &identity).unwrap();
         store.write_new_entry(
             "api-policy",
             &Entry {
