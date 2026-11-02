@@ -18,6 +18,11 @@
 # should a signal or a defect ever change tracked files of this tree, the guard
 # below restores them (when the run started clean) and fails the run.
 set -uo pipefail
+# Job control: each target runs in its own process group with default signal
+# dispositions. A plain `&` in a non-interactive shell starts the job with SIGINT
+# ignored, and the signal contracts (signal-process-contract) observe exactly
+# that inheritance. The group also lets a signal reach the whole target tree.
+set -m
 
 lane="${1:-}"
 case "$lane" in macos|linux) ;; *) echo "usage: $0 macos|linux" >&2; exit 2 ;; esac
@@ -69,7 +74,7 @@ child=""
 # shellcheck disable=SC2329 # invoked by the TERM/INT traps
 interrupted() { # exit status for the signal
   trap - TERM INT
-  if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null; wait "$child" 2>/dev/null; fi
+  if [ -n "$child" ]; then kill -TERM -- "-$child" 2>/dev/null; wait "$child" 2>/dev/null; fi
   guard
   echo "area-summary: lane=$lane interrupted" >&2
   exit "$1"
@@ -83,8 +88,9 @@ ran=""
 for target in $targets; do
   started=$SECONDS
   echo "area-target-begin: $target"
-  # A background job so that a signal reaches the trap while make runs; stdin
-  # stays attached (non-interactive background jobs default to /dev/null).
+  # A background job (own process group, see `set -m`) so that a signal reaches
+  # the trap while make runs; stdin stays attached (non-interactive background
+  # jobs default to /dev/null).
   # shellcheck disable=SC2086
   ${MAKE_PREFIX:-} make --no-print-directory "$target" <&0 &
   child=$!

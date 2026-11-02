@@ -1007,6 +1007,10 @@ AREA_ORACLE := SYMVAULT_ORACLE_BUILD_RUNNER=$(abspath $(AREA_ORACLE_RUNNER))
 define AREA_LOGGED
 > "$(AREA_EVIDENCE)/$(1)" 2> "$(AREA_EVIDENCE)/$(1).stderr" || { cat "$(AREA_EVIDENCE)/$(1)" "$(AREA_EVIDENCE)/$(1).stderr"; exit 1; }; cat "$(AREA_EVIDENCE)/$(1)"
 endef
+# The number of `migrate_kdf_commands::tests` the kdf workflow asserted as "9
+# passed"; a tenth (`policy_migration_wraps_config_failures_like_go`) was added
+# since, so the gate asserts 10.
+AREA_KDF_MIGRATION_TESTS := 10
 # The unit-test count of `cargo test -p symvault-mcp --all-targets` (non-Windows)
 # that the HTTP, MCP and API workflows assert exactly. They still hard-code 246,
 # which the tree outgrew (296 at the merge of local/rust-port 6ac34423); the
@@ -1365,7 +1369,7 @@ kdf-resource-policy-contract:
 		policy_migration_wrong_passphrase_and_old_backup_do_not_mutate_files \
 		policy_migration_restores_both_files_after_post_replacement_failure \
 		policy_migration_accepts_null_vault_configuration \
-		--contains "9 passed; 0 failed; 0 ignored"
+		--contains "$(AREA_KDF_MIGRATION_TESTS) passed; 0 failed; 0 ignored"
 	$(AREA_GO) CGO_ENABLED=0 $(GO) build -o "$(AREA_EVIDENCE)/kdf-policy/go-cli" .
 	$(AREA_ENV) $(AREA_GO) SYMVAULT_GO_BINARY="$(abspath $(AREA_EVIDENCE))/kdf-policy/go-cli" \
 		$(CARGO) test -p symvault-cli --test migrate_kdf_differential --locked -- --ignored $(call AREA_LOGGED,kdf-cli.log)
