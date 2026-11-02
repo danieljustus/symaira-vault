@@ -4,8 +4,12 @@
 # on macOS and in a native Linux container, and appends one receipt per run.
 #
 #   scripts/rust-port/local-gate.sh macos|linux|all
+#   scripts/rust-port/local-gate.sh macos-area|linux-area   (only the local-area
+#       targets of that lane; for iteration, negative controls and slices that
+#       touch an area workflow's contract)
 #
 # Env: LOCAL_GATE_LOG_DIR / LOCAL_GATE_RECEIPTS (defaults below), RUN_MIRI=1,
+#      LOCAL_AREA_ONLY (subset of local-area targets, see local-gate-area.sh),
 #      ALLOW_DIRTY=1 (receipt is then marked dirty and is not evidence),
 #      MAKE_PREFIX (e.g. a build launcher such as dev-external).
 set -euo pipefail
@@ -24,9 +28,24 @@ receipts="${LOCAL_GATE_RECEIPTS:-$log_dir/receipts.jsonl}"
 mkdir -p "$log_dir" "$(dirname "$receipts")"
 image=symvault-local-gate:1
 
+# Area targets that ran, as "name:exit,..." from the log's `area-target:`
+# lines (local-gate-area.sh), so a receipt names what it covers.
+area_targets() { # log
+  sed -n 's/^area-target: \([^ ]*\) exit=\([0-9]*\).*/\1:\2/p' "$1" | paste -sd, -
+}
+
 receipt() { # target exit started log
-  printf '{"sha":"%s","dirty":%s,"target":"%s","exit":%s,"started":"%s","finished":"%s","log":"%s"}\n' \
-    "$sha" "$dirty" "$1" "$2" "$3" "$(date -u +%FT%TZ)" "$4" >> "$receipts"
+  printf '{"sha":"%s","dirty":%s,"target":"%s","exit":%s,"started":"%s","finished":"%s","log":"%s","area_targets":"%s"}\n' \
+    "$sha" "$dirty" "$1" "$2" "$3" "$(date -u +%FT%TZ)" "$4" "$(area_targets "$4")" >> "$receipts"
+}
+
+# Targets no ci.yml job reaches (Makefile LOCAL_AREA_TARGETS, macOS lane): one
+# line per target in the log, every target runs, status 1 if any failed.
+# shellcheck disable=SC2329 # invoked as "run_$target"
+run_macos_area() {
+  [ "$(uname -s)/$(uname -m)" = Darwin/arm64 ] || { echo "local-gate: macos-area needs native Darwin/arm64" >&2; return 2; }
+  # shellcheck disable=SC2154 # root is set above
+  "$root/scripts/rust-port/local-gate-area.sh" macos
 }
 
 # shellcheck disable=SC2329 # invoked as "run_$target"
@@ -41,9 +60,7 @@ run_macos() {
   # ponytail: only this target uses the internal per-user temp dir.
   ${MAKE_PREFIX:-} make config-cli-differential TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
   ${MAKE_PREFIX:-} make mcp-approval-pty-acceptance
-  # Targets no ci.yml job reaches (Makefile LOCAL_AREA_TARGETS). -k reports
-  # every failing target, not just the first.
-  ${MAKE_PREFIX:-} make -k local-area
+  run_macos_area
   # Go is the frozen oracle: test it only when this branch changed Go code.
   # Pin the toolchain CI uses (go.mod `toolchain`, = Makefile
   # BUILD_GO_TOOLCHAIN): direct `go test` bypasses the Makefile export, and a
@@ -71,34 +88,46 @@ run_macos() {
     go test -timeout=30m -skip 'TestFlow|TestBinaryE2E|Integration' ./...
 }
 
-# shellcheck disable=SC2329 # invoked as "run_$target"
-run_linux() {
+# Docker command shared by the full linux lane and linux-area: the same absolute
+# paths as the host so a worktree's .git file still resolves, one cargo target
+# volume per worktree (cargo names workspace-member artifacts by
+# workspace-relative path, so a shared target dir reuses test binaries whose
+# env!("CARGO_MANIFEST_DIR") points into another or a removed worktree).
+# shellcheck disable=SC2329 # called from run_linux and run_linux_area
+linux_docker() { # shell command run inside the container
   docker build -q -t "$image" scripts/rust-port/local-gate >/dev/null
   common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
-  targets="rust-gates-core port-contract mcp-approval-pty-acceptance local-area"
-  # ponytail: Miri takes about an hour; opt in for slices touching
-  # symvault-core. The closing hosted CI run always includes it.
-  [ "${RUN_MIRI:-0}" = 1 ] && targets="$targets rust-miri"
-  # One target volume per worktree: cargo names workspace-member artifacts
-  # by workspace-relative path, so a shared target dir reuses test binaries
-  # whose env!("CARGO_MANIFEST_DIR") points into another (or a removed)
-  # worktree, and fixture reads fail with ENOENT.
   target_volume="symvault-gate-target-$(printf '%s' "$root" | shasum -a 256 | cut -c1-12)"
-  # shellcheck disable=SC2086 # $targets is a word list
-  # Same absolute paths as the host so a worktree's .git file still resolves.
   docker run --rm -v "$root:$root" -v "$common:$common" -w "$root" \
     -v symvault-gate-registry:/home/dev/.cargo/registry \
     -v symvault-gate-go:/home/dev/go \
     -v "$target_volume:/home/dev/target" \
     -e CARGO_TARGET_DIR=/home/dev/target \
     -e CARGO_INCREMENTAL=0 -e GOCACHE=/home/dev/go/cache \
-    -e RUST_TEST_THREADS=1 \
-    "$image" make $targets MIRI_TARGET_DIR=/home/dev/target/miri
+    -e RUST_TEST_THREADS=1 -e LOCAL_AREA_ONLY="${LOCAL_AREA_ONLY:-}" \
+    "$image" bash -c "$1"
+}
+
+# shellcheck disable=SC2329 # invoked as "run_$target"
+run_linux_area() {
+  linux_docker 'scripts/rust-port/local-gate-area.sh linux'
+}
+
+# shellcheck disable=SC2329 # invoked as "run_$target"
+run_linux() {
+  targets="rust-gates-core port-contract mcp-approval-pty-acceptance"
+  # local-area runs target by target (local-gate-area.sh) so the log names
+  # each one; set -e stops the lane at the first failing make above it.
+  cmd="set -e; make $targets; scripts/rust-port/local-gate-area.sh linux"
+  # ponytail: Miri takes about an hour; opt in for slices touching
+  # symvault-core. The closing hosted CI run always includes it.
+  [ "${RUN_MIRI:-0}" = 1 ] && cmd="$cmd; make rust-miri MIRI_TARGET_DIR=/home/dev/target/miri"
+  linux_docker "$cmd"
 }
 
 status=0
 for target in $( [ "$mode" = all ] && echo "macos linux" || echo "$mode" ); do
-  case "$target" in macos|linux) ;; *) echo "usage: $0 macos|linux|all" >&2; exit 2 ;; esac
+  case "$target" in macos|linux|macos-area|linux-area) ;; *) echo "usage: $0 macos|linux|all|macos-area|linux-area" >&2; exit 2 ;; esac
   log="$log_dir/${target}-${sha:0:8}.log"
   started="$(date -u +%FT%TZ)"
   echo "local-gate: $target @ ${sha:0:8} -> $log"
@@ -106,7 +135,7 @@ for target in $( [ "$mode" = all ] && echo "macos linux" || echo "$mode" ); do
   # would disable it inside the function too, and a failed `make` would then
   # be masked by the exit status of the function's last command.
   set +e
-  (set -e; "run_$target") > "$log" 2>&1
+  (set -e; "run_${target//-/_}") > "$log" 2>&1
   ec=$?
   set -e
   receipt "$target" "$ec" "$started" "$log"

@@ -38,3 +38,12 @@ RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-to
  && git config --global safe.directory '*' \
  && git --version \
  && mkdir -p /home/dev/.cargo/registry /home/dev/go /home/dev/target
+
+# Area process contracts (make local-area, Linux lane): the workflows' own
+# apt-get steps -- rust-cli-artifacts.yml (zsh, fish; bash ships with the base)
+# and rust-tui.yml (xvfb, xclip) -- plus python3-venv for the TUI harness venv
+# (pyte is installed into a venv under the target volume at run time).
+# Appended last so the layers above stay cached.
+RUN sudo apt-get update \
+ && sudo apt-get install -y --no-install-recommends zsh fish xvfb xclip python3-venv \
+ && sudo rm -rf /var/lib/apt/lists/*
