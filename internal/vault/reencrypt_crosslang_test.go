@@ -159,6 +159,10 @@ func TestReencryptJournalGoRustIntegration(t *testing.T) {
 			"SYMVAULT_PASSPHRASE="+string(passphrase),
 			"HOME="+filepath.Join(root, "home"),
 			"USERPROFILE="+filepath.Join(root, "home"),
+			// The Go-created vault is mutated by the Rust CLI, so the data-safety
+			// gate backs it up first; the archive must live outside the vault
+			// (HOME is inside it) or the gate refuses.
+			"XDG_STATE_HOME="+t.TempDir(),
 		)
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
