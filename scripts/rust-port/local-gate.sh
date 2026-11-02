@@ -56,7 +56,10 @@ run_macos() {
   go_changed="$(git diff --name-only origin/main -- '*.go' go.mod go.sum)"
   [ -n "$go_changed" ] || return 0
   # shellcheck disable=SC2046 # one ./dir argument per changed package
-  go test -race -count=1 $(xargs -n1 dirname <<<"$go_changed" | grep -v '^\.$' | sort -u | sed 's|^|./|')
+  # Through the same wrapper as the full suite (and `make test-race`): the
+  # vault-containing cross-language tests need the Rust CLI binary it supplies.
+  ${MAKE_PREFIX:-} python3 scripts/run_go_tests.py cargo -- \
+    go test -race -count=1 $(xargs -n1 dirname <<<"$go_changed" | grep -v '^\.$' | sort -u | sed 's|^|./|')
   # Changes outside scripts/ (leaf generator mains) also run the full suite
   # the way ci.yml `test` runs it on macOS: no -race, CGO off, 30m budget.
   # The full -race suite is CI's ubuntu job; under -race on this host

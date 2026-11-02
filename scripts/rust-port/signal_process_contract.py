@@ -183,8 +183,10 @@ def ending(returncode):
 # implementation (Go also creates .lock and manifest.age on open). Anything
 # else at the vault top level, and every name outside the vault, is
 # signal-relevant state: private TMPDIR files, CA directories, staging.
-VAULT_BASELINE = {".git", ".gitignore", ".lock", ".symvault-migrated", "config.yaml", "entries",
-                  "identity.age", "manifest.age"}
+# `.symvault-rust` is the declared D1 artifact (data-safety gate marker): a Rust
+# run marks the Go-created vault before its first mutation; Go leaves none.
+VAULT_BASELINE = {".git", ".gitignore", ".lock", ".symvault-migrated", ".symvault-rust", "config.yaml",
+                  "entries", "identity.age", "manifest.age"}
 
 
 def snapshot(home):
