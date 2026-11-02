@@ -1007,9 +1007,12 @@ AREA_ORACLE := SYMVAULT_ORACLE_BUILD_RUNNER=$(abspath $(AREA_ORACLE_RUNNER))
 define AREA_LOGGED
 > "$(AREA_EVIDENCE)/$(1)" 2> "$(AREA_EVIDENCE)/$(1).stderr" || { cat "$(AREA_EVIDENCE)/$(1)" "$(AREA_EVIDENCE)/$(1).stderr"; exit 1; }; cat "$(AREA_EVIDENCE)/$(1)"
 endef
-# The unit-test count of `cargo test -p symvault-mcp --all-targets` the HTTP,
-# MCP and API workflows asserted (non-Windows).
-AREA_MCP_TEST_COUNT := 246
+# The unit-test count of `cargo test -p symvault-mcp --all-targets` (non-Windows)
+# that the HTTP, MCP and API workflows assert exactly. They still hard-code 246,
+# which the tree outgrew (296 at the merge of local/rust-port 6ac34423); the
+# gate asserts the real count, so a shrunken run still fails. Raise it together
+# with the new tests (and the workflows' constant when they run again).
+AREA_MCP_TEST_COUNT := 296
 
 .PHONY: area-oracle-runner
 area-oracle-runner:

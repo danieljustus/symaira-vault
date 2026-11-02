@@ -48,13 +48,16 @@ trap cleanup EXIT
   || { echo "area-pairing: oracle Go is not go1.26.6" >&2; exit 1; }
 
 # build_oracle REV NAME: detached worktree of REV, binary at $work/NAME.
+# -buildvcs=false: `go build` stamps VCS state by running git in the source
+# tree, which fails (exit 128) in a worktree of a repository with extensions;
+# the stamp is not part of what the differentials compare.
 build_oracle() {
   local rev="$1" name="$2" tree="$work/$2-source"
   git worktree add --detach "$tree" "$rev" >/dev/null
   worktrees+=("$tree")
   [ "$(git -C "$tree" rev-parse HEAD)" = "$(git rev-parse "$rev^{commit}")" ] \
     || { echo "area-pairing: worktree for $rev is at the wrong commit" >&2; exit 1; }
-  GOTOOLCHAIN=go1.26.6 "$go" -C "$tree" build -o "$work/$name" .
+  GOTOOLCHAIN=go1.26.6 "$go" -C "$tree" build -buildvcs=false -o "$work/$name" .
   test -f "$work/$name"
 }
 
@@ -90,7 +93,7 @@ differential "$work/import-quarantine.log" "$work/go-cli-3232e31f" \
 $check log-ok "$work/import-quarantine.log" import_quarantine_matches_pinned_go_cli_batch_contract
 
 # Auth root-trust differential against the current Go oracle.
-GOTOOLCHAIN=go1.26.6 "$go" build -o "$work/go-auth" .
+GOTOOLCHAIN=go1.26.6 "$go" build -buildvcs=false -o "$work/go-auth" .
 differential "$work/auth-differential.log" "$work/go-auth" --test auth_differential auth_rotate
 
 # Startup-profile differential against the pinned Go source.
