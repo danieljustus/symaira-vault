@@ -44,6 +44,9 @@ fn write_vault(root: &Path, identity: &[u8], config: &[u8]) {
 fn run_with_input(binary: &Path, args: &[&str], root: &Path, input: &[u8]) -> Output {
     let home = root.join("home");
     fs::create_dir_all(&home).expect("home");
+    // The Rust CLI backs a Go-created vault up before its first mutation (D1);
+    // HOME is inside the vault, so the archive directory is moved outside it.
+    let state = tempfile::tempdir().expect("state dir");
     let mut child = Command::new(binary)
         .args(args)
         .env("HOME", &home)
@@ -51,6 +54,7 @@ fn run_with_input(binary: &Path, args: &[&str], root: &Path, input: &[u8]) -> Ou
         .env("XDG_CONFIG_HOME", home.join("config"))
         .env("XDG_DATA_HOME", home.join("data"))
         .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("XDG_STATE_HOME", state.path())
         .env("CI", "1")
         .env("SYMVAULT_TEST_KEYRING", "memory")
         .env_remove("SYMVAULT_PASSPHRASE")
