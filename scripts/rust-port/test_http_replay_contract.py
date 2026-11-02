@@ -39,9 +39,12 @@ def synthetic():
             raw_go = raw_rust = health() if name != 'route-head-health' else wire(200, b'', [('Content-Type', 'application/json')])
             if name == 'route-head-health':
                 raw_go = raw_rust = b'HTTP/1.1 200 OK\r\nContent-Length: 85\r\nContent-Type: application/json\r\n\r\n'
+        elif name in replay.INTERIM_ONLY:
+            raw_go = b'HTTP/1.1 100 Continue\r\n\r\n' + wire(200, b'same-' + name.encode())
+            raw_rust = wire(200, b'same-' + name.encode())
         elif name in replay.DECLARED:
             _, go_code, rust_code = replay.DECLARED[name]
-            raw_go = wire(go_code, b'go-' + name.encode()) if go_code != 100 else b'HTTP/1.1 100 Continue\r\n\r\n' + wire(200, b'ok')
+            raw_go = wire(go_code, b'go-' + name.encode())
             raw_rust = wire(rust_code, b'rust-' + name.encode()) if rust_code is not None else b''
         else:
             raw_go = raw_rust = wire(replay.EXPECT.get(name, 200), b'same-' + name.encode())
@@ -55,8 +58,9 @@ def synthetic():
 class ReplayContract(unittest.TestCase):
     def test_synthetic_policy_passes(self):
         go, rust = synthetic()
-        identical, declared, semantic = replay.compare(go, rust, PORT)
+        identical, declared, semantic, interim_only = replay.compare(go, rust, PORT)
         self.assertEqual(len(declared), len(replay.DECLARED))
+        self.assertEqual(sorted(c['case'] for c in interim_only), sorted(replay.INTERIM_ONLY))
         self.assertEqual(len(semantic), len(replay.HEALTH_CASES) - 1)
         self.assertGreater(len(identical), 100)
 
@@ -65,6 +69,24 @@ class ReplayContract(unittest.TestCase):
         index = next(i for i, r in enumerate(go) if r['case'] == 'method-GET')
         rust[index] = row('method-GET', wire(405, b'different'), base64.b64decode(go[index]['request_base64']))
         with self.assertRaisesRegex(AssertionError, 'undeclared difference'):
+            replay.compare(go, rust, PORT)
+
+    def test_interim_only_cases_assert_the_interim_line_and_identical_final(self):
+        # Rust starting to send the interim line makes the declaration stale.
+        go, rust = synthetic()
+        index = next(i for i, r in enumerate(go) if r['case'] == 'expect-100')
+        rust[index] = copy.deepcopy(go[index])
+        with self.assertRaisesRegex(AssertionError, 'interim line set'):
+            replay.compare(go, rust, PORT)
+        # A final response that differs beyond the interim line is rejected.
+        go, rust = synthetic()
+        rust[index] = row('expect-100', wire(200, b'different'), base64.b64decode(go[index]['request_base64']))
+        with self.assertRaisesRegex(AssertionError, 'final response differs'):
+            replay.compare(go, rust, PORT)
+        # Go without the interim line is also a change of the measured class.
+        go, rust = synthetic()
+        go[index] = copy.deepcopy(rust[index])
+        with self.assertRaisesRegex(AssertionError, 'interim line set'):
             replay.compare(go, rust, PORT)
 
     def test_stale_declaration_is_rejected(self):

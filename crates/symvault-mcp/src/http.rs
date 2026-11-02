@@ -25,7 +25,7 @@ use std::{
     path::Path,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -480,6 +480,10 @@ struct TokenRegistry {
 /// Last successfully parsed registry per path. Go keeps its in-memory registry
 /// when a reload fails or the file disappears mid-run (`StartFileWatcher`), so a
 /// request-time failure falls back to the last good state instead of denying.
+/// The cache is refreshed by every successful read, by requests and by the
+/// background poller (`watch_registry`); a failed read never replaces it. The
+/// poller is what keeps a revocation from being lost to a later corruption or
+/// deletion when no request arrives in between.
 static LAST_GOOD_REGISTRY: std::sync::Mutex<BTreeMap<std::path::PathBuf, TokenRegistry>> =
     std::sync::Mutex::new(BTreeMap::new());
 
@@ -920,6 +924,19 @@ where
         // Drop inside the scope, before scoped threads are joined, including
         // listener/setup errors. Otherwise idle reads can delay error returns.
         let _cleanup = shutdown.clone().map(shutdown::CancelOnDrop);
+        // Go's `StartFileWatcher`: reload on change, keep the last good state.
+        let watcher_stop = Arc::new(AtomicBool::new(false));
+        let watcher = {
+            let stop = Arc::clone(&watcher_stop);
+            let path = registry_path.clone();
+            thread::Builder::new().spawn_scoped(scope, move || {
+                watch_registry(&path, &stop, REGISTRY_POLL_INTERVAL);
+            })?
+        };
+        let _watcher_stop = RegistryWatcherStop {
+            stop: watcher_stop,
+            thread: watcher.thread().clone(),
+        };
         loop {
             if let Some(shutdown) = &shutdown
                 && shutdown.is_cancelled()?
@@ -2004,11 +2021,96 @@ fn lookup_token(
 }
 
 fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::Error> {
+    // The read and the cache update happen under one lock so a slow reader can
+    // never overwrite a newer state published by the poller (or a request).
+    let mut cache = LAST_GOOD_REGISTRY
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let registry = read_token_registry(registry_path)?;
-    if let Ok(mut cache) = LAST_GOOD_REGISTRY.lock() {
-        cache.insert(registry_path.to_path_buf(), registry.clone());
-    }
+    cache.insert(registry_path.to_path_buf(), registry.clone());
     Ok(registry)
+}
+
+/// How often the background poller stats the registry. Go polls every 2 s
+/// (`http_setup.go`: `StartFileWatcher(ctx, 2*time.Second)`); polling faster is
+/// never more permissive than Go, because it only ever publishes a newer
+/// successfully parsed state sooner, which narrows (never widens) the window in
+/// which a revoked token survives a later corrupt or deleted file.
+const REGISTRY_POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Go's `os.SameFile` + mtime + size identity of the registry file.
+#[derive(PartialEq, Eq)]
+struct RegistryFileId {
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    modified: Option<std::time::SystemTime>,
+    len: u64,
+}
+
+fn registry_file_id(registry_path: &Path) -> Option<RegistryFileId> {
+    let metadata = fs::metadata(registry_path).ok()?;
+    #[cfg(unix)]
+    let (device, inode) = {
+        use std::os::unix::fs::MetadataExt;
+        (metadata.dev(), metadata.ino())
+    };
+    Some(RegistryFileId {
+        #[cfg(unix)]
+        device,
+        #[cfg(unix)]
+        inode,
+        modified: metadata.modified().ok(),
+        len: metadata.len(),
+    })
+}
+
+/// One tick of Go's `StartFileWatcher`: a failed stat is ignored (the in-memory
+/// registry is retained); a changed file is reloaded, and the new state replaces
+/// the cache only when it parses. The identity is recorded before the reload, so
+/// a file that fails to parse is not retried until it changes again.
+fn poll_registry_once(registry_path: &Path, last: &mut Option<RegistryFileId>) {
+    let Some(current) = registry_file_id(registry_path) else {
+        return;
+    };
+    if last.as_ref() == Some(&current) {
+        return;
+    }
+    *last = Some(current);
+    if let Err(error) = load_token_registry(registry_path) {
+        let _ = writeln!(
+            std::io::stderr().lock(),
+            "error reloading token registry from {}: {error}",
+            registry_path.display()
+        );
+    }
+}
+
+/// Stops the registry poller when the serving scope ends.
+struct RegistryWatcherStop {
+    stop: Arc<AtomicBool>,
+    thread: thread::Thread,
+}
+
+impl Drop for RegistryWatcherStop {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        self.thread.unpark();
+    }
+}
+
+fn watch_registry(registry_path: &Path, stop: &AtomicBool, interval: Duration) {
+    // No initial identity: the first tick re-reads once, which only closes the
+    // window between the startup load and the watcher start.
+    let mut last = None;
+    while !stop.load(Ordering::Acquire) {
+        thread::park_timeout(interval);
+        if stop.load(Ordering::Acquire) {
+            break;
+        }
+        poll_registry_once(registry_path, &mut last);
+    }
 }
 
 fn read_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::Error> {
@@ -2033,10 +2135,159 @@ fn read_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::E
             "token registry too large",
         ));
     }
-    validate_go_registry(&bytes)?;
-    let registry: TokenRegistry = serde_json::from_slice(&bytes)
+    let value = fold_go_registry_keys(&bytes)?;
+    validate_go_registry(&value)?;
+    let registry: TokenRegistry = serde_json::from_value(value)
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     Ok(registry)
+}
+
+/// JSON object members in document order, duplicates kept, values unparsed.
+struct OrderedMembers(Vec<(String, Box<serde_json::value::RawValue>)>);
+
+impl<'de> Deserialize<'de> for OrderedMembers {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = OrderedMembers;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a JSON object")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut members = Vec::new();
+                while let Some(member) = map.next_entry()? {
+                    members.push(member);
+                }
+                Ok(OrderedMembers(members))
+            }
+        }
+        deserializer.deserialize_map(Visitor)
+    }
+}
+
+const REGISTRY_ROOT_FIELDS: &[&str] = &["version", "tokens"];
+const REGISTRY_ENTRY_FIELDS: &[&str] = &[
+    "id",
+    "label",
+    "hash",
+    "prefix",
+    "allowed_tools",
+    "tool_registry_hash",
+    "agent_name",
+    "created_at",
+    "expires_at",
+    "last_used_at",
+    "revoked",
+    "revoked_at",
+    "refresh_token_hash",
+    "refresh_expires_at",
+];
+/// Fields Go decodes into non-pointer scalars: a JSON `null` leaves them as is.
+const NULL_IS_NOOP_FIELDS: &[&str] = &[
+    "version",
+    "id",
+    "label",
+    "hash",
+    "prefix",
+    "tool_registry_hash",
+    "agent_name",
+    "created_at",
+    "revoked",
+    "refresh_token_hash",
+];
+
+/// `encoding/json` simple case folding for ASCII field names: U+017F folds to
+/// `s` and U+212A (Kelvin) to `k`, everything else by Unicode lowercase.
+fn go_fold_name(name: &str) -> String {
+    name.chars()
+        .flat_map(|character| match character {
+            '\u{17f}' => 's'.to_lowercase(),
+            '\u{212a}' => 'k'.to_lowercase(),
+            other => other.to_lowercase(),
+        })
+        .collect()
+}
+
+/// The struct field Go's `json.Unmarshal` would bind `key` to: an exact match,
+/// else a case-insensitive one; unknown keys are returned unchanged.
+fn go_field_name<'a>(key: &'a str, fields: &'static [&'static str]) -> &'a str {
+    if fields.contains(&key) {
+        return key;
+    }
+    let folded = go_fold_name(key);
+    fields
+        .iter()
+        .find(|field| go_fold_name(field) == folded)
+        .copied()
+        .unwrap_or(key)
+}
+
+fn fold_members(
+    members: OrderedMembers,
+    fields: &'static [&'static str],
+) -> Result<serde_json::Map<String, serde_json::Value>, serde_json::Error> {
+    let mut folded = serde_json::Map::new();
+    for (key, raw) in members.0 {
+        let name = go_field_name(&key, fields).to_owned();
+        let mut value = if fields == REGISTRY_ROOT_FIELDS && name == "tokens" {
+            fold_tokens(raw.get())?
+        } else {
+            serde_json::from_str::<serde_json::Value>(raw.get())?
+        };
+        if value.is_null() && NULL_IS_NOOP_FIELDS.contains(&name.as_str()) {
+            continue;
+        }
+        if name == "allowed_tools"
+            && let Some(tools) = value.as_array_mut()
+        {
+            // A null element decodes into a Go string as the empty string.
+            for tool in tools.iter_mut().filter(|tool| tool.is_null()) {
+                *tool = serde_json::Value::String(String::new());
+            }
+        }
+        // Later members override earlier ones, as repeated Go assignments do.
+        folded.insert(name, value);
+    }
+    Ok(folded)
+}
+
+/// Folds each entry of the `tokens` object (ids are case-sensitive map keys,
+/// the last duplicate wins); anything that is not an object is left for
+/// `validate_go_registry` to reject.
+fn fold_tokens(text: &str) -> Result<serde_json::Value, serde_json::Error> {
+    let tokens: serde_json::Value = serde_json::from_str(text)?;
+    if !tokens.is_object() {
+        return Ok(tokens);
+    }
+    let mut folded = serde_json::Map::new();
+    for (id, raw) in serde_json::from_str::<OrderedMembers>(text)?.0 {
+        let entry: serde_json::Value = serde_json::from_str(raw.get())?;
+        let entry = if entry.is_object() {
+            let members = serde_json::from_str::<OrderedMembers>(raw.get())?;
+            serde_json::Value::Object(fold_members(members, REGISTRY_ENTRY_FIELDS)?)
+        } else {
+            entry
+        };
+        folded.insert(id, entry);
+    }
+    Ok(serde_json::Value::Object(folded))
+}
+
+/// Rebuilds the registry with Go's field-name binding applied: Go matches
+/// struct fields case-insensitively, so `{"TOKENS":{"a":{"REVOKED":true}}}`
+/// revokes a token and must never be read as an unknown, ignored key.
+fn fold_go_registry_keys(bytes: &[u8]) -> Result<serde_json::Value, std::io::Error> {
+    let invalid = |error: serde_json::Error| {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())
+    };
+    let root: OrderedMembers = serde_json::from_slice(bytes).map_err(invalid)?;
+    let root = fold_members(root, REGISTRY_ROOT_FIELDS).map_err(invalid)?;
+    Ok(serde_json::Value::Object(root))
 }
 
 /// Whether the registry file holds at least one hashed entry (Go's
@@ -2059,7 +2310,7 @@ pub fn registry_has_entries(registry_path: &Path) -> Result<bool, std::io::Error
 /// Go's `json.Unmarshal` into `TokenRegistryFile` fails the whole registry on
 /// any type error, including a malformed timestamp; one bad entry must never
 /// leave the rest of the file half-trusted.
-fn validate_go_registry(bytes: &[u8]) -> Result<(), std::io::Error> {
+fn validate_go_registry(value: &serde_json::Value) -> Result<(), std::io::Error> {
     fn invalid(message: &str) -> std::io::Error {
         std::io::Error::new(std::io::ErrorKind::InvalidData, message.to_owned())
     }
@@ -2070,8 +2321,6 @@ fn validate_go_registry(bytes: &[u8]) -> Result<(), std::io::Error> {
                     .is_ok()
             })
     }
-    let value: serde_json::Value = serde_json::from_slice(bytes)
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     let root = value
         .as_object()
         .ok_or_else(|| invalid("token registry must be a JSON object"))?;
@@ -3400,6 +3649,184 @@ mod tests {
             lookup_token(&unseen, BEARER).is_err(),
             "no last-good state exists for a registry that never loaded"
         );
+    }
+
+    fn lookup_in_document(document: &str) -> Option<bool> {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("mcp-tokens.json");
+        fs::write(&path, document).expect("write registry");
+        match lookup_token(&path, BEARER) {
+            Ok(found) => Some(found.is_some()),
+            Err(_) => None,
+        }
+    }
+
+    /// Go's `json.Unmarshal` binds struct fields case-insensitively (with
+    /// Unicode simple folding); an unmatched key here would be silently dropped
+    /// and, for `REVOKED`/`EXPIRES_AT`, would make Rust MORE permissive than Go.
+    #[test]
+    fn registry_field_names_bind_case_insensitively_like_go() {
+        let hash = symvault_store::sha256_hex(BEARER.as_bytes());
+        let doc = |extra: &str, root_tokens: &str| {
+            format!(
+                r#"{{"VERSION":2,"{root_tokens}":{{"t":{{"ID":"t","HASH":"{hash}","Prefix":"http","ALLOWED_TOOLS":["*"],"Agent_Name":"default","CREATED_AT":"2026-01-01T00:00:00Z"{extra}}}}}}}"#
+            )
+        };
+        assert_eq!(
+            lookup_in_document(&doc("", "TOKENS")),
+            Some(true),
+            "control: folded names bind"
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":true"#, "TOKENS")),
+            Some(false)
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","Revoked":true"#, "tokens")),
+            Some(false)
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","EXPIRES_AT":"2000-01-01T00:00:00Z""#, "tokens")),
+            Some(false)
+        );
+        // U+017F (long s) and U+212A (Kelvin sign) fold to `s` and `k`.
+        assert_eq!(
+            lookup_in_document(&doc(
+                r#","expire\u017f_at":"2000-01-01T00:00:00Z""#,
+                "tokens"
+            )),
+            Some(false)
+        );
+        assert_eq!(
+            lookup_in_document(&doc("", "TO\u{212a}EN\u{17f}")),
+            Some(true),
+            "control: the folded root key binds"
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":true"#, "TO\u{212a}EN\u{17f}")),
+            Some(false)
+        );
+        // Repeated case variants: the later member wins, as in Go.
+        assert_eq!(
+            lookup_in_document(&doc(r#","revoked":true,"REVOKED":false"#, "tokens")),
+            Some(true)
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":false,"revoked":true"#, "tokens")),
+            Some(false)
+        );
+        // `null` leaves a Go scalar field untouched, including after a value.
+        assert_eq!(
+            lookup_in_document(&doc(
+                r#","HASH":null,"revoked":null,"Label":null"#,
+                "tokens"
+            )),
+            Some(true)
+        );
+        // Type errors still fail the whole registry under any casing.
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":"yes""#, "tokens")),
+            None
+        );
+    }
+
+    fn revoke_in_file(path: &Path) {
+        let mut document: serde_json::Value =
+            serde_json::from_slice(&fs::read(path).expect("read registry")).expect("registry json");
+        document["tokens"]["tok-test"]["revoked"] = serde_json::json!(true);
+        fs::write(path, serde_json::to_vec(&document).expect("serialize")).expect("revoke");
+    }
+
+    /// A revocation must survive a later corrupt/deleted file even when no
+    /// request arrives between the revocation and the corruption: Go's watcher
+    /// (and the Rust poller) publish the revoked state on their own.
+    #[test]
+    fn polled_revocation_survives_later_corruption_or_deletion() {
+        for delete in [false, true] {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let path = registry(dir.path());
+            load_token_registry(&path).expect("startup load");
+            revoke_in_file(&path);
+            // No request here: only the poller can observe the revocation.
+            let mut last = None;
+            poll_registry_once(&path, &mut last);
+            if delete {
+                fs::remove_file(&path).expect("delete registry");
+            } else {
+                fs::write(&path, b"{corrupt").expect("corrupt registry");
+            }
+            poll_registry_once(&path, &mut last);
+            assert!(
+                lookup_token(&path, BEARER).expect("last good").is_none(),
+                "revoked token must stay revoked after corrupt/delete (delete={delete})"
+            );
+        }
+    }
+
+    /// Negative control: without the poller (the previous behaviour, cache
+    /// refreshed only by requests) the same sequence keeps the token valid.
+    #[test]
+    fn without_polling_the_stale_cache_keeps_a_revoked_token_valid() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        load_token_registry(&path).expect("startup load");
+        revoke_in_file(&path);
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        assert!(
+            lookup_token(&path, BEARER).expect("stale cache").is_some(),
+            "control: with no poll and no request the stale entry is served"
+        );
+    }
+
+    #[test]
+    fn failed_reload_does_not_replace_the_cache_and_is_not_retried_until_changed() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        load_token_registry(&path).expect("startup load");
+        let mut last = None;
+        poll_registry_once(&path, &mut last);
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        poll_registry_once(&path, &mut last);
+        let recorded = last.as_ref().map(|id| id.len);
+        assert_eq!(recorded, Some(8), "identity recorded even for a bad file");
+        assert!(lookup_token(&path, BEARER).expect("last good").is_some());
+    }
+
+    #[test]
+    fn background_watcher_publishes_a_revocation_without_requests() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        load_token_registry(&path).expect("startup load");
+        let stop = Arc::new(AtomicBool::new(false));
+        let handle = {
+            let (path, stop) = (path.clone(), Arc::clone(&stop));
+            thread::spawn(move || watch_registry(&path, &stop, Duration::from_millis(20)))
+        };
+        revoke_in_file(&path);
+        let started = Instant::now();
+        loop {
+            let revoked = LAST_GOOD_REGISTRY
+                .lock()
+                .expect("cache")
+                .get(&path)
+                .and_then(|registry| registry.tokens.as_ref())
+                .and_then(|tokens| tokens.get("tok-test"))
+                .and_then(Option::as_ref)
+                .is_some_and(|token| token.revoked);
+            if revoked {
+                break;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "poller never published the revocation"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        assert!(lookup_token(&path, BEARER).expect("last good").is_none());
+        stop.store(true, Ordering::Release);
+        handle.thread().unpark();
+        handle.join().expect("watcher exits");
     }
 
     fn registry(dir: &Path) -> std::path::PathBuf {

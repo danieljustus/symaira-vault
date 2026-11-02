@@ -7,7 +7,9 @@ stale tool-registry stamps and malformed bearer forms.  Section B starts both
 CLIs against file-level registry states (missing, legacy, malformed, typed
 errors) and compares the startup outcome, served responses and resulting token
 files, with kill and SIGINT disposal.  Section C changes the registry while the
-servers run (live expiry, out-of-band add/revoke/corrupt) and records latency.
+servers run (live expiry, out-of-band add/revoke/corrupt) and records latency;
+Section D revokes in the file with no intervening request, waits past Go's 2 s
+poll, corrupts or deletes the file and requires both to answer 401.
 Every expectation is hand-written; Go and Rust are each held to it.
 """
 import argparse
@@ -75,6 +77,12 @@ TOKENS = {
     'tools-upper': (dict(allowed_tools=['HEALTH']), 'fixture', 200, True), 'tools-space': (dict(allowed_tools=[' health']), 'fixture', 200, True),
     'tools-star-plus': (dict(allowed_tools=['*', 'health']), 'fixture', 200, False), 'tools-unknown': (dict(allowed_tools=['nope']), 'fixture', 200, True),
     'stale-hash': (dict(tool_registry_hash='stale'), 'fixture', 200, True),
+    # Go's json.Unmarshal binds struct fields case-insensitively (Unicode simple folding): a mis-cased
+    # revoked/expiry key must take effect in both implementations, never be ignored as an unknown field.
+    'upper-revoked': (dict(REVOKED=True), 'fixture', 401, None), 'mixed-revoked-at': (dict(Revoked=True, Revoked_At='@-60'), 'fixture', 401, None),
+    'upper-expires': (dict(EXPIRES_AT='@-3600'), 'fixture', 401, None), 'long-s-expires': (dict(**{'expire\u017f_at': '@-3600'}), 'fixture', 401, None),
+    'upper-allowed-tools': (dict(ALLOWED_TOOLS=['health']), 'fixture', 200, False), 'upper-agent': (dict(AGENT_NAME='other'), 'fixture', 403, None),
+    'upper-unrevokes': (dict(revoked=True, REVOKED=False), 'fixture', 200, False),
     'last-used': (dict(last_used_at='@-10'), 'fixture', 200, False),
     'refresh-fields': (dict(refresh_token_hash='ab' * 32, refresh_expires_at='@3600'), 'fixture', 200, False),
     'extra-field': (dict(zzz='extra'), 'fixture', 200, False), 'label-empty': (dict(label=''), 'fixture', 200, False),
@@ -368,13 +376,45 @@ def observe_dynamic(binary, base, seed_vault, port, raws, body):
     return result
 
 
+def observe_stale_revocation(binary, base, seed_vault, port, raws, body, mode):
+    """Revoke in the file, send NO request (the only registry read is the startup load), wait past Go's 2 s poll,
+    then corrupt or delete the file and finally request the revoked token.  Go's watcher reloaded the revocation
+    and keeps it after the failed reload; a cache refreshed only by requests would still serve the old entry."""
+    home = prepare(base, 'stale-' + mode, seed_vault, lambda vault: (vault / 'mcp-tokens.json').write_text(body))
+    registry_path = home / 'vault' / 'mcp-tokens.json'
+    process = Process(binary, home, port)
+    try:
+        assert process.state == 'listening'
+        document = json.loads(body)
+        document['tokens']['tok-never']['revoked'] = True
+        document['tokens']['tok-never']['revoked_at'] = iso(0)
+        registry_path.write_text(json.dumps(document, indent=2) + '\n')
+        time.sleep(3.5)
+        if mode == 'corrupt':
+            registry_path.write_text('{corrupt')
+        else:
+            registry_path.unlink()
+        time.sleep(2.5)
+        return dict(mode=mode, revoked_token_status=code_of(port, raws['never']), other_token_status=code_of(port, raws['future1h']))
+    finally:
+        process.close()
+
+
+def check_stale_revocation(go, rust):
+    for left, right in zip(go, rust, strict=True):
+        for side, observed in (('go', left), ('rust', right)):
+            assert observed['revoked_token_status'] == 401, (side, observed['mode'], 'revoked token must stay revoked after a failed reload')
+            assert observed['other_token_status'] == 200, (side, observed['mode'], 'unrevoked tokens keep the last good registry')
+
+
 def check_dynamic(go, rust):
     for side, observed in (('go', go), ('rust', rust)):
         assert observed['live_before_expiry'] == 200, (side, 'token live before its deadline')
         assert 0.0 <= observed['live_detected_epoch'] - observed['live_expiry_epoch'] < 3.0, (side, 'actual elapsed expiry', observed['live_detected_epoch'] - observed['live_expiry_epoch'])
         assert observed['added_latency'] <= 4.5 and observed['revoke_latency'] <= 4.5 and observed['recovered_latency'] <= 4.5, (side, 'registry change took effect within the poll bound')
-    # Go keeps its last good in-memory registry after a failed reload; Rust must do the same (it re-reads per request,
-    # so the only declared timing difference is that registry edits take effect immediately rather than within Go's 2 s poll).
+    # Go keeps its last good in-memory registry after a failed reload; Rust must do the same (it re-reads per request and
+    # polls in the background, so the only declared timing difference is that registry edits take effect immediately
+    # rather than within Go's 2 s poll).
     assert go['after_corruption'] == 200 and rust['after_corruption'] == 200, (go['after_corruption'], rust['after_corruption'], 'last-good registry after a corrupt reload')
 
 
@@ -441,6 +481,11 @@ def main():
                 dynamic = [observe_dynamic(binary, base, seed_home / 'vault', port, raws, body) for binary in (go, rust)]
                 check_dynamic(*dynamic)
                 receipt['dynamic'] = dict(go=dynamic[0], rust=dynamic[1])
+                # D: revoke -> no request -> wait > poll -> corrupt / delete -> request (cache must not outlive the revocation)
+                stale = {impl: [observe_stale_revocation(binary, base, seed_home / 'vault', port, raws, body, mode) for mode in ('corrupt', 'delete')]
+                         for impl, binary in (('go', go), ('rust', rust))}
+                check_stale_revocation(stale['go'], stale['rust'])
+                receipt['stale_revocation'] = stale
                 assert inventory(paths, ROOT) == receipt['candidate_sources'] and candidate_paths() == paths, 'candidate changed during observations'
                 assert hashlib.sha256(rust.read_bytes()).hexdigest() == receipt['rust_binary_sha256']
                 receipt['candidate_worktree_clean_at_end'] = not checked(['git', 'status', '--porcelain=v1']).strip()
@@ -450,8 +495,8 @@ def main():
                 remove_worktree(lambda: checked(['git', 'worktree', 'remove', '--force', tree]), 'oracle worktree')
     finally:
         args.receipt.write_text(json.dumps(receipt, indent=2, default=str) + '\n', encoding='utf-8')
-    print(f"PASS: {receipt['token_cases']} token-state cases, {len(receipt['startup'])} startup/storage scenarios and 1 dynamic clock/out-of-band scenario "
-          f"per implementation on {platform.system()}")
+    print(f"PASS: {receipt['token_cases']} token-state cases, {len(receipt['startup'])} startup/storage scenarios and 1 dynamic clock/out-of-band scenario and "
+          f"{len(receipt['stale_revocation']['go'])} stale-revocation scenarios per implementation on {platform.system()}")
 
 
 if __name__ == '__main__':

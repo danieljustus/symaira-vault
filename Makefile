@@ -776,6 +776,27 @@ tool-registry-hash-fixtures-check:
 tool-registry-hash-differential: tool-registry-hash-fixtures-check
 	$(CARGO) test -p symvault-mcp --test tool_registry_hash_contract --locked
 
+# HTTP-001 / HTTP-002 process contracts. Each builds the Rust CLI and replays the
+# real Go oracle (built from the pinned commit) against it, so they need a Go
+# toolchain and a real clock (the token contract waits several seconds for the
+# registry poller); they are NOT part of port-contract. Set HTTP_CONTRACT_ARGS=
+# --allow-dirty-for-development for an uncommitted candidate.
+HTTP_CONTRACT_ARGS ?=
+.PHONY: mcp-http-replay-contract mcp-http-token-contract
+mcp-http-replay-contract:
+	python3 -B scripts/rust-port/test_http_replay_contract.py
+	$(CARGO) build -p symvault-cli --bin symvault --locked
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/http_replay_contract.py \
+		--rust "$(RUST_BINARY)" \
+		--receipt "$(CARGO_TARGET_DIR)/http-replay-contract.json" $(HTTP_CONTRACT_ARGS)
+
+mcp-http-token-contract:
+	python3 -B scripts/rust-port/test_http_replay_contract.py
+	$(CARGO) build -p symvault-cli --bin symvault --locked
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/http_token_contract.py \
+		--rust "$(RUST_BINARY)" \
+		--receipt "$(CARGO_TARGET_DIR)/http-token-contract.json" $(HTTP_CONTRACT_ARGS)
+
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:
 	SYMAIRA_CHECK_TOKEN_PORT_FIXTURE=1 GOWORK=off GOTOOLCHAIN=go1.26.6 go test ./internal/mcp/auth -run '^TestTokenPortFixture$$' -count=1

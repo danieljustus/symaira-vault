@@ -61,9 +61,17 @@ DECLARED.update({
     'line-connect': ('go-mux-404-vs-rust-400', 404, 400),
     'tls-clienthello': ('go-400-page-vs-rust-silent-close', 400, None),
     'cl-too-big': ('go-answers-first-json-value-vs-rust-awaits-declared-length', 200, None),
-    'expect-100': ('rust-sends-no-interim-100-continue', 100, 200),
-    'expect-100-chunked': ('rust-sends-no-interim-100-continue', 100, 200),
 })
+# Cases whose FINAL (non-interim) transcript must be byte-identical.  Go writes `HTTP/1.1 100 Continue` only when its
+# handler first reads the body (net/http `expectContinueReader.Read`, go1.26.6 server.go), i.e. after the Origin,
+# bearer, agent, Content-Type and Accept checks; Rust reads the whole body before it authenticates, so it never has
+# the same point to emit it.  Reproducing the exact emission point would mean deferring body reads behind those
+# checks, which is not a cheap or safe change; the interim line is the only difference and is asserted exactly
+# (Go sends one, Rust none) so that the case fails if either side changes.
+INTERIM_ONLY = {
+    'expect-100': 'go-sends-interim-100-continue-after-auth-rust-does-not',
+    'expect-100-chunked': 'go-sends-interim-100-continue-after-auth-rust-does-not',
+}
 for _name in ['te-identity', 'te-gzip-chunked', 'te-chunked-gzip', 'te-chunked-chunked', 'te-x-chunked', 'te-empty', 'te-quoted',
               'te-chunked-param', 'te-dup']:
     DECLARED[_name] = ('go-501-unsupported-transfer-encoding-vs-rust-400', 501, 400)
@@ -405,13 +413,14 @@ def health_equal_except_clock(left, right, port):
 
 
 def compare(go_rows, rust_rows, port=None):
-    """Pure comparison + policy; returns (identical, declared, semantic).  Raises AssertionError on any violation."""
+    """Pure comparison + policy; returns (identical, declared, semantic, interim_only).  Raises AssertionError on any violation."""
     assert [r['case'] for r in go_rows] == [r['case'] for r in rust_rows], 'same case inventory'
     names = [r['case'] for r in go_rows]
     assert len(set(names)) == len(names), 'unique case names'
     assert set(DECLARED) <= set(names), ('declared case missing from corpus', sorted(set(DECLARED) - set(names)))
     assert set(EXPECT) <= set(names), ('expected case missing from corpus', sorted(set(EXPECT) - set(names)))
-    identical, declared, semantic = [], [], []
+    assert set(INTERIM_ONLY) <= set(names) and not set(INTERIM_ONLY) & set(DECLARED), 'interim-only case inventory'
+    identical, declared, semantic, interim_only = [], [], [], []
     for left, right in zip(go_rows, rust_rows, strict=True):
         name = left['case']
         assert left['request_sha256'] == right['request_sha256'], name
@@ -427,6 +436,17 @@ def compare(go_rows, rust_rows, port=None):
             assert transcript(left)[0][0] == transcript(right)[0][0] == 'HTTP/1.1 200 OK' and not any(b[2] for b in transcript(left) + transcript(right))
             continue
         go_code, rust_code = final_codes(left), final_codes(right)
+        if name in INTERIM_ONLY:
+            def interims(row):
+                return [r for r in row['responses'] if r.get('interim')]
+
+            def finals(row):
+                return [r for r in transcript(dict(responses=row['responses'])) if not r[4]]
+            assert [r['code'] for r in interims(left)] == [100] and not interims(right), (name, INTERIM_ONLY[name], 'interim line set')
+            assert finals(left) == finals(right) and finals(left), (name, 'final response differs beyond the interim line')
+            assert go_code == EXPECT.get(name, go_code) == rust_code, (name, go_code, rust_code)
+            interim_only.append(dict(case=name, decision=INTERIM_ONLY[name], go=left['responses'], rust=right['responses']))
+            continue
         if name in EXPECT:
             assert go_code == EXPECT[name] == rust_code or name in DECLARED, (name, go_code, rust_code, EXPECT[name])
         if name in DECLARED:
@@ -438,7 +458,7 @@ def compare(go_rows, rust_rows, port=None):
         else:
             assert transcript(left) == transcript(right), (name, 'undeclared difference', left['responses'], right['responses'])
             identical.append(name)
-    return identical, declared, semantic
+    return identical, declared, semantic, interim_only
 
 
 def candidate_paths():
@@ -495,8 +515,8 @@ def main():
                     shutil.copytree(seed_home / 'vault', home / 'vault')
                     assert vault_snapshot(home / 'vault') == snapshot
                     observe(binary, home, port, tokens, receipt[implementation])
-                identical, declared, semantic = compare(receipt['go']['rows'], receipt['rust']['rows'], port)
-                receipt.update(declared_differences=declared, identical_cases=len(identical), semantic_cases=len(semantic))
+                identical, declared, semantic, interim_only = compare(receipt['go']['rows'], receipt['rust']['rows'], port)
+                receipt.update(declared_differences=declared, identical_cases=len(identical), semantic_cases=len(semantic), interim_only_cases=interim_only)
                 assert inventory(paths, ROOT) == receipt['candidate_sources'] and candidate_paths() == paths, 'candidate changed during observations'
                 assert hashlib.sha256(rust.read_bytes()).hexdigest() == receipt['rust_binary_sha256']
                 receipt['candidate_worktree_clean_at_end'] = not checked(['git', 'status', '--porcelain=v1']).strip()
@@ -508,7 +528,8 @@ def main():
         args.receipt.write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
     total = len(receipt['go']['rows'])
     print(f"PASS: {total} replay/SSE/envelope/route/framing cases per implementation on {platform.system()}: "
-          f"{receipt['identical_cases']} identical, {len(receipt['declared_differences'])} declared, {receipt['semantic_cases']} semantic (health clock)")
+          f"{receipt['identical_cases']} identical, {len(receipt['declared_differences'])} declared, {receipt['semantic_cases']} semantic (health clock), "
+          f"{len(receipt['interim_only_cases'])} final-identical (Go-only interim 100 Continue)")
 
 
 if __name__ == '__main__':
