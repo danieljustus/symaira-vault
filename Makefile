@@ -1053,6 +1053,7 @@ http-write-contract: area-oracle-runner
 	$(AREA_BUILD_CLI)
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/http_write_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-tls-output.json" --tls-output-probe-only
+	rm -f "$(AREA_EVIDENCE)"/native-tls-output-mutation*.json
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/http_write_mutation.py \
 		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-tls-output-mutation.json"
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) scripts/rust-port/http_write_contract.py \
