@@ -142,3 +142,6 @@ ARCHITEKTUR.md
 
 # Python bytecode caches from running the rust-port contract drivers locally.
 __pycache__/
+
+# LLVM coverage raw profiles written by instrumented binaries
+*.profraw

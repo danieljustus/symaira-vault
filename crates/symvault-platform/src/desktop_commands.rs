@@ -134,6 +134,23 @@ pub trait DesktopHost: Send + Sync {
         capture_stdout: bool,
         env: EnvPolicy,
     ) -> Result<ToolOutput, String>;
+
+    /// Go atotto's `writeAll`: start `program`, write `stdin` to its pipe on
+    /// the calling thread, close it and wait. Unlike [`DesktopHost::run`]
+    /// (Go `exec.Cmd.Stdin`, which ignores a closed pipe), a failed stdin write
+    /// is returned at once, as `write |1: <reason>`, without waiting for the
+    /// tool, so a tool that exits 0 without reading a payload larger than the
+    /// pipe buffer is still a copy failure. The default delegates to `run` for
+    /// hosts that have no real pipe.
+    fn run_write_all(
+        &self,
+        program: &str,
+        args: &[&str],
+        stdin: &[u8],
+        env: EnvPolicy,
+    ) -> Result<ToolOutput, String> {
+        self.run(program, args, stdin, false, env)
+    }
 }
 
 /// Outcome of a Go `exec.LookPath`-style search.
@@ -252,6 +269,61 @@ impl SystemHost {
                 .collect(),
         }
     }
+
+    /// Spawns `program` with the host's environment policy, a piped stdin, and
+    /// stdout piped or discarded; stderr is always discarded.
+    fn spawn_piped(
+        &self,
+        program: &str,
+        args: &[&str],
+        capture_stdout: bool,
+        env: EnvPolicy,
+    ) -> Result<std::process::Child, String> {
+        let resolved = match self.lookup(program) {
+            Lookup::Found(path) => path,
+            Lookup::RelativeToCwd => {
+                return Err(format!(
+                    "exec: \"{program}\": cannot run executable found relative to current directory"
+                ));
+            }
+            Lookup::NotFound => {
+                return Err(format!(
+                    "exec: \"{program}\": executable file not found in $PATH"
+                ));
+            }
+        };
+        let mut command = Command::new(self.on_disk(&resolved));
+        command.args(args);
+        if let Some(cwd) = &self.cwd {
+            command.current_dir(cwd);
+        }
+        command.env_clear();
+        let base = self.base_env();
+        let mut passed: Vec<(String, String)> = base
+            .iter()
+            .filter(|(key, _)| {
+                env == EnvPolicy::Inherit || AUTOTYPE_ENV_WHITELIST.contains(&key.as_str())
+            })
+            .cloned()
+            .collect();
+        if env == EnvPolicy::Whitelist {
+            let systemroot = base
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("SYSTEMROOT"))
+                .map(|(_, v)| v.clone());
+            add_critical_env(&mut passed, systemroot, cfg!(windows));
+        }
+        command.envs(passed);
+        command
+            .stdin(Stdio::piped())
+            .stdout(if capture_stdout {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stderr(Stdio::null());
+        command.spawn().map_err(|error| error.to_string())
+    }
 }
 
 fn is_executable(path: &Path) -> bool {
@@ -309,50 +381,7 @@ impl DesktopHost for SystemHost {
         capture_stdout: bool,
         env: EnvPolicy,
     ) -> Result<ToolOutput, String> {
-        let resolved = match self.lookup(program) {
-            Lookup::Found(path) => path,
-            Lookup::RelativeToCwd => {
-                return Err(format!(
-                    "exec: \"{program}\": cannot run executable found relative to current directory"
-                ));
-            }
-            Lookup::NotFound => {
-                return Err(format!(
-                    "exec: \"{program}\": executable file not found in $PATH"
-                ));
-            }
-        };
-        let mut command = Command::new(self.on_disk(&resolved));
-        command.args(args);
-        if let Some(cwd) = &self.cwd {
-            command.current_dir(cwd);
-        }
-        command.env_clear();
-        let base = self.base_env();
-        let mut passed: Vec<(String, String)> = base
-            .iter()
-            .filter(|(key, _)| {
-                env == EnvPolicy::Inherit || AUTOTYPE_ENV_WHITELIST.contains(&key.as_str())
-            })
-            .cloned()
-            .collect();
-        if env == EnvPolicy::Whitelist {
-            let systemroot = base
-                .iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case("SYSTEMROOT"))
-                .map(|(_, v)| v.clone());
-            add_critical_env(&mut passed, systemroot, cfg!(windows));
-        }
-        command.envs(passed);
-        command
-            .stdin(Stdio::piped())
-            .stdout(if capture_stdout {
-                Stdio::piped()
-            } else {
-                Stdio::null()
-            })
-            .stderr(Stdio::null());
-        let mut child = command.spawn().map_err(|error| error.to_string())?;
+        let mut child = self.spawn_piped(program, args, capture_stdout, env)?;
         // Write stdin on its own thread so a tool that never reads cannot wedge
         // us, and drain stdout so a chatty tool cannot block on a full pipe.
         let writer = child.stdin.take().map(|mut pipe| {
@@ -380,6 +409,46 @@ impl DesktopHost for SystemHost {
             stdout,
         })
     }
+
+    fn run_write_all(
+        &self,
+        program: &str,
+        args: &[&str],
+        stdin: &[u8],
+        env: EnvPolicy,
+    ) -> Result<ToolOutput, String> {
+        let mut child = self.spawn_piped(program, args, false, env)?;
+        let mut pipe = child.stdin.take().expect("stdin was piped");
+        if let Err(error) = pipe.write_all(stdin) {
+            // Go returns here with the child still running and never waits for
+            // it; reap it in the background so it does not stay a zombie.
+            drop(pipe);
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            return Err(go_pipe_write_error(&error));
+        }
+        drop(pipe);
+        let status = child.wait().map_err(|error| error.to_string())?;
+        Ok(ToolOutput {
+            code: status.code(),
+            stdout: Vec::new(),
+        })
+    }
+}
+
+/// Go's `*os.PathError` text for a failed write to the pipe `os.Pipe` made for
+/// `exec.Cmd.StdinPipe` (`write |1: broken pipe`): the pipe's write end is
+/// named `|1` and `syscall.Errno` prints its lowercase message.
+fn go_pipe_write_error(error: &std::io::Error) -> String {
+    let reason = if error.kind() == std::io::ErrorKind::BrokenPipe {
+        "broken pipe".to_owned()
+    } else {
+        let text = error.to_string();
+        let text = text.split(" (os error").next().unwrap_or(&text);
+        text.to_lowercase()
+    };
+    format!("write |1: {reason}")
 }
 
 /// Go's `*exec.ExitError` text.
@@ -405,6 +474,23 @@ fn run_checked(
     env: EnvPolicy,
 ) -> Result<(), String> {
     let output = host.run(program, args, stdin, false, env)?;
+    if output.code == Some(0) {
+        Ok(())
+    } else {
+        Err(exit_status_text(output.code))
+    }
+}
+
+/// [`run_checked`] with atotto `writeAll` semantics (see
+/// [`DesktopHost::run_write_all`]).
+fn run_write_all_checked(
+    host: &dyn DesktopHost,
+    program: &str,
+    args: &[&str],
+    stdin: &[u8],
+    env: EnvPolicy,
+) -> Result<(), String> {
+    let output = host.run_write_all(program, args, stdin, env)?;
     if output.code == Some(0) {
         Ok(())
     } else {
@@ -527,7 +613,7 @@ impl CommandClipboard {
 impl Clipboard for CommandClipboard {
     fn set(&self, text: &[u8]) -> Result<(), PlatformError> {
         let backend = self.backend_or_unavailable()?;
-        run_checked(
+        run_write_all_checked(
             self.host.as_ref(),
             backend.copy[0],
             &backend.copy[1..],
@@ -863,5 +949,45 @@ mod tests {
             .type_text("x")
             .unwrap_err();
         assert_eq!(error.kind, PlatformErrorKind::Unavailable);
+    }
+
+    #[test]
+    fn pipe_write_errors_use_go_os_patherror_text() {
+        use std::io::{Error, ErrorKind};
+        assert_eq!(
+            go_pipe_write_error(&Error::from(ErrorKind::BrokenPipe)),
+            "write |1: broken pipe"
+        );
+        // `syscall.Errno` prints the lowercase message without Rust's suffix.
+        assert_eq!(
+            go_pipe_write_error(&Error::from_raw_os_error(28)),
+            "write |1: no space left on device"
+        );
+    }
+
+    /// atotto's `writeAll` returns the stdin write error (the tool is never
+    /// waited for), while a tool run through `exec.Cmd.Stdin` (`run`, used by
+    /// autotype) ignores a closed pipe and reports the exit status. Go's own
+    /// capture of the clipboard side is in `copy-clipboard-linux.json` and
+    /// `get_clipboard_linux.json` (`large_payload_tool_closes_stdin_*`).
+    #[cfg(unix)]
+    #[test]
+    fn write_all_reports_a_closed_stdin_but_run_does_not() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("symvault-write-all-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let tool = dir.join("closer");
+        std::fs::write(&tool, "#!/bin/sh\nexec 0<&-\nexit 0\n").unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let host = SystemHost::isolated(vec![dir.clone()], HashMap::new());
+        // Far above any pipe buffer, so the write cannot finish before the
+        // tool closes its end.
+        let payload = vec![b'x'; 4 * 1024 * 1024];
+        let copied = host.run_write_all("closer", &[], &payload, EnvPolicy::Inherit);
+        let ran = host.run("closer", &[], &payload, false, EnvPolicy::Inherit);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(copied.unwrap_err(), "write |1: broken pipe");
+        assert_eq!(ran.unwrap().code, Some(0));
     }
 }

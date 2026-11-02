@@ -5,7 +5,7 @@ pub mod approval;
 pub mod desktop_commands;
 pub mod get_clipboard;
 mod text_clipboard;
-pub use text_clipboard::{OwnedTextClipboard, native_text_clipboard};
+pub use text_clipboard::{OwnedTextClipboard, native_command_clipboard, native_text_clipboard};
 mod focus;
 #[cfg(target_os = "macos")]
 mod macos;

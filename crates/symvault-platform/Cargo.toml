@@ -32,7 +32,9 @@ windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Stor
 # Same pin as symvault-cli, which uses it in other commands only.
 ctrlc = { version = "=3.5.2", features = ["termination"] }
 
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+# Windows only: Linux and macOS write the clipboard through command tools
+# (Go's atotto/clipboard), not through a GUI-toolkit client.
+[target.'cfg(target_os = "windows")'.dependencies]
 arboard = { version = "=3.7.0", default-features = false }
 
 [target.'cfg(any(windows, target_os = "macos"))'.dev-dependencies]

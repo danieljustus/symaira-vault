@@ -764,7 +764,7 @@ port-contract: cfg-overrides-fixtures-check mcp-oauth-contract store004-isolatio
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9 --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check tool-registry-hash-differential ffi-differential
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential clipboard-linux-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check tool-registry-hash-differential ffi-differential
 
 # TOOLHASH-001: Go-recorded tool-registry hash + call-time drift refusal. The
 # process-level Go/Rust/cross-binary check needs prebuilt binaries (see
@@ -1239,6 +1239,64 @@ get-clipboard-fixtures-generate:
 
 get-clipboard-differential: get-clipboard-fixtures-check
 	$(CARGO) test -p symvault-platform --test get_clipboard_contract --locked
+
+# PLATFORM-WIRE-001: the clipboard Go really uses on Linux (atotto command
+# backend, tool choice fixed in that package's init() from PATH and
+# WAYLAND_DISPLAY) behind MCP copy_to_clipboard, `symvault get` and the TUI.
+# Two fixtures are recorded by the real Go commands on GOOS=linux with fake
+# POSIX-shell tools on a disposable PATH (re-executed child per scenario). On a
+# Linux host they are checked natively; elsewhere the Linux Go toolchain runs in
+# a container (clipboard-linux-fixtures-check) and the aggregate gate prints a
+# NOTE like desktop-linux-fixtures-ci. The Rust replays run on every Unix; the
+# real-binary test (mcp --stdio and `get` on a pty) is Linux-only and, with
+# SYMVAULT_GATE=1 (or CI), fails instead of skipping when python3/pty is missing.
+MCP_CLIPBOARD_LINUX_FIXTURE := testdata/port/mcp/copy-clipboard-linux.json
+GET_CLIPBOARD_LINUX_FIXTURE := testdata/port/platform/get_clipboard_linux.json
+
+# Off Linux the generators run in a container whose git cannot read a worktree
+# checkout and whose Go is not the pinned toolchain. The oracle pin (the
+# working-tree sources equal the blobs of the reachable pinned commit) is
+# therefore verified on the host first and handed to the container as a file.
+CLIPBOARD_LINUX_DOCKER = docker run --rm --name "symvault-clipboard-linux-$$$$" -v "$(CURDIR):$(CURDIR)" -v "$(DESKTOP_REPO_COMMON):$(DESKTOP_REPO_COMMON)" -v "$$pin:$$pin" -v "$(DESKTOP_GOMODCACHE):/gomod" -v desktopgen-gocache:/gocache -w "$(CURDIR)" \
+	-e GOMODCACHE=/gomod -e GOCACHE=/gocache -e GOWORK=off -e GOTOOLCHAIN=local -e GOFLAGS=-mod=mod -e GOPROXY=off -e CGO_ENABLED=0 \
+	-e SYMAIRA_MCP_COPY_CLIPBOARD_LINUX_PIN_FILE="$$pin/mcp.json" -e SYMVAULT_GET_CLIPBOARD_LINUX_PIN_FILE="$$pin/get.json"
+CLIPBOARD_LINUX_HOST_PIN = SYMAIRA_MCP_COPY_CLIPBOARD_LINUX_PIN_FILE="$$pin/mcp.json" GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestMCPCopyClipboardLinuxOraclePin$$' -count=1 \
+	&& SYMVAULT_GET_CLIPBOARD_LINUX_PIN_FILE="$$pin/get.json" GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGetClipboardLinuxOraclePin$$' -count=1
+
+.PHONY: clipboard-linux-fixtures-check clipboard-linux-fixtures-generate clipboard-linux-fixtures-ci clipboard-linux-differential
+clipboard-linux-fixtures-check:
+ifeq ($(shell uname -s),Linux)
+	SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardLinuxFixture$$' -count=1
+	SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=check GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGenerateGetClipboardLinuxFixture$$' -count=1
+else
+	pin=$$(mktemp -d) && trap 'rm -rf "$$pin"' EXIT && $(CLIPBOARD_LINUX_HOST_PIN) \
+	&& $(CLIPBOARD_LINUX_DOCKER) -e SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 -e SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=check \
+		$(DESKTOP_DOCKER_IMAGE) sh -c "go test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardLinuxFixture\$$' -count=1 && go test ./cmd -run '^TestGenerateGetClipboardLinuxFixture\$$' -count=1"
+endif
+
+clipboard-linux-fixtures-generate:
+ifeq ($(shell uname -s),Linux)
+	SYMAIRA_GENERATE_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardLinuxFixture$$' -count=1
+	SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=write GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGenerateGetClipboardLinuxFixture$$' -count=1
+else
+	pin=$$(mktemp -d) && trap 'rm -rf "$$pin"' EXIT && $(CLIPBOARD_LINUX_HOST_PIN) \
+	&& $(CLIPBOARD_LINUX_DOCKER) -e SYMAIRA_GENERATE_MCP_COPY_CLIPBOARD_LINUX_FIXTURE=1 -e SYMVAULT_GET_CLIPBOARD_LINUX_FIXTURE=write \
+		$(DESKTOP_DOCKER_IMAGE) sh -c "go test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardLinuxFixture\$$' -count=1 && go test ./cmd -run '^TestGenerateGetClipboardLinuxFixture\$$' -count=1"
+endif
+
+clipboard-linux-fixtures-ci:
+ifeq ($(shell uname -s),Linux)
+	$(MAKE) clipboard-linux-fixtures-check
+else
+	@echo "NOTE copy-clipboard-linux.json / get_clipboard_linux.json: not regenerated on $(shell uname -s); the Linux 'Rust port contract' job verifies them. Run 'make clipboard-linux-fixtures-check' (Docker) to verify here."
+endif
+
+clipboard-linux-differential: clipboard-linux-fixtures-ci
+	$(CARGO) test -p symvault-mcp --test tools_copy_to_clipboard_linux_contract --locked
+	$(CARGO) test -p symvault-platform --test get_clipboard_linux_contract --test owned_clipboard_command_contract --locked
+ifeq ($(shell uname -s),Linux)
+	SYMVAULT_GATE=1 $(CARGO) test -p symvault-cli --test clipboard_linux_entrypoints --locked
+endif
 
 .PHONY: export-differential
 export-differential:
