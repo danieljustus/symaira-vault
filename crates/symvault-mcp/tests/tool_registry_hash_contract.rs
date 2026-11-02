@@ -5,9 +5,14 @@
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 use symvault_core::session::MemoryKeyring;
 use symvault_crypto::generate_identity;
+use symvault_mcp::http::{HttpShutdown, serve_loopback_until_cancelled};
 use symvault_mcp::toolhash::{
     ToolHashDef, catalog_hash_defs, compute_tool_registry_hash, current_tool_registry_hash,
     is_drift,
@@ -451,4 +456,177 @@ fn drift_refusal_is_audited_and_ordered_after_scope_denial() {
             && text.contains("\"code\":\"tool_registry_drift\""),
         "drift audit entry missing: {text}"
     );
+}
+
+/// Stale-era registry hash shape (the 01c5ea51… generation); never equal to the
+/// catalog hash.
+const STALE_TOKEN_HASH: &str = "01c5ea51000000000000000000000000000000000000000000000000000000aa";
+const DRIFT_REFUSAL: &str = "tool registry has changed since this token was issued \u{2014} re-issue the token with 'symvault agent token new fixture'";
+
+fn http_tools_call(
+    address: std::net::SocketAddr,
+    bearer: &str,
+    id: u32,
+    tool: &str,
+    arguments: &str,
+) -> Value {
+    // One connection per request; the per-token session persists server-side.
+    let send = |body: String| -> String {
+        let request = format!(
+            "POST /mcp HTTP/1.1\r\nHost: {address}\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {bearer}\r\nX-Symaira-Agent: fixture\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let mut stream = TcpStream::connect(address).expect("connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(30)))
+            .expect("read timeout");
+        stream.write_all(request.as_bytes()).expect("send");
+        let mut response = String::new();
+        stream.read_to_string(&mut response).expect("read response");
+        response
+    };
+    let initialize = send(
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"probe","version":"1.0"},"capabilities":{}}}"#
+            .to_owned(),
+    );
+    assert!(initialize.starts_with("HTTP/1.1 200"), "{initialize}");
+    let initialized = send(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#.to_owned());
+    assert!(
+        initialized.starts_with("HTTP/1.1 202") || initialized.starts_with("HTTP/1.1 200"),
+        "{initialized}"
+    );
+    let call = send(format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"tools/call","params":{{"name":"{tool}","arguments":{arguments}}}}}"#
+    ));
+    assert!(call.starts_with("HTTP/1.1 200"), "{call}");
+    let body = call.split_once("\r\n\r\n").expect("response body").1;
+    let response: Value = serde_json::from_str(body).expect("JSON-RPC response");
+    assert!(
+        response.get("error").is_none(),
+        "unexpected RPC error: {response}"
+    );
+    response["result"].clone()
+}
+
+/// The HTTP layer must feed each bearer token's stored `tool_registry_hash`
+/// into the session (`set_token_registry_hash`): a stale stored hash is refused
+/// with Go's drift text and a `tool_registry_drift` audit; the current hash and
+/// the legacy empty hash are not.
+#[test]
+fn http_bearer_token_stored_registry_hash_drives_drift_refusal() {
+    let (root, identity, audit) = fixture_vault();
+    let current = current_tool_registry_hash().expect("hash");
+    let tokens: serde_json::Map<String, Value> = [
+        ("tok-stale", "bearer-stale", STALE_TOKEN_HASH),
+        ("tok-current", "bearer-current", current.as_str()),
+        ("tok-legacy", "bearer-legacy", ""),
+    ]
+    .into_iter()
+    .map(|(id, bearer, registry_hash)| {
+        let mut record = serde_json::json!({
+            "id": id,
+            "hash": symvault_store::sha256_hex(bearer.as_bytes()),
+            "prefix": "http",
+            "allowed_tools": ["*"],
+            "agent_name": "fixture",
+            "created_at": "2026-01-01T00:00:00Z",
+        });
+        if !registry_hash.is_empty() {
+            record["tool_registry_hash"] = Value::String(registry_hash.to_owned());
+        }
+        (id.to_owned(), record)
+    })
+    .collect();
+    let registry_dir = tempfile::tempdir().expect("registry dir");
+    let registry_path = registry_dir.path().join("mcp-tokens.json");
+    fs::write(
+        &registry_path,
+        serde_json::to_vec(&serde_json::json!({"version": 2, "tokens": tokens}))
+            .expect("serialize registry"),
+    )
+    .expect("write registry");
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+    let address = listener.local_addr().expect("address");
+    let shutdown = HttpShutdown::default();
+    let server_shutdown = shutdown.clone();
+    let server_root = root.path().to_path_buf();
+    let mut identity = Some(identity);
+    let server = thread::spawn(move || {
+        let server_root_dir = server_root;
+        serve_loopback_until_cancelled(
+            listener,
+            &registry_path,
+            move |_agent| {
+                let identity = identity.take().expect("one handler per agent");
+                let config = ReadOnlyRuntimeConfig {
+                    server_name: "symvault".into(),
+                    server_version: "0.0.0-fixture".into(),
+                    transport: "http".into(),
+                    agent_name: "fixture".into(),
+                    approval_mode: "none".into(),
+                    allowed_paths: vec!["*".into()],
+                    available_tools: read_only_tool_names(),
+                    vault_dir: server_root_dir.to_string_lossy().into_owned(),
+                    vault_unlocked: true,
+                    ..ReadOnlyRuntimeConfig::default()
+                };
+                ProtocolHandler::with_store_read_only_runtime_and_audit(
+                    "symvault",
+                    "0.0.0-fixture",
+                    &server_root_dir,
+                    identity,
+                    config,
+                    None,
+                    None,
+                    Some(Arc::clone(&audit)),
+                )
+                .map_err(|error| error.to_string())
+            },
+            server_shutdown,
+        )
+        .expect("serve loopback");
+    });
+
+    let stale = http_tools_call(
+        address,
+        "bearer-stale",
+        2,
+        "symaira_search",
+        r#"{"intent":"auth"}"#,
+    );
+    assert_eq!(stale["isError"], Value::Bool(true), "stale: {stale}");
+    assert_eq!(stale["content"][0]["text"], DRIFT_REFUSAL);
+
+    for bearer in ["bearer-current", "bearer-legacy"] {
+        let accepted =
+            http_tools_call(address, bearer, 2, "symaira_search", r#"{"intent":"auth"}"#);
+        assert_ne!(
+            accepted["isError"],
+            Value::Bool(true),
+            "{bearer} must not be refused: {accepted}"
+        );
+    }
+
+    let events = http_tools_call(
+        address,
+        "bearer-current",
+        3,
+        "symaira_audit_self",
+        r#"{"limit":50}"#,
+    );
+    let text = events["content"][0]["text"].as_str().expect("audit text");
+    assert_eq!(
+        text.matches("\"code\":\"tool_registry_drift\"").count(),
+        1,
+        "exactly the stale call is audited as drift: {text}"
+    );
+    assert!(
+        text.contains("\"tool\":\"tool_registry_drift\"")
+            && text.contains("\"path\":\"symaira_search\""),
+        "drift audit entry missing: {text}"
+    );
+
+    shutdown.cancel().expect("cancel server");
+    server.join().expect("join server");
 }

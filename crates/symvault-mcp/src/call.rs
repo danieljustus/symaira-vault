@@ -115,6 +115,13 @@ pub trait ToolCallRuntime: Send + Sync {
     /// override this so the refusal lands between the tier checks and the
     /// policy gate, as in `validateToolAccess`; the default refuses after
     /// `authorize`, which is only equivalent for policy-free runtimes.
+    ///
+    /// The default writes no `tool_registry_drift` audit entry and uses the
+    /// agent name from [`Self::registry_drift_agent`] (empty unless
+    /// overridden). It exists for policy-free runtimes in tests and examples
+    /// only: every production runtime (`StoreReadOnlyRuntime`, wired by the
+    /// CLI's `mcp serve` and `ProtocolHandler::with_store_read_only_runtime*`)
+    /// overrides it to audit and to name the agent.
     fn authorize_with_registry_drift(
         &self,
         name: &str,

@@ -799,6 +799,10 @@ mod tests {
     use super::*;
     use std::{fs, sync::mpsc, time::Duration};
 
+    /// A real-shaped, non-empty tool-registry hash (the stale-era Go value).
+    const ROTATED_REGISTRY_HASH: &str =
+        "bccf8c7e8660328030bc4e9bbc0c0d43a650278bae4b8ef60d5543d64c46455d";
+
     fn vault_dir() -> (tempfile::TempDir, std::path::PathBuf) {
         let root = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
         let path = root.path().to_path_buf();
@@ -983,7 +987,8 @@ mod tests {
 
         let later = now + time::Duration::minutes(5);
         let (rotated, new_access, new_refresh) =
-            rotate_via_refresh_token(&path, &raw_refresh, "", later).expect("rotate refresh token");
+            rotate_via_refresh_token(&path, &raw_refresh, ROTATED_REGISTRY_HASH, later)
+                .expect("rotate refresh token");
         assert_ne!(new_access, raw_access);
         assert_ne!(new_refresh, raw_refresh);
         assert_eq!(
@@ -997,6 +1002,16 @@ mod tests {
             Some(go_rfc3339(later).as_str())
         );
         assert!(!stored[&rotated.id].revoked);
+        // The replacement is stamped with the caller's hash, not the old token's.
+        assert_eq!(rotated.tool_registry_hash, ROTATED_REGISTRY_HASH);
+        assert_eq!(
+            stored[&rotated.id].tool_registry_hash,
+            ROTATED_REGISTRY_HASH
+        );
+        assert_ne!(
+            stored[&original.id].tool_registry_hash,
+            stored[&rotated.id].tool_registry_hash
+        );
         assert!(rotate_via_refresh_token(&path, &raw_refresh, "", later).is_err());
         assert!(rotate_via_refresh_token(&path, &new_refresh, "", later).is_ok());
     }
@@ -1031,10 +1046,16 @@ mod tests {
             &path,
             &refresh,
             time::Duration::hours(24),
-            "",
+            ROTATED_REGISTRY_HASH,
             later,
         )
         .expect("valid refresh can renew expired access token");
+        assert_eq!(rotated.tool_registry_hash, ROTATED_REGISTRY_HASH);
+        assert_eq!(
+            read(&path.join(TOKEN_REGISTRY_FILE)).expect("read rotated registry")[&rotated.id]
+                .tool_registry_hash,
+            ROTATED_REGISTRY_HASH
+        );
         assert_eq!(
             rotated.expires_at.as_deref(),
             Some(go_rfc3339(later + time::Duration::hours(24)).as_str())
