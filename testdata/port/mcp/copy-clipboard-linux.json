@@ -1,0 +1,855 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "go_version": "go1.26.6",
+    "goos": "linux",
+    "atotto_clipboard_version": "v0.1.4",
+    "source_files": [
+      "go.mod",
+      "go.sum",
+      "internal/clipboard/clipboard.go",
+      "internal/clipboard/clipboard_signal_unix.go",
+      "internal/clipboard/interface.go",
+      "internal/clipboard/provider.go",
+      "internal/clipboard/system_clipboard.go",
+      "internal/mcp/server/server.go",
+      "internal/mcp/server/tools_clipboard.go"
+    ],
+    "source_hash": "6faaf06e505e6c80c65f900d73f677f9ceeb773c728997a38687db7ba4f79b8d",
+    "generator_files": [
+      "internal/mcp/server/mcp_copy_clipboard_linux_fixture_generator_test.go",
+      "internal/mcp/server/mcp_copy_clipboard_fixture_generator_test.go",
+      "internal/mcp/server/mcpsetentry_fixture_generator_test.go",
+      "internal/mcp/server/tools_test_helpers.go"
+    ],
+    "generator_hash": "173bdb537a6b8068ccb93bfbf14b5efcc779c62d291a805db0ebf4e05720ef34"
+  },
+  "note": "Real Go tools/call copy_to_clipboard on GOOS=linux with the production clipboard.DefaultClipboard() (atotto/clipboard command backend, selected at process start from PATH and WAYLAND_DISPLAY) and fake POSIX-shell tools on a disposable PATH; no clipboard.SetClipboard. Source digests are working-tree digests of the files listed, not a commit pin.",
+  "server_name": "symvault",
+  "server_version": "0.0.0-copy-clipboard-linux-fixture",
+  "script_placeholders": [
+    "@REC@",
+    "@EXIT@",
+    "@FOCUS1@",
+    "@FOCUS2@",
+    "@FOCUSEXIT@"
+  ],
+  "fake_tools": {
+    "clip.exe": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2\u003e/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" \u003e \"$REC/seq\"\nmode=copy\n{ printf '%s\\n' 'clip.exe' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } \u003e \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat \u003e \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2\u003e/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" \u003e \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "powershell.exe": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2\u003e/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" \u003e \"$REC/seq\"\nmode=paste\n{ printf '%s\\n' 'powershell.exe' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } \u003e \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat \u003e \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2\u003e/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" \u003e \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "termux-clipboard-get": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2\u003e/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" \u003e \"$REC/seq\"\nmode=paste\n{ printf '%s\\n' 'termux-clipboard-get' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } \u003e \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat \u003e \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2\u003e/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" \u003e \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "termux-clipboard-set": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2\u003e/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" \u003e \"$REC/seq\"\nmode=copy\n{ printf '%s\\n' 'termux-clipboard-set' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } \u003e \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat \u003e \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2\u003e/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" \u003e \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "wl-copy": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2\u003e/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" \u003e \"$REC/seq\"\nmode=copy\n{ printf '%s\\n' 'wl-copy' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } \u003e \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat \u003e \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2\u003e/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" \u003e \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "wl-paste": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2\u003e/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" \u003e \"$REC/seq\"\nmode=paste\n{ printf '%s\\n' 'wl-paste' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } \u003e \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat \u003e \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2\u003e/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" \u003e \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "xclip": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2\u003e/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" \u003e \"$REC/seq\"\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\n{ printf '%s\\n' 'xclip' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } \u003e \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat \u003e \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2\u003e/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" \u003e \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "xsel": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2\u003e/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" \u003e \"$REC/seq\"\nmode=paste\nfor a in \"$@\"; do case \"$a\" in --input) mode=copy;; esac; done\n{ printf '%s\\n' 'xsel' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } \u003e \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat \u003e \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2\u003e/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" \u003e \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n"
+  },
+  "cases": [
+    {
+      "name": "no_tool_installed",
+      "path_tools": null,
+      "wayland_display": "",
+      "tool_exit": 0,
+      "auto_clear_duration": 0,
+      "repeat": 1,
+      "want_calls": 0,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "clipboard copy failed: No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        }
+      ],
+      "tool_calls": []
+    },
+    {
+      "name": "xclip_success",
+      "path_tools": [
+        "xclip"
+      ],
+      "wayland_display": "",
+      "tool_exit": 0,
+      "auto_clear_duration": 0,
+      "repeat": 1,
+      "want_calls": 1,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "StrongP@ssw0rd123"
+        }
+      ]
+    },
+    {
+      "name": "xclip_success_auto_clear",
+      "path_tools": [
+        "xclip"
+      ],
+      "wayland_display": "",
+      "tool_exit": 0,
+      "auto_clear_duration": 1,
+      "repeat": 1,
+      "want_calls": 2,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "StrongP@ssw0rd123"
+        },
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "xclip_refreshes_auto_clear",
+      "path_tools": [
+        "xclip"
+      ],
+      "wayland_display": "",
+      "tool_exit": 0,
+      "auto_clear_duration": 1,
+      "repeat": 2,
+      "want_calls": 3,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 3,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "StrongP@ssw0rd123"
+        },
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "StrongP@ssw0rd123"
+        },
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "xsel_success_auto_clear",
+      "path_tools": [
+        "xsel"
+      ],
+      "wayland_display": "",
+      "tool_exit": 0,
+      "auto_clear_duration": 1,
+      "repeat": 1,
+      "want_calls": 2,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "xsel",
+          "mode": "copy",
+          "argv": [
+            "--input",
+            "--clipboard"
+          ],
+          "stdin": "StrongP@ssw0rd123"
+        },
+        {
+          "tool": "xsel",
+          "mode": "copy",
+          "argv": [
+            "--input",
+            "--clipboard"
+          ],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "xclip_beats_xsel",
+      "path_tools": [
+        "xsel",
+        "xclip"
+      ],
+      "wayland_display": "",
+      "tool_exit": 0,
+      "auto_clear_duration": 0,
+      "repeat": 1,
+      "want_calls": 1,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "StrongP@ssw0rd123"
+        }
+      ]
+    },
+    {
+      "name": "wayland_wl_copy_auto_clear",
+      "path_tools": [
+        "wl-copy",
+        "wl-paste",
+        "xclip"
+      ],
+      "wayland_display": "wayland-0",
+      "tool_exit": 0,
+      "auto_clear_duration": 1,
+      "repeat": 1,
+      "want_calls": 2,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "wl-copy",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "StrongP@ssw0rd123"
+        },
+        {
+          "tool": "wl-copy",
+          "mode": "copy",
+          "argv": [],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "wayland_without_wl_paste_uses_xclip",
+      "path_tools": [
+        "wl-copy",
+        "xclip"
+      ],
+      "wayland_display": "wayland-0",
+      "tool_exit": 0,
+      "auto_clear_duration": 0,
+      "repeat": 1,
+      "want_calls": 1,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "StrongP@ssw0rd123"
+        }
+      ]
+    },
+    {
+      "name": "wl_copy_ignored_without_wayland",
+      "path_tools": [
+        "wl-copy",
+        "wl-paste",
+        "xsel"
+      ],
+      "wayland_display": "",
+      "tool_exit": 0,
+      "auto_clear_duration": 0,
+      "repeat": 1,
+      "want_calls": 1,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "xsel",
+          "mode": "copy",
+          "argv": [
+            "--input",
+            "--clipboard"
+          ],
+          "stdin": "StrongP@ssw0rd123"
+        }
+      ]
+    },
+    {
+      "name": "termux_success",
+      "path_tools": [
+        "termux-clipboard-set",
+        "termux-clipboard-get"
+      ],
+      "wayland_display": "",
+      "tool_exit": 0,
+      "auto_clear_duration": 0,
+      "repeat": 1,
+      "want_calls": 1,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "termux-clipboard-set",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "StrongP@ssw0rd123"
+        }
+      ]
+    },
+    {
+      "name": "windows_exe_success",
+      "path_tools": [
+        "clip.exe",
+        "powershell.exe"
+      ],
+      "wayland_display": "",
+      "tool_exit": 0,
+      "auto_clear_duration": 0,
+      "repeat": 1,
+      "want_calls": 1,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"success\": true}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "clip.exe",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "StrongP@ssw0rd123"
+        }
+      ]
+    },
+    {
+      "name": "xclip_exit_failure",
+      "path_tools": [
+        "xclip"
+      ],
+      "wayland_display": "",
+      "tool_exit": 1,
+      "auto_clear_duration": 1,
+      "repeat": 1,
+      "want_calls": 1,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "clipboard copy failed: exit status 1",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "StrongP@ssw0rd123"
+        }
+      ]
+    },
+    {
+      "name": "xsel_exit_failure_code_3",
+      "path_tools": [
+        "xsel"
+      ],
+      "wayland_display": "",
+      "tool_exit": 3,
+      "auto_clear_duration": 0,
+      "repeat": 1,
+      "want_calls": 1,
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"copy_to_clipboard\",\"arguments\":{\"path\":\"github\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-copy-clipboard-linux-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "clipboard copy failed: exit status 3",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool": "xsel",
+          "mode": "copy",
+          "argv": [
+            "--input",
+            "--clipboard"
+          ],
+          "stdin": "StrongP@ssw0rd123"
+        }
+      ]
+    }
+  ]
+}

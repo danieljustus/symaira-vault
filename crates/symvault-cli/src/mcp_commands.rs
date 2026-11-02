@@ -23,8 +23,6 @@ use std::{
 };
 
 use crate::run_commands::McpCommandExecutor;
-#[cfg(not(target_os = "macos"))]
-use symvault_core::platform::UnavailablePlatform;
 use symvault_core::{
     config::{AgentProfile, Config, McpConfig},
     platform::Clipboard,
@@ -868,15 +866,11 @@ fn autotype_backend() -> Option<Arc<dyn symvault_core::platform::Autotype>> {
     Some(symvault_platform::native_autotype())
 }
 
+/// Go's `clipboard.DefaultClipboard()`: `pbcopy` on macOS and the atotto
+/// command selection on Linux (`wl-copy`/`xclip`/`xsel`/Termux/`clip.exe`);
+/// unavailable elsewhere.
 fn clipboard_backend() -> Arc<dyn Clipboard> {
-    #[cfg(target_os = "macos")]
-    {
-        Arc::new(symvault_platform::MacOsPlatform)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        Arc::new(UnavailablePlatform)
-    }
+    symvault_platform::native_command_clipboard()
 }
 
 fn runtime_config(
