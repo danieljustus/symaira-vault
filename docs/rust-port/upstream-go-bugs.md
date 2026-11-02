@@ -86,7 +86,7 @@ Go oracle, never a reading of the source alone.
 - **Rust:** keeps it (`write_mcp`), a declared difference like 1 and 2 (`declared_line_differences` of
   `rewrite.json`, case `mcp_oauth`; live: `agent_uninstall_keeps_every_mcp_field_go_keeps`).
 
-## 9. yaml.v3 writes literal blocks that start with a line break or a space wrongly
+## 9. yaml.v3 writes literal blocks that start with a line break, a space or a tab wrongly
 
 - **Where:** `gopkg.in/yaml.v3` emitter, hit by `Config.SaveTo` for any string value.
 - **Repro (a):** `scan_patterns: [{name: n, pattern: p, description: "\nlead", severity: low}]`, or
@@ -103,9 +103,18 @@ Go oracle, never a reading of the source alone.
   (`go_saved_faithful: false`; the generator now also compares map keys when it decides whether Go's bytes are
   faithful). A key with a leading space and a line break keeps its `? |4-` form on both sides because the
   indicator matches at that depth (case `leading_space_map_key`).
+- **Repro (d):** a multi-line string whose first character is a **TAB** (`"\ta\nb"` as a list item, a value or a
+  mapping key). yaml.v3 writes a literal block (`|-` / `? |-`) whose first content character is the tab, and
+  neither Go nor Rust can load the saved file (`yaml: line N: found a tab character where an indentation space
+  is expected`). Recorded: cases `leading_tab_list_item`, `leading_tab_map_value`, `leading_tab_map_key`
+  (`go_saved_faithful: false`). Swept alongside it (probed against yaml.v3 at mapping depths 0-5 as value, list
+  item and key): a leading CR, form feed, vertical tab, NBSP, NEL, BOM, NUL, BEL, DEL, ESC, ZWSP, EM SPACE or
+  ideographic space is already written double-quoted by yaml.v3 and round-trips; only a leading LF, U+2028,
+  U+2029, space (in a sequence item) and TAB break, so TAB is the only addition to the guard.
 - **Expected:** a double-quoted scalar for these strings (or a correct indicator).
 - **Rust:** writes them double-quoted (`yaml::string_value` for values and list items, `yaml::mapping_key` for the
-  `? key` form), so the file always loads and reloads equal; every other string, multi-line included, is
+  `? key` form; the guard is a leading line break, a leading tab, or a leading space off the indicator's
+  depth), so the file always loads and reloads equal; every other string, multi-line included, is
   byte-identical to Go.
 
 ## 10. `Config.SaveTo` also drops `mcp.perplexity`, `mcp.approval_required`, `git.author`, `git.email`, `clipboard.printByDefault`
@@ -121,6 +130,10 @@ Go oracle, never a reading of the source alone.
   `git_identity`, `clipboard_print_by_default`). `clipboard.printByDefault` is still folded into
   `copyByDefault` (so the effective value is the same) and written back next to it; `perplexity.allow_private`
   is carried through but, as in Go's loader, nothing reads it.
+- **Unknown keys are dropped (same as Go):** only the four `mcp.perplexity` fields above are modelled, so an
+  unknown nested key under `mcp.perplexity` (a typo or a future field) does not survive a rewrite. This is the
+  codebase-wide unknown-key policy: Go's `Config` has no catch-all either, and the same holds for every other
+  section.
 
 ## 11. `Config.SaveTo` widens a tiered profile's permissions
 
@@ -146,5 +159,9 @@ Go oracle, never a reading of the source alone.
   `agent_profile_show_is_unchanged_by_a_rewrite_for_every_tier` (`config_rewrite_differential.rs`:
   `agent profile show bot --output json` identical before and after `agent uninstall other --yes`), each with a
   negative control.
+- **Builtin agents without a tier (narrowing, same as Go):** a builtin agent (e.g. `claude-code`) that has no
+  `tier:` and an explicit `approvalMode: null` is rewritten to the builtin deny default (`approvalMode: deny`),
+  because there is no preset whose mode a null could keep. That narrows the profile (deny is the strictest mode)
+  rather than widening it, and Go writes the same bytes, so it is not a declared difference.
 - **Related, not a widening:** Go writes no `canWrite` for a custom profile that never set it; Rust always writes
   `canWrite` (a missing one is `false` either way). Declared as `rust_adds` for case `custom_without_can_write`.

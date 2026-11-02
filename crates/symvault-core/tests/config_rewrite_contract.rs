@@ -452,7 +452,7 @@ fn rewritten_files_reload_to_the_same_sections() {
     }
 }
 
-/// yaml.v3 writes a value that starts with a line break (or, inside a
+/// yaml.v3 writes a value that starts with a line break or a tab (or, inside a
 /// sequence item, with a space) as a literal block that no parser reads back
 /// or that loses the break; Rust must not copy those bytes.
 #[test]
@@ -470,6 +470,9 @@ fn go_bytes_that_do_not_round_trip_are_written_double_quoted() {
             "leading_break_list_item",
             "leading_break_scan_pattern",
             "leading_break_map_value",
+            "leading_tab_list_item",
+            "leading_tab_map_value",
+            "leading_tab_map_key",
             "leading_break_map_key"
         ]
     );

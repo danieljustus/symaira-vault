@@ -107,7 +107,11 @@ pub fn string_in_sequence(text: &str, sequence_indent: i32) -> String {
 ///    of `4`, which a parser reads relative to the parent's column, while the
 ///    content sits at the collection's emitter indent. The two agree only when
 ///    the content is exactly four columns deeper (every sequence item and a
-///    mapping nested in one breaks: the file no longer parses).
+///    mapping nested in one breaks: the file no longer parses);
+///  - a value that starts with a TAB: yaml.v3 writes the tab as the first
+///    content character of the block, and its scanner (and every other one)
+///    rejects it as indentation (`found a tab character where an indentation
+///    space is expected`).
 fn string_value(text: &str, content_indent: i32, parent_indent: i32) -> String {
     let mut emitter = Emitter::new();
     emitter.indention = false;
@@ -348,7 +352,9 @@ impl Emitter {
             && let Some(parent) = self.literal_parent
         {
             let first = text.chars().next();
-            if first.is_some_and(is_break) || (first == Some(' ') && indent != parent + BEST_INDENT)
+            if first.is_some_and(is_break)
+                || first == Some('\t')
+                || (first == Some(' ') && indent != parent + BEST_INDENT)
             {
                 style = Style::DoubleQuoted;
             }
@@ -732,6 +738,10 @@ mod tests {
         assert_eq!(string_in_sequence(" a\nb", 12), "\" a\\nb\"");
         assert_eq!(string_in_mapping(" a\nb", 6), "\" a\\nb\"");
         assert_eq!(string_in_mapping("\na", 4), "\"\\na\"");
+        // A leading TAB cannot start a literal block's content.
+        assert_eq!(string_in_mapping("\ta\nb", 4), "\"\\ta\\nb\"");
+        assert_eq!(string_in_sequence("\ta\nb", 12), "\"\\ta\\nb\"");
+        assert_eq!(string_in_mapping("a\n\tb", 4), "|-\n        a\n        \tb");
         // At depth 4 the indentation indicator is right and is kept.
         assert_eq!(string_in_mapping(" a\nb", 4), "|4-\n         a\n        b");
         // Keys: simple, quoted, and the `? key` form of a multi-line key.
@@ -745,6 +755,7 @@ mod tests {
         // block (`? |4-` reloads as `a\nb`): double-quoted instead.
         assert_eq!(mapping_key("\na\nb", 8), "? \"\\na\\nb\"\n        :");
         assert_eq!(mapping_key("\n", 4), "? \"\\n\"\n    :");
+        assert_eq!(mapping_key("\ta\nb", 8), "? \"\\ta\\nb\"\n        :");
         // A leading space needs the indicator, which matches at this depth.
         assert_eq!(
             mapping_key(" a\nb", 4),
