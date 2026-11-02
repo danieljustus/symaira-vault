@@ -19,6 +19,11 @@ pub(crate) fn set_quiet(quiet: bool) {
     QUIET.store(quiet, Ordering::Relaxed);
 }
 
+/// Whether `--quiet` is in effect (`cliout.Warnf` prints nothing then).
+pub(crate) fn is_quiet() -> bool {
+    QUIET.load(Ordering::Relaxed)
+}
+
 /// `--no-pipe-warning`: Go's `cli.NoPipeWarning`, set from the root flag.
 pub(crate) fn set_no_pipe_warning(suppress: bool) {
     NO_PIPE_WARNING.store(suppress, Ordering::Relaxed);

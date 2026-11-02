@@ -14,9 +14,8 @@ use symvault_core::config::{Config, GitConfig};
 #[cfg(test)]
 use symvault_crypto::encrypt;
 use symvault_crypto::{
-    Identity, Recipient, SecretBytes, decrypt_identity, encrypt_identity_scrypt, fingerprint,
-    generate_identity, identity_string, parse_identity, parse_recipient, recipient_string,
-    reencrypt,
+    Identity, Recipient, SecretBytes, encrypt_identity_scrypt, fingerprint, generate_identity,
+    identity_string, parse_identity, parse_recipient, recipient_string, reencrypt,
 };
 use symvault_sync::{
     CommitOptions, DeviceRegistry, GitRepository, GoTime, JoinResponse, PairingFile,
@@ -119,7 +118,10 @@ pub(crate) fn open_unlocked_vault(vault: &Path, identity: &Identity) -> Result<(
     let store = symvault_store::Store::open(vault, identity).map_err(|error| error.to_string())?;
     store
         .migrate_legacy()
-        .map_err(|error| format!("migrate legacy entries: {error}"))
+        .map_err(|error| format!("migrate legacy entries: {error}"))?;
+    // Go's `Open` rebuilds a missing, stale or incomplete manifest on every open.
+    store.reconcile_manifest_on_open(identity);
+    Ok(())
 }
 
 pub(crate) fn unlock_vault_with_runtime(
@@ -193,7 +195,9 @@ fn unlock_vault_with_mode(
         let Some(data) = data.as_deref() else {
             return Err(missing_identity());
         };
-        if let Ok(identity) = decrypt_identity(data, &SecretBytes::new(&cached)) {
+        // Go's `resolveUnlockPassphrase` hands the cached passphrase to
+        // `OpenWithPassphrase`, which heals a legacy zero-key identity too.
+        if let Ok(identity) = crate::identity_error::open_identity(vault, data, &cached) {
             // `OpenWithPassphrase` loads config.yaml after the identity; the
             // store would treat a missing file as the default configuration.
             if !config_present {
@@ -217,18 +221,8 @@ fn unlock_vault_with_mode(
         return Err("open vault: passphrase is empty".to_owned());
     }
     let data = data.ok_or_else(missing_identity)?;
-    let sec_pass = SecretBytes::new(passphrase.as_bytes());
-    let identity = decrypt_identity(&data, &sec_pass).map_err(|error| {
-        format!(
-            "open vault: {}",
-            crate::identity_error::load_identity_error(
-                vault,
-                &data,
-                passphrase.as_bytes(),
-                error.class()
-            )
-        )
-    })?;
+    let identity = crate::identity_error::open_identity(vault, &data, passphrase.as_bytes())
+        .map_err(|error| format!("open vault: {error}"))?;
     if !config_present {
         return Err(format!(
             "open vault: load config: {}",

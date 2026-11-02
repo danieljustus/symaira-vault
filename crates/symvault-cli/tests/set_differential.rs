@@ -655,7 +655,7 @@ fn open_failure_cases() -> Vec<Case> {
             mutate: Some(|root| write_identity(root, &scrypt_shaped("AAAAAAAAAAAAAAAAAAAAAA"))),
         },
     ];
-    let commands: [(&str, &[&str]); 7] = [
+    let commands: [(&str, &[&str]); 9] = [
         ("get", &["get", "w/a.password"]),
         ("list", &["list"]),
         ("set", &["set", "w/a.password", "--value", STRONG]),
@@ -663,6 +663,10 @@ fn open_failure_cases() -> Vec<Case> {
         ("delete", &["delete", "w/a", "--yes"]),
         ("find", &["find", "a"]),
         ("edit", &["edit", "w/a"]),
+        // `unlock` and `verify` print `open vault: load identity: ...` twice,
+        // like every other command (SET-004).
+        ("unlock", &["unlock"]),
+        ("verify", &["verify"]),
     ];
     let mut out = Vec::new();
     for damage in &damages {
@@ -1158,20 +1162,6 @@ fn run_prompted(binary: &Path, parent: &Path, case: &PromptCase) -> Prompted {
         (None, after) => after,
         (Some(_), None) => None,
     };
-    // Go leaves `.lock` and `manifest.age` behind after any successful open,
-    // read-only commands included; the native read paths write neither (a
-    // vault-maintenance gap tracked in docs/rust-port/cli-gap-inventory.md,
-    // not part of the prompt contract compared here).
-    let read_only = case
-        .args
-        .iter()
-        .any(|arg| matches!(*arg, "get" | "list" | "delete"));
-    let created = created.map(|files| {
-        files
-            .into_iter()
-            .filter(|file| !read_only || (file != ".lock" && file != "manifest.age"))
-            .collect::<Vec<_>>()
-    });
     Prompted {
         code: driven["rc"].as_i64().map(|code| code as i32),
         stdout: normalise(&decode("stdout"), &root, &home),

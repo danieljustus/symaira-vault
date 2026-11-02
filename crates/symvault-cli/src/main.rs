@@ -2974,7 +2974,8 @@ fn run_verify(
         let identity = device::unlock_vault(&vault)?;
         verify_commands::verify(&vault, &identity, rebuild, rebuild_only, &mut io::stderr())
     })();
-    finish_vault_result(result)
+    // Go returns every failure from `RunE`: cobra and `ExecuteRoot` each print it.
+    finish_vault_result_doubled_exit3(result)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3323,7 +3324,7 @@ fn run_auth_set(
                         .map_err(|error| format!("read identity: {error}"))?;
                     let _ = &config_bytes;
                     let passphrase = passphrase_for_biometric_setup(&vault, &runtime)?;
-                    decrypt_identity(&identity_bytes, &SecretBytes::new(passphrase.as_bytes()))
+                    identity_error::open_identity(&vault, &identity_bytes, passphrase.as_bytes())
                         .map_err(|error| format!("open vault: {error}"))?;
                     session_commands::save_touch_id_passphrase(
                         &vault,
@@ -3372,19 +3373,8 @@ fn run_auth_rotate_passphrase(
 
         let old_passphrase = session_input::read_passphrase("Current passphrase: ")
             .map_err(|error| format!("cannot read current passphrase: {error}"))?;
-        let identity =
-            match decrypt_identity(&original, &SecretBytes::new(old_passphrase.as_bytes())) {
-                Ok(identity) => identity,
-                Err(error) => {
-                    let load_error = identity_error::load_identity_error(
-                        &vault,
-                        &original,
-                        old_passphrase.as_bytes(),
-                        error.class(),
-                    );
-                    return Err(format!("current passphrase is incorrect: {load_error}"));
-                }
-            };
+        let identity = identity_error::open_identity(&vault, &original, old_passphrase.as_bytes())
+            .map_err(|error| format!("current passphrase is incorrect: {error}"))?;
 
         device::open_unlocked_vault(&vault, &identity)
             .map_err(|error| format!("current passphrase is incorrect: {error}"))?;
@@ -5539,9 +5529,9 @@ fn run_unlock(
         let identity_bytes = fs::read(vault.join("identity.age"))
             .map_err(|error| format!("read identity: {error}"))?;
         let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
-        let secret = SecretBytes::new(passphrase.as_bytes());
-        let decrypted_identity = decrypt_identity(&identity_bytes, &secret)
-            .map_err(|error| format!("unlock vault: {error}"))?;
+        let decrypted_identity =
+            identity_error::open_identity(&vault, &identity_bytes, passphrase.as_bytes())
+                .map_err(|error| format!("open vault: {error}"))?;
         device::open_unlocked_vault(&vault, &decrypted_identity)
             .map_err(|error| format!("open vault: {error}"))?;
         let configured_ttl = if config.session_timeout.is_zero() {
@@ -5609,6 +5599,15 @@ fn passphrase_for_biometric_setup(
     session_input::read_passphrase("Passphrase: ")
 }
 
+/// Go's `Touch ID skipped` warning (`internal/cli/unlock.go`).
+const TOUCH_ID_SKIPPED: &str = "Touch ID skipped (no GUI session); use 'symvault unlock' in a graphical session or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE";
+
+/// `touchid && !interactive && !SessionHasGUISession()`: the branch that follows
+/// Go's `touchid && SessionHasGUISession()` attempt.
+const fn touch_id_skip_warning(touch_id: bool, interactive: bool, gui_session: bool) -> bool {
+    touch_id && !interactive && !gui_session
+}
+
 fn unlock_passphrase(
     config_bytes: &[u8],
     config: &Config,
@@ -5664,6 +5663,16 @@ fn unlock_passphrase_with_mode(
             }
             Err(_) => {}
         }
+    }
+    // `resolveUnlockPassphrase`: Touch ID is a GUI prompt, so a script without a
+    // GUI session is told why it was skipped (`cliout.Warnf`, silenced by --quiet).
+    if touch_id_skip_warning(
+        config.effective_auth_method() == symvault_core::config::AuthMethod::Touchid,
+        interactive,
+        session_commands::gui_session_available(),
+    ) && !session_input::is_quiet()
+    {
+        eprintln!("{TOUCH_ID_SKIPPED}");
     }
     if interactive {
         session_input::unlock_passphrase_for_session(config_bytes)
@@ -5733,6 +5742,12 @@ fn finish_session_result(
                     "Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored."
                 );
                 return ExitCode::from(4);
+            }
+            if locked_error && error.starts_with("open vault: ") {
+                // `UnlockVaultForSession` wraps the open failure in a CLIError,
+                // which cobra and `ExecuteRoot` each print.
+                print_error_like_go(&error);
+                return ExitCode::from(1);
             }
             let _ = writeln!(io::stderr(), "Error: {error}");
             if error.contains("vault not initialized") {
@@ -6530,5 +6545,35 @@ mod get_clipboard_wiring_tests {
             false,
         );
         assert_eq!(outcome.clipboard.state.lock().unwrap().0, "5432");
+    }
+}
+
+#[cfg(test)]
+mod touch_id_skip_warning_tests {
+    use super::{TOUCH_ID_SKIPPED, touch_id_skip_warning};
+
+    /// Go: `touchid && SessionHasGUISession()` attempts Touch ID; only the
+    /// `else if touchid && !interactive && !SessionHasGUISession()` warns.
+    #[test]
+    fn warns_only_for_touch_id_without_a_gui_session_when_not_interactive() {
+        for touch_id in [false, true] {
+            for interactive in [false, true] {
+                for gui in [false, true] {
+                    assert_eq!(
+                        touch_id_skip_warning(touch_id, interactive, gui),
+                        touch_id && !interactive && !gui,
+                        "touch_id={touch_id} interactive={interactive} gui={gui}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_text_is_gos() {
+        assert_eq!(
+            TOUCH_ID_SKIPPED,
+            "Touch ID skipped (no GUI session); use 'symvault unlock' in a graphical session or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE"
+        );
     }
 }

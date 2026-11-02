@@ -393,7 +393,10 @@ fn probe(
     } else {
         ciphertext
     };
-    let Ok(decryptor) = age::Decryptor::new(subject) else {
+    // The bytes are untrusted: a line the age crate would chew on for minutes
+    // is never handed to it (Go's parser would accept it; the text it would
+    // then give depends on key material, which is not worth the walk).
+    let Ok(decryptor) = symvault_crypto::entry_decryptor(subject) else {
         return Probe::Unexplained;
     };
     let reader = match identity {
@@ -489,7 +492,7 @@ fn authenticates_first_chunks(
     identity: &Identity<'_>,
     chunks: usize,
 ) -> bool {
-    let Ok(decryptor) = age::Decryptor::new(ciphertext) else {
+    let Ok(decryptor) = symvault_crypto::entry_decryptor(ciphertext) else {
         return false;
     };
     let reader = match identity {

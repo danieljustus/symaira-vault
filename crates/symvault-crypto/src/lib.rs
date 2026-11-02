@@ -340,8 +340,7 @@ pub fn encrypt(plaintext: &[u8], recipients: &[Recipient]) -> Result<Vec<u8>, Cr
 
 /// Decrypts an age entry with an X25519 identity.
 pub fn decrypt(ciphertext: &[u8], identity: &Identity) -> Result<Vec<u8>, CryptoError> {
-    let decryptor = age::Decryptor::new(ciphertext)
-        .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope"))?;
+    let decryptor = entry_decryptor(ciphertext).map_err(|_| entry_header_error())?;
     let mut reader = decryptor
         .decrypt(iter::once(&identity.0 as &dyn age::Identity))
         .map_err(|_| CryptoError::new(FailureClass::WrongPassphraseOrKey, "decryption failed"))?;
@@ -361,8 +360,7 @@ pub fn decrypt_bounded(
     identity: &Identity,
     max_plaintext_bytes: u64,
 ) -> Result<Vec<u8>, CryptoError> {
-    let decryptor = age::Decryptor::new(ciphertext)
-        .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope"))?;
+    let decryptor = entry_decryptor(ciphertext).map_err(|_| entry_header_error())?;
     let mut reader = decryptor
         .decrypt(iter::once(&identity.0 as &dyn age::Identity))
         .map_err(|_| CryptoError::new(FailureClass::WrongPassphraseOrKey, "decryption failed"))?;
@@ -412,7 +410,10 @@ pub fn decrypt_scrypt(ciphertext: &[u8], passphrase: &SecretBytes) -> Result<Vec
     );
     let mut identity = age::scrypt::Identity::new(secret);
     identity.set_max_work_factor(MAX_SCRYPT_WORK_FACTOR);
-    let decryptor = age::Decryptor::new(ciphertext)
+    if identity_header_refused(ciphertext) {
+        return Err(identity_header_error(ciphertext));
+    }
+    let decryptor = linear_decryptor(ciphertext)
         .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope"))?;
     let mut reader = decryptor
         .decrypt(iter::once(&identity as &dyn age::Identity))
@@ -692,7 +693,10 @@ impl age::Identity for ArgonPolicyInspector {
 
 /// Inspects historical header budgets without a KDF or authenticating its key.
 pub fn inspect_argon2id_policy(raw: &[u8]) -> Result<bool, CryptoError> {
-    let decryptor = age::Decryptor::new(raw).map_err(|_| malformed_argon2id())?;
+    if identity_header_refused(raw) {
+        return Err(malformed_argon2id());
+    }
+    let decryptor = linear_decryptor(raw).map_err(|_| malformed_argon2id())?;
     let inspector = ArgonPolicyInspector {
         status: Cell::new(None),
     };
@@ -891,7 +895,10 @@ fn decrypt_argon2id_with_mode(
     passphrase: &SecretBytes,
     mode: ReadMode,
 ) -> Result<Vec<u8>, CryptoError> {
-    let decryptor = age::Decryptor::new(ciphertext)
+    if identity_header_refused(ciphertext) {
+        return Err(identity_header_error(ciphertext));
+    }
+    let decryptor = linear_decryptor(ciphertext)
         .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope"))?;
     let identity = ArgonIdentity {
         passphrase: SecretBytes::new(passphrase.as_bytes()),
@@ -925,6 +932,342 @@ fn decrypt_argon2id_with_mode(
         })?;
     }
     Ok(plaintext)
+}
+
+/// age's `format.maxHeaderBytes`.
+const MAX_AGE_HEADER_BYTES: usize = 2 << 20;
+/// age's `format.maxRecipientStanzas`.
+const MAX_AGE_STANZAS: usize = 1024;
+/// What the `age` crate is handed for an identity file. A vault identity header
+/// is about 150 bytes; the crate's header parser is superlinear in the length
+/// of a line (a 64 KiB argument line costs it 17 s, Go's parser microseconds),
+/// so anything beyond this is refused without calling it. Go reports such a
+/// file as an identity the passphrase does not open, which the caller words.
+const IDENTITY_HEADER_BUDGET: usize = 16 * 1024;
+const IDENTITY_LINE_BUDGET: usize = 1024;
+
+/// Scans an age header the way `format.Parse` accounts for it, without its
+/// validation, and says whether it outgrows `limit` bytes, has a line longer
+/// than `line_cap`, or more than `stanza_cap` stanzas. A malformed header makes
+/// the scan stop with `false`, leaving the complaint to the real parser.
+fn age_header_beyond(raw: &[u8], limit: usize, line_cap: usize, stanza_cap: usize) -> bool {
+    // Charges the next line; `None` is "past a bound".
+    let line_end = |position: &mut usize| -> Option<(usize, bool)> {
+        let rest = &raw[*position..];
+        let (length, terminated) = match rest.iter().position(|&byte| byte == b'\n') {
+            Some(end) => (end + 1, true),
+            None => (rest.len(), false),
+        };
+        if *position + length > limit || length > line_cap {
+            return None;
+        }
+        let start = *position;
+        *position += length;
+        Some((start, terminated))
+    };
+    let mut position = 0;
+    match line_end(&mut position) {
+        None => return true,
+        Some((_, false)) => return false,
+        Some(_) => {}
+    }
+    let mut stanzas = 0;
+    loop {
+        if position + 3 > limit {
+            return true;
+        }
+        if raw.len() - position < 3 {
+            return false;
+        }
+        if &raw[position..position + 3] == b"---" {
+            return line_end(&mut position).is_none();
+        }
+        stanzas += 1;
+        if stanzas > stanza_cap {
+            return true;
+        }
+        // A stanza: its opening line, then body lines up to the first short one.
+        for index in 0.. {
+            let Some((start, terminated)) = line_end(&mut position) else {
+                return true;
+            };
+            if !terminated {
+                return false;
+            }
+            let length = position - start - 1;
+            if index == 0 {
+                if !raw[start..position].starts_with(b"->") {
+                    return false;
+                }
+            } else if length != 64 {
+                break;
+            }
+        }
+    }
+}
+
+/// Whether Go's age header parser would give up on `raw` because the header
+/// outgrows 2 MiB (`header exceeds 2 MiB`), without parsing it in full. It
+/// keeps an absurdly large identity file linear in the 2 MiB Go may read.
+#[must_use]
+pub fn age_header_exceeds_limit(raw: &[u8]) -> bool {
+    age_header_beyond(raw, MAX_AGE_HEADER_BYTES, usize::MAX, usize::MAX)
+}
+
+/// Whether `raw` is not worth handing to the `age` crate as an identity file:
+/// Go's 2 MiB cap and 1024-stanza cap, plus the crate's own cost limits.
+fn identity_header_refused(raw: &[u8]) -> bool {
+    age_header_exceeds_limit(raw)
+        || age_header_beyond(
+            raw,
+            IDENTITY_HEADER_BUDGET,
+            IDENTITY_LINE_BUDGET,
+            MAX_AGE_STANZAS,
+        )
+}
+
+/// Where the header of `raw` ends (the offset just past the `--- <mac>` line),
+/// by `format.Parse`'s accounting and without its validation: 2 MiB at most,
+/// stanza bodies as full 64-column lines up to the first short one. `None` when
+/// the header is unterminated, outgrows the cap or is not shaped like one; the
+/// real parser then has nothing to complain about that this scan did not.
+/// One pass, linear in the bytes it reads.
+fn age_header_extent(raw: &[u8]) -> Option<usize> {
+    let limit = MAX_AGE_HEADER_BYTES.min(raw.len());
+    let mut position = 0;
+    let next_line = |position: &mut usize| -> Option<(usize, usize)> {
+        let rest = &raw[*position..limit];
+        let end = rest.iter().position(|&byte| byte == b'\n')?;
+        let start = *position;
+        *position += end + 1;
+        Some((start, end))
+    };
+    next_line(&mut position)?;
+    loop {
+        if raw.get(position..position + 3)? == b"---" {
+            next_line(&mut position)?;
+            return Some(position);
+        }
+        for index in 0.. {
+            let (start, length) = next_line(&mut position)?;
+            if index == 0 {
+                if !raw[start..].starts_with(b"->") {
+                    return None;
+                }
+            } else if length != 64 {
+                break;
+            }
+        }
+    }
+}
+
+/// A reader over an age file that hands the `age` crate its whole header in one
+/// `read_until` instead of line by line. The crate re-parses everything read so
+/// far after every line it asks for, so a header of `n` lines and `s` bytes costs
+/// it `n * s` (a 12 KiB header of 2000 tiny stanzas took 67 s, Go's parser
+/// 0.2 s). The extent is found by one linear scan ([`age_header_extent`]);
+/// anything the parser still wants beyond it is an incomplete header.
+pub struct HeaderReader<'a> {
+    data: &'a [u8],
+    position: usize,
+    header_end: usize,
+}
+
+impl std::io::Read for HeaderReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let count = (&self.data[self.position..]).read(buf)?;
+        self.position += count;
+        Ok(count)
+    }
+}
+
+impl std::io::BufRead for HeaderReader<'_> {
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        Ok(&self.data[self.position..])
+    }
+
+    fn consume(&mut self, amount: usize) {
+        self.position = (self.position + amount).min(self.data.len());
+    }
+
+    fn read_until(&mut self, _byte: u8, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+        if self.position != 0 {
+            return Ok(0);
+        }
+        buf.extend_from_slice(&self.data[..self.header_end]);
+        self.position = self.header_end;
+        Ok(self.header_end)
+    }
+}
+
+/// `age::Decryptor::new` without the parser's superlinear header read, for any
+/// header the vault itself guards ([`identity_header_refused`]). The error is the
+/// crate's `InvalidHeader`, which every caller words as an unreadable envelope.
+fn linear_decryptor(raw: &[u8]) -> Result<age::Decryptor<HeaderReader<'_>>, age::DecryptError> {
+    let header_end = age_header_extent(raw).ok_or(age::DecryptError::InvalidHeader)?;
+    age::Decryptor::new_buffered(HeaderReader {
+        data: raw,
+        position: 0,
+        header_end,
+    })
+}
+
+/// The longest header line, the most stanzas and the most body lines per stanza
+/// the `age` crate is handed for an entry or manifest. Everything this vault
+/// (and Go's `age.Encrypt`) writes is `X25519`, `scrypt` or `argon2id`: stanza
+/// lines of 55-100 bytes, one body line of 43-59 columns and a 48-byte footer;
+/// Go parses at most 1024 recipient stanzas. Entry ciphertext is untrusted (a git
+/// pull or rsync can drop a file into `entries/`) and the crate's header parser
+/// is superlinear in lines, stanzas and body lines, so a header shaped any other
+/// way is refused without calling it. Rust-written entries also carry one grease
+/// stanza (see [`entry_header_extent`]).
+const ENTRY_LINE_BUDGET: usize = 1024;
+/// The body of a grease stanza is 0-99 random bytes: at most 133 base64
+/// characters, i.e. two full 64-column lines and a short (or empty) one.
+const ENTRY_GREASE_BODY_LINES: usize = 3;
+
+/// Strict, linear validation of an entry or manifest ciphertext header: the
+/// exact `age-encryption.org/v1` intro, 1..=1024 stanzas of the types the vault
+/// writes (`X25519` with one 43-character argument and a one-line body;
+/// `scrypt` with two arguments; `argon2id` with up to four; rust-age's random
+/// `*-grease` stanza with a body of up to [`ENTRY_GREASE_BODY_LINES`] lines), each
+/// opening line within [`ENTRY_LINE_BUDGET`], bodies as full 64-column lines
+/// then a short one, a `--- ` footer of 43 characters and the 2 MiB cap. Returns
+/// the offset just past the footer line. Deliberately refuses other stanza types
+/// (Go would skip them as unknown) and the pre-1.0 unterminated body, so the
+/// parser is only ever handed what it digests in time.
+fn entry_header_extent(raw: &[u8]) -> Option<usize> {
+    const INTRO: &[u8] = b"age-encryption.org/v1\n";
+    let limit = MAX_AGE_HEADER_BYTES.min(raw.len());
+    let mut position = INTRO.len();
+    if !raw.starts_with(INTRO) {
+        return None;
+    }
+    let line = |position: &mut usize| -> Option<&[u8]> {
+        let rest = &raw[*position..limit];
+        let end = rest.iter().position(|&byte| byte == b'\n')?;
+        if end + 1 > ENTRY_LINE_BUDGET {
+            return None;
+        }
+        let text = &rest[..end];
+        *position += end + 1;
+        Some(text)
+    };
+    let mut stanzas = 0;
+    loop {
+        if raw.get(position..position + 3)? == b"---" {
+            let footer = line(&mut position)?;
+            let tag = footer.strip_prefix(b"--- ")?;
+            return (stanzas > 0 && tag.len() == 43).then_some(position);
+        }
+        stanzas += 1;
+        if stanzas > MAX_AGE_STANZAS {
+            return None;
+        }
+        let opening = line(&mut position)?.strip_prefix(b"-> ")?;
+        let mut arguments = opening.split(|&byte| byte == b' ');
+        let kind = arguments.next()?;
+        let shape: StanzaShape = match kind {
+            b"X25519" => StanzaShape::new(1..=1, 43..=43, 1),
+            b"scrypt" => StanzaShape::new(2..=2, 1..=64, 1),
+            b"argon2id" => StanzaShape::new(1..=4, 1..=64, 1),
+            // rust-age appends one random `<1-8 chars>-grease` stanza with up to
+            // four 1-8 character arguments and a 0-99 byte body (up to three lines).
+            tag if tag.len() <= 64
+                && tag.ends_with(b"-grease")
+                && tag.iter().all(|byte| (33..=126).contains(byte)) =>
+            {
+                StanzaShape::new(0..=8, 1..=64, ENTRY_GREASE_BODY_LINES)
+            }
+            _ => return None,
+        };
+        let mut count = 0;
+        for argument in arguments {
+            count += 1;
+            if !shape.argument_length.contains(&argument.len())
+                || !argument.iter().all(|byte| (33..=126).contains(byte))
+            {
+                return None;
+            }
+        }
+        if !shape.arguments.contains(&count) {
+            return None;
+        }
+        for index in 1.. {
+            if index > shape.body_lines {
+                return None;
+            }
+            if line(&mut position)?.len() != 64 {
+                break;
+            }
+        }
+    }
+}
+
+/// What a stanza of an admitted type may look like.
+struct StanzaShape {
+    arguments: std::ops::RangeInclusive<usize>,
+    argument_length: std::ops::RangeInclusive<usize>,
+    body_lines: usize,
+}
+
+impl StanzaShape {
+    fn new(
+        arguments: std::ops::RangeInclusive<usize>,
+        argument_length: std::ops::RangeInclusive<usize>,
+        body_lines: usize,
+    ) -> Self {
+        Self {
+            arguments,
+            argument_length,
+            body_lines,
+        }
+    }
+}
+
+/// Whether `raw` (untrusted entry/manifest ciphertext) must not be handed to the
+/// `age` crate: see [`entry_header_extent`]. Every caller that feeds the crate
+/// bytes it did not just produce goes through [`entry_decryptor`].
+#[must_use]
+pub fn entry_header_refused(raw: &[u8]) -> bool {
+    entry_header_extent(raw).is_none()
+}
+
+/// `age::Decryptor::new` for untrusted entry/manifest ciphertext: refuses a
+/// header [`entry_header_extent`] does not admit, and reads an admitted one in a
+/// single linear pass. The error is the crate's `InvalidHeader`.
+pub fn entry_decryptor(raw: &[u8]) -> Result<age::Decryptor<HeaderReader<'_>>, age::DecryptError> {
+    let header_end = entry_header_extent(raw).ok_or(age::DecryptError::InvalidHeader)?;
+    age::Decryptor::new_buffered(HeaderReader {
+        data: raw,
+        position: 0,
+        header_end,
+    })
+}
+
+/// The error for a refused entry header: the same class and text as any other
+/// envelope the `age` crate cannot parse.
+fn entry_header_error() -> CryptoError {
+    CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope")
+}
+
+/// The error for a refused identity header. An `argon2id` stanza whose line is
+/// too long to be one is Go's `ErrArgon2Malformed` (a resource-class error that
+/// is reported as it is); any other oversized header is simply an envelope the
+/// passphrase does not open.
+fn identity_header_error(raw: &[u8]) -> CryptoError {
+    // Go's parser fails on a header past 2 MiB before it looks at any stanza.
+    if age_header_exceeds_limit(raw) {
+        return CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope");
+    }
+    let scanned = &raw[..raw.len().min(MAX_AGE_HEADER_BYTES)];
+    if scanned
+        .split(|&byte| byte == b'\n')
+        .any(|line| line.len() > IDENTITY_LINE_BUDGET && line.starts_with(b"-> argon2id "))
+    {
+        return malformed_argon2id();
+    }
+    CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope")
 }
 
 /// Identifies the passphrase envelope family without attempting decryption.
@@ -1126,7 +1469,10 @@ pub fn recover_zero_key_identity(
         ));
     }
     let zeros = SecretBytes(vec![0; passphrase_len]);
-    let decryptor = age::Decryptor::new(raw)
+    if identity_header_refused(raw) {
+        return Err(identity_header_error(raw));
+    }
+    let decryptor = linear_decryptor(raw)
         .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope"))?;
     let identity = ArgonIdentity {
         passphrase: zeros,
@@ -1151,6 +1497,81 @@ pub fn recover_zero_key_identity(
     }
     drop(reader);
     parse_recovered_identity(&mut plaintext, authority)
+}
+
+/// Go's `RecoverZeroKeyIdentityWithAuthorities`: one zero-key KDF run, then the
+/// recovered identity is checked against every independently trusted authority.
+///
+/// The error text is Go's: an unwrap that fails is
+/// `zero-key recovery failed: decryption failed`; a plaintext that is unreadable,
+/// is not an identity or matches no authority is `zero-key recovery failed`; a
+/// resource-policy refusal keeps its own class.
+pub fn recover_zero_key_identity_with_authorities(
+    raw: &[u8],
+    passphrase_len: usize,
+    authorities: &[ZeroKeyAuthority<'_>],
+) -> Result<Identity, CryptoError> {
+    if authorities.is_empty() {
+        return Err(CryptoError::new(
+            FailureClass::InvalidInput,
+            "zero-key authority is invalid",
+        ));
+    }
+    for authority in authorities {
+        validate_zero_key_authority(*authority)?;
+    }
+    if passphrase_len == 0 || passphrase_len > MAX_ZERO_KEY_PASSPHRASE_LEN {
+        return Err(CryptoError::new(
+            FailureClass::InvalidInput,
+            "zero-key length is invalid",
+        ));
+    }
+    let unwrap_failed = || {
+        CryptoError::new(
+            FailureClass::ZeroKeyCandidate,
+            "zero-key recovery failed: decryption failed",
+        )
+    };
+    let recovery_failed =
+        || CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed");
+    let zeros = SecretBytes(vec![0; passphrase_len]);
+    if identity_header_refused(raw) {
+        let error = identity_header_error(raw);
+        return Err(if error.to_string() == "malformed argon2id stanza" {
+            error
+        } else {
+            unwrap_failed()
+        });
+    }
+    let decryptor = linear_decryptor(raw).map_err(|_| unwrap_failed())?;
+    let identity = ArgonIdentity {
+        passphrase: zeros,
+        mode: ReadMode::Automatic,
+        error: Cell::new(None),
+    };
+    let mut reader = decryptor
+        .decrypt(iter::once(&identity as &dyn age::Identity))
+        .map_err(|_| identity.error.get().unwrap_or_else(unwrap_failed))?;
+    let mut plaintext = Vec::new();
+    if reader.read_to_end(&mut plaintext).is_err() {
+        plaintext.zeroize();
+        return Err(recovery_failed());
+    }
+    drop(reader);
+    let result = (|| {
+        let value = std::str::from_utf8(&plaintext).map_err(|_| recovery_failed())?;
+        let parsed = parse_identity(value.trim()).map_err(|_| recovery_failed())?;
+        if authorities
+            .iter()
+            .any(|authority| validate_recovered_identity(&parsed, *authority).is_ok())
+        {
+            Ok(parsed)
+        } else {
+            Err(recovery_failed())
+        }
+    })();
+    plaintext.zeroize();
+    result
 }
 
 #[cfg(test)]
@@ -2030,6 +2451,362 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(invalid_authority.class(), FailureClass::InvalidInput);
+    }
+
+    #[test]
+    fn recovery_with_authorities_derives_once_and_words_failures_like_go() {
+        let expected = parse_identity(ID).unwrap();
+        let other = parse_identity(ID2).unwrap();
+        let params = Argon2idParams {
+            time: 1,
+            memory_kib: 32,
+            threads: 1,
+        };
+        let zeros = SecretBytes::new(&[0; 23]);
+        let ciphertext = encrypt_argon2id(ID.as_bytes(), &zeros, params).unwrap();
+        let (right, wrong) = (recipient_string(&expected), recipient_string(&other));
+
+        // Any listed authority that matches recovers the identity.
+        let recovered = recover_zero_key_identity_with_authorities(
+            &ciphertext,
+            23,
+            &[
+                ZeroKeyAuthority::recipient(&wrong),
+                ZeroKeyAuthority::recipient(&right),
+            ],
+        )
+        .unwrap();
+        assert_eq!(recipient_string(&recovered), right);
+
+        // Nothing matches: Go's bare `ErrZeroKeyRecovery`.
+        let mismatch = recover_zero_key_identity_with_authorities(
+            &ciphertext,
+            23,
+            &[ZeroKeyAuthority::recipient(&wrong)],
+        )
+        .unwrap_err();
+        assert_eq!(mismatch.to_string(), "zero-key recovery failed");
+
+        // A key of another length does not unwrap: `ErrZeroKeyRecovery: ErrDecryptionFailed`.
+        let unwrap = recover_zero_key_identity_with_authorities(
+            &ciphertext,
+            22,
+            &[ZeroKeyAuthority::recipient(&right)],
+        )
+        .unwrap_err();
+        assert_eq!(
+            unwrap.to_string(),
+            "zero-key recovery failed: decryption failed"
+        );
+
+        // Authorities are checked before the length, the length before the KDF.
+        let invalid =
+            recover_zero_key_identity_with_authorities(&ciphertext, 1025, &[]).unwrap_err();
+        assert_eq!(invalid.class(), FailureClass::InvalidInput);
+        let too_long = recover_zero_key_identity_with_authorities(
+            &ciphertext,
+            MAX_ZERO_KEY_PASSPHRASE_LEN + 1,
+            &[ZeroKeyAuthority::recipient(&right)],
+        )
+        .unwrap_err();
+        assert_eq!(too_long.to_string(), "zero-key length is invalid");
+    }
+
+    #[test]
+    fn age_header_limit_follows_go_byte_accounting() {
+        let intro = b"age-encryption.org/v1\n";
+        let footer = [b"--- ".as_slice(), &[b'A'; 43], b"\n"].concat();
+        let header = |pad: usize| {
+            [
+                intro.as_slice(),
+                b"-> scrypt AAAAAAAAAAAAAAAAAAAAAA 15 ",
+                &vec![b'z'; pad],
+                b"\nAAAA\n",
+                &footer,
+            ]
+            .concat()
+        };
+        let base = header(0).len();
+        // The header, closing line included, may be exactly 2 MiB.
+        assert!(!age_header_exceeds_limit(&header(
+            MAX_AGE_HEADER_BYTES - base
+        )));
+        assert!(age_header_exceeds_limit(&header(
+            MAX_AGE_HEADER_BYTES - base + 1
+        )));
+        // Payload after the closing line is not charged.
+        let mut with_payload = header(0);
+        with_payload.extend_from_slice(&vec![0; 3 << 20]);
+        assert!(!age_header_exceeds_limit(&with_payload));
+        // No newline at all: charged up to the limit.
+        assert!(age_header_exceeds_limit(
+            &[intro.as_slice(), &vec![b'x'; 3 << 20]].concat()
+        ));
+        assert!(!age_header_exceeds_limit(b"garbage"));
+        // A header the `age` crate would chew on for minutes is refused, with
+        // Go's resource-class error for an argon2id stanza that long.
+        let long = [
+            intro.as_slice(),
+            b"-> argon2id AAAAAAAAAAAAAAAAAAAAAA ",
+            &vec![b'z'; 64 * 1024],
+            b"\nAAAA\n",
+            &footer,
+        ]
+        .concat();
+        assert!(!age_header_exceeds_limit(&long));
+        assert!(identity_header_refused(&long));
+        assert_eq!(
+            identity_header_error(&long).to_string(),
+            "malformed argon2id stanza"
+        );
+        let started = std::time::Instant::now();
+        let error = decrypt_identity(&long, &SecretBytes::new(b"passphrase")).unwrap_err();
+        assert_eq!(error.to_string(), "malformed argon2id stanza");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    }
+
+    /// `age-encryption.org/v1`, `stanzas`, then a 43-character MAC and a payload
+    /// that is long enough for the nonce.
+    fn crafted_header(stanzas: &[u8]) -> Vec<u8> {
+        let mut raw = b"age-encryption.org/v1\n".to_vec();
+        raw.extend_from_slice(stanzas);
+        raw.extend_from_slice(b"--- ");
+        raw.extend(std::iter::repeat_n(b'A', 43));
+        raw.push(b'\n');
+        raw.extend_from_slice(&[0; 64]);
+        raw
+    }
+
+    fn repeated(unit: &[u8], count: usize) -> Vec<u8> {
+        unit.repeat(count)
+    }
+
+    /// The hostile header shapes of the SET-004c review, each cheap to build and
+    /// each minutes of work for the `age` crate's header parser (measured in a
+    /// debug build: 2000 tiny stanzas 67 s, one stanza of 200 body lines 21 s,
+    /// 32 stanzas of 1 KiB lines 15 s, a 2 MiB header more than 100 s).
+    fn hostile_headers() -> Vec<(&'static str, Vec<u8>)> {
+        let kilo_line = [b"-> X25519 ".as_slice(), &[b'z'; 1000], b"\nAAAA\n"].concat();
+        let mut two_mib_of_lines = Vec::new();
+        while two_mib_of_lines.len() < (2 << 20) - 2000 {
+            two_mib_of_lines.extend_from_slice(&kilo_line);
+        }
+        let mut two_mib_of_tiny = Vec::new();
+        while two_mib_of_tiny.len() < (2 << 20) - 2000 {
+            two_mib_of_tiny.extend_from_slice(b"-> a\n\n");
+        }
+        let body_lines = [
+            b"-> X25519 ".as_slice(),
+            &[b'A'; 43],
+            b"\n",
+            &repeated(&[&[b'A'; 64][..], b"\n"].concat(), 200),
+            b"\n",
+        ]
+        .concat();
+        let x25519 = [b"-> X25519 ".as_slice(), &[b'A'; 43], b"\nAAAA\n"].concat();
+        vec![
+            (
+                "2000 tiny stanzas",
+                crafted_header(&repeated(b"-> a\n\n", 2000)),
+            ),
+            (
+                "1000 tiny stanzas",
+                crafted_header(&repeated(b"-> a\n\n", 1000)),
+            ),
+            ("2 MiB of tiny stanzas", crafted_header(&two_mib_of_tiny)),
+            ("one stanza of 200 body lines", crafted_header(&body_lines)),
+            (
+                "32 stanzas of 1 KiB lines",
+                crafted_header(&repeated(&kilo_line, 32)),
+            ),
+            (
+                "2 MiB of sub-1-KiB lines",
+                crafted_header(&two_mib_of_lines),
+            ),
+            (
+                "1025 valid-looking X25519 stanzas",
+                crafted_header(&repeated(&x25519, 1025)),
+            ),
+            (
+                "unknown stanza type",
+                crafted_header(&[b"-> mystery ".as_slice(), &[b'A'; 43], b"\nAAAA\n"].concat()),
+            ),
+            (
+                "X25519 with a second argument",
+                crafted_header(&[b"-> X25519 ".as_slice(), &[b'A'; 43], b" x\nAAAA\n"].concat()),
+            ),
+            ("no stanza at all", crafted_header(b"")),
+            (
+                "unterminated stanza body",
+                [
+                    b"age-encryption.org/v1\n-> X25519 ".as_slice(),
+                    &[b'A'; 43],
+                    b"\nAAAA",
+                ]
+                .concat(),
+            ),
+            (
+                "grease body of four lines",
+                crafted_header(
+                    &[
+                        b"-> x-grease\n".as_slice(),
+                        &repeated(&[&[b'A'; 64][..], b"\n"].concat(), 3),
+                        b"\n",
+                    ]
+                    .concat(),
+                ),
+            ),
+        ]
+    }
+
+    #[test]
+    fn entry_header_validator_accepts_everything_the_vault_writes() {
+        let identity = generate_identity();
+        let own = || parse_recipient(&recipient_string(&identity)).unwrap();
+        let single = encrypt(b"payload", &[own()]).unwrap();
+        assert!(!entry_header_refused(&single));
+
+        // 171 recipients (a header over 16 KiB) and Go's 1024-stanza limit.
+        for count in [171, 1023] {
+            let recipients: Vec<Recipient> = std::iter::once(own())
+                .chain(
+                    (1..count)
+                        .map(|_| parse_recipient(&recipient_string(&generate_identity())).unwrap()),
+                )
+                .collect();
+            let wide = encrypt(b"payload", &recipients).unwrap();
+            let header_end = wide
+                .windows(5)
+                .position(|window| window == b"\n--- ")
+                .unwrap();
+            assert!(count != 171 || header_end > IDENTITY_HEADER_BUDGET);
+            assert!(!entry_header_refused(&wide), "{count} recipients");
+            assert_eq!(decrypt(&wide, &identity).unwrap(), b"payload");
+            assert_eq!(decrypt_bounded(&wide, &identity, 64).unwrap(), b"payload");
+        }
+
+        let scrypt = encrypt_scrypt(b"payload", &SecretBytes::new(b"pw"), 4).unwrap();
+        assert!(!entry_header_refused(&scrypt));
+        let argon = encrypt_argon2id(
+            b"payload",
+            &SecretBytes::new(b"pw"),
+            Argon2idParams {
+                time: 1,
+                memory_kib: 32,
+                threads: 1,
+            },
+        )
+        .unwrap();
+        assert!(!entry_header_refused(&argon));
+        assert_eq!(
+            decrypt_argon2id(&argon, &SecretBytes::new(b"pw")).unwrap(),
+            b"payload"
+        );
+    }
+
+    #[test]
+    fn rust_age_grease_stanzas_of_every_size_are_admitted() {
+        // The crate appends one random `*-grease` stanza: tag and up to four
+        // arguments of 1-8 characters, a 0-99 byte body (up to three lines).
+        let identity = generate_identity();
+        let recipient = parse_recipient(&recipient_string(&identity)).unwrap();
+        for _ in 0..300 {
+            let ciphertext = encrypt(b"payload", std::slice::from_ref(&recipient)).unwrap();
+            assert!(!entry_header_refused(&ciphertext));
+            assert_eq!(decrypt(&ciphertext, &identity).unwrap(), b"payload");
+        }
+    }
+
+    #[test]
+    fn hostile_entry_headers_are_refused_in_microseconds_by_every_entry_decrypt() {
+        let identity = generate_identity();
+        for (name, header) in hostile_headers() {
+            assert!(entry_header_refused(&header), "{name}");
+            let started = std::time::Instant::now();
+            for result in [
+                decrypt(&header, &identity),
+                decrypt_bounded(&header, &identity, 1024),
+            ] {
+                let error = result.unwrap_err();
+                assert_eq!(error.class(), FailureClass::MalformedEnvelope, "{name}");
+                assert_eq!(error.to_string(), "malformed age envelope", "{name}");
+            }
+            assert!(
+                started.elapsed() < std::time::Duration::from_secs(2),
+                "{name}: the age parser was reached: {:?}",
+                started.elapsed()
+            );
+        }
+    }
+
+    #[test]
+    fn oversized_identity_header_line_is_refused_quickly_by_every_identity_decrypt() {
+        let mut evil = b"age-encryption.org/v1\n-> X25519 ".to_vec();
+        evil.extend(vec![b'z'; 64 * 1024]);
+        evil.extend_from_slice(b"\nAAAA\n--- ");
+        evil.extend(vec![b'A'; 43]);
+        evil.push(b'\n');
+        evil.extend_from_slice(&[0; 64]);
+        let started = std::time::Instant::now();
+        let error = decrypt_scrypt(&evil, &SecretBytes::new(b"passphrase")).unwrap_err();
+        assert_eq!(error.class(), FailureClass::MalformedEnvelope);
+        assert_eq!(error.to_string(), "malformed age envelope");
+        assert_eq!(
+            inspect_argon2id_policy(&evil).unwrap_err().to_string(),
+            "malformed argon2id stanza"
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "the age parser was reached: {:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn identity_files_get_their_header_in_one_linear_pass() {
+        // `identity_header_refused` lets 1024 stanzas and 16 KiB through; handed to
+        // the crate line by line they cost it 10-20 s (debug) however few the
+        // bytes. Every such shape must now be an ordinary refusal or a failed
+        // unwrap in well under that.
+        let passphrase = SecretBytes::new(b"passphrase");
+        let body_lines = crafted_header(
+            &[
+                b"-> scrypt AAAAAAAAAAAAAAAAAAAAAA 10\n".as_slice(),
+                &repeated(&[&[b'A'; 64][..], b"\n"].concat(), 200),
+                b"\n",
+            ]
+            .concat(),
+        );
+        for (name, header) in [
+            (
+                "1000 tiny stanzas",
+                crafted_header(&repeated(b"-> a\n\n", 1000)),
+            ),
+            ("200 body lines", body_lines),
+        ] {
+            let started = std::time::Instant::now();
+            assert!(decrypt_scrypt(&header, &passphrase).is_err(), "{name}");
+            assert!(inspect_argon2id_policy(&header).is_err(), "{name}");
+            assert!(
+                started.elapsed() < std::time::Duration::from_secs(5),
+                "{name}: {:?}",
+                started.elapsed()
+            );
+        }
+    }
+
+    #[test]
+    fn header_extent_stops_at_the_footer_and_leaves_the_payload_alone() {
+        let identity = generate_identity();
+        let recipient = parse_recipient(&recipient_string(&identity)).unwrap();
+        let ciphertext = encrypt(&vec![7u8; 200_000], &[recipient]).unwrap();
+        let end = age_header_extent(&ciphertext).unwrap();
+        assert_eq!(end, entry_header_extent(&ciphertext).unwrap());
+        assert_eq!(ciphertext[end - 1], b'\n');
+        assert_eq!(decrypt(&ciphertext, &identity).unwrap(), vec![7u8; 200_000]);
+        // A header without its footer line has no extent.
+        assert_eq!(age_header_extent(&ciphertext[..end - 1]), None);
+        assert!(entry_decryptor(&ciphertext[..end - 1]).is_err());
     }
 
     #[test]

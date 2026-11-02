@@ -401,13 +401,146 @@ Still open:
 
 | Class | Go | Rust |
 | --- | --- | --- |
-| read-only commands (`get`, `list`, `find`, `delete` without a match) after a successful open | leave `.lock` and `manifest.age` in the vault | write neither (the prompt differential ignores the two names for these commands) |
-| vault-open failure of `verify` (probed; `run` matches, the rest were not probed) | `Error:` twice | once (only `set` and the six commands above were re-pinned) |
-| legacy zero-key vault (identity wrapped under the pre-#476 bug, valid `recipients.txt`) | heals the file and opens | refuses with `zero-key recovery failed: decryption failed` |
 | non-UTF-8 passphrase bytes at the unlock prompt | raw bytes are the passphrase | each invalid byte is U+FFFD |
-| age header larger than 2 MiB; `%q` of exotic Unicode in the quoted intro | `header exceeds 2 MiB`; `strconv.Quote` | not ported; an approximation of `unicode.IsPrint` |
+| `%q` of exotic Unicode in the quoted intro | `strconv.Quote` | an approximation of `unicode.IsPrint` |
 | Go's `bufio` fill when the writer is slower than the reader | takes one `read(2)` of whatever arrived | same model, so the same timing dependence |
 | Windows hidden read | `term.ReadPassword` | `rpassword` plus the stderr line feed (no native run) |
+
+## SET-004 fix round: legacy zero-key heal, `unlock`/`verify` errors, Go's `Open` bookkeeping
+
+Fixed, each pinned against the non-CGO Go oracle in
+`crates/symvault-cli/tests/zero_key_differential.rs` (25 heal cases, 15 header cases, 7 manifest
+cases, Touch ID warning, 4 Ctrl-D prompt cases) and, for the error shape, `set_differential.rs`
+(`unlock` and `verify` joined the 12 open-failure damages of the other seven commands):
+
+- **Legacy zero-key vaults heal.** `vault.OpenWithPassphrase` calls `tryHealZeroKeyIdentity` when an
+  Argon2id unwrap fails with a non-resource error. The shared implementation is
+  `symvault_store::zero_key::heal_zero_key_identity` (CLI and C ABI): `recipients.txt` is read first
+  (byte-exact `bufio.Scanner` rules: regular file, never a symlink, CRLF stripped, 64 KiB lines refused,
+  comments/blank lines skipped, every other line a valid `age1` key, duplicates folded), the identity is
+  recovered once with a zero key of the passphrase length (`recover_zero_key_identity_with_authorities`,
+  Go's `RecoverZeroKeyIdentityWithAuthorities`: authorities, then the 1..=1024 length, then the unwrap),
+  `recipients.txt` is re-read and must be unchanged, then `identity.age.bak` (mode 0600, atomic) receives
+  the old bytes, `identity.age` is re-wrapped with Argon2id under the real passphrase (mode 0600,
+  atomic), re-read and opened with the passphrase, and rolled back from the backup if that fails. Go
+  prints no notice and writes no audit record for a heal (`HealedFromZeroKey` has no reader). Callers
+  traced from Go's `OpenWithPassphrase` users: every unlock (`device.rs`, including the cached-session
+  passphrase), `unlock`, `auth rotate-passphrase`, `auth set touchid` and the FFI; `migrate kdf` only
+  reaches it for a scrypt identity (never healed) and `serve`'s OAuth consent check still verifies by
+  decrypting (below).
+- A heal that finds a passphrase longer than 1024 bytes reports `zero-key length is invalid` (after the
+  `recipients.txt` checks, as in Go); the heal refusals and a vault healed by either binary opening in
+  the other are pinned.
+- `unlock` and `verify` print a wrong-passphrase failure twice as `open vault: load identity: …`, exit 1.
+- The `Touch ID skipped (no GUI session); …` warning is printed by the non-interactive unlock path
+  (`get`, `list`, …) when `authMethod: touchid` and no GUI session exists; `--quiet` silences it.
+- An `identity.age` header over 2 MiB fails with `header exceeds 2 MiB` in the accounting of Go's
+  `headerReader` (intro, stanza lines, footer line and the 3-byte footer peek are charged) and no longer
+  reaches the `age` crate or the mirror parser unbounded. The `age` crate is also superlinear in the length
+  of a header line (a 64 KiB argument line takes it 17 s); identity headers over 16 KiB, with a line over
+  1 KiB or more than 1024 stanzas are therefore never handed to it and are reported as an identity the
+  passphrase does not open (an `argon2id` stanza line that long is Go's `malformed argon2id stanza`).
+  **Deliberate deviation:** a Go-valid identity with such a header cannot be opened; no vault writes one.
+- Every vault open rebuilds a missing, stale (older than `manifest_generation`) or incomplete (`.age` files
+  the manifest does not list) `manifest.age`, best effort, like `Vault.Open` (`Store::reconcile_manifest_on_open`),
+  so `verify` on a manifest-less vault verifies instead of printing `No manifest found`, and read commands
+  leave `.lock` and `manifest.age` as Go does.
+- Hidden terminal input: Ctrl-D (one zero-byte read) is ignored while the terminal is open, as in
+  `x/term`'s `readPasswordLine` loop; the terminal attributes are restored by a drop guard. Password and
+  line buffers are `Zeroizing` with their capacity reserved (growth wipes the old allocation) and the
+  consumed range of the shared 4096-byte `bufio` buffer is zeroed.
+  **Deliberate deviation:** a terminal that has hung up (the zero-byte read returns at once, 64 times in a
+  row) ends the read as `EOF`; Go spins at full CPU forever.
+  **Signals:** both binaries are killed by SIGINT/SIGTERM/SIGHUP at the prompt without running their
+  restore (`ISIG` stays on; Go's `defer` and Rust's drop guard do not run on death by signal), so both
+  leave echo off. Neither installs a handler for the hidden read.
+
+Still open:
+
+| Class | Go | Rust |
+| --- | --- | --- |
+| `serve` OAuth consent passphrase check on a legacy zero-key vault | `OpenWithPassphrase` heals the file | decrypts only; a zero-key vault is refused at consent (the vault must have been unlocked once by any command) |
+| `Touch ID skipped` warning on a host with a GUI session | not printed | not printed; the warning branch is only exercised against the oracle on hosts without one (unit test in the binary on others) |
+| `FlushManifestUpdates`, filesystem-sync reports, git relocation of `Open` | run on open | not part of the Rust open |
+
+## SET-004b/c fix rounds: entry-ciphertext header validation and delta-review follow-ups
+
+Pinned against the non-CGO Go oracle (`set_differential`, `zero_key_differential`, `cli_differential`,
+`auth_differential`, `edit_differential`, `add_form_differential`, `error_taxonomy`, `session_commands`,
+`write_commands`). `output_modes` (the frozen manpage corpus and the live
+`touch_id_availability_matches_go_in_the_same_sandbox`) is **not** pinned against that oracle: it needs the
+CGO-enabled oracle that `make output-modes-cli-differential` builds with a plain `go build` (the non-CGO
+binary cannot report Touch ID), and it SKIPs visibly without `SYMVAULT_OUTPUT_MODES_GO_BINARY`.
+
+- **Entry ciphertext is untrusted; the `age` crate's header parser is superlinear in line length, stanza count
+  and body lines (SET-004b/c).** A crafted `entries/w/zz-evil.age` (a git pull or rsync can drop one in) made
+  `list` take 53 s in the review and 50-125 s in a debug build here; Go parses every shape below in 0.1-0.4 s.
+  The crate re-parses the whole header after each line it reads, so cost is lines x bytes. Debug-build
+  measurements of the bare crate: 64 KiB line about 60 s; 1000 tiny stanzas (6 KiB) 10.6 s, 2000 (12 KiB) 67 s;
+  one stanza with 200 body lines 21.5 s; 32 x 1 KiB stanzas 14.9 s; a 2 MiB header over 100 s. SET-004b capped
+  only the line length (1 KiB) and the 2 MiB total, which left all but the first shape open.
+  **Fix:** `symvault_crypto::entry_decryptor` (used by `decrypt`, `decrypt_bounded` for entries, manifest,
+  `grant_key`, doctor round trip, and both probes of the FFI `agehdr` walk) first runs the strict, one-pass
+  `entry_header_extent`: exact `age-encryption.org/v1` intro, 1..=1024 stanzas (Go's `maxRecipientStanzas`) of
+  only the types the vault writes (`X25519` with one 43-character argument; `scrypt` with two; `argon2id` with
+  up to four; rust-age's random `*-grease` stanza with at most three body lines), opening lines of at most
+  1 KiB, bodies as 64-column lines closed by a short one, a 43-character `--- ` footer, 2 MiB cap. Anything
+  else is `malformed age envelope` without reaching the crate (Go would skip an unknown stanza type; the vault
+  never writes one). An admitted header is then handed to the crate through `HeaderReader`, whose single
+  `read_until` returns the whole header (found by that scan), so the crate parses it once. The identity-file
+  paths (`decrypt_scrypt`, `decrypt_argon2id*`, `inspect_argon2id_policy`, `recover_zero_key_identity*`) keep
+  their stricter `identity_header_refused` budget and now also read through `HeaderReader` via
+  `linear_decryptor` (a 1000-stanza identity file within the budget used to cost 10-20 s). A 171-recipient entry
+  (17 KiB header) and a 1023-recipient entry still decrypt.
+  Tests: `symvault-crypto` `entry_header_validator_accepts_everything_the_vault_writes`,
+  `rust_age_grease_stanzas_of_every_size_are_admitted`,
+  `hostile_entry_headers_are_refused_in_microseconds_by_every_entry_decrypt` (12 shapes, one per dimension,
+  each under 2 s), `identity_files_get_their_header_in_one_linear_pass`,
+  `header_extent_stops_at_the_footer_and_leaves_the_payload_alone`; `symvault-store`
+  `hostile_entry_headers_never_reach_the_age_parser` (open + reconcile + list + get + verify + rebuild over
+  five shapes under 10 s). With the validator replaced by the SET-004b rule, the store test fails (the crafted
+  header reaches the parser: `decryption failed` instead of `malformed age envelope`).
+  **Measured worst case, end to end (debug Rust binary vs Go oracle, `list` / `get` on one crafted entry):**
+  Rust 0.2-0.4 s for every shape, up to the 2 MiB headers, Go 0.06-0.4 s (one run per shape, wall clock
+  including process start).
+  **How a refused entry fails (Rust-safer deviation):** `list` exits 0 and names the file, as in Go; `get`
+  exits 1 in both. Go prints `Error: cannot read entry: cannot read entry w/zz-evil: decryption failed: invalid
+  X25519 recipient block: decryption failed: invalid X25519 recipient block` (Go's parser accepts the line and
+  rejects the block); Rust prints `Error: cannot read entry: entry ciphertext is invalid: malformed age
+  envelope`, the text of every other envelope the crate cannot parse. Exit status matches; the Go wording for
+  a hostile header is not reproduced (the FFI diagnostic still produces Go's text through its own linear
+  parser, and only its `age`-crate probes are guarded: an otherwise valid header the validator refuses reports
+  Go's `malformed header (N bytes)` fallback instead of the key-dependent text).
+- `atomic_write` in `zero_key.rs` now `fchmod`s the temporary file to the requested mode after creating it,
+  like `os.CreateTemp` + `File.Chmod`: under umask 0277 `identity.age` and `identity.age.bak` end up 0600 (they
+  were 0400). Pinned by `heal_files_keep_mode_0600_under_a_restrictive_umask_like_go` (fails without the
+  fix). **Still open, outside this heal:** Go creates `.lock`, `.symvault-migrated` and `manifest.age` with
+  the umask applied (0400 under 0277, and the next open then fails with `open lock file: permission
+  denied`); Rust creates them at a fixed 0600. A restrictive umask is not a supported configuration.
+- **Accepted deviation, I/O failures of the heal's atomic writes:** the text of a failing temp-file create,
+  write, sync or rename in `zero_key.rs` is the errno text (`write backup: …`), where Go reports its
+  `*PathError`/`*LinkError`, which names a randomly suffixed temporary file (`open /…/identity.age.bak.tmp-123456:
+  …`). The random name cannot be reproduced and is not compared; the exit status and the rollback behaviour are.
+- **Accepted deviation, `auth set touchid` with a cached session:** Go's `passphraseForBiometricSetup` returns
+  a cached-session passphrase without opening the vault; Rust opens (and so heals) in that branch too, before
+  saving the Touch ID item. Practically unreachable: a cached passphrase was verified (and healed) when it
+  was cached. Only the env-variable and prompt branches open in Go.
+- **FFI open reconciles the manifest.** `pkg/mobilebind` goes through `vault.Open` / `OpenWithPassphrase`, so
+  every FFI call that opens a vault rebuilds a missing, stale or incomplete manifest like the CLI; the FFI
+  used to rebuild only a missing one. `every_open_reconciles_the_manifest_like_go` (fails without the change).
+- **Accepted deviation, non-regular `*.age` files in `entries/`:** Go's `DetectOutOfBandEntries` counts any
+  non-directory ending in `.age`. A symlink makes Go's `list` ignore it and `verify` report it as unknown;
+  Rust refuses the whole open with `vault path is a symlink: …` (fail closed, STORE-003). A FIFO/socket named
+  `*.age` is counted by Go (whose rebuild would then `open` it, which can block); Rust skips it, so no
+  rebuild is triggered. Matching Go would mean hashing through a symlink or opening a FIFO, which is the
+  hazard the store's rooted walk exists to avoid.
+- **`generate manpages` corpus no longer expires daily.** cobra writes its generation date into the one
+  `.SH HISTORY` line it emits (`2-Nov-2026 Auto generated by spf13/cobra`, only in `symvault-version.1`), so the
+  recorded sha of that page went stale every day. Normalization rule 9 (`man-date`) now also rewrites the
+  date of exactly that line to `<MAN-DATE>`, in the generator (`outputmodegen`), the replay and the fixture
+  notes; the fixture was re-recorded through `make output-modes-regenerate` and differs from the old one only
+  in the generator digest, the rule-9 note and the five `symvault-version.1` hashes. The unit test pins the
+  shapes that must not be rewritten.
 
 ## Historical measurement, 2026-09-27
 

@@ -74,33 +74,7 @@ pub(crate) fn quote(text: &str) -> String {
 
 /// The lower-case `strerror` wording Go's `syscall.Errno` prints.
 pub(crate) fn errno_text(error: &io::Error) -> String {
-    let known = match error.raw_os_error() {
-        Some(1) => Some("operation not permitted"),
-        Some(2) => Some("no such file or directory"),
-        Some(5) => Some("input/output error"),
-        Some(13) => Some("permission denied"),
-        Some(17) => Some("file exists"),
-        Some(20) => Some("not a directory"),
-        Some(21) => Some("is a directory"),
-        Some(22) => Some("invalid argument"),
-        Some(28) => Some("no space left on device"),
-        Some(30) => Some("read-only file system"),
-        Some(36 | 63) => Some("file name too long"),
-        Some(39 | 66) => Some("directory not empty"),
-        Some(40 | 62) => Some("too many levels of symbolic links"),
-        _ => None,
-    };
-    if let Some(text) = known {
-        return text.to_owned();
-    }
-    match error.kind() {
-        io::ErrorKind::NotFound => "no such file or directory".to_owned(),
-        io::ErrorKind::PermissionDenied => "permission denied".to_owned(),
-        io::ErrorKind::AlreadyExists => "file exists".to_owned(),
-        io::ErrorKind::NotADirectory => "not a directory".to_owned(),
-        io::ErrorKind::IsADirectory => "is a directory".to_owned(),
-        _ => error.to_string().to_lowercase(),
-    }
+    symvault_store::zero_key::errno_text(error)
 }
 
 /// Go `*fs.PathError`: `op path: reason`.
