@@ -240,6 +240,106 @@ Running them:
 | `make mcp-http-replay-contract`, `mcp-http-token-contract`, `clipboard-linux-differential`, `tool-registry-hash-differential` (new on `local/rust-port`) | not steps of any workflow. `clipboard-linux-differential` and `tool-registry-hash-differential` are `port-contract` members (Linux lane); the two HTTP-replay/token contracts are explicit manual runs by design (they need a real clock and several seconds of waiting) and stay out of the area list |
 | `rust-audit.yml`, `codeql.yml`, `deferred-deps-check.yml`, `macos-*.yml`, `release.yml`, `ci.yml` | not area workflows |
 
+### Measured run times
+
+Wall-clock seconds per target of the final full `macos-area` and `linux-area`
+runs at `20291611` (48 targets each, exit 0, receipts `partial: false`,
+`area_complete: true`), measured on the MacBook (arm64) with a 1-minute load
+average of about 5 to 27 (other worktrees ran cargo and docker in parallel;
+`area-load:` lines in the log show the load at each target's start).
+`n/a` = the target does not exist in that lane. Both runs used
+warm cargo target directories; the first run after a cold start adds the
+compile to `mcp-init-differential`, `mcp-list-differential`,
+`mcp-call-differential`, `http-write-contract` and `mcp-process-contract`
+(the first, cold macOS lane on `ca0f2300` took 72 minutes at load 7 to 65).
+
+| Target | macOS (s) | Linux (s) |
+|---|---|---|
+| `mcp-init-differential` | 3 | 2 |
+| `mcp-stdio-differential` | 1 | 0 |
+| `mcp-list-differential` | 223 | 83 |
+| `mcp-call-differential` | 248 | 117 |
+| `mcp-clipboard-signals-differential` | 1 | 0 |
+| `mcp-execute-api-policy-differential` | 251 | 77 |
+| `mcp-oauth-contract` | 2 | 6 |
+| `api-templates-differential` | 2 | 0 |
+| `config-profile-differential` | 11 | 14 |
+| `config-session-differential` | 20 | 18 |
+| `cfg-overrides-fixtures-check` | 5 | 2 |
+| `device-list-differential` | 10 | 6 |
+| `device-session-differential` | 7 | 8 |
+| `pairing-differential` | 7 | 10 |
+| `git-offline-differential` | 1 | 1 |
+| `git-winner-differential` | 1 | 0 |
+| `rust-007-differential` | 8 | 6 |
+| `store004-isolation-check` | 2 | 2 |
+| `update-fixtures-check` | 15 | 6 |
+| `area-check-selftest` | 3 | 2 |
+| `worktree-prune-check` | 0 | 0 |
+| `http-framing-contract` | 8 | 4 |
+| `http-head-contract` | 5 | 5 |
+| `http-origin-contract` | 6 | 4 |
+| `http-slow-peer-contract` | 25 | 24 |
+| `http-timeout-contract` | 63 | 60 |
+| `http-tls-contract` | 92 | 94 |
+| `http-write-contract` | 397 | 385 |
+| `http-oauth-contract` | 32 | 44 |
+| `http-process-contract` | 41 | 64 |
+| `mcp-process-contract` | 431 | 101 |
+| `mcp-named-tests` | 97 | 67 |
+| `api-transport-contract` | 12 | 8 |
+| `broker-connect-contract` | 5 | 3 |
+| `broker-egress-contract` | 34 | 30 |
+| `cli-artifacts-contract` | 73 | 38 |
+| `intake-cli-contract` | 20 | 13 |
+| `serve-cli-contract` | 25 | 17 |
+| `kdf-resource-policy-contract` | 54 | 172 |
+| `read-resource-policy-contract` | 63 | 89 |
+| `mcp-http-shutdown-contract` | 8 | 7 |
+| `signal-process-contract` | 83 | 77 |
+| `store-live-contract` | 20 | 26 |
+| `store-observations-contract` | 66 | 24 |
+| `sync-observations-contract` | 56 | 32 |
+| `pairing-oracle-contract` | 67 | 21 |
+| `tui-named-tests` | 1 | 0 |
+| `tui-harness-check` | 1 | n/a |
+| `tui-contract` | n/a | 228 |
+| **sum** | **2606** | **1997** |
+
+A full lane takes about 43 minutes on macOS and about
+33 minutes on Linux when warm.
+
+Findings of the first full runs on `ca0f2300` and what changed:
+
+- `mcp-named-tests` (macOS): the `symvault-mcp --all-targets` total was 304, the
+  gate expected 296: the merged MCP authz-order slice added 8 tests. The constant
+  `AREA_MCP_TEST_COUNT` is now 304 (the count is the same on Linux).
+- `http-write-contract` (macOS): one run at load 40 to 120 failed `actual
+  progressing output required` (the slow reader of `rust/tls-output` received no
+  byte within 34 seconds, the Go side and `rust/tcp-output` progressed). Reruns
+  at load 8 to 13 passed (402 s). Timing-sensitive; run the gate below a
+  1-minute load average of about 16.
+- `signal-process-contract`: the earlier exit 2 at load 122 did not reproduce.
+  Three consecutive macOS runs at load 14 to 17 passed (82 to 87 s) and the full
+  runs of both lanes passed it.
+- `kdf-resource-policy-contract` and `tui-named-tests` (Linux only):
+  `gate_area_check.py log-ok LOG --exact-prefix X name ...` failed with
+  `unrecognized arguments` because the container's `python3` is 3.12, whose
+  argparse rejects positional names after options. The parser now accepts them
+  (`parse_known_args`, with a negative control in `test_gate_area_check.py`).
+- Container hygiene: `area_http_write_mutation.sh` and `area_pairing_oracle.sh`
+  ran `git worktree prune` inside the Linux container. Host worktree paths do
+  not exist there, so git deleted the `.git/worktrees/*` admin dirs of the host
+  worktrees. Both scripts now unregister only their own scratch worktree
+  (`remove_worktree_only`), the container runs with `gc.auto=0`,
+  `gc.worktreePruneExpire=never`, `maintenance.auto=false` (environment and
+  `/etc/gitconfig` of the image), and the `worktree-prune-check` target fails the
+  gate on any `git worktree prune|repair`, `git gc` or `git prune` in `scripts/`
+  or the Makefile. Never run those commands in a gate script or container.
+- The gate image tag is `symvault-local-gate:1-<hash of the Dockerfile>`: a
+  shared plain tag was retagged under a running lane by another worktree's
+  concurrent build.
+
 ## Pull requests folded in at the start
 
 | PR | Result |
