@@ -323,6 +323,13 @@ pub struct GitConfig {
     pub auto_pull: bool,
     pub auto_pull_interval: Duration,
     pub commit_template: String,
+    /// Go's `git.author` / `git.email`: the commit identity. Go's loader never
+    /// merges them, so its rewrite drops them; they are kept here
+    /// (`upstream-go-bugs.md` entry 10).
+    #[serde(default)]
+    pub author: String,
+    #[serde(default)]
+    pub email: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -353,6 +360,24 @@ pub struct McpConfig {
     pub allow_insecure_bind: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oauth: Option<OAuthConfig>,
+    /// The deprecated `mcp.approval_required`. Go's loader only warns about it
+    /// and its rewrite drops the key; it is kept here (entry 10).
+    #[serde(default)]
+    pub approval_required: bool,
+    /// Go's `mcp.perplexity` client block. Go's rewrite drops it, which turns
+    /// a configured Perplexity client off; it is kept here (entry 10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub perplexity: Option<PerplexityConfig>,
+}
+
+/// Go's `PerplexityConfig`. `allow_private` is carried through a rewrite but,
+/// as in Go, no loader or consumer reads it.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PerplexityConfig {
+    pub api_key: String,
+    pub base_url: String,
+    pub rate_limit_per_min: i64,
+    pub allow_private: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -379,6 +404,11 @@ pub struct UpdateConfig {
 pub struct ClipboardConfig {
     pub auto_clear_duration: i64,
     pub copy_by_default: bool,
+    /// The deprecated `clipboard.printByDefault` as the operator wrote it.
+    /// `copy_by_default` already honours it; Go's rewrite drops the key, this
+    /// one keeps it (entry 10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub print_by_default: Option<bool>,
 }
 
 impl Default for GitConfig {
@@ -388,6 +418,8 @@ impl Default for GitConfig {
             auto_pull: true,
             auto_pull_interval: Duration::from_secs(10),
             commit_template: "Update from Symaira Vault".into(),
+            author: String::new(),
+            email: String::new(),
         }
     }
 }
@@ -415,6 +447,8 @@ impl Default for McpConfig {
             mtls_enabled: false,
             allow_insecure_bind: false,
             oauth: None,
+            approval_required: false,
+            perplexity: None,
         }
     }
 }
@@ -430,6 +464,7 @@ impl Default for ClipboardConfig {
         Self {
             auto_clear_duration: 30,
             copy_by_default: true,
+            print_by_default: None,
         }
     }
 }
@@ -2224,6 +2259,11 @@ fn parse_git(value: &serde_yaml_ng::Value) -> Result<GitConfig, ConfigError> {
     if let Some(v) = written(map, "commit_template") {
         out.commit_template = string_field(v, "commit_template")?;
     }
+    for (key_name, target) in [("author", &mut out.author), ("email", &mut out.email)] {
+        if let Some(v) = written(map, key_name) {
+            *target = string_field(v, key_name)?;
+        }
+    }
     Ok(out)
 }
 fn parse_mcp(
@@ -2238,6 +2278,7 @@ fn parse_mcp(
         && bool_field(v, "approval_required")?
     {
         warnings.push(APPROVAL_REQUIRED_WARNING.to_owned());
+        out.approval_required = true;
     }
     if let Some(v) = written(map, "port") {
         out.port = int_field(v, "port")?;
@@ -2315,6 +2356,25 @@ fn parse_mcp(
             }
         }
         out.oauth = Some(oauth);
+    }
+    if let Some(value) = written(map, "perplexity").filter(|value| !value.is_null()) {
+        let fields = mapping(value)?;
+        let mut perplexity = PerplexityConfig::default();
+        for (name, target) in [
+            ("api_key", &mut perplexity.api_key),
+            ("base_url", &mut perplexity.base_url),
+        ] {
+            if let Some(value) = written(fields, name) {
+                *target = string_field(value, name)?;
+            }
+        }
+        if let Some(value) = written(fields, "rate_limit_per_min") {
+            perplexity.rate_limit_per_min = int_field(value, "rate_limit_per_min")?;
+        }
+        if let Some(value) = written(fields, "allow_private") {
+            perplexity.allow_private = bool_field(value, "allow_private")?;
+        }
+        out.perplexity = Some(perplexity);
     }
     Ok(out)
 }
@@ -2460,6 +2520,9 @@ fn parse_clipboard(
         if state.first_print_by_default() {
             warnings.push(PRINT_BY_DEFAULT_WARNING.to_owned());
         }
+    }
+    if let Some(v) = written(map, "printByDefault").filter(|v| !v.is_null()) {
+        out.print_by_default = Some(bool_field(v, "printByDefault")?);
     }
     Ok(out)
 }
@@ -2632,8 +2695,18 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
     if let Some(v) = p.tier.as_deref().filter(|value| !value.is_empty()) {
         out.push_str(&format!("        tier: {}\n", map_value(v, 8)));
     }
+    // The tier preset the next load applies to every key this block omits.
+    let preset = p.tier.as_deref().and_then(crate::tier::get_preset);
     if let Some(v) = &p.approval_mode {
         out.push_str(&format!("        approvalMode: {}\n", map_value(v, 8)));
+    } else if preset
+        .as_ref()
+        .is_some_and(|preset| preset.approval_mode.is_some())
+    {
+        // An explicit `approvalMode: null` replaced the preset's mode. Leaving
+        // the key out would let the preset (and, with `requireApproval`
+        // written, the derived mode) come back on the next load.
+        out.push_str("        approvalMode: null\n");
     }
     if !p.allowed_paths.is_empty() {
         out.push_str("        allowedPaths:\n");
@@ -2732,6 +2805,16 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
     if !p.allowed_executables.is_empty() {
         out.push_str("        allowedExecutables:\n");
         write_string_list_body(out, 12, &p.allowed_executables);
+    } else if preset
+        .as_ref()
+        .and_then(|preset| preset.allowed_executables.as_ref())
+        .is_some_and(|executables| !executables.is_empty())
+    {
+        // An explicit empty allowlist replaced the preset's. Go's omitempty
+        // drops it, and the next load then grants the preset's executables
+        // again (`tier: standard` gains curl, git, terraform, docker, ...):
+        // a rewrite must never widen permissions, so the empty list stays.
+        out.push_str("        allowedExecutables: []\n");
     }
     if !p.prompt_injection_mode.is_empty() && !(builtin && p.prompt_injection_mode == "off") {
         out.push_str(&format!(
@@ -2902,6 +2985,11 @@ fn write_git(out: &mut String, v: &GitConfig) -> Result<(), ConfigError> {
             map_value(&v.commit_template, 4)
         ));
     }
+    for (key_name, value) in [("author", &v.author), ("email", &v.email)] {
+        if !value.is_empty() {
+            body.push_str(&format!("    {key_name}: {}\n", map_value(value, 4)));
+        }
+    }
     // Preserve an explicit false. Go's raw SaveTo struct uses `omitempty`
     // and consequently reloads false as its true default; retaining the
     // operator's disablement is the safer Rust writer behavior.
@@ -2939,6 +3027,9 @@ fn write_mcp(out: &mut String, v: &McpConfig) {
     }
     if v.stdio {
         out.push_str("    stdio: true\n");
+    }
+    if v.approval_required {
+        out.push_str("    approval_required: true\n");
     }
     for (key, value) in [
         ("read_header_timeout", v.read_header_timeout),
@@ -2981,6 +3072,32 @@ fn write_mcp(out: &mut String, v: &McpConfig) {
             format_duration(oauth.access_token_ttl),
             format_duration(oauth.refresh_token_ttl)
         ));
+    }
+    if let Some(perplexity) = &v.perplexity {
+        let mut body = String::new();
+        for (key_name, value) in [
+            ("api_key", &perplexity.api_key),
+            ("base_url", &perplexity.base_url),
+        ] {
+            if !value.is_empty() {
+                body.push_str(&format!("        {key_name}: {}\n", map_value(value, 8)));
+            }
+        }
+        if perplexity.rate_limit_per_min != 0 {
+            body.push_str(&format!(
+                "        rate_limit_per_min: {}\n",
+                perplexity.rate_limit_per_min
+            ));
+        }
+        if perplexity.allow_private {
+            body.push_str("        allow_private: true\n");
+        }
+        if body.is_empty() {
+            out.push_str("    perplexity: {}\n");
+        } else {
+            out.push_str("    perplexity:\n");
+            out.push_str(&body);
+        }
     }
 }
 /// Go's `AuditConfig`: `maxSizeMb` is `omitempty`, the other two are not, and
@@ -3098,6 +3215,9 @@ fn write_clipboard(out: &mut String, v: &ClipboardConfig) -> Result<(), ConfigEr
     // Go's `omitempty` drops false here, which makes a subsequent load turn
     // an explicit opt-out back on. Keep the opt-out in Rust's canonical bytes.
     body.push_str(&format!("    copyByDefault: {}\n", v.copy_by_default));
+    if let Some(print_by_default) = v.print_by_default {
+        body.push_str(&format!("    printByDefault: {print_by_default}\n"));
+    }
     if body.is_empty() {
         out.push_str("clipboard: {}\n");
     } else {
@@ -3555,6 +3675,8 @@ mod tests {
                 auto_pull: false,
                 auto_pull_interval: Duration::ZERO,
                 commit_template: String::new(),
+                author: String::new(),
+                email: String::new(),
             }),
             update: Some(UpdateConfig {
                 cache_ttl: Duration::ZERO,
@@ -3836,6 +3958,7 @@ mod tests {
             clipboard: Some(ClipboardConfig {
                 auto_clear_duration: -1,
                 copy_by_default: false,
+                print_by_default: None,
             }),
             ..Config::default()
         };

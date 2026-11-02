@@ -3,10 +3,16 @@
 //!
 //! Go's `SaveTo` drops the top-level `paymentPolicies` and `security`
 //! sections; Rust keeps them on purpose (`docs/rust-port/upstream-go-bugs.md`).
-//! Those two sections and the nested `mcp.oauth` block (also dropped by Go) are
-//! the only declared differences: the Rust file minus them must equal Go's
+//! Those two sections and the keys in [`KEPT`] (`mcp.oauth`, `mcp.perplexity`,
+//! `mcp.approval_required`, `git.author`, `git.email`,
+//! `clipboard.printByDefault`, all dropped by Go) are the declared differences
+//! of these whole-file comparisons: the Rust file minus them must equal Go's
 //! file byte for byte, the Rust file must still hold them, and both the Rust
-//! and the Go loader must accept the file Rust wrote.
+//! and the Go loader must accept the file Rust wrote. (The per-case line
+//! differences are pinned by `config_rewrite_contract` in `symvault-core`.)
+//!
+//! `agent_profile_show_is_unchanged_by_a_rewrite_for_every_tier` needs no
+//! oracle: it compares the effective profile view before and after a rewrite.
 
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
@@ -18,6 +24,16 @@ use std::{
 };
 
 const DECLARED: [&str; 2] = ["paymentPolicies", "security"];
+
+/// Nested keys Go drops on rewrite and Rust keeps (indent 4 in the file).
+const KEPT: [&str; 6] = [
+    "oauth",
+    "perplexity",
+    "approval_required",
+    "author",
+    "email",
+    "printByDefault",
+];
 
 const CONFIG: &str = "\
 vaultDir: /fixture/vault
@@ -97,6 +113,30 @@ mcp:
   oauth:
     access_token_ttl: 2h
     refresh_token_ttl: 90m
+";
+
+/// The keys of [`KEPT`] other than `oauth`, next to the modelled ones.
+const DROPPED_BY_GO: &str = "\
+vaultDir: /fixture/vault
+agents:
+  other:
+    canWrite: true
+git:
+  commit_template: msg
+  author: Ann
+  email: ann@example.test
+mcp:
+  port: 9096
+  approval_required: true
+  perplexity:
+    api_key: pplx-secret
+    base_url: https://api.perplexity.ai
+    rate_limit_per_min: 7
+    allow_private: true
+clipboard:
+  auto_clear_duration: 15
+  copyByDefault: true
+  printByDefault: true
 ";
 
 /// `doctor --fix` repairs: zero audit size (fix 3) and a negative clipboard
@@ -179,12 +219,15 @@ fn without_sections(yaml: &str, sections: &[&str]) -> String {
     out
 }
 
-/// Removes the nested `    oauth:` block of `mcp` (Go's SaveTo drops it).
-fn without_oauth(yaml: &str) -> String {
+/// Removes the [`KEPT`] keys (and their nested lines) that sit at indent 4.
+fn without_kept(yaml: &str) -> String {
     let mut out = String::new();
     let mut skipping = false;
     for line in yaml.split_inclusive('\n') {
-        if line.starts_with("    oauth:") {
+        if KEPT
+            .iter()
+            .any(|key| line.starts_with(&format!("    {key}:")))
+        {
             skipping = true;
             continue;
         }
@@ -264,13 +307,15 @@ fn compare(label: &str, config: &str, args: &[&str]) {
             "{label}: Rust must keep {section} exactly when the input had it"
         );
     }
+    for key in KEPT {
+        assert_eq!(
+            rust_file.contains(&format!("\n    {key}:")),
+            config.contains(&format!("\n  {key}:")),
+            "{label}: Rust must keep {key} exactly when the input had it"
+        );
+    }
     assert_eq!(
-        rust_file.contains("\n    oauth:\n"),
-        config.contains("\n  oauth:\n"),
-        "{label}: Rust must keep mcp.oauth exactly when the input had it"
-    );
-    assert_eq!(
-        without_oauth(&without_sections(&rust_file, &DECLARED)),
+        without_kept(&without_sections(&rust_file, &DECLARED)),
         go_file,
         "{label}: config.yaml bytes\n--- rust ---\n{rust_file}"
     );
@@ -319,6 +364,15 @@ fn agent_uninstall_keeps_every_mcp_field_go_keeps() {
     compare(
         "agent uninstall (mcp)",
         MCP,
+        &["agent", "uninstall", "other", "--yes"],
+    );
+}
+
+#[test]
+fn agent_uninstall_keeps_what_go_drops_and_nothing_else_differs() {
+    compare(
+        "agent uninstall (dropped by Go)",
+        DROPPED_BY_GO,
         &["agent", "uninstall", "other", "--yes"],
     );
 }
@@ -378,4 +432,125 @@ fn doctor_fix_repairs_audit_and_clipboard_like_go() {
         );
         assert!(config_of(&go_side).contains("maxSizeMb: 100\n"));
     }
+}
+
+const TIERS: [&str; 3] = ["read-only", "standard", "admin"];
+const PRESET_BOOLS: [&str; 9] = [
+    "canWrite",
+    "canRunCommands",
+    "canManageConfig",
+    "canUseClipboard",
+    "canUseAutotype",
+    "canReadValues",
+    "exposeValueTools",
+    "autoUnseal",
+    "requireApproval",
+];
+
+/// A tiered `bot` with `body` written explicitly, next to the `other` agent
+/// the test uninstalls.
+fn tiered_config(tier: &str, body: &str) -> String {
+    format!(
+        "vaultDir: /fixture/vault\nagents:\n  bot:\n    tier: {tier}\n{body}  other:\n    canWrite: true\n"
+    )
+}
+
+fn profile_show(binary: &Path, side: &Side) -> (Option<i32>, String) {
+    let output = run(
+        binary,
+        side,
+        &["agent", "profile", "show", "bot", "--output", "json"],
+    );
+    (
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+    )
+}
+
+/// CONFIG-WRITER fix round 3 (HIGH), against the Rust CLI alone: for every
+/// tier, every preset-backed field written explicitly as empty / false / zero /
+/// null leaves `agent profile show bot --output json` unchanged by
+/// `agent uninstall other --yes`. Go's rewrite drops an explicit empty
+/// `allowedExecutables` and the next load hands `tier: standard` curl, git,
+/// terraform, npm, node, python, python3, docker and kubectl.
+#[test]
+fn agent_profile_show_is_unchanged_by_a_rewrite_for_every_tier() {
+    let binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let mut bodies: Vec<(String, String)> = Vec::new();
+    for key in PRESET_BOOLS {
+        for value in ["true", "false", "null"] {
+            bodies.push((format!("{key}={value}"), format!("    {key}: {value}\n")));
+        }
+    }
+    for (key, value) in [
+        ("allowedExecutables", "[]"),
+        ("allowedExecutables", "null"),
+        ("allowedExecutables", "[git]"),
+        ("approvalMode", "null"),
+        ("approvalMode", "none"),
+        ("approvalMode", "deny"),
+        ("approvalMode", "prompt"),
+        ("approvalTimeout", "0s"),
+        ("approvalTimeout", "90s"),
+    ] {
+        bodies.push((format!("{key}={value}"), format!("    {key}: {value}\n")));
+    }
+    bodies.push((
+        "every preset-backed field explicit".to_owned(),
+        PRESET_BOOLS
+            .iter()
+            .map(|key| format!("    {key}: false\n"))
+            .chain([
+                "    approvalMode: null\n".to_owned(),
+                "    allowedExecutables: []\n".to_owned(),
+            ])
+            .collect(),
+    ));
+    let mut failures = Vec::new();
+    let mut checked = 0;
+    for tier in TIERS {
+        for (label, body) in &bodies {
+            let side = side(&tiered_config(tier, body));
+            let before = profile_show(&binary, &side);
+            assert_eq!(before.0, Some(0), "{tier}/{label}: {}", before.1);
+            let rewrite = run(&binary, &side, &["agent", "uninstall", "other", "--yes"]);
+            assert!(
+                rewrite.status.success(),
+                "{tier}/{label}: uninstall: {}",
+                String::from_utf8_lossy(&rewrite.stderr)
+            );
+            let after = profile_show(&binary, &side);
+            checked += 1;
+            if before != after {
+                failures.push(format!(
+                    "{tier}/{label}:\n--- before\n{}--- after\n{}--- config.yaml\n{}",
+                    before.1,
+                    after.1,
+                    config_of(&side)
+                ));
+            }
+        }
+    }
+    assert_eq!(checked, TIERS.len() * bodies.len());
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The control: the widened view really differs, so the test above can fail.
+#[test]
+fn agent_profile_show_sees_a_widened_tier_profile() {
+    let binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let config = tiered_config(
+        "standard",
+        "    allowedExecutables: []\n    approvalMode: null\n",
+    );
+    let narrowed = side(&config);
+    let (_, before) = profile_show(&binary, &narrowed);
+    assert!(before.contains("\"AllowedExecutables\": null"), "{before}");
+    // What Go's rewrite leaves behind: the two explicit keys are gone.
+    let widened = tiered_config("standard", "");
+    let widened_side = side(&widened);
+    let (_, after) = profile_show(&binary, &widened_side);
+    assert_ne!(before, after);
+    assert!(after.contains("\"curl\""), "{after}");
+    assert!(after.contains("\"kubectl\""), "{after}");
 }

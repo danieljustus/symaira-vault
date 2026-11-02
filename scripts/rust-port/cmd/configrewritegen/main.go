@@ -48,6 +48,10 @@ var productionSources = []string{
 // Rust writer keeps (docs/rust-port/upstream-go-bugs.md).
 var declaredDifferences = []string{"paymentPolicies", "security"}
 
+// tierExplicitEmptyCases are the per-tier cases that set every preset-backed
+// field of a profile explicitly to an empty/false value.
+var tierExplicitEmptyCases = []string{"tier_explicit_empty_read_only", "tier_explicit_empty_standard", "tier_explicit_empty_admin"}
+
 var declaredLineDifferences = []lineDifference{
 	{Side: "rust_adds", Keys: []string{"oauth"}, Block: true,
 		Reason: "Go's SaveTo drops mcp.oauth (the OAuth server TTLs silently fall back to their defaults); Rust keeps it (upstream-go-bugs.md)"},
@@ -57,6 +61,16 @@ var declaredLineDifferences = []lineDifference{
 		Reason: "Go's omitempty drops clipboard.copyByDefault false and the loader default is true; Rust writes the false"},
 	{Side: "rust_adds", Cases: []string{"mcp_false_and_zero_values"}, Keys: []string{"port", "read_timeout", "rate_limit", "metrics_auth_required"}, Values: []string{"0", "0s", "false"},
 		Reason: "Go's omitempty drops a zero port/timeout/rate limit and a false metrics_auth_required, and the loader defaults (8080, 10s, 60, true) replace them; Rust writes the operator's value"},
+	{Side: "rust_adds", Cases: tierExplicitEmptyCases, Keys: []string{"allowedExecutables"}, Values: []string{"[]"},
+		Reason: "Go's omitempty drops an explicit empty allowedExecutables and the next load re-applies the tier preset (standard grants curl, git, terraform, npm, node, python, python3, docker, kubectl): a rewrite widens the profile's permissions; Rust keeps the empty list (upstream-go-bugs.md 11)"},
+	{Side: "rust_adds", Cases: tierExplicitEmptyCases, Keys: []string{"approvalMode"}, Values: []string{"null"},
+		Reason: "Go drops an explicit approvalMode: null of a tiered profile and the next load re-applies the preset's mode (or derives one from requireApproval); Rust keeps the null so the effective profile does not change (upstream-go-bugs.md 11)"},
+	{Side: "rust_adds", Cases: []string{"custom_without_can_write"}, Agents: []string{"x"}, Keys: []string{"canWrite"}, Values: []string{"false"},
+		Reason: "Go holds canWrite as *bool and writes nothing for a profile that never set it; Rust holds bool and always writes canWrite, which reloads to the same false"},
+	{Side: "rust_adds", Cases: []string{"mcp_dropped_by_go", "all_fields_non_zero", "git_identity", "clipboard_print_by_default"}, Keys: []string{"approval_required", "author", "email", "printByDefault"},
+		Reason: "Go's SaveTo drops mcp.approval_required, git.author, git.email and clipboard.printByDefault; Rust keeps them (upstream-go-bugs.md 10)"},
+	{Side: "rust_adds", Cases: []string{"mcp_dropped_by_go", "all_fields_non_zero"}, Keys: []string{"perplexity"}, Block: true,
+		Reason: "Go's SaveTo drops mcp.perplexity, which turns a configured Perplexity client off; Rust keeps it (upstream-go-bugs.md 10)"},
 	{Side: "go_only", Cases: []string{"custom_explicit_false_capabilities"}, Agents: []string{"x"}, Keys: []string{"canRunCommands", "canManageConfig", "canUseClipboard", "canUseAutotype", "canReadValues", "autoUnseal", "exposePaymentValues"}, Values: []string{"false"},
 		Reason: "Go holds *bool: an explicit false on a custom profile is a set pointer and is written back; Rust holds bool and omits it, which reloads to the same false (a missing capability is false)"},
 }
@@ -176,7 +190,7 @@ func presentPaths(t reflect.Type, data any, path string, out map[string]bool) {
 	}
 }
 
-// multilineStrings collects every string leaf with a line break.
+// multilineStrings collects every string leaf and map key with a line break.
 func multilineStrings(node any, out map[string]bool) {
 	switch v := node.(type) {
 	case string:
@@ -184,7 +198,10 @@ func multilineStrings(node any, out map[string]bool) {
 			out[v] = true
 		}
 	case map[string]any:
-		for _, item := range v {
+		for key, item := range v {
+			if strings.Contains(key, "\n") {
+				out[key] = true
+			}
 			multilineStrings(item, out)
 		}
 	case []any:
@@ -453,10 +470,33 @@ func inputs() []input {
 			head + lines("agents:", "  bot:", "    canWrite: true", "    perToolRedactFields:", "      get: []", "      put:", "    dynamicProviders:", "      aws: []")},
 		{"approval_timeout_zero", "an explicit approvalTimeout: 0s is written back as 0s",
 			head + lines("agents:", "  bot:", "    canWrite: true", "    approvalTimeout: 0s", "  other:", "    canWrite: true")},
+		{"leading_break_map_key", "agent and perToolRedactFields keys that start with a line break: yaml.v3 writes them as `? |4-` and reads them back without the break, so \"\\na\\nb\" collides with \"a\\nb\"; Rust double-quotes them",
+			head + lines("agents:", "  \"\\na\\nb\":", "    canWrite: true", "    perToolRedactFields:", "      \"\\nk\": [x]", "  \"a\\nb\":", "    canWrite: false")},
+		{"leading_space_map_key", "an agent key that starts with a space and has a line break keeps its `? |4-` form (the indentation indicator matches at this depth)",
+			head + lines("agents:", "  \" a\\nb\":", "    canWrite: true")},
+		{"custom_without_can_write", "a custom profile that never sets canWrite: Go writes no canWrite, Rust writes the false",
+			head + lines("agents:", "  x:", "    skillPath: /s/p")},
+		{"tier_explicit_empty_read_only", "every preset-backed field of a read-only profile set explicitly to false/empty/null",
+			head + tierExplicitEmpty("read-only")},
+		{"tier_explicit_empty_standard", "every preset-backed field of a standard profile set explicitly to false/empty/null: dropping allowedExecutables: [] would re-grant the preset's nine executables",
+			head + tierExplicitEmpty("standard")},
+		{"tier_explicit_empty_admin", "every preset-backed field of an admin profile set explicitly to false/empty/null",
+			head + tierExplicitEmpty("admin")},
+		{"git_identity", "git.author and git.email are dropped by Go and kept by Rust",
+			head + lines("git:", "  commit_template: msg", "  author: Ann", "  email: ann@example.test")},
+		{"clipboard_print_by_default", "the deprecated printByDefault: Go folds it into copyByDefault and drops the key, Rust keeps it",
+			head + lines("clipboard:", "  auto_clear_duration: 15", "  printByDefault: true")},
 		{"all_sections_modelled", "vault, git, mcp, update, clipboard together with audit and logging",
 			head + lines("vault:", "  path: /fixture/v", "  search_index: true", "mcp:", "  port: 9090", "  bind: 127.0.0.1", "update:", "  cache_ttl: 12h", "clipboard:", "  auto_clear_duration: 15", "  copyByDefault: true", "git:", "  auto_push: true", "  auto_pull: true", "  commit_template: msg",
 				"audit:", "  maxSizeMb: 5", "logging:", "  format: json")},
 	}
+}
+
+// tierExplicitEmpty is a profile of the given tier with every preset-backed
+// field written explicitly as false/empty/null, next to a profile that
+// `agent uninstall` removes.
+func tierExplicitEmpty(tier string) string {
+	return lines("agents:", "  bot:", "    tier: "+tier, "    approvalMode: null", "    canWrite: false", "    canRunCommands: false", "    canManageConfig: false", "    canUseClipboard: false", "    canUseAutotype: false", "    canReadValues: false", "    exposeValueTools: false", "    autoUnseal: false", "    requireApproval: false", "    allowedExecutables: []", "  other:", "    canWrite: true")
 }
 
 func apply(cfg *configpkg.Config, mutation string) error {

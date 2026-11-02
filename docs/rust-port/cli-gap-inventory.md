@@ -539,9 +539,13 @@ with its reason, or a byte-level residual named here)
 - **Other explicit zeros still unwritten:** `max_reads_per_hour: 0`, `max_reads_per_day: 0`,
   `max_secrets_in_session: 0`, `skillVersion: ''`, `paymentPolicy: ''`, `exposePaymentValues: false`, an explicit
   `5m` / `off` on a built-in preset; no non-zero value is lost and each reloads as its default.
-- **Not modelled in Rust, dropped like Go:** `git.author`/`email`, `mcp.perplexity` (its `api_key` too),
-  `mcp.approval_required`, `agents.*.pre_call_hooks|post_call_hooks`, `envAllowlist|envWhitelist`,
-  `vault.sync`/`listing_cache_ttl`/`manifest_generation` (`upstream-go-bugs.md` 3, 4, 6, 10).
+- **Kept by Rust, dropped by Go (declared, `rust_adds`):** `git.author`/`email`, `mcp.perplexity` (its `api_key`
+  too), `mcp.approval_required`, `clipboard.printByDefault` (`upstream-go-bugs.md` 10); an explicit empty
+  `allowedExecutables` and `approvalMode: null` of a tiered profile, which Go's rewrite turns into the tier
+  preset's grant (`upstream-go-bugs.md` 11); `canWrite: false` of a custom profile that never set it.
+- **Not modelled in Rust, dropped like Go:** `agents.*.pre_call_hooks|post_call_hooks`,
+  `envAllowlist|envWhitelist`, `vault.sync`/`listing_cache_ttl`/`manifest_generation`
+  (`upstream-go-bugs.md` 3, 4, 6).
 - Go loads the global config once at startup for every `__complete` and for `completion <shell>`; Rust's
   completion path loads only what the completer needs, so Go prints a loader warning twice / once where Rust
   prints it once / not at all (`__complete get ''`, `completion bash`). Ordinary commands match.

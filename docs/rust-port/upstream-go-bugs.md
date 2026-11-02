@@ -96,14 +96,55 @@ Go oracle, never a reading of the source alone.
   column while the emitter wrote the content at its own indent, and the two agree only at mapping depth 4 / 8.
   Recorded: cases `leading_break_list_item`, `leading_break_scan_pattern` (`go_saved_faithful: false`).
 - **Repro (b):** `vault.path: "\nlead\nx"`: the file loads, but as `lead\nx` (the leading break is lost).
+- **Repro (c):** a mapping **key** that starts with a line break: `agents: {"\na\nb": {...}, "a\nb": {...}}`,
+  or a `perToolRedactFields` / `dynamicProviders` key `"\nk"`. The saved file holds `? |4-` / `a` / `b` and the
+  key reloads as `a\nb`: two distinct agents collide on the next load (yaml.v3 rejects the duplicate or the
+  later one wins, so one profile silently replaces the other). Recorded: case `leading_break_map_key`
+  (`go_saved_faithful: false`; the generator now also compares map keys when it decides whether Go's bytes are
+  faithful). A key with a leading space and a line break keeps its `? |4-` form on both sides because the
+  indicator matches at that depth (case `leading_space_map_key`).
 - **Expected:** a double-quoted scalar for these strings (or a correct indicator).
-- **Rust:** writes them double-quoted (`yaml::string_value`), so the file always loads and reloads equal; every
-  other string, multi-line included, is byte-identical to Go.
+- **Rust:** writes them double-quoted (`yaml::string_value` for values and list items, `yaml::mapping_key` for the
+  `? key` form), so the file always loads and reloads equal; every other string, multi-line included, is
+  byte-identical to Go.
 
 ## 10. `Config.SaveTo` also drops `mcp.perplexity`, `mcp.approval_required`, `git.author`, `git.email`, `clipboard.printByDefault`
 
 - Same `raw` copy. `mcp.perplexity.api_key` and `base_url` are lost on every rewrite, so a configured Perplexity
   client stops working silently after `agent install`. Recorded in `dropped_by_save_to` of `rewrite.json` (case
   `all_fields_non_zero`).
-- **Rust:** does not model them and drops them like Go (fix both sides together).
+- **Rust (Rust-safer deviation, declared):** keeps all of them. `mcp.perplexity` (`api_key`, `base_url`,
+  `rate_limit_per_min`, `allow_private`; Rust's Perplexity runtime reads `config.yaml` itself, so a rewrite used
+  to switch a configured client off), `mcp.approval_required`, `git.author`, `git.email` and
+  `clipboard.printByDefault` are modelled, written back in Go's field order and listed as `rust_adds`
+  `declared_line_differences` of `rewrite.json` (cases `mcp_dropped_by_go`, `all_fields_non_zero`,
+  `git_identity`, `clipboard_print_by_default`). `clipboard.printByDefault` is still folded into
+  `copyByDefault` (so the effective value is the same) and written back next to it; `perplexity.allow_private`
+  is carried through but, as in Go's loader, nothing reads it.
 
+## 11. `Config.SaveTo` widens a tiered profile's permissions
+
+- **Where:** `Config.SaveTo` (`omitempty` on `AgentProfile.AllowedExecutables`, `ApprovalMode`) together with the
+  loader (`mergeAgentProfile`: `ApplyTierPreset` runs for every `tier:` key and fills what the profile does not
+  write).
+- **Repro:** `agents.bot: {tier: standard, allowedExecutables: [], approvalMode: null}` (an operator who took
+  the executables away), then any rewriting command (`agent uninstall other --yes`). Go writes `bot` without
+  `allowedExecutables` and without `approvalMode`; the next load re-applies the `standard` preset and `bot`
+  gains `curl, git, terraform, npm, node, python, python3, docker, kubectl` and the preset's `prompt` mode. A
+  profile that was locked down by an explicit empty list is quietly opened by an unrelated command.
+  Recorded: cases `tier_explicit_empty_read_only`, `tier_explicit_empty_standard`, `tier_explicit_empty_admin`
+  (every preset-backed field written as false / empty / null).
+- **Expected:** a rewrite never changes the effective profile; an explicit empty list stays `[]`.
+- **Rust (Rust-safer deviation, declared):** `write_agent` keeps `allowedExecutables: []` when the profile's
+  tier preset carries a non-empty list and `approvalMode: null` when the preset carries a mode and the profile
+  replaced it with null. The other preset-backed fields (`canWrite`, `canRunCommands`, `canManageConfig`,
+  `canUseClipboard`, `canUseAutotype`, `canReadValues`, `exposeValueTools`, `autoUnseal`, `requireApproval`)
+  were already written for every tiered profile, false included. Both are `rust_adds`
+  `declared_line_differences` of `rewrite.json` for the three `tier_explicit_empty_*` cases. Pinned by
+  `a_rewrite_never_changes_the_effective_profile` (`config_rewrite_contract.rs`: every tier x every
+  preset-backed field x true/false/null/empty, whole `AgentProfile` equal after a rewrite) and
+  `agent_profile_show_is_unchanged_by_a_rewrite_for_every_tier` (`config_rewrite_differential.rs`:
+  `agent profile show bot --output json` identical before and after `agent uninstall other --yes`), each with a
+  negative control.
+- **Related, not a widening:** Go writes no `canWrite` for a custom profile that never set it; Rust always writes
+  `canWrite` (a missing one is `false` either way). Declared as `rust_adds` for case `custom_without_can_write`.

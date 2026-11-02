@@ -215,7 +215,7 @@ fn fixture_has_pinned_provenance_and_schema() {
                     && !difference.reason.is_empty()
             )
     );
-    assert_eq!(fixture.declared_line_differences.len(), 5);
+    assert_eq!(fixture.declared_line_differences.len(), 10);
 }
 
 /// The field-coverage probe: the generator proves that every yaml field of
@@ -259,7 +259,18 @@ fn every_go_field_is_exercised_and_only_the_dropped_ones_are_lost() {
         missing.is_empty(),
         "the Rust writer drops fields Go keeps: {missing:?}\n{rust}"
     );
-    // The declared line difference: Rust keeps what Go drops.
+    // The declared line differences: Rust keeps what Go drops (entry 10).
+    for kept in [
+        "    perplexity:\n",
+        "        api_key: k\n",
+        "        allow_private: true\n",
+        "    approval_required: true\n",
+        "    author: Ann\n",
+        "    email: ann@example.test\n",
+        "    printByDefault: true\n",
+    ] {
+        assert!(rust.contains(kept), "{kept:?} survives:\n{rust}");
+    }
     let oauth = fixture
         .cases
         .iter()
@@ -458,7 +469,8 @@ fn go_bytes_that_do_not_round_trip_are_written_double_quoted() {
         [
             "leading_break_list_item",
             "leading_break_scan_pattern",
-            "leading_break_map_value"
+            "leading_break_map_value",
+            "leading_break_map_key"
         ]
     );
     for case in unfaithful {
@@ -482,6 +494,155 @@ fn go_bytes_that_do_not_round_trip_are_written_double_quoted() {
         assert_eq!(reloaded.agents, original.agents);
         assert_eq!(reloaded.vault, original.vault);
     }
+}
+
+const TIERS: [&str; 3] = ["read-only", "standard", "admin"];
+const PRESET_BOOLS: [&str; 9] = [
+    "canWrite",
+    "canRunCommands",
+    "canManageConfig",
+    "canUseClipboard",
+    "canUseAutotype",
+    "canReadValues",
+    "exposeValueTools",
+    "autoUnseal",
+    "requireApproval",
+];
+
+/// Every tier crossed with every preset-backed field (and the other fields a
+/// preset or a builtin default can refill) written explicitly as an
+/// empty / false / zero / null value, plus the all-explicit-empty profile.
+fn effective_matrix() -> Vec<(String, String)> {
+    let mut cases = Vec::new();
+    for tier in TIERS {
+        let mut push = |label: String, body: String| {
+            cases.push((
+                format!("{tier}: {label}"),
+                format!("vaultDir: /fixture/vault\nagents:\n  bot:\n    tier: {tier}\n{body}  other:\n    canWrite: true\n"),
+            ));
+        };
+        for key in PRESET_BOOLS {
+            for value in ["true", "false", "null"] {
+                push(format!("{key}={value}"), format!("    {key}: {value}\n"));
+            }
+        }
+        for (key, value) in [
+            ("allowedExecutables", "[]"),
+            ("allowedExecutables", "null"),
+            ("allowedExecutables", "[git]"),
+            ("approvalMode", "null"),
+            ("approvalMode", "''"),
+            ("approvalMode", "none"),
+            ("approvalMode", "deny"),
+            ("approvalMode", "prompt"),
+            ("approvalTimeout", "0s"),
+            ("approvalTimeout", "90s"),
+            ("max_reads_per_hour", "0"),
+            ("max_reads_per_day", "0"),
+            ("max_secrets_in_session", "0"),
+            ("allowedPaths", "[]"),
+            ("allowed_tools", "[]"),
+            ("allowedEnvVars", "[]"),
+            ("redactFields", "[]"),
+            ("promptInjectionMode", "''"),
+            ("skillPath", "''"),
+            ("skillVersion", "''"),
+            ("exposePaymentValues", "false"),
+        ] {
+            push(format!("{key}={value}"), format!("    {key}: {value}\n"));
+        }
+        let all_empty: String = PRESET_BOOLS
+            .iter()
+            .map(|key| format!("    {key}: false\n"))
+            .chain([
+                "    approvalMode: null\n".to_owned(),
+                "    allowedExecutables: []\n".to_owned(),
+            ])
+            .collect();
+        push("every preset-backed field explicit".to_owned(), all_empty);
+    }
+    cases
+}
+
+fn reloaded_bot(yaml: &str) -> symvault_core::config::AgentProfile {
+    Config::load_from_bytes(yaml.as_bytes())
+        .unwrap_or_else(|error| panic!("load: {error}\n{yaml}"))
+        .agents
+        .remove("bot")
+        .expect("bot profile")
+}
+
+/// CONFIG-WRITER fix round 3 (HIGH): a rewrite (`agent uninstall other`) must
+/// leave the *effective* profile of every other agent untouched. Go's
+/// omitempty writer drops an explicit empty `allowedExecutables`, and the next
+/// load re-applies the tier preset: `tier: standard` gains curl, git,
+/// terraform, npm, node, python, python3, docker and kubectl.
+#[test]
+fn a_rewrite_never_changes_the_effective_profile() {
+    let mut failures = Vec::new();
+    for (label, input) in effective_matrix() {
+        let mut config = Config::load_from_bytes(input.as_bytes()).expect("load");
+        let before = config.agents.get("bot").cloned().expect("bot");
+        config.agents.remove("other");
+        let rewritten = String::from_utf8(config.to_yaml_bytes().expect("write")).expect("utf-8");
+        let after = reloaded_bot(&rewritten);
+        if before != after {
+            failures.push(format!("{label}:\n  before {before:?}\n  after  {after:?}"));
+        }
+        // And the rewrite is a fixed point.
+        let again = String::from_utf8(
+            Config::load_from_bytes(rewritten.as_bytes())
+                .expect("reload")
+                .to_yaml_bytes()
+                .expect("write"),
+        )
+        .expect("utf-8");
+        assert_eq!(again, rewritten, "{label}: second rewrite differs");
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The control for the test above: without the presence writes the same
+/// detector fires, and the standard tier really does gain nine executables.
+#[test]
+fn negative_control_dropping_the_presence_writes_widens_the_profile() {
+    let input = "vaultDir: /fixture/vault\nagents:\n  bot:\n    tier: standard\n    allowedExecutables: []\n    approvalMode: null\n  other:\n    canWrite: true\n";
+    let mut config = Config::load_from_bytes(input.as_bytes()).expect("load");
+    let before = config.agents["bot"].clone();
+    assert!(before.allowed_executables.is_empty());
+    assert_eq!(before.approval_mode, None);
+    config.agents.remove("other");
+    let written = String::from_utf8(config.to_yaml_bytes().expect("write")).expect("utf-8");
+    assert!(
+        written.contains("        allowedExecutables: []\n"),
+        "{written}"
+    );
+    assert!(
+        written.contains("        approvalMode: null\n"),
+        "{written}"
+    );
+    assert_eq!(reloaded_bot(&written), before);
+
+    let widened = written.replace("        allowedExecutables: []\n", "");
+    assert_ne!(widened, written);
+    let after = reloaded_bot(&widened);
+    assert_ne!(after, before, "the detector must see the widening");
+    assert_eq!(
+        after.allowed_executables,
+        [
+            "curl",
+            "git",
+            "terraform",
+            "npm",
+            "node",
+            "python",
+            "python3",
+            "docker",
+            "kubectl"
+        ]
+    );
+    let refilled = written.replace("        approvalMode: null\n", "");
+    assert_ne!(reloaded_bot(&refilled), before);
 }
 
 fn case<'a>(fixture: &'a Fixture, name: &str) -> &'a Case {

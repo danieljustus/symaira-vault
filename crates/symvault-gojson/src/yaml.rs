@@ -132,6 +132,11 @@ pub fn mapping_key(key: &str, mapping_indent: i32) -> String {
         emitter.write_indicator(":", false, false, false);
     } else {
         emitter.write_indicator("?", true, false, true);
+        // The same yaml.v3 literal-block defects as `string_value`: a key that
+        // starts with a line break loses it (so `"\na\nb"` and `"a\nb"` would
+        // collide on reload), and one that starts with a space needs the
+        // indentation indicator to match the content column.
+        emitter.literal_parent = Some(mapping_indent);
         emitter.string(
             key,
             false,
@@ -735,6 +740,15 @@ mod tests {
         assert_eq!(
             mapping_key("k\nj", 12),
             "? |-\n                k\n                j\n            :"
+        );
+        // A key that starts with a line break would lose it as a literal
+        // block (`? |4-` reloads as `a\nb`): double-quoted instead.
+        assert_eq!(mapping_key("\na\nb", 8), "? \"\\na\\nb\"\n        :");
+        assert_eq!(mapping_key("\n", 4), "? \"\\n\"\n    :");
+        // A leading space needs the indicator, which matches at this depth.
+        assert_eq!(
+            mapping_key(" a\nb", 4),
+            "? |4-\n         a\n        b\n    :"
         );
     }
 

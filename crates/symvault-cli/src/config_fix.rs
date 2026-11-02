@@ -227,6 +227,7 @@ fn apply_auto_fixes(loaded: &mut Loaded, load_error: Option<&str>, validation_er
             .get_or_insert(ClipboardConfig {
                 auto_clear_duration: 0,
                 copy_by_default: false,
+                print_by_default: None,
             })
             .auto_clear_duration = 30;
         modified = true;
@@ -662,6 +663,7 @@ mod tests {
         loaded.config.clipboard = Some(ClipboardConfig {
             auto_clear_duration: -1,
             copy_by_default: true,
+            print_by_default: None,
         });
         let errors = validate(&loaded);
         assert!(errors[0].starts_with("audit.maxFileSize"), "{errors:?}");
@@ -679,6 +681,7 @@ mod tests {
         loaded.config.clipboard = Some(ClipboardConfig {
             auto_clear_duration: 30,
             copy_by_default: true,
+            print_by_default: None,
         });
         let text = String::from_utf8(render(&loaded).expect("render")).expect("utf8");
         let clipboard = text.find("\nclipboard:\n").expect("clipboard");
