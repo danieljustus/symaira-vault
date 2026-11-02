@@ -33,10 +33,13 @@ const MAX_OAUTH_CLIENTS_BYTES: usize = 1024 * 1024;
 /// family never sets, like refresh tokens) round-trip unchanged.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TokenRecord {
+    #[serde(default)]
     pub id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
+    #[serde(default)]
     pub hash: String,
+    #[serde(default)]
     pub prefix: String,
     #[serde(rename = "allowed_tools", default)]
     pub allowed_tools: Option<Vec<String>>,
@@ -52,7 +55,7 @@ pub struct TokenRecord {
         skip_serializing_if = "String::is_empty"
     )]
     pub agent_name: String,
-    #[serde(rename = "created_at")]
+    #[serde(rename = "created_at", default)]
     pub created_at: String,
     #[serde(
         rename = "expires_at",
@@ -285,8 +288,10 @@ pub fn verify_s256_code_verifier(verifier: &str, challenge: &str) -> bool {
 
 #[derive(Default, Deserialize)]
 struct RawFile {
+    // A JSON `null` entry decodes to Go's zero value, which carries no hash
+    // and is dropped like any other hash-less entry.
     #[serde(default)]
-    tokens: Option<BTreeMap<String, TokenRecord>>,
+    tokens: Option<BTreeMap<String, Option<TokenRecord>>>,
 }
 
 #[derive(Serialize)]
@@ -730,7 +735,12 @@ fn read(path: &Path) -> Result<BTreeMap<String, TokenRecord>, StoreError> {
             "load token registry: parse token registry: {error}"
         ))
     })?;
-    Ok(raw.tokens.unwrap_or_default())
+    Ok(raw
+        .tokens
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(id, record)| record.map(|record| (id, record)))
+        .collect())
 }
 
 fn write(

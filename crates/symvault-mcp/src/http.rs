@@ -2,14 +2,14 @@
 //! The socket listener stays with the caller; this module owns `/mcp` request
 //! checks and response framing for bounded HTTP/1.x connections.
 
+#[path = "http_envelope.rs"]
+mod envelope;
 #[path = "http_shutdown.rs"]
 pub(crate) mod shutdown;
 pub use shutdown::HttpShutdown;
 
 use crate::approval::{ApprovalQueue, handle_local_request};
-use crate::{
-    Error, Message, ProtocolHandler, error_code, handle_line, is_supported_protocol_version,
-};
+use crate::{Error, Message, ProtocolHandler, error_code, is_supported_protocol_version};
 use rustls::{
     RootCertStore, ServerConfig, ServerConnection, StreamOwned,
     pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
@@ -25,7 +25,7 @@ use std::{
     path::Path,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -471,10 +471,37 @@ impl Default for HttpTimeouts {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct TokenRegistry {
     #[serde(default)]
-    tokens: BTreeMap<String, symvault_store::token_registry::TokenRecord>,
+    tokens: Option<BTreeMap<String, Option<symvault_store::token_registry::TokenRecord>>>,
+}
+
+/// Last successfully parsed registry per path. Go keeps its in-memory registry
+/// when a reload fails or the file disappears mid-run (`StartFileWatcher`), so a
+/// request-time failure falls back to the last good state instead of denying.
+/// The cache is refreshed by every successful read, by requests and by the
+/// background poller (`watch_registry`); a failed read never replaces it. The
+/// poller is what keeps a revocation from being lost to a later corruption or
+/// deletion when no request arrives in between.
+static LAST_GOOD_REGISTRY: std::sync::Mutex<BTreeMap<std::path::PathBuf, TokenRegistry>> =
+    std::sync::Mutex::new(BTreeMap::new());
+
+static LEGACY_BEARER: std::sync::OnceLock<Arc<str>> = std::sync::OnceLock::new();
+
+/// Registers the process-wide legacy single bearer token that Go's token
+/// system returns next to the scoped registry. It authenticates without a
+/// registry entry: no agent binding, unrestricted tool scope. The first call wins.
+pub fn set_legacy_bearer(token: &str) {
+    let _ = LEGACY_BEARER.set(Arc::from(token));
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    let mut difference = left.len() ^ right.len();
+    for (index, byte) in left.iter().enumerate() {
+        difference |= usize::from(byte ^ right.get(index).copied().unwrap_or(0));
+    }
+    difference == 0
 }
 
 /// Serves authenticated HTTP requests on a loopback-only listener. The caller
@@ -897,6 +924,19 @@ where
         // Drop inside the scope, before scoped threads are joined, including
         // listener/setup errors. Otherwise idle reads can delay error returns.
         let _cleanup = shutdown.clone().map(shutdown::CancelOnDrop);
+        // Go's `StartFileWatcher`: reload on change, keep the last good state.
+        let watcher_stop = Arc::new(AtomicBool::new(false));
+        let watcher = {
+            let stop = Arc::clone(&watcher_stop);
+            let path = registry_path.clone();
+            thread::Builder::new().spawn_scoped(scope, move || {
+                watch_registry(&path, &stop, REGISTRY_POLL_INTERVAL);
+            })?
+        };
+        let _watcher_stop = RegistryWatcherStop {
+            stop: watcher_stop,
+            thread: watcher.thread().clone(),
+        };
         loop {
             if let Some(shutdown) = &shutdown
                 && shutdown.is_cancelled()?
@@ -1169,6 +1209,15 @@ where
                         write_http_response(reader.get_mut(), response, "HTTP/1.1", false, false)?;
                         return Ok(());
                     }
+                    if read_error.to_string() == "expectation failed" {
+                        let response = HttpResponse {
+                            status: 417,
+                            headers: Vec::new(),
+                            body: Vec::new(),
+                        };
+                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false, false)?;
+                        return Ok(());
+                    }
                     if read_error.to_string() == "invalid JSON" {
                         let response = error(400, None, error_code::PARSE_ERROR, "invalid JSON")
                             .map_err(std::io::Error::other)?;
@@ -1211,6 +1260,40 @@ where
         // A rejected bounded body may leave unsent/unread bytes. Never treat
         // those bytes as a subsequent keep-alive request.
         let keep_alive = requested_keep_alive && !closes && request.body_error.is_none();
+        let mut request = request;
+        match route_path(&request.path) {
+            Route::Invalid => {
+                write_http_error(reader.get_mut(), 400, "bad request")?;
+                return Ok(());
+            }
+            Route::Redirect(location) => {
+                write_mux_redirect(
+                    reader.get_mut(),
+                    &location,
+                    &request.method,
+                    &request.http_version,
+                    keep_alive,
+                )?;
+                if !keep_alive {
+                    return Ok(());
+                }
+                continue;
+            }
+            Route::Path(path) => request.path = path,
+        }
+        if let Some(response) = builtin_route_response(&request, local) {
+            write_http_response(
+                reader.get_mut(),
+                response,
+                &request.http_version,
+                keep_alive,
+                request.method == "HEAD",
+            )?;
+            if !keep_alive {
+                return Ok(());
+            }
+            continue;
+        }
         if let Some(response) = well_known_response(&request, local, reader.get_ref().is_tls()) {
             write_http_response(
                 reader.get_mut(),
@@ -1310,11 +1393,18 @@ where
         write_request_error(stream, 401, "unauthorized", response_version, keep_alive)?;
         return Ok(keep_alive);
     };
-    let token = match lookup_token(registry_path, bearer) {
-        Ok(Some(token)) => token,
-        Ok(None) | Err(_) => {
-            write_request_error(stream, 401, "unauthorized", response_version, keep_alive)?;
-            return Ok(keep_alive);
+    let legacy = LEGACY_BEARER
+        .get()
+        .is_some_and(|legacy| constant_time_eq(legacy.as_bytes(), bearer.as_bytes()));
+    let token = if legacy {
+        None
+    } else {
+        match lookup_token(registry_path, bearer) {
+            Ok(Some(token)) => Some(token),
+            Ok(None) | Err(_) => {
+                write_request_error(stream, 401, "unauthorized", response_version, keep_alive)?;
+                return Ok(keep_alive);
+            }
         }
     };
     if request.agent.is_empty() {
@@ -1327,7 +1417,10 @@ where
         )?;
         return Ok(keep_alive);
     }
-    if !token.agent_name.is_empty() && token.agent_name != request.agent {
+    if token
+        .as_ref()
+        .is_some_and(|token| !token.agent_name.is_empty() && token.agent_name != request.agent)
+    {
         write_request_error(
             stream,
             403,
@@ -1358,6 +1451,22 @@ where
         write_http_response(stream, response, response_version, keep_alive, false)?;
         return Ok(keep_alive);
     }
+    let decoded = envelope::decode(&request.body).ok();
+    let version = request.protocol_version.trim();
+    if !version.is_empty()
+        && !is_supported_protocol_version(version)
+        && let Some(message) = decoded.as_ref()
+    {
+        let response = error(
+            400,
+            message.id.clone(),
+            error_code::INVALID_REQUEST,
+            "unsupported MCP-Protocol-Version",
+        )
+        .map_err(std::io::Error::other)?;
+        write_http_response(stream, response, response_version, keep_alive, false)?;
+        return Ok(keep_alive);
+    }
     let handler = {
         let mut state = state
             .lock()
@@ -1382,19 +1491,28 @@ where
                     )?;
                     return Ok(keep_alive);
                 }
-                Err(error) => {
-                    write_json_error_for_request(
-                        stream,
+                Err(message) => {
+                    // Go writes the handler-creation failure as an internal
+                    // JSON-RPC error carrying the request id.
+                    let response = error(
                         403,
-                        &error,
-                        response_version,
-                        keep_alive,
-                    )?;
+                        decoded.and_then(|decoded| decoded.id),
+                        error_code::INTERNAL_ERROR,
+                        &message,
+                    )
+                    .map_err(std::io::Error::other)?;
+                    write_http_response(stream, response, response_version, keep_alive, false)?;
                     return Ok(keep_alive);
                 }
             }
         }
-        let session_key = format!("{}:{}", token.id, request.agent);
+        let session_key = format!(
+            "{}:{}",
+            token
+                .as_ref()
+                .map_or("legacy-bearer", |token| token.id.as_str()),
+            request.agent
+        );
         if !sessions.contains_key(&session_key) && sessions.len() >= MAX_HTTP_SESSIONS {
             write_request_error(
                 stream,
@@ -1418,8 +1536,16 @@ where
         let mut handler = handler
             .lock()
             .map_err(|_| std::io::Error::other("MCP HTTP session poisoned"))?;
-        handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
-        handler.set_token_registry_hash(&token.tool_registry_hash);
+        match token.as_ref() {
+            Some(token) => {
+                handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
+                handler.set_token_registry_hash(&token.tool_registry_hash);
+            }
+            None => {
+                handler.set_token_scope(&["*".to_owned()]);
+                handler.set_token_registry_hash("");
+            }
+        }
         handler.set_request_context(request_context.clone());
         handle_request(http_request, &mut handler)
             .map_err(|error| std::io::Error::other(error.to_string()))?
@@ -1445,6 +1571,24 @@ struct WireRequest {
     body: String,
     body_error: Option<(u16, &'static str)>,
 }
+
+/// Headers whose interpretation drives framing, routing or authentication.
+/// A repeated occurrence is rejected (request-smuggling ambiguity); repeats of
+/// every other field are accepted with Go's first-value semantics.
+const DUPLICATE_SENSITIVE_HEADERS: &[&str] = &[
+    "host",
+    "authorization",
+    "x-symaira-agent",
+    "content-type",
+    "content-length",
+    "transfer-encoding",
+    "origin",
+    "mcp-protocol-version",
+    "x-enroll-timestamp",
+    "x-enroll-proof",
+    "connection",
+    "expect",
+];
 
 fn read_wire_request(
     reader: &mut BufReader<HttpStream>,
@@ -1530,17 +1674,27 @@ fn read_wire_request(
         let name = name.to_ascii_lowercase();
         let value = value.trim_matches([' ', '\t']);
         if let Some(previous) = headers.get_mut(&name) {
-            if name != "accept" {
+            if name == "accept" {
+                previous.push(',');
+                previous.push_str(value);
+            } else if DUPLICATE_SENSITIVE_HEADERS.contains(&name.as_str()) {
                 return Err(invalid_http("duplicate HTTP header"));
             }
-            previous.push(',');
-            previous.push_str(value);
+            // Any other repeated field is not interpreted; like Header.Get the
+            // first value stays authoritative.
         } else {
             headers.insert(name, value.to_owned());
         }
     }
     if headers.get("host").is_none_or(String::is_empty) {
         return Err(invalid_http("missing Host header"));
+    }
+    if version == "HTTP/1.1"
+        && headers
+            .get("expect")
+            .is_some_and(|expect| !expect.eq_ignore_ascii_case("100-continue"))
+    {
+        return Err(invalid_http("expectation failed"));
     }
     reader
         .get_mut()
@@ -1570,9 +1724,16 @@ fn read_wire_request(
         (body, None)
     } else {
         let length = match headers.get("content-length") {
-            Some(value) => value
-                .parse::<usize>()
-                .map_err(|_| invalid_http("invalid Content-Length"))?,
+            // net/http accepts only unsigned decimal digits (no sign, hex or
+            // separators) that fit 63 bits.
+            Some(value) => Some(value)
+                .filter(|value| {
+                    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
+                })
+                .and_then(|value| value.parse::<u64>().ok())
+                .filter(|value| *value <= i64::MAX as u64)
+                .and_then(|value| usize::try_from(value).ok())
+                .ok_or_else(|| invalid_http("invalid Content-Length"))?,
             None => 0,
         };
         if length > MAX_HTTP_BODY {
@@ -1586,18 +1747,17 @@ fn read_wire_request(
             // without waiting for an oversized peer to send the remaining body.
             // Take still bounds consumption; incomplete/valid prefixes need the
             // same lookahead before Go's measured 413 can be returned.
-            let failure =
-                match serde_json::from_reader::<_, Message>(reader.take(MAX_HTTP_BODY as u64)) {
-                    Err(error) if error.is_io() => return Err(error.into()),
-                    Err(error) if !error.is_eof() => (400, "invalid JSON"),
-                    _ => {
-                        // Consume one lookahead byte, like Go's MaxBytesReader. The
-                        // one-byte-over response must not race an unread TCP byte.
-                        let mut lookahead = [0; 1];
-                        reader.read_exact(&mut lookahead)?;
-                        (413, "request body too large")
-                    }
-                };
+            let failure = match envelope::parse_reader(reader.take(MAX_HTTP_BODY as u64)) {
+                Err(error) if error.is_io() => return Err(error.into()),
+                Err(error) if !error.is_eof() => (400, "invalid JSON"),
+                _ => {
+                    // Consume one lookahead byte, like Go's MaxBytesReader. The
+                    // one-byte-over response must not race an unread TCP byte.
+                    let mut lookahead = [0; 1];
+                    reader.read_exact(&mut lookahead)?;
+                    (413, "request body too large")
+                }
+            };
             // Defer MCP body errors until its existing admission/content checks.
             (String::new(), Some(failure))
         } else {
@@ -1837,11 +1997,23 @@ fn lookup_token(
     registry_path: &Path,
     bearer: &str,
 ) -> Result<Option<symvault_store::token_registry::TokenRecord>, std::io::Error> {
-    let registry = load_token_registry(registry_path)?;
+    let registry = match load_token_registry(registry_path) {
+        Ok(registry) => registry,
+        Err(error) => LAST_GOOD_REGISTRY
+            .lock()
+            .ok()
+            .and_then(|cache| cache.get(registry_path).cloned())
+            .ok_or(error)?,
+    };
     let now = time::OffsetDateTime::now_utc();
-    let Some(token) =
-        symvault_store::token_registry::lookup_raw_bearer(&registry.tokens, bearer, now)
-            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
+    let tokens = registry
+        .tokens
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(id, token)| token.map(|token| (id, token)))
+        .collect::<BTreeMap<_, _>>();
+    let Some(token) = symvault_store::token_registry::lookup_raw_bearer(&tokens, bearer, now)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
     else {
         return Ok(None);
     };
@@ -1849,6 +2021,99 @@ fn lookup_token(
 }
 
 fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::Error> {
+    // The read and the cache update happen under one lock so a slow reader can
+    // never overwrite a newer state published by the poller (or a request).
+    let mut cache = LAST_GOOD_REGISTRY
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let registry = read_token_registry(registry_path)?;
+    cache.insert(registry_path.to_path_buf(), registry.clone());
+    Ok(registry)
+}
+
+/// How often the background poller stats the registry. Go polls every 2 s
+/// (`http_setup.go`: `StartFileWatcher(ctx, 2*time.Second)`); polling faster is
+/// never more permissive than Go, because it only ever publishes a newer
+/// successfully parsed state sooner, which narrows (never widens) the window in
+/// which a revoked token survives a later corrupt or deleted file.
+const REGISTRY_POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Go's `os.SameFile` + mtime + size identity of the registry file.
+#[derive(PartialEq, Eq)]
+struct RegistryFileId {
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    modified: Option<std::time::SystemTime>,
+    len: u64,
+}
+
+fn registry_file_id(registry_path: &Path) -> Option<RegistryFileId> {
+    let metadata = fs::metadata(registry_path).ok()?;
+    #[cfg(unix)]
+    let (device, inode) = {
+        use std::os::unix::fs::MetadataExt;
+        (metadata.dev(), metadata.ino())
+    };
+    Some(RegistryFileId {
+        #[cfg(unix)]
+        device,
+        #[cfg(unix)]
+        inode,
+        modified: metadata.modified().ok(),
+        len: metadata.len(),
+    })
+}
+
+/// One tick of Go's `StartFileWatcher`: a failed stat is ignored (the in-memory
+/// registry is retained); a changed file is reloaded, and the new state replaces
+/// the cache only when it parses. The identity is recorded before the reload, so
+/// a file that fails to parse is not retried until it changes again.
+fn poll_registry_once(registry_path: &Path, last: &mut Option<RegistryFileId>) {
+    let Some(current) = registry_file_id(registry_path) else {
+        return;
+    };
+    if last.as_ref() == Some(&current) {
+        return;
+    }
+    *last = Some(current);
+    if let Err(error) = load_token_registry(registry_path) {
+        let _ = writeln!(
+            std::io::stderr().lock(),
+            "error reloading token registry from {}: {error}",
+            registry_path.display()
+        );
+    }
+}
+
+/// Stops the registry poller when the serving scope ends.
+struct RegistryWatcherStop {
+    stop: Arc<AtomicBool>,
+    thread: thread::Thread,
+}
+
+impl Drop for RegistryWatcherStop {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        self.thread.unpark();
+    }
+}
+
+fn watch_registry(registry_path: &Path, stop: &AtomicBool, interval: Duration) {
+    // No initial identity: the first tick re-reads once, which only closes the
+    // window between the startup load and the watcher start.
+    let mut last = None;
+    while !stop.load(Ordering::Acquire) {
+        thread::park_timeout(interval);
+        if stop.load(Ordering::Acquire) {
+            break;
+        }
+        poll_registry_once(registry_path, &mut last);
+    }
+}
+
+fn read_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::Error> {
     let encrypted = registry_path.with_file_name("registry.age");
     if encrypted.exists() {
         return Err(std::io::Error::new(
@@ -1870,9 +2135,233 @@ fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::E
             "token registry too large",
         ));
     }
-    let registry: TokenRegistry = serde_json::from_slice(&bytes)
+    let value = fold_go_registry_keys(&bytes)?;
+    validate_go_registry(&value)?;
+    let registry: TokenRegistry = serde_json::from_value(value)
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     Ok(registry)
+}
+
+/// JSON object members in document order, duplicates kept, values unparsed.
+struct OrderedMembers(Vec<(String, Box<serde_json::value::RawValue>)>);
+
+impl<'de> Deserialize<'de> for OrderedMembers {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = OrderedMembers;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a JSON object")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut members = Vec::new();
+                while let Some(member) = map.next_entry()? {
+                    members.push(member);
+                }
+                Ok(OrderedMembers(members))
+            }
+        }
+        deserializer.deserialize_map(Visitor)
+    }
+}
+
+const REGISTRY_ROOT_FIELDS: &[&str] = &["version", "tokens"];
+const REGISTRY_ENTRY_FIELDS: &[&str] = &[
+    "id",
+    "label",
+    "hash",
+    "prefix",
+    "allowed_tools",
+    "tool_registry_hash",
+    "agent_name",
+    "created_at",
+    "expires_at",
+    "last_used_at",
+    "revoked",
+    "revoked_at",
+    "refresh_token_hash",
+    "refresh_expires_at",
+];
+/// Fields Go decodes into non-pointer scalars: a JSON `null` leaves them as is.
+const NULL_IS_NOOP_FIELDS: &[&str] = &[
+    "version",
+    "id",
+    "label",
+    "hash",
+    "prefix",
+    "tool_registry_hash",
+    "agent_name",
+    "created_at",
+    "revoked",
+    "refresh_token_hash",
+];
+
+/// `encoding/json` simple case folding for ASCII field names: U+017F folds to
+/// `s` and U+212A (Kelvin) to `k`, everything else by Unicode lowercase.
+fn go_fold_name(name: &str) -> String {
+    name.chars()
+        .flat_map(|character| match character {
+            '\u{17f}' => 's'.to_lowercase(),
+            '\u{212a}' => 'k'.to_lowercase(),
+            other => other.to_lowercase(),
+        })
+        .collect()
+}
+
+/// The struct field Go's `json.Unmarshal` would bind `key` to: an exact match,
+/// else a case-insensitive one; unknown keys are returned unchanged.
+fn go_field_name<'a>(key: &'a str, fields: &'static [&'static str]) -> &'a str {
+    if fields.contains(&key) {
+        return key;
+    }
+    let folded = go_fold_name(key);
+    fields
+        .iter()
+        .find(|field| go_fold_name(field) == folded)
+        .copied()
+        .unwrap_or(key)
+}
+
+fn fold_members(
+    members: OrderedMembers,
+    fields: &'static [&'static str],
+) -> Result<serde_json::Map<String, serde_json::Value>, serde_json::Error> {
+    let mut folded = serde_json::Map::new();
+    for (key, raw) in members.0 {
+        let name = go_field_name(&key, fields).to_owned();
+        let mut value = if fields == REGISTRY_ROOT_FIELDS && name == "tokens" {
+            fold_tokens(raw.get())?
+        } else {
+            serde_json::from_str::<serde_json::Value>(raw.get())?
+        };
+        if value.is_null() && NULL_IS_NOOP_FIELDS.contains(&name.as_str()) {
+            continue;
+        }
+        if name == "allowed_tools"
+            && let Some(tools) = value.as_array_mut()
+        {
+            // A null element decodes into a Go string as the empty string.
+            for tool in tools.iter_mut().filter(|tool| tool.is_null()) {
+                *tool = serde_json::Value::String(String::new());
+            }
+        }
+        // Later members override earlier ones, as repeated Go assignments do.
+        folded.insert(name, value);
+    }
+    Ok(folded)
+}
+
+/// Folds each entry of the `tokens` object (ids are case-sensitive map keys,
+/// the last duplicate wins); anything that is not an object is left for
+/// `validate_go_registry` to reject.
+fn fold_tokens(text: &str) -> Result<serde_json::Value, serde_json::Error> {
+    let tokens: serde_json::Value = serde_json::from_str(text)?;
+    if !tokens.is_object() {
+        return Ok(tokens);
+    }
+    let mut folded = serde_json::Map::new();
+    for (id, raw) in serde_json::from_str::<OrderedMembers>(text)?.0 {
+        let entry: serde_json::Value = serde_json::from_str(raw.get())?;
+        let entry = if entry.is_object() {
+            let members = serde_json::from_str::<OrderedMembers>(raw.get())?;
+            serde_json::Value::Object(fold_members(members, REGISTRY_ENTRY_FIELDS)?)
+        } else {
+            entry
+        };
+        folded.insert(id, entry);
+    }
+    Ok(serde_json::Value::Object(folded))
+}
+
+/// Rebuilds the registry with Go's field-name binding applied: Go matches
+/// struct fields case-insensitively, so `{"TOKENS":{"a":{"REVOKED":true}}}`
+/// revokes a token and must never be read as an unknown, ignored key.
+fn fold_go_registry_keys(bytes: &[u8]) -> Result<serde_json::Value, std::io::Error> {
+    let invalid = |error: serde_json::Error| {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())
+    };
+    let root: OrderedMembers = serde_json::from_slice(bytes).map_err(invalid)?;
+    let root = fold_members(root, REGISTRY_ROOT_FIELDS).map_err(invalid)?;
+    Ok(serde_json::Value::Object(root))
+}
+
+/// Whether the registry file holds at least one hashed entry (Go's
+/// `len(reg.entries) > 0` after `Load`). A missing file is an empty registry;
+/// every other load failure is fatal, as for Go's `LoadTokenSystem`.
+pub fn registry_has_entries(registry_path: &Path) -> Result<bool, std::io::Error> {
+    match fs::symlink_metadata(registry_path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+        Ok(_) => {}
+    }
+    Ok(load_token_registry(registry_path)?
+        .tokens
+        .unwrap_or_default()
+        .values()
+        .flatten()
+        .any(|token| !token.hash.is_empty()))
+}
+
+/// Go's `json.Unmarshal` into `TokenRegistryFile` fails the whole registry on
+/// any type error, including a malformed timestamp; one bad entry must never
+/// leave the rest of the file half-trusted.
+fn validate_go_registry(value: &serde_json::Value) -> Result<(), std::io::Error> {
+    fn invalid(message: &str) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, message.to_owned())
+    }
+    fn timestamp(value: &serde_json::Value) -> bool {
+        value.is_null()
+            || value.as_str().is_some_and(|text| {
+                time::OffsetDateTime::parse(text, &time::format_description::well_known::Rfc3339)
+                    .is_ok()
+            })
+    }
+    let root = value
+        .as_object()
+        .ok_or_else(|| invalid("token registry must be a JSON object"))?;
+    if root
+        .get("version")
+        .is_some_and(|version| !version.is_null() && version.as_i64().is_none())
+    {
+        return Err(invalid("token registry version must be an integer"));
+    }
+    let tokens = match root.get("tokens") {
+        None | Some(serde_json::Value::Null) => return Ok(()),
+        Some(serde_json::Value::Object(tokens)) => tokens,
+        Some(_) => return Err(invalid("token registry tokens must be an object")),
+    };
+    for entry in tokens.values() {
+        let fields = match entry {
+            serde_json::Value::Null => continue,
+            serde_json::Value::Object(fields) => fields,
+            _ => return Err(invalid("token registry entry must be an object")),
+        };
+        for (key, field) in fields {
+            let valid = match key.as_str() {
+                "id" | "label" | "hash" | "prefix" | "tool_registry_hash" | "agent_name"
+                | "refresh_token_hash" => field.is_null() || field.is_string(),
+                "allowed_tools" => {
+                    field.is_null()
+                        || field.as_array().is_some_and(|tools| {
+                            tools.iter().all(|tool| tool.is_null() || tool.is_string())
+                        })
+                }
+                "revoked" => field.is_null() || field.is_boolean(),
+                "created_at" | "expires_at" | "last_used_at" | "revoked_at"
+                | "refresh_expires_at" => timestamp(field),
+                _ => true,
+            };
+            if !valid {
+                return Err(invalid("token registry entry field has the wrong type"));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
@@ -2010,11 +2499,14 @@ fn write_http_response(
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        307 => "Temporary Redirect",
         406 => "Not Acceptable",
         409 => "Conflict",
         413 => "Request Entity Too Large",
         415 => "Unsupported Media Type",
+        417 => "Expectation Failed",
         429 => "Too Many Requests",
+        501 => "Not Implemented",
         _ => "Internal Server Error",
     };
     write!(stream, "{version} {} {reason}\r\n", response.status)?;
@@ -2070,6 +2562,214 @@ fn write_connection_header(
         ("HTTP/1.0", true) => stream.write_all(b"Connection: keep-alive\r\n"),
         ("HTTP/1.1", false) => stream.write_all(b"Connection: close\r\n"),
         _ => Ok(()),
+    }
+}
+
+static HEALTH_VERSION: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+
+/// Sets the version string reported by `GET /health`. The first call wins;
+/// the default is `dev`, as in an unstamped Go build.
+pub fn set_health_version(version: &'static str) {
+    let _ = HEALTH_VERSION.set(version);
+}
+
+enum Route {
+    Invalid,
+    Redirect(String),
+    Path(String),
+}
+
+/// `http.ServeMux` request-path handling (Go 1.22+): clean the *escaped* path
+/// with `path.Clean` (keeping a trailing slash) and redirect when that changes
+/// it, then match each segment after percent-decoding. A segment that decodes
+/// to a separator or an escape can never name a plain route.
+fn route_path(raw: &str) -> Route {
+    let (path, query) = match raw.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (raw, None),
+    };
+    if percent_decode_path(path).is_none() {
+        return Route::Invalid;
+    }
+    let cleaned = clean_route_path(path);
+    if cleaned != path {
+        let mut location = escape_route_path(&cleaned);
+        if let Some(query) = query {
+            location.push('?');
+            location.push_str(query);
+        }
+        return Route::Redirect(location);
+    }
+    let mut decoded = String::new();
+    for segment in cleaned.split('/').skip(1) {
+        let Some(segment) = percent_decode_path(segment) else {
+            return Route::Invalid;
+        };
+        if segment.contains(['/', '?', '%']) {
+            return Route::Path("/\u{0}unroutable".to_owned());
+        }
+        decoded.push('/');
+        decoded.push_str(&segment);
+    }
+    Route::Path(match query {
+        Some(query) => format!("{decoded}?{query}"),
+        None => decoded,
+    })
+}
+
+fn percent_decode_path(path: &str) -> Option<String> {
+    let bytes = path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let pair = bytes.get(index + 1..index + 3)?;
+            let value = u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()?;
+            if !pair.iter().all(u8::is_ascii_hexdigit) {
+                return None;
+            }
+            decoded.push(value);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    Some(String::from_utf8_lossy(&decoded).into_owned())
+}
+
+fn clean_route_path(path: &str) -> String {
+    if path.is_empty() {
+        return "/".to_owned();
+    }
+    let rooted = if path.starts_with('/') {
+        path.to_owned()
+    } else {
+        format!("/{path}")
+    };
+    let mut stack = Vec::new();
+    for segment in rooted.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                stack.pop();
+            }
+            segment => stack.push(segment),
+        }
+    }
+    let mut cleaned = format!("/{}", stack.join("/"));
+    if rooted.ends_with('/') && cleaned != "/" {
+        cleaned.push('/');
+    }
+    cleaned
+}
+
+/// `url.URL{Path: p}.String()` for a rooted path: escape everything except
+/// unreserved characters and `$&+,/:;=@`.
+fn escape_route_path(path: &str) -> String {
+    let mut escaped = String::with_capacity(path.len());
+    for byte in path.bytes() {
+        if byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b'-' | b'_'
+                    | b'.'
+                    | b'~'
+                    | b'$'
+                    | b'&'
+                    | b'+'
+                    | b','
+                    | b'/'
+                    | b':'
+                    | b';'
+                    | b'='
+                    | b'@'
+            )
+        {
+            escaped.push(char::from(byte));
+        } else {
+            escaped.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    escaped
+}
+
+fn write_mux_redirect(
+    stream: &mut HttpStream,
+    location: &str,
+    method: &str,
+    version: &str,
+    keep_alive: bool,
+) -> Result<(), std::io::Error> {
+    let location: String = location
+        .bytes()
+        .map(|byte| {
+            if byte >= 0x80 {
+                format!("%{byte:02X}")
+            } else {
+                char::from(byte).to_string()
+            }
+        })
+        .collect();
+    write!(
+        stream,
+        "{version} 307 Temporary Redirect\r\nLocation: {location}\r\n"
+    )?;
+    let body = if method == "GET" {
+        let html = location
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&#34;")
+            .replace('\'', "&#39;");
+        format!("<a href=\"{html}\">Temporary Redirect</a>.\n\n").into_bytes()
+    } else {
+        Vec::new()
+    };
+    if matches!(method, "GET" | "HEAD") {
+        stream.write_all(b"Content-Type: text/html; charset=utf-8\r\n")?;
+    }
+    if method != "HEAD" {
+        write!(stream, "Content-Length: {}\r\n", body.len())?;
+    }
+    write_connection_header(stream, version, keep_alive)?;
+    stream.write_all(b"\r\n")?;
+    stream.write_all(&body)
+}
+
+/// Unauthenticated Go mux routes that exist independent of OAuth/MCP: the
+/// health document and the metrics stub of a build without metrics support.
+fn builtin_route_response(
+    request: &WireRequest,
+    local: std::net::SocketAddr,
+) -> Option<HttpResponse> {
+    match request.path.split('?').next() {
+        Some("/health") => {
+            let timestamp = time::OffsetDateTime::now_utc()
+                .replace_nanosecond(0)
+                .ok()?
+                .format(&time::format_description::well_known::Rfc3339)
+                .ok()?;
+            let mut body = serde_json::to_vec(&serde_json::json!({
+                "port": local.port(),
+                "status": "healthy",
+                "timestamp": timestamp,
+                "version": HEALTH_VERSION.get().copied().unwrap_or("dev"),
+            }))
+            .ok()?;
+            body.push(b'\n');
+            Some(HttpResponse {
+                status: 200,
+                headers: vec![("Content-Type", "application/json")],
+                body,
+            })
+        }
+        Some("/metrics") => Some(HttpResponse {
+            status: 501,
+            headers: vec![("Content-Type", "text/plain; charset=utf-8")],
+            body: b"metrics not compiled in (build with -tags metrics)\n".to_vec(),
+        }),
+        _ => None,
     }
 }
 
@@ -2253,36 +2953,33 @@ pub fn handle_request(
     if request.body.len() > MAX_HTTP_BODY {
         // Match the socket parser's bounded prefix classification. Byte slicing
         // also remains safe when the budget ends within a UTF-8 character.
-        if let Err(error) =
-            serde_json::from_slice::<Message>(&request.body.as_bytes()[..MAX_HTTP_BODY])
-            && !error.is_eof()
-        {
+        if envelope::prefix_is_definitively_invalid(&request.body.as_bytes()[..MAX_HTTP_BODY]) {
             return self::error(400, None, error_code::PARSE_ERROR, "invalid JSON");
         }
         return error(413, None, error_code::PARSE_ERROR, "request body too large");
     }
-    if serde_json::from_str::<Message>(request.body).is_err() {
+    // Go decodes into transport.Message without the stdio loop's jsonrpc and
+    // method guards; reproduce that envelope, then dispatch the message as is.
+    let Ok(message) = envelope::decode(request.body) else {
         return error(400, None, error_code::PARSE_ERROR, "invalid JSON");
-    }
+    };
     if request.body.len() > MAX_HTTP_BODY {
         return error(413, None, error_code::PARSE_ERROR, "request body too large");
     }
 
     let version = request.protocol_version.trim();
     if !version.is_empty() && !is_supported_protocol_version(version) {
-        let id = serde_json::from_str::<Message>(request.body)
-            .ok()
-            .and_then(|message| message.id);
         return error(
             400,
-            id,
+            message.id,
             error_code::INVALID_REQUEST,
             "unsupported MCP-Protocol-Version",
         );
     }
 
-    match handle_line(request.body, handler)? {
-        Some(mut body) => {
+    match handler.handle_message(&message)? {
+        Some(response) => {
+            let mut body = crate::encode(&response)?;
             body.push('\n');
             Ok(HttpResponse {
                 status: 200,
@@ -2342,7 +3039,11 @@ fn parse_mime_media_type(value: &str) -> Option<String> {
         return None;
     }
     let mut parameters = std::collections::HashSet::new();
-    for parameter in parts.iter().skip(1) {
+    for (index, parameter) in parts.iter().enumerate().skip(1) {
+        // mime.ParseMediaType ignores one trailing semicolon.
+        if index == parts.len() - 1 && parameter.trim().is_empty() {
+            continue;
+        }
         let (name, value) = parameter.split_once('=')?;
         let name = name.trim();
         let value = value.trim();
@@ -2926,6 +3627,206 @@ mod tests {
             .expect("cancel completed saturation server");
         server.join().expect("join saturation server");
         assert_eq!(shutdown.registered_connection_count(), 0);
+    }
+
+    #[test]
+    fn corrupt_or_deleted_registry_keeps_last_good_state_like_go_watcher() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        assert!(
+            lookup_token(&path, BEARER).expect("good load").is_some(),
+            "token is valid before the registry breaks"
+        );
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        assert!(
+            lookup_token(&path, BEARER).expect("last good").is_some(),
+            "Go keeps the in-memory registry after a failed reload"
+        );
+        fs::remove_file(&path).expect("delete registry");
+        assert!(lookup_token(&path, BEARER).expect("last good").is_some());
+        let unseen = dir.path().join("never-loaded").join("mcp-tokens.json");
+        assert!(
+            lookup_token(&unseen, BEARER).is_err(),
+            "no last-good state exists for a registry that never loaded"
+        );
+    }
+
+    fn lookup_in_document(document: &str) -> Option<bool> {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("mcp-tokens.json");
+        fs::write(&path, document).expect("write registry");
+        match lookup_token(&path, BEARER) {
+            Ok(found) => Some(found.is_some()),
+            Err(_) => None,
+        }
+    }
+
+    /// Go's `json.Unmarshal` binds struct fields case-insensitively (with
+    /// Unicode simple folding); an unmatched key here would be silently dropped
+    /// and, for `REVOKED`/`EXPIRES_AT`, would make Rust MORE permissive than Go.
+    #[test]
+    fn registry_field_names_bind_case_insensitively_like_go() {
+        let hash = symvault_store::sha256_hex(BEARER.as_bytes());
+        let doc = |extra: &str, root_tokens: &str| {
+            format!(
+                r#"{{"VERSION":2,"{root_tokens}":{{"t":{{"ID":"t","HASH":"{hash}","Prefix":"http","ALLOWED_TOOLS":["*"],"Agent_Name":"default","CREATED_AT":"2026-01-01T00:00:00Z"{extra}}}}}}}"#
+            )
+        };
+        assert_eq!(
+            lookup_in_document(&doc("", "TOKENS")),
+            Some(true),
+            "control: folded names bind"
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":true"#, "TOKENS")),
+            Some(false)
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","Revoked":true"#, "tokens")),
+            Some(false)
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","EXPIRES_AT":"2000-01-01T00:00:00Z""#, "tokens")),
+            Some(false)
+        );
+        // U+017F (long s) and U+212A (Kelvin sign) fold to `s` and `k`.
+        assert_eq!(
+            lookup_in_document(&doc(
+                r#","expire\u017f_at":"2000-01-01T00:00:00Z""#,
+                "tokens"
+            )),
+            Some(false)
+        );
+        assert_eq!(
+            lookup_in_document(&doc("", "TO\u{212a}EN\u{17f}")),
+            Some(true),
+            "control: the folded root key binds"
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":true"#, "TO\u{212a}EN\u{17f}")),
+            Some(false)
+        );
+        // Repeated case variants: the later member wins, as in Go.
+        assert_eq!(
+            lookup_in_document(&doc(r#","revoked":true,"REVOKED":false"#, "tokens")),
+            Some(true)
+        );
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":false,"revoked":true"#, "tokens")),
+            Some(false)
+        );
+        // `null` leaves a Go scalar field untouched, including after a value.
+        assert_eq!(
+            lookup_in_document(&doc(
+                r#","HASH":null,"revoked":null,"Label":null"#,
+                "tokens"
+            )),
+            Some(true)
+        );
+        // Type errors still fail the whole registry under any casing.
+        assert_eq!(
+            lookup_in_document(&doc(r#","REVOKED":"yes""#, "tokens")),
+            None
+        );
+    }
+
+    fn revoke_in_file(path: &Path) {
+        let mut document: serde_json::Value =
+            serde_json::from_slice(&fs::read(path).expect("read registry")).expect("registry json");
+        document["tokens"]["tok-test"]["revoked"] = serde_json::json!(true);
+        fs::write(path, serde_json::to_vec(&document).expect("serialize")).expect("revoke");
+    }
+
+    /// A revocation must survive a later corrupt/deleted file even when no
+    /// request arrives between the revocation and the corruption: Go's watcher
+    /// (and the Rust poller) publish the revoked state on their own.
+    #[test]
+    fn polled_revocation_survives_later_corruption_or_deletion() {
+        for delete in [false, true] {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let path = registry(dir.path());
+            load_token_registry(&path).expect("startup load");
+            revoke_in_file(&path);
+            // No request here: only the poller can observe the revocation.
+            let mut last = None;
+            poll_registry_once(&path, &mut last);
+            if delete {
+                fs::remove_file(&path).expect("delete registry");
+            } else {
+                fs::write(&path, b"{corrupt").expect("corrupt registry");
+            }
+            poll_registry_once(&path, &mut last);
+            assert!(
+                lookup_token(&path, BEARER).expect("last good").is_none(),
+                "revoked token must stay revoked after corrupt/delete (delete={delete})"
+            );
+        }
+    }
+
+    /// Negative control: without the poller (the previous behaviour, cache
+    /// refreshed only by requests) the same sequence keeps the token valid.
+    #[test]
+    fn without_polling_the_stale_cache_keeps_a_revoked_token_valid() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        load_token_registry(&path).expect("startup load");
+        revoke_in_file(&path);
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        assert!(
+            lookup_token(&path, BEARER).expect("stale cache").is_some(),
+            "control: with no poll and no request the stale entry is served"
+        );
+    }
+
+    #[test]
+    fn failed_reload_does_not_replace_the_cache_and_is_not_retried_until_changed() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        load_token_registry(&path).expect("startup load");
+        let mut last = None;
+        poll_registry_once(&path, &mut last);
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        poll_registry_once(&path, &mut last);
+        let recorded = last.as_ref().map(|id| id.len);
+        assert_eq!(recorded, Some(8), "identity recorded even for a bad file");
+        assert!(lookup_token(&path, BEARER).expect("last good").is_some());
+    }
+
+    #[test]
+    fn background_watcher_publishes_a_revocation_without_requests() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = registry(dir.path());
+        load_token_registry(&path).expect("startup load");
+        let stop = Arc::new(AtomicBool::new(false));
+        let handle = {
+            let (path, stop) = (path.clone(), Arc::clone(&stop));
+            thread::spawn(move || watch_registry(&path, &stop, Duration::from_millis(20)))
+        };
+        revoke_in_file(&path);
+        let started = Instant::now();
+        loop {
+            let revoked = LAST_GOOD_REGISTRY
+                .lock()
+                .expect("cache")
+                .get(&path)
+                .and_then(|registry| registry.tokens.as_ref())
+                .and_then(|tokens| tokens.get("tok-test"))
+                .and_then(Option::as_ref)
+                .is_some_and(|token| token.revoked);
+            if revoked {
+                break;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "poller never published the revocation"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        fs::write(&path, b"{corrupt").expect("corrupt registry");
+        assert!(lookup_token(&path, BEARER).expect("last good").is_none());
+        stop.store(true, Ordering::Release);
+        handle.thread().unpark();
+        handle.join().expect("watcher exits");
     }
 
     fn registry(dir: &Path) -> std::path::PathBuf {
