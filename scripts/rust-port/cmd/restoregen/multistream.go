@@ -213,6 +213,7 @@ func buildMultistreamCases() []multiCase {
 		}
 		item.Wrap = describeMulti(spec)
 		item.TarB64 = base64.StdEncoding.EncodeToString(tarBytes)
+		item.TarParts = nil
 		cases = append(cases, multiCase{restoreCase: item, GzB64: base64.StdEncoding.EncodeToString(gz)})
 	}
 	return cases

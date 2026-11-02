@@ -1,3 +1,4 @@
+use crate::gotar::GoTar;
 use crate::gzip_multistream::GoGzip;
 use flate2::{Compression, write::GzEncoder};
 use serde::{Deserialize, Serialize};
@@ -7,7 +8,7 @@ use std::{
     io::{self, Read, Seek, Write},
     path::{Component, Path, PathBuf},
 };
-use tar::{Archive, Builder, EntryType, Header};
+use tar::{Builder, Header};
 use thiserror::Error;
 
 /// Deliberate safety limit with no production-Go equivalent (Go restores any
@@ -411,63 +412,9 @@ fn make_dir(path: &Path, mode: u32) -> io::Result<()> {
     }
 }
 
-/// What Go's `Reader.readHeader` derives from one header block beyond what
-/// the tar crate exposes.
-struct GoHeader {
-    mode: i64,
-    /// USTAR prefix Go prepends to a GNU header whose atime/ctime does not
-    /// parse (the format is demoted and the prefix field, which overlaps
-    /// those GNU fields, is read). Empty otherwise.
-    gnu_demoted_prefix: Vec<u8>,
-}
-
-/// Go's `Reader.readHeader` numeric parsing: size, mode, uid, gid and mtime
-/// always; devmajor/devminor from USTAR on; STAR atime/ctime. Any failure is
-/// the one sticky `ErrHeader`. A bad GNU atime/ctime is not an error: Go
-/// drops the times, demotes the format and joins the ASCII USTAR prefix.
-fn go_header(header: &Header) -> Result<GoHeader, ()> {
-    let block = header.as_bytes();
-    let field = |start: usize, len: usize| &block[start..start + len];
-    let magic = field(257, 6);
-    let star = magic == b"ustar\0" && field(508, 4) == b"tar\0";
-    let ustar = magic == b"ustar\0";
-    let gnu = magic == b"ustar " && field(263, 2) == b" \0";
-    let mut numeric = vec![(124, 12), (100, 8), (108, 8), (116, 8), (136, 12)];
-    if ustar || gnu {
-        numeric.extend([(329, 8), (337, 8)]);
-    }
-    if star {
-        numeric.extend([(476, 12), (488, 12)]);
-    }
-    for (start, len) in numeric {
-        go_parse_numeric(field(start, len))?;
-    }
-    let mut gnu_demoted_prefix = Vec::new();
-    if gnu && !star {
-        let demoted = [345, 357].into_iter().any(|start| {
-            let time = field(start, 12);
-            time[0] != 0 && go_parse_numeric(time).is_err()
-        });
-        if demoted {
-            let prefix = field(345, 155);
-            let prefix = prefix
-                .iter()
-                .position(|byte| *byte == 0)
-                .map_or(prefix, |nul| &prefix[..nul]);
-            if prefix.is_ascii() {
-                gnu_demoted_prefix = prefix.to_vec();
-            }
-        }
-    }
-    Ok(GoHeader {
-        mode: go_parse_numeric(field(100, 8))?,
-        gnu_demoted_prefix,
-    })
-}
-
 /// Go's `parser.parseNumeric`: base-256 when the high bit is set (the sign
 /// bit makes the value negative), otherwise `parseOctal`.
-fn go_parse_numeric(field: &[u8]) -> Result<i64, ()> {
+pub(crate) fn go_parse_numeric(field: &[u8]) -> Result<i64, ()> {
     if field[0] & 0x80 != 0 {
         let inverted: u8 = if field[0] & 0x40 != 0 { 0xff } else { 0x00 };
         let mut value: u64 = 0;
@@ -497,7 +444,7 @@ fn go_parse_numeric(field: &[u8]) -> Result<i64, ()> {
 /// `strconv.ParseUint(parseString(b), 8, 64)`, where `parseString` cuts at the
 /// first remaining NUL. Only unsigned base-8 digits are accepted (no sign,
 /// prefix or separators), and the unsigned result is reinterpreted as `int64`.
-fn go_parse_octal(field: &[u8]) -> Result<i64, ()> {
+pub(crate) fn go_parse_octal(field: &[u8]) -> Result<i64, ()> {
     let is_padding = |byte: &u8| *byte == b' ' || *byte == 0;
     let start = field.iter().position(|byte| !is_padding(byte));
     let Some(start) = start else {
@@ -561,6 +508,12 @@ fn go_stream_error(error: &io::Error, failure: &Failure) -> String {
         // Go appends "before offset N", a decoder-internal position that
         // flate2 does not expose.
         return "flate: corrupt input".to_owned();
+    }
+    if let Some(tar_error) = error
+        .get_ref()
+        .and_then(|inner| inner.downcast_ref::<crate::gotar::TarError>())
+    {
+        return tar_error.to_string();
     }
     if error.raw_os_error().is_some() {
         return go_reason(error);
@@ -659,12 +612,6 @@ fn create_staging(dir: &Path) -> io::Result<(fs::File, tempfile::TempPath)> {
     Err(last)
 }
 
-/// True when the first header block of `entry` carries the legacy `\0`
-/// typeflag (Go's `TypeRegA`).
-fn is_legacy_regular<R: Read>(entry: &tar::Entry<'_, R>) -> bool {
-    entry.header().as_bytes()[156] == 0
-}
-
 /// Fails with [`ArchiveError::Limit`] before any member is written when the
 /// archive holds more than `MAX_ARCHIVE_ENTRIES` members. Only headers are
 /// counted; a read error ends the count so the extraction pass reports it with
@@ -684,25 +631,20 @@ fn check_entry_limit(input: &Path) -> Result<(), ArchiveError> {
 /// rejects that very header (as Go does) before reading its body, so nothing
 /// beyond it can be written and the oversized body is never inflated here.
 fn scan_entry_limit<R: Read>(reader: R, max_file: u64, max_total: u64) -> Result<(), ArchiveError> {
-    let mut archive = Archive::new(reader);
-    let Ok(entries) = archive.entries() else {
-        return Ok(());
-    };
+    let mut archive = GoTar::new(reader);
     let mut total = 0u64;
-    for (index, item) in entries.enumerate() {
-        let Ok(entry) = item else {
-            return Ok(());
-        };
+    let mut index = 0usize;
+    // A read error ends the count: the extraction pass reports it.
+    while let Ok(Some(header)) = archive.next() {
         if index >= MAX_ARCHIVE_ENTRIES {
             return Err(ArchiveError::Limit);
         }
+        index += 1;
         // Mirrors the extraction pass: only regular files carry a size check.
-        let is_dir = entry.header().entry_type() == EntryType::Directory
-            || (is_legacy_regular(&entry) && entry.path_bytes().ends_with(b"/"));
-        if is_dir || entry.header().entry_type() != EntryType::Regular {
+        if header.typeflag != b'0' {
             continue;
         }
-        let size = entry.size();
+        let size = header.size as u64;
         if size > max_file || size > max_total || total > max_total - size {
             return Ok(());
         }
@@ -758,7 +700,7 @@ pub fn restore(
         inner: gzip,
         failure: failure.clone(),
     };
-    let mut archive = Archive::new(decoder);
+    let mut archive = GoTar::new(decoder);
     let read_error = |error: &io::Error| {
         restore_error(format!(
             "read archive: {}",
@@ -767,26 +709,16 @@ pub fn restore(
     };
     let mut result = Vec::new();
     let mut total = 0u64;
-    let entries = archive.entries().map_err(|error| read_error(&error))?;
-    for item in entries {
-        let mut entry = item.map_err(|error| read_error(&error))?;
-        // Go parses the numeric header fields while reading the header, so a
-        // malformed mode wins over any name error.
-        let go_header = go_header(entry.header())
-            .map_err(|()| restore_error("read archive: archive/tar: invalid tar header"))?;
-        let header_mode = go_header.mode;
-        let mut raw_name = entry.path_bytes().into_owned();
-        // ponytail: a GNU long name or PAX path replaces the header name in
-        // Go, prefix included; treat "differs from the header's own name" as
-        // that override (a long name equal to the header name is misread).
-        if !go_header.gnu_demoted_prefix.is_empty()
-            && raw_name.as_slice() == entry.header().path_bytes().as_ref()
-        {
-            let mut joined = go_header.gnu_demoted_prefix;
-            joined.push(b'/');
-            joined.extend_from_slice(&raw_name);
-            raw_name = joined;
-        }
+    loop {
+        // `tar.Reader.Next`: header errors (including those of GNU/PAX
+        // extension headers and PAX records) win over any name error.
+        let header = match archive.next() {
+            Ok(Some(header)) => header,
+            Ok(None) => break,
+            Err(error) => return Err(read_error(&error.into_io())),
+        };
+        let header_mode = header.mode;
+        let raw_name = header.name;
         let name = String::from_utf8_lossy(&raw_name).into_owned();
         let clean_bytes = go_clean_member_name(&raw_name).map_err(restore_error)?;
         let clean = String::from_utf8_lossy(&clean_bytes).into_owned();
@@ -799,13 +731,11 @@ pub fn restore(
                 shown.display()
             )));
         }
-        let kind = entry.header().entry_type();
-        // Go's reader maps a legacy `\0` typeflag to a directory when the
+        // The reader maps a legacy `\0` typeflag to a directory when the
         // (final) name ends in a slash, and to a regular file otherwise.
-        let is_dir = kind == EntryType::Directory
-            || (kind == EntryType::Regular
-                && is_legacy_regular(&entry)
-                && raw_name.ends_with(b"/"));
+        let kind = header.typeflag;
+        let is_dir = kind == b'5';
+
         if is_dir {
             if header_mode < 0 {
                 return Err(restore_error(format!(
@@ -828,12 +758,12 @@ pub fn restore(
             });
             continue;
         }
-        if kind != EntryType::Regular {
+        if kind != b'0' {
             return Err(restore_error(format!(
                 "unsupported archive entry type: {name}"
             )));
         }
-        let size = entry.size();
+        let size = header.size as u64;
         if size > MAX_ARCHIVE_FILE {
             return Err(restore_error(format!(
                 "archive entry {name} exceeds maximum file size of {MAX_ARCHIVE_FILE} bytes"
@@ -893,7 +823,7 @@ pub fn restore(
             Ok((mut staged, staged_path)) => {
                 drop(existing);
                 let outcome =
-                    copy_and_hash((&mut entry).take(size), &mut staged).map_err(|error| {
+                    copy_and_hash((&mut archive).take(size), &mut staged).map_err(|error| {
                         restore_error(format!("write file: {}", go_stream_error(&error, &failure)))
                     })?;
                 if outcome.0 != size {
@@ -933,7 +863,7 @@ pub fn restore(
                 }
                 handle.set_len(0).map_err(create_error)?;
                 let outcome =
-                    copy_and_hash((&mut entry).take(size), &mut handle).map_err(|error| {
+                    copy_and_hash((&mut archive).take(size), &mut handle).map_err(|error| {
                         restore_error(format!("write file: {}", go_stream_error(&error, &failure)))
                     })?;
                 if outcome.0 != size {
