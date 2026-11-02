@@ -105,6 +105,36 @@ pub trait ToolCallRuntime: Send + Sync {
     /// JSON-RPC internal-error classification without executing the handler.
     fn authorize(&self, name: &str, arguments: &Value) -> Result<(), ToolCallResult>;
 
+    /// Name used in the drift refusal's re-issue hint (Go: `s.agent.Name`).
+    fn registry_drift_agent(&self) -> String {
+        String::new()
+    }
+
+    /// `authorize` plus Go's call-time tool-registry drift refusal for a token
+    /// issued against a different registry hash. Runtimes that gate on policy
+    /// override this so the refusal lands between the tier checks and the
+    /// policy gate, as in `validateToolAccess`; the default refuses after
+    /// `authorize`, which is only equivalent for policy-free runtimes.
+    ///
+    /// The default writes no `tool_registry_drift` audit entry and uses the
+    /// agent name from [`Self::registry_drift_agent`] (empty unless
+    /// overridden). It exists for policy-free runtimes in tests and examples
+    /// only: every production runtime (`StoreReadOnlyRuntime`, wired by the
+    /// CLI's `mcp serve` and `ProtocolHandler::with_store_read_only_runtime*`)
+    /// overrides it to audit and to name the agent.
+    fn authorize_with_registry_drift(
+        &self,
+        name: &str,
+        arguments: &Value,
+        drift: bool,
+    ) -> Result<(), ToolCallResult> {
+        self.authorize(name, arguments)?;
+        if drift {
+            return Err(registry_drift_refusal(&self.registry_drift_agent()));
+        }
+        Ok(())
+    }
+
     /// Execute an authorized tool. Handler failures become JSON-RPC internal
     /// errors, matching Go's `executeTool` dispatch boundary.
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String>;
@@ -120,6 +150,13 @@ pub trait ToolCallRuntime: Send + Sync {
         context.check()?;
         self.call(name, arguments)
     }
+}
+
+/// Go's drift refusal result, an error tool result (not a JSON-RPC error).
+pub(crate) fn registry_drift_refusal(agent: &str) -> ToolCallResult {
+    ToolCallResult::error(format!(
+        "tool registry has changed since this token was issued \u{2014} re-issue the token with 'symvault agent token new {agent}'"
+    ))
 }
 
 /// Result of executing an already authorized MCP command.

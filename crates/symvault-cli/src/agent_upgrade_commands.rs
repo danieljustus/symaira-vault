@@ -351,12 +351,13 @@ pub(crate) fn run_with_challenger(
         if let Some(error) = outcome.save_error {
             return Err(format!("save token registry: {error}"));
         }
+        let registry_hash = super::agent_install_commands::tool_registry_hash()?;
         let request = NewToken {
             label: &format!("upgrade-{agent_name}-{target_tier}"),
             allowed_tools: vec!["*".to_owned()],
             agent_name,
             ttl: None,
-            tool_registry_hash: super::agent_install_commands::PINNED_TOOL_REGISTRY_HASH,
+            tool_registry_hash: &registry_hash,
         };
         let (record, raw_token) =
             token_registry::create(vault, &request, OffsetDateTime::now_utc()).map_err(

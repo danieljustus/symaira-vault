@@ -1419,6 +1419,7 @@ where
             .lock()
             .map_err(|_| std::io::Error::other("MCP HTTP session poisoned"))?;
         handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
+        handler.set_token_registry_hash(&token.tool_registry_hash);
         handler.set_request_context(request_context.clone());
         handle_request(http_request, &mut handler)
             .map_err(|error| std::io::Error::other(error.to_string()))?

@@ -106,6 +106,20 @@ fn catalog() -> Result<&'static [ToolDefinition], String> {
         .map_err(Clone::clone)
 }
 
+/// The catalog as tool-registry hash material (all definitions).
+pub(crate) fn hash_defs() -> Result<Vec<crate::toolhash::ToolHashDef>, String> {
+    Ok(catalog()?
+        .iter()
+        .map(|definition| crate::toolhash::ToolHashDef {
+            name: definition.name.clone(),
+            description: definition.description.clone(),
+            input_schema: definition.input_schema.clone(),
+            read_only_hint: definition.read_only_hint.unwrap_or(false),
+            destructive_hint: definition.destructive_hint.unwrap_or(false),
+        })
+        .collect())
+}
+
 pub(crate) fn contains_tool(name: &str) -> Result<bool, String> {
     Ok(catalog()?.iter().any(|definition| definition.name == name))
 }
