@@ -160,7 +160,7 @@ fn open_pty(rows: u16, cols: u16) -> (OwnedFd, OwnedFd) {
             &mut slave,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut size,
+            &raw mut size,
         )
     };
     assert_eq!(rc, 0, "openpty: {}", io::Error::last_os_error());
