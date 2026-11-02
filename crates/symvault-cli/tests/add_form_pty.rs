@@ -33,6 +33,9 @@ const TOTP: &str = "JBSWY3DPEHPK3PXPJBSWY3DPEH";
 const TAB: &str = "\t";
 const ENTER: &str = "\r";
 const CTRL_C: &str = "\x03";
+/// Quiet period that counts as "the form has handled the key".
+const SETTLE_WINDOW: Duration = Duration::from_millis(40);
+const SETTLE_CAP: Duration = Duration::from_secs(2);
 
 fn command(root: &Path) -> Command {
     let home = root.join("h");
@@ -198,8 +201,22 @@ impl Pty {
     fn send(&mut self, keys: &str) {
         self.master.write_all(keys.as_bytes()).unwrap();
         self.master.flush().unwrap();
-        thread::sleep(Duration::from_millis(80));
-        self.drain(Duration::from_millis(1));
+        self.settle();
+    }
+
+    /// Waits until the program has answered the last write: the pty has been
+    /// quiet for a whole window (it redraws only when the form changed, so a
+    /// key that changes nothing costs exactly one window). Returns early on
+    /// EOF and gives up after `SETTLE_CAP`; no fixed sleep.
+    fn settle(&mut self) {
+        let start = Instant::now();
+        while start.elapsed() < SETTLE_CAP {
+            let before = self.seen.len();
+            self.drain(SETTLE_WINDOW);
+            if self.seen.len() == before {
+                return;
+            }
+        }
     }
 
     /// Waits for the child and returns (exit code, terminal text).
@@ -256,7 +273,8 @@ fn ctrl_c_cancels_with_go_error_and_creates_nothing() {
     let root = init_vault();
     let (code, text) = run_form(&root, &["add", "e1"], &[CTRL_C]);
     assert_eq!(code, 1, "{text}");
-    assert!(text.contains("Error: canceled"), "{text}");
+    // Go's `RunE` error is printed by cobra and again by `ExecuteRoot`.
+    assert_eq!(text.matches("Error: canceled").count(), 2, "{text}");
     assert!(get_json(&root, "e1").is_none());
 }
 
@@ -385,8 +403,10 @@ fn invalid_totp_secret_is_rejected_after_the_form_without_writing() {
     ];
     let (code, text) = run_form(&root, &["add", "e1"], &keys);
     assert_eq!(code, 1, "{text}");
-    assert!(
-        text.contains("Error: TOTP secret too short: minimum 16 bytes required"),
+    assert_eq!(
+        text.matches("Error: TOTP secret too short: minimum 16 bytes required")
+            .count(),
+        2,
         "{text}"
     );
     assert!(get_json(&root, "e1").is_none());
@@ -408,10 +428,12 @@ fn existing_entry_fails_before_the_form_even_with_force() {
             pty.finish()
         };
         assert_eq!(code, 1, "{text}");
-        assert!(
-            text.contains(
+        assert_eq!(
+            text.matches(
                 "Error: entry \"e1\" already exists (use 'set' to update or 'edit' to modify)"
-            ),
+            )
+            .count(),
+            2,
             "{text}"
         );
         assert!(!text.contains("Add New Entry"), "{text}");

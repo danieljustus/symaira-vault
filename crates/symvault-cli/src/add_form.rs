@@ -21,20 +21,15 @@
 
 use std::{
     collections::BTreeMap,
-    io::{self, IsTerminal, Write},
+    fmt,
     time::{Duration, Instant},
 };
 
-use crossterm::{
-    cursor::{Hide, Show},
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    queue,
-    terminal::{disable_raw_mode, enable_raw_mode},
-};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde_json::Value;
 use symvault_core::password::assess_password_strength;
 use symvault_store::{SecretType, detect_secret_type};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 const FIELD_USERNAME: usize = 0;
 const FIELD_PASSWORD: usize = 1;
@@ -54,7 +49,7 @@ const BLINK_SPEED: Duration = Duration::from_millis(530);
 const TEXTAREA_MAX_HEIGHT: usize = 99;
 
 /// Default values handed to the form (Go's `buildFormDefaults` map).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct FormDefaults {
     pub username: String,
     pub url: String,
@@ -68,13 +63,65 @@ pub struct FormDefaults {
     pub totp_account: String,
 }
 
+/// `Debug` names the fields but never prints the TOTP secret.
+impl fmt::Debug for FormDefaults {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FormDefaults")
+            .field("username", &self.username)
+            .field("url", &self.url)
+            .field("notes", &self.notes)
+            .field("secret_type", &self.secret_type)
+            .field("usage_hint", &self.usage_hint)
+            .field("auto_rotate", &self.auto_rotate)
+            .field("totp_secret", &redacted(&self.totp_secret))
+            .field("totp_issuer", &self.totp_issuer)
+            .field("totp_account", &self.totp_account)
+            .finish()
+    }
+}
+
+fn redacted(secret: &str) -> &'static str {
+    if secret.is_empty() { "" } else { "<redacted>" }
+}
+
 /// Collected form output: entry data plus the secret metadata fields.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+///
+/// `data` carries the password and TOTP secret, so the value is wiped on drop
+/// and `Debug` lists only the data keys.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct FormResult {
     pub data: BTreeMap<String, Value>,
     pub secret_type: String,
     pub usage_hint: String,
     pub auto_rotate: bool,
+}
+
+impl fmt::Debug for FormResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FormResult")
+            .field("data_keys", &self.data.keys().collect::<Vec<_>>())
+            .field("secret_type", &self.secret_type)
+            .field("usage_hint", &self.usage_hint)
+            .field("auto_rotate", &self.auto_rotate)
+            .finish()
+    }
+}
+
+impl Drop for FormResult {
+    fn drop(&mut self) {
+        for value in self.data.values_mut() {
+            zeroize_value(value);
+        }
+    }
+}
+
+fn zeroize_value(value: &mut Value) {
+    match value {
+        Value::String(s) => s.zeroize(),
+        Value::Array(items) => items.iter_mut().for_each(zeroize_value),
+        Value::Object(map) => map.iter_mut().for_each(|(_, v)| zeroize_value(v)),
+        _ => {}
+    }
 }
 
 /// What the form wants the driver to do after an event.
@@ -130,8 +177,10 @@ impl TextInput {
         }
     }
 
-    fn text(&self) -> String {
-        self.value.iter().collect()
+    /// The typed text; wiped when the caller drops it (the field may hold a
+    /// password or TOTP secret).
+    fn text(&self) -> Zeroizing<String> {
+        Zeroizing::new(self.value.iter().collect())
     }
 
     fn set_value(&mut self, s: &str) {
@@ -768,30 +817,11 @@ pub struct AddForm {
     totp_secret: TextInput,
     totp_issuer: TextInput,
     totp_account: TextInput,
-    focused: usize,
+    /// Index of the focused field (read by the model tests).
+    pub focused: usize,
     force: bool,
-    canceled: bool,
     password_err: Option<String>,
-    width: u16,
     ticks: Vec<Tick>,
-}
-
-/// Go's `UsageHintForType`.
-///
-/// `SecretType::usage_hint` in `symvault-store` stores a literal run of
-/// asterisks where Go has the `<token>`, `<key>` and `<encoded>` placeholders
-/// (three hints), so those are restated here until the store is corrected.
-pub fn usage_hint_for(secret_type: SecretType) -> &'static str {
-    match secret_type {
-        SecretType::ApiKey => {
-            "Set as header or query parameter depending on API documentation. Common: X-API-Key: <key> or ?api_key=<key>"
-        }
-        SecretType::BearerToken => "Set Header Authorization: Bearer <token>",
-        SecretType::BasicAuth => {
-            "Encode as base64(user:pass) and set Header Authorization: Basic <encoded>"
-        }
-        other => other.usage_hint(),
-    }
 }
 
 pub fn secret_type_from_string(s: &str) -> SecretType {
@@ -887,9 +917,7 @@ impl AddForm {
             totp_account: TextInput::new("optional", 256),
             focused: 0,
             force,
-            canceled: false,
             password_err: None,
-            width: 0,
             ticks: Vec::new(),
         };
         form.focus_field(0);
@@ -936,22 +964,6 @@ impl AddForm {
         });
     }
 
-    /// Test-facing accessor.
-    #[allow(dead_code)]
-    pub fn canceled(&self) -> bool {
-        self.canceled
-    }
-
-    /// Test-facing accessor.
-    #[allow(dead_code)]
-    pub fn focused_field(&self) -> usize {
-        self.focused
-    }
-
-    pub fn set_width(&mut self, width: u16) {
-        self.width = width;
-    }
-
     fn auto_detect_type(&mut self, password: &str) {
         if !self.secret_type.value.is_empty() {
             return;
@@ -965,7 +977,7 @@ impl AddForm {
         if !self.usage_hint.is_empty() {
             return;
         }
-        let hint = usage_hint_for(secret_type_from_string(&self.secret_type.text()));
+        let hint = secret_type_from_string(&self.secret_type.text()).usage_hint();
         if !hint.is_empty() {
             self.usage_hint.set_value(hint);
         }
@@ -1093,10 +1105,7 @@ impl AddForm {
 
     fn input(&mut self, name: &str, runes: &[char], now: Instant) -> Flow {
         match name {
-            "ctrl+c" => {
-                self.canceled = true;
-                return Flow::Cancel;
-            }
+            "ctrl+c" => return Flow::Cancel,
             "tab" => {
                 self.next_field();
                 return Flow::Continue;
@@ -1163,7 +1172,7 @@ impl AddForm {
         }
         let password = self.password.text();
         if !password.is_empty() {
-            data.insert("password".to_owned(), Value::String(password));
+            data.insert("password".to_owned(), Value::String(password.to_string()));
         }
         let url = self.url.text().trim().to_owned();
         if !url.is_empty() {
@@ -1173,10 +1182,10 @@ impl AddForm {
         if !notes.is_empty() {
             data.insert("notes".to_owned(), Value::String(notes));
         }
-        let secret = self.totp_secret.text().trim().to_owned();
+        let secret = Zeroizing::new(self.totp_secret.text().trim().to_owned());
         if !secret.is_empty() {
             let mut totp = serde_json::Map::new();
-            totp.insert("secret".to_owned(), Value::String(secret));
+            totp.insert("secret".to_owned(), Value::String(secret.to_string()));
             let issuer = self.totp_issuer.text().trim().to_owned();
             if !issuer.is_empty() {
                 totp.insert("issuer".to_owned(), Value::String(issuer));
@@ -1201,15 +1210,14 @@ impl AddForm {
                 secret_type_from_string(&secret_type).as_str().to_owned()
             },
             usage_hint: self.usage_hint.text(),
-            auto_rotate: self.auto_rotate.text() == "yes",
+            auto_rotate: self.auto_rotate.text().as_str() == "yes",
         }
     }
 
     /// Renders the form as terminal lines (no trailing newline).
-    pub fn view(&self, now: Instant) -> Vec<String> {
+    pub fn view(&self) -> Vec<String> {
         // Bubbles toggles the cursor every blink period; the exact phase is not
         // observable state, so keep it solid.
-        let _ = now;
         let cursor_on = true;
         let bold = |code: &str, s: &str| format!("\x1b[1;38;5;{code}m{s}\x1b[0m");
         let mut lines = vec![bold("212", "Add New Entry"), String::new()];
@@ -1259,302 +1267,5 @@ impl AddForm {
         }
         lines.push(format!("\x1b[38;5;240m{help}\x1b[0m"));
         lines
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Terminal driver
-// ---------------------------------------------------------------------------
-
-fn char_width(c: char) -> usize {
-    match c as u32 {
-        0x0300..=0x036F | 0x200B..=0x200F | 0xFE00..=0xFE0F => 0,
-        0x1100..=0x115F
-        | 0x2E80..=0xA4CF
-        | 0xAC00..=0xD7A3
-        | 0xF900..=0xFAFF
-        | 0xFE30..=0xFE4F
-        | 0xFF00..=0xFF60
-        | 0xFFE0..=0xFFE6
-        | 0x1F300..=0x1F64F
-        | 0x1F900..=0x1F9FF
-        | 0x20000..=0x3FFFD => 2,
-        _ => 1,
-    }
-}
-
-/// Truncates a styled line to `cols` display columns, keeping SGR escapes whole.
-fn fit_to_width(line: &str, cols: usize) -> String {
-    let mut out = String::new();
-    let mut width = 0;
-    let mut chars = line.chars().peekable();
-    let mut truncated = false;
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            out.push(c);
-            for n in chars.by_ref() {
-                out.push(n);
-                if n.is_ascii_alphabetic() {
-                    break;
-                }
-            }
-            continue;
-        }
-        let w = char_width(c);
-        if width + w > cols {
-            truncated = true;
-            break;
-        }
-        width += w;
-        out.push(c);
-    }
-    if truncated {
-        out.push_str("\x1b[0m");
-    }
-    out
-}
-
-struct TerminalMode {
-    active: bool,
-}
-
-impl TerminalMode {
-    fn enter(out: &mut impl Write) -> io::Result<Self> {
-        enable_raw_mode()?;
-        let mode = Self { active: true };
-        queue!(out, Hide)?;
-        out.flush()?;
-        Ok(mode)
-    }
-
-    fn leave(&mut self) {
-        if self.active {
-            self.active = false;
-            let mut out = io::stdout();
-            let _ = queue!(out, Show);
-            let _ = out.flush();
-            let _ = disable_raw_mode();
-        }
-    }
-}
-
-impl Drop for TerminalMode {
-    fn drop(&mut self) {
-        self.leave();
-    }
-}
-
-/// Redraws the form in place below the prompt. Only changed lines are
-/// rewritten (like Bubble Tea's standard renderer) so a keystroke costs a few
-/// bytes instead of a full repaint.
-struct InlineRenderer {
-    last: Vec<String>,
-}
-
-impl InlineRenderer {
-    fn draw(&mut self, out: &mut impl Write, lines: &[String], cols: usize) -> io::Result<()> {
-        let fitted: Vec<String> = lines.iter().map(|l| fit_to_width(l, cols)).collect();
-        if self.last.len() > 1 {
-            write!(out, "\x1b[{}A", self.last.len() - 1)?;
-        }
-        write!(out, "\r")?;
-        for (i, line) in fitted.iter().enumerate() {
-            if i > 0 {
-                write!(out, "\r\n")?;
-            }
-            // The last line is always rewritten so the cursor ends on it.
-            if self.last.get(i) != Some(line) || i + 1 == fitted.len() {
-                write!(out, "\x1b[2K{line}")?;
-            }
-        }
-        write!(out, "\x1b[J")?;
-        self.last = fitted;
-        out.flush()
-    }
-}
-
-fn terminal_columns() -> usize {
-    crossterm::terminal::size().map_or(80, |(w, _)| usize::from(w).max(1))
-}
-
-/// One terminal read as Bubble Tea would deliver it.
-enum Message {
-    Key(KeyEvent),
-    /// A run of printable characters from a single read.
-    Text(Vec<char>),
-    Resize(u16),
-}
-
-/// Bubble Tea reads the terminal in 256-byte chunks.
-const READ_CHUNK_BYTES: usize = 256;
-
-fn plain_char(key: &KeyEvent) -> Option<char> {
-    match key.code {
-        KeyCode::Char(c)
-            if key.kind != KeyEventKind::Release
-                && !key
-                    .modifiers
-                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
-        {
-            Some(c)
-        }
-        _ => None,
-    }
-}
-
-/// Reads the next message, merging already-queued printable keys into one
-/// `Text` run. A non-printable event that ended a run is kept in `pending`.
-fn read_message(pending: &mut Option<Event>) -> Result<Option<Message>, String> {
-    let fail = |e: io::Error| format!("form error: {e}");
-    let first = match pending.take() {
-        Some(event) => event,
-        None => event::read().map_err(fail)?,
-    };
-    match first {
-        Event::Key(key) if key.kind == KeyEventKind::Release => Ok(None),
-        Event::Key(key) => {
-            let Some(first) = plain_char(&key) else {
-                return Ok(Some(Message::Key(key)));
-            };
-            let mut runes = vec![first];
-            let mut bytes = first.len_utf8();
-            while bytes < READ_CHUNK_BYTES && event::poll(Duration::ZERO).map_err(fail)? {
-                let next = event::read().map_err(fail)?;
-                if let Event::Key(k) = &next
-                    && let Some(c) = plain_char(k)
-                {
-                    runes.push(c);
-                    bytes += c.len_utf8();
-                    continue;
-                }
-                *pending = Some(next);
-                break;
-            }
-            Ok(Some(Message::Text(runes)))
-        }
-        Event::Resize(width, _) => Ok(Some(Message::Resize(width))),
-        _ => Ok(None),
-    }
-}
-
-/// SIGTERM/SIGINT flags. Bubble Tea turns SIGTERM into a normal quit (the form
-/// is *submitted* with what has been typed) and SIGINT into
-/// `program was interrupted`.
-struct SignalFlags {
-    terminate: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    interrupt: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    #[cfg(unix)]
-    ids: Vec<signal_hook::SigId>,
-}
-
-impl SignalFlags {
-    fn install() -> Self {
-        use std::sync::{Arc, atomic::AtomicBool};
-        let terminate = Arc::new(AtomicBool::new(false));
-        let interrupt = Arc::new(AtomicBool::new(false));
-        #[cfg(unix)]
-        let ids = [
-            (signal_hook::consts::SIGTERM, &terminate),
-            (signal_hook::consts::SIGINT, &interrupt),
-        ]
-        .into_iter()
-        .filter_map(|(signal, flag)| signal_hook::flag::register(signal, Arc::clone(flag)).ok())
-        .collect();
-        Self {
-            terminate,
-            interrupt,
-            #[cfg(unix)]
-            ids,
-        }
-    }
-
-    fn terminated(&self) -> bool {
-        self.terminate.load(std::sync::atomic::Ordering::Acquire)
-    }
-
-    fn interrupted(&self) -> bool {
-        self.interrupt.load(std::sync::atomic::Ordering::Acquire)
-    }
-}
-
-impl Drop for SignalFlags {
-    fn drop(&mut self) {
-        #[cfg(unix)]
-        for id in self.ids.drain(..) {
-            signal_hook::low_level::unregister(id);
-        }
-    }
-}
-
-/// Runs the interactive form on the controlling terminal. A cancelled form
-/// returns the Go error text `canceled`.
-pub fn run_add_form(force: bool, defaults: &FormDefaults) -> Result<FormResult, String> {
-    if !io::stdin().is_terminal() {
-        return Err("form error: stdin is not a terminal".to_owned());
-    }
-    let fail = |e: io::Error| format!("form error: {e}");
-    let mut form = AddForm::new(force);
-    form.set_defaults(defaults);
-    let mut out = io::stdout();
-    let mut mode = TerminalMode::enter(&mut out).map_err(fail)?;
-    let mut renderer = InlineRenderer { last: Vec::new() };
-    form.set_width(terminal_columns() as u16);
-    form.start(Instant::now());
-    let signals = SignalFlags::install();
-    let mut pending: Option<Event> = None;
-    let mut dirty = true;
-    let flow = loop {
-        if signals.interrupted() {
-            let _ = write!(out, "\r\n");
-            let _ = out.flush();
-            mode.leave();
-            return Err("form error: program was killed: program was interrupted".to_owned());
-        }
-        if signals.terminated() {
-            break Flow::Submit;
-        }
-        let now = Instant::now();
-        if form.next_tick().is_some_and(|due| due <= now) {
-            form.run_due_ticks(now);
-            dirty = true;
-        }
-        if dirty {
-            renderer
-                .draw(&mut out, &form.view(now), terminal_columns())
-                .map_err(fail)?;
-            dirty = false;
-        }
-        if pending.is_none() {
-            let wait = form.next_tick().map_or(Duration::from_millis(50), |due| {
-                due.saturating_duration_since(Instant::now())
-                    .min(Duration::from_millis(50))
-            });
-            if !event::poll(wait).map_err(fail)? {
-                continue;
-            }
-        }
-        dirty = true;
-        let flow = match read_message(&mut pending)? {
-            Some(Message::Key(key)) => form.key(&key, Instant::now()),
-            Some(Message::Text(runes)) => form.text(&runes, Instant::now()),
-            Some(Message::Resize(width)) => {
-                form.set_width(width);
-                Flow::Continue
-            }
-            None => Flow::Continue,
-        };
-        if flow != Flow::Continue {
-            break flow;
-        }
-    };
-    renderer
-        .draw(&mut out, &form.view(Instant::now()), terminal_columns())
-        .map_err(fail)?;
-    let _ = write!(out, "\r\n");
-    let _ = out.flush();
-    mode.leave();
-    match flow {
-        Flow::Cancel => Err("canceled".to_owned()),
-        _ => Ok(form.result()),
     }
 }

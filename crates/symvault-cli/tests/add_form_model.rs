@@ -1,7 +1,6 @@
 //! State-machine tests for the interactive `add` form. Expected values mirror
 //! what the Go oracle (`internal/ui/forms/add_form.go`) produced in the PTY
 //! differential recorded for this port.
-#![allow(dead_code)]
 
 #[path = "../src/add_form.rs"]
 mod add_form;
@@ -133,16 +132,16 @@ fn enter_moves_forward_and_last_enter_submits() {
     let mut form = Driver::new(false);
     form.paste("alice");
     assert_eq!(form.press(KeyCode::Enter), Flow::Continue);
-    assert_eq!(form.form.focused_field(), 1);
+    assert_eq!(form.form.focused, 1);
     form.paste(STRONG);
     form.press(KeyCode::Enter);
     form.press(KeyCode::Enter);
     // Usage hint is a textarea: Enter inserts a newline instead of moving on.
-    assert_eq!(form.form.focused_field(), 3);
+    assert_eq!(form.form.focused, 3);
     form.press(KeyCode::Enter);
-    assert_eq!(form.form.focused_field(), 3);
+    assert_eq!(form.form.focused, 3);
     form.tab(6);
-    assert_eq!(form.form.focused_field(), 9);
+    assert_eq!(form.form.focused, 9);
     assert_eq!(form.press(KeyCode::Enter), Flow::Submit);
 }
 
@@ -151,16 +150,16 @@ fn backspace_on_empty_field_returns_to_previous_field() {
     let mut form = Driver::new(false);
     form.paste("ab");
     form.tab(1);
-    assert_eq!(form.form.focused_field(), 1);
+    assert_eq!(form.form.focused, 1);
     form.press(KeyCode::Backspace);
-    assert_eq!(form.form.focused_field(), 0);
+    assert_eq!(form.form.focused, 0);
     form.press(KeyCode::Backspace);
     assert_eq!(form.result().data.get("username"), Some(&string("a")));
     // First field never goes below zero.
     form.press(KeyCode::Backspace);
     form.press(KeyCode::Backspace);
     form.press(KeyCode::Backspace);
-    assert_eq!(form.form.focused_field(), 0);
+    assert_eq!(form.form.focused, 0);
 }
 
 #[test]
@@ -170,7 +169,6 @@ fn ctrl_c_cancels_and_escape_is_ignored() {
     form.paste("abc");
     assert_eq!(form.result().data.get("username"), Some(&string("abc")));
     assert_eq!(form.ctrl('c'), Flow::Cancel);
-    assert!(form.form.canceled());
 }
 
 #[test]
@@ -178,7 +176,7 @@ fn weak_password_is_advisory_and_force_hides_the_warning() {
     let mut weak = Driver::new(false);
     weak.tab(1);
     weak.paste("weak");
-    let view = weak.form.view(weak.now).join("\n");
+    let view = weak.form.view().join("\n");
     assert!(view.contains("password too short"), "{view}");
     assert_eq!(
         weak.result().data.get("password"),
@@ -189,20 +187,14 @@ fn weak_password_is_advisory_and_force_hides_the_warning() {
     let mut forced = Driver::new(true);
     forced.tab(1);
     forced.paste("weak");
-    let view = forced.form.view(forced.now).join("\n");
+    let view = forced.form.view().join("\n");
     assert!(view.contains("Strength: OK"), "{view}");
     assert!(!view.contains("password too short"));
 
     let mut strong = Driver::new(false);
     strong.tab(1);
     strong.paste(STRONG);
-    assert!(
-        strong
-            .form
-            .view(strong.now)
-            .join("\n")
-            .contains("Strength: OK")
-    );
+    assert!(strong.form.view().join("\n").contains("Strength: OK"));
 }
 
 #[test]
@@ -225,7 +217,8 @@ fn data_is_trimmed_and_totp_extras_need_a_secret() {
     form.paste(" Iss ");
     form.tab(1);
     form.paste(" Acct ");
-    let data = form.result().data;
+    let result = form.result();
+    let data = &result.data;
     assert_eq!(data["username"], string("spaced"));
     assert_eq!(data["url"], string("https://t.example"));
     assert_eq!(data["notes"], string("note"));
@@ -371,7 +364,7 @@ fn text_runs_named_like_keys_trigger_the_binding_as_in_go() {
     // "tab" is indistinguishable from the Tab key.
     let mut form = Driver::new(false);
     form.paste("tab");
-    assert_eq!(form.form.focused_field(), 1);
+    assert_eq!(form.form.focused, 1);
     assert!(form.result().data.is_empty());
 }
 
@@ -389,4 +382,24 @@ fn word_and_line_editing_in_single_line_inputs() {
     form.key(KeyCode::Left, KeyModifiers::NONE);
     form.key(KeyCode::Char('d'), KeyModifiers::CONTROL);
     assert_eq!(form.result().data["username"], string("abc df"));
+}
+
+#[test]
+fn blink_ticks_are_scheduled_every_530ms_while_the_field_stays_focused() {
+    let mut form = Driver::new(false);
+    let started = form.now;
+    assert_eq!(
+        form.form.next_tick(),
+        Some(started + Duration::from_millis(530))
+    );
+    form.advance(Duration::from_millis(540));
+    assert_eq!(
+        form.form.next_tick(),
+        Some(started + Duration::from_millis(1060)),
+        "the chain continues while the first field is focused"
+    );
+    // Moving on ends that chain after its next message.
+    form.press(KeyCode::Tab);
+    form.advance(Duration::from_millis(540));
+    assert_eq!(form.form.next_tick(), None);
 }

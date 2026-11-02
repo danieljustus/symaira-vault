@@ -15,6 +15,8 @@ use symvault_sync::GoTime;
 
 #[path = "add_form.rs"]
 mod add_form;
+#[path = "add_form_terminal.rs"]
+mod add_form_terminal;
 
 /// Set once `--stdin-totp-secret` has been consumed, so the argv-exposure
 /// warning (Go's `warnArgvExposure(.., stdinTOTP)`) can tell the TOTP secret did
@@ -144,7 +146,7 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<(),
         )
     } else if std::io::stdin().is_terminal() {
         // Go: `forms.RunAddEntryForm(AddForce, buildFormDefaults())`.
-        let result = add_form::run_add_form(options.force, &form_defaults(options))?;
+        let result = add_form_terminal::run_add_form(options.force, &form_defaults(options))?;
         for (key, value) in &result.data {
             data.insert(key.clone(), value.clone());
         }
@@ -211,7 +213,7 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<(),
         SecretMetadata {
             secret_type: metadata_type.as_str().to_owned(),
             usage_hint: if options.usage_hint.is_empty() {
-                usage_hint(metadata_type).to_owned()
+                metadata_type.usage_hint().to_owned()
             } else {
                 options.usage_hint.clone()
             },
@@ -284,7 +286,7 @@ fn form_secret_metadata(options: &AddOptions, form: &add_form::FormResult) -> Se
         if !options.usage_hint.is_empty() {
             hint = options.usage_hint.clone();
         } else if let Some(kind) = SecretType::from_name(&secret_type) {
-            hint = usage_hint(kind).to_owned();
+            hint = kind.usage_hint().to_owned();
         }
     }
     SecretMetadata {
@@ -343,8 +345,4 @@ fn primary_field(secret_type: SecretType) -> String {
         SecretType::Password | SecretType::Custom => "password",
     }
     .to_owned()
-}
-
-fn usage_hint(secret_type: SecretType) -> &'static str {
-    add_form::usage_hint_for(secret_type)
 }
