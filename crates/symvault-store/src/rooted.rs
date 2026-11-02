@@ -130,8 +130,7 @@ pub(super) fn walk_from_with_limits(
         &mut entries,
         &mut path_bytes,
         relative.components().count(),
-        (max_depth, max_entries),
-        false,
+        (max_depth, max_entries, false),
     )?;
     Ok(entries)
 }
@@ -176,8 +175,7 @@ fn walk_root(
         &mut entries,
         &mut path_bytes,
         0,
-        (max_depth, max_entries),
-        prune_git,
+        (max_depth, max_entries, prune_git),
     )?;
     Ok(entries)
 }
@@ -189,10 +187,9 @@ fn walk_directory(
     entries: &mut Vec<RootedEntry>,
     path_bytes: &mut usize,
     depth: usize,
-    limits: (Option<usize>, Option<usize>),
-    prune_git: bool,
+    limits: (Option<usize>, Option<usize>, bool),
 ) -> Result<(), StoreError> {
-    let (max_depth, max_entries) = limits;
+    let (max_depth, max_entries, prune_git) = limits;
     use rustix::fs::Dir;
     use std::os::unix::ffi::OsStrExt;
     let mut stream = Dir::read_from(directory).map_err(|source| StoreError::Read {
@@ -260,7 +257,6 @@ fn walk_directory(
                     path_bytes,
                     depth + 1,
                     limits,
-                    prune_git,
                 )?;
             }
             FileType::RegularFile => entries.push(RootedEntry {
