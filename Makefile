@@ -969,7 +969,7 @@ local-area-list:
 
 AREA_EVIDENCE ?= $(CARGO_TARGET_DIR)/area-evidence
 AREA_ENV := GOWORK=off TZ=UTC PYTHONDONTWRITEBYTECODE=1 SYMVAULT_TEST_KEYRING=memory
-AREA_CHECK := $(AREA_PYTHON) -B scripts/rust-port/gate_area_check.py
+AREA_CHECK := python3 -B scripts/rust-port/gate_area_check.py
 AREA_VENV := $(AREA_EVIDENCE)/tui-venv
 AREA_PROBES := $(CARGO_TARGET_DIR)/debug/examples
 # HTTP and MCP-process contracts pin the oracle toolchain their workflows used
