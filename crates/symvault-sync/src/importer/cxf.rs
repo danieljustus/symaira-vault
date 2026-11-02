@@ -10,6 +10,9 @@ use super::{ImportError, ImportedEntry, apply_prefix, normalize_path, parse_totp
 
 const MAX_IMPORT_BYTES: usize = 100 * 1024 * 1024;
 const MAX_ZIP_ENTRY: u64 = 100 * 1024 * 1024;
+// gozip models Go's io.ReadAll(LimitReader) end-of-stream visibility for
+// limits on flate's 32 KiB window boundary only (see gozip.rs).
+const _: () = assert!(MAX_ZIP_ENTRY.is_multiple_of(32_768));
 
 // The CXF document is decoded like Go's `json.Unmarshal` into the same typed
 // structs as `internal/importer/cxf.go`: `null` is a no-op, keys match

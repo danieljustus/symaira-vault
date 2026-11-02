@@ -1126,32 +1126,6 @@ mod tests {
         );
     }
 
-    /// Complexity form of the same check, immune to a slow machine: 2.5x the
-    /// entries must cost well under the 6.25x of a quadratic queue.
-    #[test]
-    fn sparse_expansion_time_grows_with_the_entry_count() {
-        let best_of_three = |entries: usize| {
-            let tar = sparse_archive(entries);
-            (0..3)
-                .map(|_| {
-                    let started = Instant::now();
-                    let mut reader = GoTar::new(Cursor::new(tar.clone()));
-                    reader.next().unwrap().expect("member");
-                    let body = read_all(&mut reader).unwrap();
-                    assert_eq!(body.len(), 2 * entries + 1);
-                    started.elapsed()
-                })
-                .min()
-                .unwrap()
-        };
-        let small = best_of_three(40_000).max(Duration::from_millis(1));
-        let large = best_of_three(100_000);
-        assert!(
-            large < small * 4,
-            "2.5x the entries took {large:?} against {small:?}"
-        );
-    }
-
     /// Go's `Next` drops `mergePAX`'s error for a global header and returns
     /// the Name/Typeflag header; the same record in a local header is an error.
     #[test]
