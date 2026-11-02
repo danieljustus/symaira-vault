@@ -178,6 +178,33 @@ warmups on macOS arm64. These numbers are promising but deliberately marked
 non-representative; they do not justify product cutover before representative
 crypto/storage/MCP slices pass.
 
+## Release snapshot evidence (DIST-001/DIST-002, local)
+
+`.goreleaser.yml` now builds `crates/symvault-cli` (binary `symvault`) with GoReleaser's
+`rust` builder for exactly `aarch64-apple-darwin`, `x86_64-unknown-linux-musl` and
+`aarch64-unknown-linux-musl` (D3). Linux is static musl via cargo-zigbuild, matching the
+`CGO_ENABLED=0` Go builds; musl built cleanly and the arm64 binary runs on ubuntu:24.04.
+Both builds go through `scripts/cargo-auditable.sh` so syft finds the crate list in the
+binary (without it the SBOMs have zero components). The Rust CLI only reads
+`SYMVAULT_VERSION` (set from `{{ .Version }}`); commit/date/builtBy have no Rust counterpart.
+Archive names, members, nfpm/syft/cosign/`build-mcpb.sh` are unchanged (D4); completions and
+man pages come from the Rust `completion`/`generate manpages` commands (`make completions`,
+`make release-manpages`, byte-identical completions to the committed Go output).
+
+`make release-contract` (`scripts/rust-port/release_contract.py`) runs
+`goreleaser release --snapshot --clean --skip=publish,sign` into
+`/Volumes/1TB_NVMe_SN850X/Dev/Symaira_Dev/builds/symaira-vault/dist` and writes
+`../release-contract-report.json`. It checks archive set/members, checksum file, nfpm
+deb/rpm/apk metadata and packaged binary, MCPB bundles, SBOM components, ELF/Mach-O format,
+and `symvault version` (darwin-arm64 native; linux-arm64 in ubuntu:24.04; linux-amd64 in
+ubuntu:24.04 **emulated**). Eight tampered copies (missing member, flipped byte, missing
+SBOM/deb/MCPB, extra platform, dropped checksum line) must each be rejected.
+
+Still open for DIST-001/002: native linux-amd64 execution (CI runner), and everything
+needing credentials or publication (DIST-003 signing/provenance/notarization, DIST-004
+ecosystem installs). `Dockerfile` and the Go-based `lint`/`test`/`govulncheck` jobs in
+`release.yml` still use Go and are out of scope here.
+
 ## Execution rule
 
 On the next implementation turn, start at the first `ready` item in

@@ -34,6 +34,9 @@ class Symvault < Formula
   license "Apache-2.0"
   version_scheme 1
 
+  # git is a hard runtime dependency (docs/adr/0033-git-binary-runtime-dependency.md).
+  depends_on "git"
+
   on_macos do
     depends_on arch: :arm64
     on_arm do

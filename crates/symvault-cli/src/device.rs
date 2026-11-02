@@ -1144,7 +1144,15 @@ pub(super) fn join(
             .arg(remote_url)
             .arg(vault)
             .status()
-            .map_err(|e| format!("clone vault: {e}"))?;
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    // Same text as symvault_sync's GitError::GitNotFound (ADR 0033).
+                    "clone vault: git is required but was not found in PATH; install git and retry"
+                        .to_owned()
+                } else {
+                    format!("clone vault: {e}")
+                }
+            })?;
         if !status.success() {
             return Err(format!("clone vault: git clone failed with {status}"));
         }

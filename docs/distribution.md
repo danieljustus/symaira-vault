@@ -61,7 +61,7 @@ The formula is rendered by `scripts/homebrew-formula.sh` and published to `danie
 curl -LO https://github.com/danieljustus/symaira-vault/releases/latest/download/symvault_<version>_linux_<arch>.deb
 
 # Install
-sudo dpkg -i symvault_<version>_linux_<arch>.deb
+sudo apt install ./symvault_<version>_linux_<arch>.deb   # resolves the git dependency (dpkg -i would not)
 ```
 
 #### Fedora/RHEL (.rpm)
@@ -71,7 +71,7 @@ sudo dpkg -i symvault_<version>_linux_<arch>.deb
 curl -LO https://github.com/danieljustus/symaira-vault/releases/latest/download/symvault_<version>_linux_<arch>.rpm
 
 # Install
-sudo rpm -i symvault_<version>_linux_<arch>.rpm
+sudo dnf install ./symvault_<version>_linux_<arch>.rpm   # resolves the git dependency
 ```
 
 #### Alpine (.apk)
@@ -126,11 +126,20 @@ Available MCPB platforms: `darwin-arm64`, `linux-amd64`, `linux-arm64`.
 
 For detailed installation instructions, see [docs/mcpb-install.md](mcpb-install.md).
 
-### Go Install
+### Cargo Install
 
 ```bash
-go install github.com/danieljustus/symaira-vault@latest
+cargo install --locked --git https://github.com/danieljustus/symaira-vault --tag <release tag> symvault-cli
 ```
+
+### Runtime dependency: git
+
+`symvault` shells out to the `git` executable (vault history and sync), so
+`git` must be on `PATH`. The deb/rpm/apk packages declare `git` as a hard
+dependency; the archives, install script and `cargo install` do not install it
+for you. On macOS, `git` comes with the Xcode Command Line Tools
+(`xcode-select --install`, prompted on first use) or Homebrew. Rationale:
+[ADR 0033](adr/0033-git-binary-runtime-dependency.md).
 
 ### Build from Source
 

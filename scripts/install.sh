@@ -16,6 +16,9 @@
 #   INSTALL_DIR          Same as --install-dir
 #   DRY_RUN              Set to "true" for dry-run mode
 #
+# Requires git at runtime (symvault shells out to it) and cosign for signature
+# verification.
+#
 # The script never modifies shell profiles.  After installation it prints
 # the PATH adjustments you may need.
 
@@ -46,6 +49,28 @@ require_cosign() {
   Install cosign from https://docs.sigstore.dev/cosign/installation/
   or use: brew install cosign (macOS) / apt install cosign (Linux)."
     fi
+}
+
+# git is a hard runtime dependency (vault history and sync shell out to it; the
+# Go CLI embedded go-git). See docs/adr/0033-git-binary-runtime-dependency.md.
+# `git --version` rather than `command -v`: on macOS /usr/bin/git is a stub that
+# prompts for the Xcode Command Line Tools and fails until they are installed.
+require_git() {
+    if has_cmd git && git --version >/dev/null 2>&1; then
+        return 0
+    fi
+    msg="git is required by symvault but was not found (or is not usable) in PATH.
+  macOS:          xcode-select --install   (or: brew install git)
+  Debian/Ubuntu:  sudo apt install git
+  Fedora/RHEL:    sudo dnf install git
+  Alpine:         sudo apk add git
+  Install git, then re-run this installer."
+    if [ "${dry_run:-false}" = "true" ]; then
+        warn "$msg"
+        warn "Continuing because this is a dry run."
+        return 0
+    fi
+    fatal "$msg"
 }
 
 # Download a URL to stdout.  Prefers curl, falls back to wget.
@@ -248,6 +273,8 @@ USAGE
                 ;;
         esac
     done
+
+    require_git
 
     # Resolve version.
     if [ -z "$version" ]; then
