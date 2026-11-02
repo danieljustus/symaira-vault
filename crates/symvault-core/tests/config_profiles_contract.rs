@@ -2,7 +2,7 @@
 
 use serde::Deserialize;
 use std::collections::BTreeMap;
-use symvault_core::config::{Config, Profile};
+use symvault_core::config::{Config, ConfigError, Profile};
 use symvault_core::test_support::corpus_limit;
 
 #[derive(Debug, Deserialize)]
@@ -131,16 +131,19 @@ fn pinned_go_profile_cases_match_load_and_save() {
                 );
             }
             (Err(error), None, None, Some(expected)) if case.name == "null_profile" => {
-                assert!(
-                    error.to_string().contains("mapping") || error.to_string().contains("parse")
-                );
+                // The loader's errors are bare, as Go's are, so the kind of
+                // failure is the variant rather than a `parse config:` prefix.
+                assert!(matches!(
+                    error,
+                    ConfigError::Parse(_) | ConfigError::Yaml(_)
+                ));
                 // Go panics here; Rust rejects the malformed ordinary input safely.
                 assert!(expected.contains("nil pointer dereference"));
             }
             (Err(error), None, Some(expected), None) => {
                 assert!(!expected.is_empty(), "{} error oracle", case.name);
                 assert!(
-                    error.to_string().contains("mapping") || error.to_string().contains("parse"),
+                    matches!(error, ConfigError::Parse(_) | ConfigError::Yaml(_)),
                     "{}: {error}",
                     case.name
                 );

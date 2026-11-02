@@ -62,8 +62,9 @@ fn config_validate_invalid_schema() {
     let home = TempDir::new("home");
     let invalid_file = home.0.join("invalid-config.yaml");
 
+    // No `vaultDir:` key: an empty one keeps the resolved default (see
+    // `config_validate_empty_vault_dir_keeps_the_resolved_default`).
     let yaml = r#"
-vaultDir: ""
 agents:
   default:
     approvalMode: deny
@@ -84,7 +85,6 @@ clipboard:
     assert_eq!(out.status.code(), Some(6));
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains(&format!("Configuration is invalid ({path_str}):")));
-    assert!(stdout.contains("  ✗ vaultDir: must not be empty"));
     assert!(stdout.contains("  ✗ agents.default.allowedPaths[0]:"));
     assert!(stdout.contains("  ✗ vault.argon2id_time:"));
     assert!(stdout.contains("  ✗ vault.argon2id_threads:"));
@@ -104,7 +104,55 @@ clipboard:
     let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON stdout");
     assert_eq!(parsed["valid"], false);
     let errors = parsed["errors"].as_array().expect("errors array");
-    assert_eq!(errors.len(), 6);
+    assert_eq!(errors.len(), 5);
+}
+
+/// Go merges `vaultDir` only when the text is non-empty, so `vaultDir: ''`
+/// (and `null`) keeps the resolved default and the file validates.
+#[test]
+fn config_validate_empty_vault_dir_keeps_the_resolved_default() {
+    let home = TempDir::new("empty-vault-dir");
+    for text in ["vaultDir: ''\n", "vaultDir: \"\"\n", "vaultDir: null\n"] {
+        let path = home.0.join("config.yaml");
+        fs::write(&path, text).unwrap();
+        let path_str = path.to_str().unwrap();
+        let out = run_cli(&home.0, &["config", "validate", path_str]);
+        assert_eq!(out.status.code(), Some(0), "{text:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            format!("Configuration is valid ({path_str})\n"),
+            "{text:?}"
+        );
+        assert!(out.stderr.is_empty(), "{text:?}");
+    }
+}
+
+/// The error Go keeps for `Config.VaultDir` is reachable when no default can
+/// be resolved at all: no home directory, no `SYMVAULT_VAULT`.
+#[test]
+fn config_validate_reports_an_unresolvable_default_vault_dir() {
+    let home = TempDir::new("no-home");
+    let path = home.0.join("config.yaml");
+    fs::write(&path, "vaultDir: ''\n").unwrap();
+    let path_str = path.to_str().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_symvault"))
+        .args(["config", "validate", path_str])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("CI", "1")
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("run symvault CLI");
+    assert_eq!(out.status.code(), Some(6));
+    let message = "vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)";
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        format!("Configuration is invalid ({path_str}):\n  ✗ {message}\n")
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr)
+            .contains(&format!("Error: config validation failed: {message}"))
+    );
 }
 
 #[test]
@@ -137,7 +185,8 @@ fn config_validate_rejects_unsupported_approval_mode_during_load() {
         assert_eq!(out.status.code(), Some(6));
         let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
         assert_eq!(parsed["valid"], false);
-        assert_eq!(parsed["error"], format!("invalid config: {diagnostic}"));
+        // Go returns the loader's error bare, with no `invalid config:` prefix.
+        assert_eq!(parsed["error"], diagnostic);
         assert!(parsed.get("errors").is_none());
         assert!(String::from_utf8_lossy(&out.stderr).contains("Error: config load failed:"));
         assert_eq!(fs::read(&path).unwrap(), before);

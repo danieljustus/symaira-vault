@@ -3,14 +3,6 @@
   "comment": "Recorded Go behavior the Rust bridge deliberately does not reproduce yet. Every entry pins the exact (path-normalized, $ROOT) error text Rust returns instead: the Rust and Swift replays fail when a case starts matching Go (remove the entry), when it succeeds where Rust must refuse, and when Rust's text is anything other than expected_rust, so an entry cannot outlive its cause or hide a different failure.",
   "cases": [
     {
-      "id": "OpenVaultWithPassphrase/config-type-mismatch",
-      "category": "config-diagnostic-wording",
-      "owner": "symvault-core config loader (CFG rows)",
-      "approval": "CFG rows; not an FFI decision",
-      "reason": "A non-mapping YAML document is worded 'parse config: top-level YAML document must be a mapping' instead of yaml.v3's 'yaml: unmarshal errors: ... cannot unmarshal !!int `5` into config.VaultConfig'.",
-      "expected_rust": "load config: parse config: top-level YAML document must be a mapping"
-    },
-    {
       "id": "ListEntriesJSON/entries-dir-is-symlink",
       "category": "symlink-hardening",
       "owner": "symvault-store rooted traversal (STORE rows)",

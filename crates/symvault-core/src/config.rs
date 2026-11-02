@@ -55,15 +55,20 @@ static PROCESS_WARNINGS: WarningState = WarningState {
 pub enum ConfigError {
     #[error("read config: {0}")]
     Read(#[from] std::io::Error),
-    #[error("parse config: {0}")]
+    /// A loader failure of the native decoder. Go's `config.Load` returns its
+    /// causes bare (callers add their own `load config:` / `cannot load
+    /// config from …:` wrapper), so this renders without a prefix of its own.
+    #[error("{0}")]
     Parse(String),
     /// A loader failure whose text Go returns unwrapped: a libyaml-level syntax
-    /// failure worded as `yaml.v3` words it (`yaml: line 3: …`) or the
-    /// multiple-document rejection. It renders without the `parse config:`
-    /// prefix of [`ConfigError::Parse`].
+    /// failure worded as `yaml.v3` words it (`yaml: line 3: …`), a typed-decode
+    /// failure (`yaml: unmarshal errors: …`) or the multiple-document
+    /// rejection.
     #[error("{0}")]
     Yaml(String),
-    #[error("invalid config: {0}")]
+    /// A semantic rejection (`sessionTimeout: must be greater than 0, got 0s
+    /// …`, `agent "x": invalid approvalMode …`). Bare, as Go returns it.
+    #[error("{0}")]
     Invalid(String),
     #[error("serialize config: {0}")]
     Serialize(String),
@@ -100,9 +105,9 @@ impl AuthMethod {
         match value.trim().to_ascii_lowercase().as_str() {
             "" | "passphrase" => Ok(Self::Passphrase),
             "touchid" | "touch-id" | "touch_id" | "biometric" | "biometrics" => Ok(Self::Touchid),
-            other => Err(ConfigError::Invalid(format!(
-                "invalid authMethod {other:?} (valid: passphrase, touchid)"
-            ))),
+            // Go quotes the method as written (`%q` of the argument), not the
+            // trimmed, lower-cased form it switched on.
+            _ => Err(ConfigError::Invalid(invalid_auth_method_message(value))),
         }
     }
 
@@ -170,6 +175,12 @@ pub struct VaultConfig {
     pub default_recipients: Vec<String>,
     pub confirm_remove: bool,
     pub auth_method: AuthMethod,
+    /// A `vault.authMethod` the file spells in a way [`AuthMethod`] cannot
+    /// hold. Go's loader keeps the raw string and lets `Validate` reject it, so
+    /// the file loads and `config validate` reports it; the typed field above
+    /// then stays at its default. Cleared by [`Config::set_auth_method`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invalid_auth_method: Option<String>,
     pub use_touch_id: bool,
     pub legacy_mode: Option<bool>,
     pub search_index: bool,
@@ -532,6 +543,7 @@ impl Config {
         self.use_touch_id = Some(method == AuthMethod::Touchid);
         if let Some(vault) = &mut self.vault {
             vault.auth_method = method;
+            vault.invalid_auth_method = None;
             vault.use_touch_id = method == AuthMethod::Touchid;
         }
         Ok(())
@@ -542,11 +554,14 @@ impl Config {
     /// so `symvault config validate` can report them all at once, joined with
     /// `\n` the same way Go's `errors.Join(...).Error()` renders them.
     ///
-    /// `authMethod` values are not re-checked here: unlike Go's untyped
-    /// string field, the Rust `AuthMethod` enum is already validated at parse
-    /// time, so a loaded `Config` can never carry an invalid one. Go's
-    /// `audit.maxFileSize` and `paymentPolicies` checks are omitted because
-    /// this port does not yet model those config sections at all.
+    /// The top-level `authMethod` is not re-checked here: Go's loader only
+    /// stores a method that normalizes, so the field Go validates is always
+    /// valid, and the Rust `AuthMethod` enum cannot hold anything else. A
+    /// `vault.authMethod` that does not normalize is the one case Go's
+    /// `Validate` can still reject, and it is carried in
+    /// [`VaultConfig::invalid_auth_method`]. Go's `audit.maxFileSize` and
+    /// `paymentPolicies` checks are omitted because this port does not yet
+    /// model those config sections at all.
     #[must_use]
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
@@ -568,6 +583,13 @@ impl Config {
                 "sessionMaxLifetime: must be greater than 0 (default: 8h, configure sessionMaxLifetime in config.yaml)"
                     .to_owned(),
             );
+        }
+        if let Some(raw) = self
+            .vault
+            .as_ref()
+            .and_then(|vault| vault.invalid_auth_method.as_deref())
+        {
+            errors.push(invalid_auth_method_message(raw));
         }
 
         if !self.default_agent.is_empty() && !self.agents.contains_key(&self.default_agent) {
@@ -682,15 +704,30 @@ impl Config {
         let first = documents
             .next()
             .ok_or_else(|| ConfigError::Parse("empty YAML stream".to_owned()))?;
-        let profiles = ProfileFields::deserialize(first)
-            .map_err(|error| ConfigError::Parse(error.to_string()))?;
         // Go counts a later document only when it decodes: a syntax error in
-        // it leaves the stream a single-document one.
+        // it leaves the stream a single-document one. serde_yaml_ng parses a
+        // document into events before it hands it out, so the first can be
+        // left unread while the stream is checked.
         if let Some(second) = documents.next()
             && crate::go_yaml::decodes_as_go_node(second)
         {
             return Err(ConfigError::Yaml(MULTIPLE_DOCUMENTS_MESSAGE.to_owned()));
         }
+        // Go decodes the whole first document into the typed `Config` before
+        // it merges a single field, so a value of the wrong shape anywhere in
+        // it (`audit.maxSizeMb: abc`, `logging.level: [1]`, an integer where a
+        // `time.Duration` belongs) fails first, worded as yaml.v3 words it.
+        // The decode covers every section, including the ones this port does
+        // not model.
+        if let Ok(text) = std::str::from_utf8(bytes)
+            && let Some(cause) = crate::config_typed::unmarshal_errors(text)
+        {
+            return Err(ConfigError::Yaml(
+                String::from_utf8_lossy(&cause).into_owned(),
+            ));
+        }
+        let profiles = ProfileFields::deserialize(first)
+            .map_err(|error| ConfigError::Parse(error.to_string()))?;
         let fields: serde_yaml_ng::Mapping = profiles
             .fields
             .into_iter()
@@ -699,50 +736,66 @@ impl Config {
         let root = &fields;
         let mut config = Self::default();
         let mut auth_method_explicit = false;
+        // Go merges `vaultDir` only when the text is non-empty, so `vaultDir:
+        // ''` (like `null`) keeps the resolved default; whether that default
+        // is empty is `validate`'s business, not the loader's.
         if let Some(v) = scalar(root, "vaultDir") {
-            config.vault_dir = string(v, "vaultDir")?;
+            let text = if v.is_null() {
+                String::new()
+            } else {
+                text_scalar(v, "vaultDir")?
+            };
+            if !text.is_empty() {
+                config.vault_dir = text;
+            }
         }
         if let Some(v) = scalar(root, "defaultAgent") {
-            config.default_agent = string(v, "defaultAgent")?;
-        }
-        if let Some(v) = scalar(root, "sessionTimeout") {
-            match duration_allowing_negative(v, "sessionTimeout")? {
-                Some(d) if d > Duration::ZERO => config.session_timeout = d,
-                // Go's Validate already states this rule; its merge guard used
-                // to discard the value before Validate could see it, so a
-                // config that disabled a timeout silently ran with the default.
-                // Both sides now reject it.
-                _ => {
-                    return Err(ConfigError::Parse(non_positive_duration_message(
-                        "sessionTimeout",
-                        "15m",
-                    )));
-                }
+            let text = if v.is_null() {
+                String::new()
+            } else {
+                text_scalar(v, "defaultAgent")?
+            };
+            if !text.is_empty() {
+                config.default_agent = text;
             }
         }
-        if let Some(v) = scalar(root, "sessionMaxLifetime") {
-            match duration_allowing_negative(v, "sessionMaxLifetime")? {
-                Some(d) if d > Duration::ZERO => config.session_max_lifetime = d,
-                // Go's Validate already states this rule; its merge guard used
-                // to discard the value before Validate could see it, so a
-                // config that disabled a timeout silently ran with the default.
-                // Both sides now reject it.
-                _ => {
-                    return Err(ConfigError::Parse(non_positive_duration_message(
-                        "sessionMaxLifetime",
-                        "8h",
-                    )));
+        // Go's `validateDurationFields` rejects a session duration the
+        // operator wrote as zero or negative (a key that is present but null
+        // decodes to zero), naming the parsed value, and reports both fields
+        // when both are wrong. The typed decode above already refused anything
+        // that is not a string `time.ParseDuration` accepts.
+        let mut duration_errors = Vec::new();
+        for (name, default, target) in [
+            ("sessionTimeout", "15m", &mut config.session_timeout),
+            ("sessionMaxLifetime", "8h", &mut config.session_max_lifetime),
+        ] {
+            let Some(v) = scalar(root, name) else {
+                continue;
+            };
+            match session_duration_nanos(v, name)? {
+                nanos if nanos > 0 => {
+                    *target = Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX));
                 }
+                nanos => duration_errors.push(non_positive_duration_message(name, nanos, default)),
             }
+        }
+        if !duration_errors.is_empty() {
+            return Err(ConfigError::Invalid(duration_errors.join("\n")));
         }
         // Go decodes a null scalar to the zero value, and its merges test the
         // raw method against the exact empty string: only a non-empty text
-        // counts as written. A null or `""` method therefore leaves
-        // `useTouchID` and the vault block free to select the method.
+        // counts as written, whether or not it normalizes. A method that does
+        // not normalize is dropped without a word (`config.Load` swallows
+        // `NormalizeAuthMethod`'s error and `Validate` only ever sees the
+        // default), but it still counts as written, so it keeps `useTouchID`
+        // and the vault block from selecting the method. A null or `""` method
+        // leaves both free to.
         if let Some(v) = scalar(root, "authMethod").filter(|v| !v.is_null()) {
-            let text = string(v, "authMethod")?;
+            let text = text_scalar(v, "authMethod")?;
             if !text.is_empty() {
-                config.auth_method = AuthMethod::parse(&text)?;
+                if let Ok(method) = AuthMethod::parse(&text) {
+                    config.auth_method = method;
+                }
                 auth_method_explicit = true;
             }
         }
@@ -803,7 +856,21 @@ impl Config {
             let mode = agent.approval_mode.as_deref().unwrap_or("");
             if !matches!(mode, "" | "none" | "deny" | "prompt") {
                 return Err(ConfigError::Invalid(format!(
-                    "agent {name:?}: invalid approvalMode {mode:?} (valid: none, deny, prompt)"
+                    "agent {}: invalid approvalMode {} (valid: none, deny, prompt)",
+                    crate::go_quote(name),
+                    crate::go_quote(mode)
+                )));
+            }
+        }
+        // Go's `validateAgents` runs its prompt-injection loop only after the
+        // approval-mode loop has passed for every profile.
+        for (name, agent) in &config.agents {
+            let mode = agent.prompt_injection_mode.as_str();
+            if !matches!(mode, "" | "off" | "log-only" | "wrap" | "deny") {
+                return Err(ConfigError::Invalid(format!(
+                    "agent {}: invalid promptInjectionMode {} (valid: off, log-only, wrap, deny)",
+                    crate::go_quote(name),
+                    crate::go_quote(mode)
                 )));
             }
         }
@@ -1058,16 +1125,93 @@ fn string(value: &serde_yaml_ng::Value, field: &str) -> Result<String, ConfigErr
 pub const MULTIPLE_DOCUMENTS_MESSAGE: &str = "config contains more than one YAML document; split it into separate files or remove everything after the first document separator";
 
 /// Rejection text for a session duration the operator set to a non-positive
-/// value.
-///
-/// The offending value is deliberately not interpolated: Go reaches this point
-/// with a parsed `time.Duration` and would render `-5m0s` where Rust still has
-/// the scalar text `-5m`. The field name and the default are what the operator
-/// needs.
+/// value, naming the parsed value the way Go's `%s` of a `time.Duration` does
+/// (`0s`, `-5m0s`).
 #[must_use]
-pub fn non_positive_duration_message(field: &str, default: &str) -> String {
+pub fn non_positive_duration_message(field: &str, nanos: i128, default: &str) -> String {
     format!(
-        "{field}: must be greater than 0 (default: {default}, configure {field} in config.yaml)"
+        "{field}: must be greater than 0, got {} (default: {default}, configure {field} in config.yaml)",
+        go_duration_string(nanos)
+    )
+}
+
+/// Go's `time.Duration.String()` for a signed nanosecond count.
+#[must_use]
+pub fn go_duration_string(nanos: i128) -> String {
+    if nanos == 0 {
+        return "0s".to_owned();
+    }
+    let sign = if nanos < 0 { "-" } else { "" };
+    let magnitude = nanos.unsigned_abs();
+    // Digits of `fraction` below `scale`, trailing zeros trimmed.
+    let fractional = |fraction: u128, scale: u128| -> String {
+        if fraction == 0 {
+            return String::new();
+        }
+        let width = scale.ilog10() as usize;
+        let digits = format!("{fraction:0width$}");
+        format!(".{}", digits.trim_end_matches('0'))
+    };
+    if magnitude < 1_000_000_000 {
+        let (unit, scale) = if magnitude < 1_000 {
+            ("ns", 1_u128)
+        } else if magnitude < 1_000_000 {
+            ("µs", 1_000)
+        } else {
+            ("ms", 1_000_000)
+        };
+        return format!(
+            "{sign}{}{}{unit}",
+            magnitude / scale,
+            fractional(magnitude % scale, scale)
+        );
+    }
+    let seconds = magnitude / 1_000_000_000;
+    let mut text = format!(
+        "{}{}s",
+        seconds % 60,
+        fractional(magnitude % 1_000_000_000, 1_000_000_000)
+    );
+    let minutes = seconds / 60;
+    if minutes > 0 {
+        text = format!("{}m{text}", minutes % 60);
+        let hours = minutes / 60;
+        if hours > 0 {
+            text = format!("{hours}h{text}");
+        }
+    }
+    format!("{sign}{text}")
+}
+
+/// A session duration as the operator wrote it, in nanoseconds. A key that is
+/// present but null decodes to zero in Go.
+fn session_duration_nanos(value: &serde_yaml_ng::Value, field: &str) -> Result<i128, ConfigError> {
+    if value.is_null() {
+        return Ok(0);
+    }
+    let text = string(value, field)?;
+    parse_go_duration(&text)
+        .map(i128::from)
+        .map_err(|error| ConfigError::Parse(format!("{field}: {error}")))
+}
+
+/// The text yaml.v3 puts into a string field: any scalar decodes into it, a
+/// number or boolean as its spelling (rendered the way `serde_yaml_ng` prints
+/// it, so `0x10` reads `16` and `True` reads `true`). Only the fields where the
+/// spelling is harmless or reaches a message use it.
+fn text_scalar(value: &serde_yaml_ng::Value, field: &str) -> Result<String, ConfigError> {
+    match value {
+        serde_yaml_ng::Value::Number(number) => Ok(number.to_string()),
+        serde_yaml_ng::Value::Bool(flag) => Ok(flag.to_string()),
+        other => string(other, field),
+    }
+}
+
+/// Go's `NormalizeAuthMethod` rejection, quoting the method as written.
+fn invalid_auth_method_message(method: &str) -> String {
+    format!(
+        "invalid authMethod {} (valid: passphrase, touchid)",
+        crate::go_quote(method)
     )
 }
 
@@ -1574,8 +1718,12 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
         if let Some(v) = fields.get(key("allowedExecutables")) {
             profile.allowed_executables = string_list(v, "allowedExecutables")?;
         }
-        if let Some(v) = fields.get(key("promptInjectionMode")) {
-            profile.prompt_injection_mode = string(v, "promptInjectionMode")?;
+        // A `*string` in Go: null stays nil and leaves the current mode.
+        if let Some(v) = fields
+            .get(key("promptInjectionMode"))
+            .filter(|v| !v.is_null())
+        {
+            profile.prompt_injection_mode = text_scalar(v, "promptInjectionMode")?;
         }
         if let Some(v) = fields.get(key("skillPath")) {
             profile.skill_path = string(v, "skillPath")?;
@@ -1784,11 +1932,21 @@ fn parse_vault(
     }
     if let Some(v) = map.get(key("authMethod")) {
         auth_present = true;
-        let text = string_field(v, "vault.authMethod")?;
+        let text = if v.is_null() {
+            String::new()
+        } else {
+            text_scalar(v, "vault.authMethod")?
+        };
         if !text.is_empty() {
-            let method = AuthMethod::parse(&text)?;
-            out.auth_method = method;
-            fed_auth = Some(method);
+            // Go keeps a method that does not normalize as written and lets
+            // `Validate` reject it; it feeds nothing to the top level.
+            match AuthMethod::parse(&text) {
+                Ok(method) => {
+                    out.auth_method = method;
+                    fed_auth = Some(method);
+                }
+                Err(_) => out.invalid_auth_method = Some(text),
+            }
         }
     }
     if let Some(v) = map.get(key("useTouchID")) {
@@ -2222,7 +2380,11 @@ fn write_vault(out: &mut String, v: &VaultConfig) -> Result<(), ConfigError> {
     // to a different KDF/search/format configuration on the next load.
     body.push_str(&format!(
         "    authMethod: {}\n",
-        yaml_scalar(v.auth_method.as_str())?
+        yaml_scalar(
+            v.invalid_auth_method
+                .as_deref()
+                .unwrap_or_else(|| v.auth_method.as_str())
+        )?
     ));
     if v.use_touch_id {
         body.push_str("    useTouchID: true\n");
@@ -2710,6 +2872,92 @@ mod tests {
         assert!(loaded.mcp.is_none());
         assert!(loaded.update.is_none());
         assert!(loaded.clipboard.is_none());
+    }
+
+    /// `time.Duration.String()` for the values a session duration can take.
+    #[test]
+    fn go_duration_string_matches_time_duration_string() {
+        for (nanos, want) in [
+            (0_i128, "0s"),
+            (1, "1ns"),
+            (999, "999ns"),
+            (1_500, "1.5\u{b5}s"),
+            (1_500_000, "1.5ms"),
+            (999_999_999, "999.999999ms"),
+            (1_000_000_000, "1s"),
+            (1_500_000_000, "1.5s"),
+            (90_000_000_000, "1m30s"),
+            (300_000_000_000, "5m0s"),
+            (3_600_000_000_000, "1h0m0s"),
+            (3_600_000_000_001, "1h0m0.000000001s"),
+            (90_000_000_000_000, "25h0m0s"),
+            (-300_000_000_000, "-5m0s"),
+            (-1_500_000_000, "-1.5s"),
+            (-1, "-1ns"),
+            (i128::from(i64::MIN), "-2562047h47m16.854775808s"),
+            (i128::from(i64::MAX), "2562047h47m16.854775807s"),
+        ] {
+            assert_eq!(go_duration_string(nanos), want, "{nanos}");
+        }
+    }
+
+    #[test]
+    fn non_positive_session_durations_are_reported_with_their_value_and_joined() {
+        let error = Config::load_from_bytes(b"sessionTimeout: 0s\nsessionMaxLifetime: -90m\n")
+            .expect_err("both durations are rejected");
+        assert_eq!(
+            error.to_string(),
+            "sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)\n\
+             sessionMaxLifetime: must be greater than 0, got -1h30m0s (default: 8h, configure sessionMaxLifetime in config.yaml)"
+        );
+    }
+
+    #[test]
+    fn loader_errors_carry_no_native_prefix() {
+        for input in [
+            "agents:\n  x:\n    approvalMode: bogus\n",
+            "agents:\n  x:\n    promptInjectionMode: weird\n",
+            "mcp:\n  bind: ''\n",
+            "audit:\n  maxSizeMb: abc\n",
+            "sessionTimeout: -5m\n",
+        ] {
+            let text = Config::load_from_bytes(input.as_bytes())
+                .expect_err("rejected")
+                .to_string();
+            assert!(
+                !text.starts_with("parse config:") && !text.starts_with("invalid config:"),
+                "{input:?}: {text}"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_auth_methods_load_like_go() {
+        // The top-level method is dropped; the key still counts as written.
+        let config = Config::load_from_bytes(b"authMethod: bogus\nuseTouchID: true\n").unwrap();
+        assert_eq!(config.auth_method, AuthMethod::Passphrase);
+        assert!(config.validate().is_empty());
+        // A vault method is kept as written and rejected by validate, quoted
+        // the way it was written.
+        let config = Config::load_from_bytes(b"vault:\n  authMethod: ' Bogus '\n").unwrap();
+        assert_eq!(
+            config.validate(),
+            ["invalid authMethod \" Bogus \" (valid: passphrase, touchid)"]
+        );
+        let mut config = config;
+        config.set_auth_method("touchid").unwrap();
+        assert!(config.validate().is_empty());
+    }
+
+    #[test]
+    fn empty_vault_dir_keeps_the_default() {
+        let default = Config::default().vault_dir;
+        for input in ["vaultDir: ''\n", "vaultDir: null\n"] {
+            assert_eq!(
+                Config::load_from_bytes(input.as_bytes()).unwrap().vault_dir,
+                default
+            );
+        }
     }
 
     #[test]

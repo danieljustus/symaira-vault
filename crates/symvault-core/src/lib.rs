@@ -6,6 +6,8 @@ use symaira_core_version::new as new_version;
 
 pub mod config;
 pub mod config_overrides;
+mod config_schema;
+pub mod config_typed;
 pub mod error;
 mod go_unicode_print_15;
 pub mod go_yaml;

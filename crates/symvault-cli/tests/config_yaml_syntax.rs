@@ -101,12 +101,15 @@ struct Fixture {
 }
 
 /// Cases whose Go output the native CLI must reproduce byte for byte.
-const MATCHING_CASES: usize = 94;
+const MATCHING_CASES: usize = 128;
 /// Comparisons the replay executes: every recorded config observation, one
-/// `doctor` run per case and the five `agent list` runs.
-const REPLAYED_COMPARISONS: usize = 441;
+/// `doctor` run per case and the fourteen `agent list` runs.
+const REPLAYED_COMPARISONS: usize = 554;
+/// The `load_*` cases (CONFIG-LOAD-001): what the loader and validator accept
+/// or reject once the bytes parse as YAML.
+const LOAD_CASES: usize = 32;
 /// Inputs on which the native CLI is known to differ from Go.
-const OPEN_DIVERGENCES: usize = 32;
+const OPEN_DIVERGENCES: usize = 31;
 
 fn fixture() -> Fixture {
     const CONTENT: &[u8] = include_bytes!("../../../testdata/port/cli/config-yaml-syntax.json");
@@ -379,6 +382,8 @@ fn fixture_pins_go_oracle_and_covers_every_libyaml_stage() {
             "go.sum",
             "internal/cli/cli.go",
             "internal/config/config_load.go",
+            "internal/config/config_merge.go",
+            "internal/config/config_validate.go",
             "internal/config/dottedpath.go",
             "internal/errors/errors.go",
             "internal/health/doctor_mcp.go",
@@ -448,7 +453,9 @@ fn fixture_pins_go_oracle_and_covers_every_libyaml_stage() {
     }
     assert_eq!(
         classes,
-        BTreeSet::from(["accepted", "loader", "node", "parser", "reader", "scanner"])
+        BTreeSet::from([
+            "accepted", "decode", "loader", "node", "parser", "reader", "scanner"
+        ])
     );
     assert!(
         problems.len() >= 38,
@@ -662,4 +669,121 @@ fn open_divergence_check_tells_a_match_from_a_gap() {
         .find(|divergence| divergence.name == "trailing_token_after_double_quoted")
         .expect("trailing_token_after_double_quoted is recorded");
     assert!(!open_divergence_differences(gap, &fixture.doctor_ids).is_empty());
+}
+
+/// CONFIG-LOAD-001: the six inputs on which the native loader used to differ
+/// from `config.Load` / `Config.Validate`, by the name of the recorded case.
+/// Each is replayed with the rest of the corpus above; this keeps the list
+/// honest by naming them and by pinning what Go prints for them.
+#[test]
+fn config_load_divergences_are_recorded_and_replay_as_go_prints_them() {
+    let fixture = fixture();
+    let load_cases: Vec<&Case> = fixture
+        .cases
+        .iter()
+        .filter(|case| case.name.starts_with("load_"))
+        .collect();
+    assert_eq!(load_cases.len(), LOAD_CASES);
+    let find = |name: &str| -> &Case {
+        load_cases
+            .iter()
+            .copied()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("{name} is not part of the corpus"))
+    };
+    let validate = |case: &Case| -> Observation {
+        case.observations
+            .iter()
+            .find(|observation| observation.command == "validate")
+            .expect("validate observation")
+            .clone()
+    };
+
+    // 1. `vaultDir: ''` is valid.
+    assert_eq!(validate(find("load_vault_dir_empty")).exit_code, 0);
+    // 2. An unknown promptInjectionMode is rejected while the file loads.
+    let observation = validate(find("load_prompt_injection_mode_invalid"));
+    assert_eq!(observation.exit_code, 6);
+    assert!(
+        observation
+            .stderr
+            .contains("invalid promptInjectionMode \"weird\" (valid: off, log-only, wrap, deny)")
+    );
+    // 3 and 4. A value of the wrong shape in a section the port does not model.
+    for (name, shape) in [
+        ("load_audit_max_size_mb_string", "!!str `abc` into int64"),
+        ("load_logging_level_sequence", "!!seq into string"),
+    ] {
+        let observation = validate(find(name));
+        assert_eq!(observation.exit_code, 6, "{name}");
+        assert!(observation.stderr.contains(shape), "{name}");
+    }
+    // 5. An unknown authMethod loads and validates.
+    assert_eq!(validate(find("load_auth_method_unknown")).exit_code, 0);
+    // 6. The session duration rejection names the parsed value.
+    let observation = validate(find("load_session_timeout_zero"));
+    assert_eq!(observation.exit_code, 6);
+    assert!(observation.stderr.contains(
+        "sessionTimeout: must be greater than 0, got 0s (default: 15m, configure sessionTimeout in config.yaml)"
+    ));
+
+    // Go returns the loader's errors bare: not one recorded byte of any
+    // command carries the native loader's former prefixes.
+    for case in &load_cases {
+        let mut texts: Vec<&str> = case
+            .observations
+            .iter()
+            .flat_map(|observation| [observation.stdout.as_str(), observation.stderr.as_str()])
+            .collect();
+        texts.extend(
+            case.doctor
+                .results
+                .iter()
+                .map(|result| result.message.as_str()),
+        );
+        if let Some(agent_list) = &case.agent_list {
+            texts.extend([agent_list.stdout.as_str(), agent_list.stderr.as_str()]);
+        }
+        for text in texts {
+            assert!(
+                !text.contains("parse config:") && !text.contains("invalid config:"),
+                "{}: {text:?}",
+                case.name
+            );
+        }
+    }
+}
+
+/// Negative control for the `load_*` replay: an expectation that differs from
+/// Go in the one detail this packet fixed (`, got 0s`) must fail the replay.
+#[test]
+fn mutated_load_expectation_is_detected() {
+    let fixture = fixture();
+    let case = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "load_session_timeout_zero")
+        .expect("load_session_timeout_zero is part of the corpus");
+    let bytes = decode_hex(&case.config_hex);
+    let validate = case
+        .observations
+        .iter()
+        .find(|observation| observation.command == "validate")
+        .expect("validate observation");
+    assert_eq!(run_config_observation(&bytes, validate), None);
+
+    let mut without_value = validate.clone();
+    without_value.stderr = without_value.stderr.replace(", got 0s", "");
+    assert_ne!(
+        without_value.stderr, validate.stderr,
+        "mutation changed nothing"
+    );
+    assert!(run_config_observation(&bytes, &without_value).is_some());
+
+    let mut prefixed = validate.clone();
+    prefixed.stderr = prefixed
+        .stderr
+        .replace("__CONFIG__: ", "__CONFIG__: parse config: ");
+    assert_ne!(prefixed.stderr, validate.stderr, "mutation changed nothing");
+    assert!(run_config_observation(&bytes, &prefixed).is_some());
 }

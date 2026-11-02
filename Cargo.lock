@@ -4136,8 +4136,10 @@ dependencies = [
  "sha1",
  "sha2 0.11.1",
  "symaira-core-version",
+ "symvault-gojson",
  "thiserror 2.0.21",
  "unicode_categories",
+ "yaml-edit",
  "zeroize",
 ]
 

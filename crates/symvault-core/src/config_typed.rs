@@ -55,7 +55,7 @@ const MERGE_REQUIRES_MAP: &str = "yaml: map merge requires map or sequence of ma
 /// unparsable `time.Time`, a merge of a non-mapping, ...) returns its own text
 /// instead. Bytes, because the truncated value may split a multi-byte
 /// character.
-pub(crate) fn unmarshal_errors(source: &str) -> Option<Vec<u8>> {
+pub fn unmarshal_errors(source: &str) -> Option<Vec<u8>> {
     let file = yaml_edit::YamlFile::from_str(source).ok()?;
     let document = file.documents().next()?;
     let root = if let Some(mapping) = document.as_mapping() {
@@ -87,7 +87,7 @@ pub(crate) fn unmarshal_errors(source: &str) -> Option<Vec<u8>> {
 /// a tag the plain text would not resolve to (`<<` resolves to `!!str`), so
 /// `config set` writes every plain `<<` back as `!!merge <<`: keys and values,
 /// at any depth. A quoted `'<<'` or an explicitly tagged one is left alone.
-pub(crate) fn tag_merge_keys(rendered: &str) -> String {
+pub fn tag_merge_keys(rendered: &str) -> String {
     fn collect(node: &YamlNode, starts: &mut Vec<usize>) {
         match node {
             YamlNode::Scalar(scalar) => {
@@ -714,7 +714,7 @@ impl<'a> Decoder<'a> {
                 _ => false,
             },
             "time.Duration" => match &value {
-                Val::Str(text) => symvault_core::config::parse_go_duration(text).is_ok(),
+                Val::Str(text) => crate::config::parse_go_duration(text).is_ok(),
                 _ => false,
             },
             // A Go type this table does not model decodes any scalar.
@@ -752,7 +752,7 @@ impl<'a> Decoder<'a> {
                     let message = format!(
                         "line {}: mapping key {} already defined at line {}",
                         second.line,
-                        symvault_core::go_quote(&second.value),
+                        crate::go_quote(&second.value),
                         first.line
                     );
                     self.terrors.push(message.into_bytes());

@@ -160,15 +160,6 @@ pub(crate) fn load(path: &Path) -> Result<Loaded, String> {
     })
 }
 
-/// The core loader wraps some failures as `parse config: …` / `invalid config: …`;
-/// Go's `Load` returns the bare cause, which is what the fix flow prints.
-fn go_text(error: &str) -> &str {
-    error
-        .strip_prefix("parse config: ")
-        .or_else(|| error.strip_prefix("invalid config: "))
-        .unwrap_or(error)
-}
-
 /// Go's `Config.Validate`, including the `audit.maxFileSize` check that the
 /// typed config cannot make. The message sits where Go's `errors.Join`
 /// emits it: after the agent checks, before the clipboard and Argon2id ones.
@@ -207,15 +198,11 @@ pub(crate) fn fix(
 ) -> Result<Loaded, String> {
     let mut loaded = match first {
         Err(load_error) => {
-            report_errors(path, Some(go_text(&load_error)), None);
+            report_errors(path, Some(&load_error), None);
             run_editor_fix(path).map_err(|error| format!("config fix failed: {error}"))?;
             // The user edited the file in $EDITOR; reload and re-validate.
-            load(path).map_err(|error| {
-                format!(
-                    "config still invalid after manual edit: {}",
-                    go_text(&error)
-                )
-            })?
+            load(path)
+                .map_err(|error| format!("config still invalid after manual edit: {error}"))?
         }
         Ok(loaded) => loaded,
     };
@@ -241,12 +228,8 @@ pub(crate) fn fix(
             Ok(repaired)
         }
         Fixed::Edited => {
-            let reloaded = load(path).map_err(|error| {
-                format!(
-                    "config still invalid after manual edit: {}",
-                    go_text(&error)
-                )
-            })?;
+            let reloaded = load(path)
+                .map_err(|error| format!("config still invalid after manual edit: {error}"))?;
             let errors = validate(&reloaded);
             if !errors.is_empty() {
                 return Err(format!(

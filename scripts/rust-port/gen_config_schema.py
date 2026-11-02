@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate crates/symvault-cli/src/config_schema.rs from the Go config structs.
+"""Generate crates/symvault-core/src/config_schema.rs from the Go config structs.
 
 `symvault config set` re-reads the written file with yaml.v3 into the typed
 `config.Config` struct; the Rust port needs the same field types to reproduce
@@ -16,7 +16,7 @@ field's Go type is recorded verbatim (`*time.Duration`, `[]string`,
 A field the script cannot turn into a table row is an error, never a silent
 omission: a field line it cannot parse, a yaml tag flag the table cannot model
 (`,inline`), a tag of the legacy raw form, an embedded or multi-name exported
-field, and a field type that crates/symvault-cli/src/config_typed.rs does not
+field, and a field type that crates/symvault-core/src/config_typed.rs does not
 decode. The key is yaml.v3's own: the first element of the `yaml:"..."` tag
 wherever it sits in the tag string, else the lower-cased field name;
 `yaml:"-"` and unexported fields are not part of the document.
@@ -27,7 +27,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "internal/config"
-TARGET = ROOT / "crates/symvault-cli/src/config_schema.rs"
+TARGET = ROOT / "crates/symvault-core/src/config_schema.rs"
 ROOT_STRUCT = "Config"
 
 # Scalar and library types config_typed.rs decodes; every other name in a
@@ -101,7 +101,7 @@ def check_type(where, go_type, bodies):
         else:
             break
     if inner not in MODELED_TYPES and inner not in bodies:
-        raise SchemaError(f"{where}: field type {go_type!r} is not decoded by crates/symvault-cli/src/config_typed.rs")
+        raise SchemaError(f"{where}: field type {go_type!r} is not decoded by crates/symvault-core/src/config_typed.rs")
 
 
 def parse_struct(name, path, body, bodies):
