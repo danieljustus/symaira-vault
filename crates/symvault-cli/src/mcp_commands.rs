@@ -282,6 +282,17 @@ pub fn run(
                 refresh_token_ttl: oauth.refresh_token_ttl,
             }
         });
+        let legacy_token = load_token_system(
+            root,
+            config
+                .mcp
+                .as_ref()
+                .map_or("", |mcp| mcp.http_token_file.as_str()),
+        )?;
+        if let Some(token) = legacy_token.as_deref() {
+            symvault_mcp::http::set_legacy_bearer(token);
+        }
+        symvault_mcp::http::set_health_version(option_env!("SYMVAULT_VERSION").unwrap_or("dev"));
         let mut http_options = symvault_mcp::http::HttpServerOptions {
             token_ttls,
             ..symvault_mcp::http::HttpServerOptions::default()
@@ -455,6 +466,84 @@ impl RuntimeMetadataGuard {
 /// Creates `<vault>/.symvault/device-sessions.json` (`{}`) when it is absent,
 /// matching Go's `NewDeviceSessionStore` on first start. An existing store is
 /// left to the approval commands that own its schema and migration.
+/// Go's `auth.LoadTokenSystem` for the HTTP server: a non-empty scoped registry
+/// is used as is; otherwise the single legacy bearer token (file, environment
+/// or freshly generated) is migrated into a wildcard-scoped registry entry and
+/// the file removed. The raw token is returned so it keeps authenticating, like
+/// Go's returned `legacyToken`, without ever being written to the registry.
+fn load_token_system(
+    root: &Path,
+    configured_file: &str,
+) -> Result<Option<zeroize::Zeroizing<String>>, String> {
+    use zeroize::Zeroizing;
+
+    let registry_path = root.join("mcp-tokens.json");
+    if symvault_mcp::http::registry_has_entries(&registry_path)
+        .map_err(|error| format!("load token system: {error}"))?
+    {
+        return Ok(None);
+    }
+    let legacy_path = if configured_file.is_empty() || configured_file == "auto" {
+        root.join("mcp-token")
+    } else {
+        PathBuf::from(configured_file)
+    };
+    let env_token = std::env::var("SYMVAULT_MCP_TOKEN")
+        .ok()
+        .filter(|token| !token.is_empty())
+        .map(Zeroizing::new);
+    let file_token = fs::read(&legacy_path)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .map(|text| Zeroizing::new(text.trim().to_owned()))
+        .filter(|token| !token.is_empty());
+    let (token, generated) = match (file_token, env_token) {
+        (Some(token), env) => {
+            if env.is_some() {
+                eprintln!(
+                    "Warning: SYMVAULT_MCP_TOKEN is set but file token exists at {}; using file token",
+                    legacy_path.display()
+                );
+            }
+            (token, false)
+        }
+        // The environment token serves only this process: Go neither writes
+        // it to the registry nor to a file.
+        (None, Some(token)) => return Ok(Some(token)),
+        (None, None) => {
+            let mut bytes = Zeroizing::new([0_u8; 32]);
+            getrandom::fill(bytes.as_mut_slice())
+                .map_err(|error| format!("load legacy token: generate token: {error}"))?;
+            let hex = bytes
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            (Zeroizing::new(hex), true)
+        }
+    };
+    let migrated = symvault_store::token_registry::import_legacy(
+        root,
+        &token,
+        time::OffsetDateTime::now_utc(),
+    )
+    .map_err(|error| format!("load token system: load legacy token: {error}"))?;
+    if let Some(id) = migrated {
+        eprintln!(
+            "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id={id}).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy {id}"
+        );
+        if !generated
+            && let Err(error) = fs::remove_file(&legacy_path)
+            && error.kind() != io::ErrorKind::NotFound
+        {
+            eprintln!(
+                "failed to remove legacy token file {} after migration: {error}",
+                legacy_path.display()
+            );
+        }
+    }
+    Ok(Some(token))
+}
+
 fn ensure_device_session_store(root: &Path) -> Result<(), String> {
     let path = root.join(".symvault").join("device-sessions.json");
     let existing = symvault_sync::safeio::read(&path)

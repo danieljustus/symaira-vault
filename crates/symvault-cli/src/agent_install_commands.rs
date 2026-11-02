@@ -1690,8 +1690,7 @@ struct HttpConfig {
 // MCP tool definitions; the Rust port has no equivalent registry hash yet, so
 // the install slice pins the Oracle-observed constant. Upgrade path: compute
 // the hash from the Rust tool definitions and share it with the store.
-pub(crate) const PINNED_TOOL_REGISTRY_HASH: &str =
-    "01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f";
+pub(crate) const PINNED_TOOL_REGISTRY_HASH: &str = symvault_mcp::TOOL_REGISTRY_HASH;
 
 // Remembers that `SYMVAULT_MCP_TOKEN` was consumed. Go calls
 // `os.Unsetenv`, which `#![deny(unsafe_code)]` forbids here

@@ -44,6 +44,13 @@ pub use tools::ToolListConfig;
 /// The newest protocol version this server speaks.
 pub const LATEST_SUPPORTED_PROTOCOL_VERSION: &str = "2025-11-25";
 
+/// SHA-256 of the pinned oracle's compiled MCP tool definitions. A scoped token
+/// stamped with any other non-empty value was issued against a different tool
+/// registry and is refused at `tools/call` time, as in Go
+/// (`IsToolRegistryDriftDetected`); an empty stamp (legacy tokens) never drifts.
+pub const TOOL_REGISTRY_HASH: &str =
+    "01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f";
+
 /// The version the HTTP transport defaults to. Kept here because it is part of
 /// the same oracle constant block; MCP-001 itself only exercises stdio.
 pub const DEFAULT_HTTP_PROTOCOL_VERSION: &str = "2025-03-26";
@@ -415,6 +422,8 @@ pub struct ProtocolHandler {
     tool_call_runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>,
     initialized: bool,
     token_allowed_tools: Option<Vec<String>>,
+    /// Set (to the agent name) when the authenticated token's registry stamp drifted.
+    token_registry_drift: Option<String>,
     request_context: RequestContext,
 }
 
@@ -427,6 +436,7 @@ impl ProtocolHandler {
             tool_call_runtime: None,
             initialized: false,
             token_allowed_tools: None,
+            token_registry_drift: None,
             request_context: RequestContext::default(),
         }
     }
@@ -445,6 +455,7 @@ impl ProtocolHandler {
             tool_call_runtime: None,
             initialized: false,
             token_allowed_tools: None,
+            token_registry_drift: None,
             request_context: RequestContext::default(),
         }
     }
@@ -464,6 +475,7 @@ impl ProtocolHandler {
             tool_call_runtime: Some(runtime),
             initialized: false,
             token_allowed_tools: None,
+            token_registry_drift: None,
             request_context: RequestContext::default(),
         }
     }
@@ -529,6 +541,12 @@ impl ProtocolHandler {
         self.token_allowed_tools = Some(allowed_tools.to_vec());
     }
 
+    /// Records the authenticated token's tool-registry stamp for `tools/call`.
+    pub fn set_token_registry_hash(&mut self, token_hash: &str, agent: &str) {
+        self.token_registry_drift =
+            (!token_hash.is_empty() && token_hash != TOOL_REGISTRY_HASH).then(|| agent.to_owned());
+    }
+
     /// Set context on this session, never on its shared application runtime.
     pub fn set_request_context(&mut self, context: RequestContext) {
         self.request_context = context;
@@ -544,6 +562,7 @@ impl ProtocolHandler {
             tool_call_runtime: self.tool_call_runtime.clone(),
             initialized: false,
             token_allowed_tools: self.token_allowed_tools.clone(),
+            token_registry_drift: None,
             request_context: RequestContext::default(),
         }
     }
@@ -765,6 +784,14 @@ impl ProtocolHandler {
                 ));
             }
             return Message::response(msg.id.clone(), call::payload(result));
+        }
+        if let Some(agent) = self.token_registry_drift.as_deref() {
+            return Message::response(
+                msg.id.clone(),
+                call::payload(ToolCallResult::error(format!(
+                    "tool registry has changed since this token was issued \u{2014} re-issue the token with 'symvault agent token new {agent}'"
+                ))),
+            );
         }
         match runtime.call_with_context(&name, &arguments, &self.request_context) {
             Ok(result) => Message::response(msg.id.clone(), call::payload(result)),
