@@ -53,7 +53,7 @@
       "status": "passed",
       "depends_on": ["RUST-005"],
       "contract_rows": ["AUDIT-001", "AUDIT-002"],
-      "acceptance": ["make audit-differential (repeat twice from clean target/audit outputs)", "cargo test -p symvault-store --test audit --locked", "cargo clippy -p symvault-store --all-targets --all-features --locked -- -D warnings", "native CI audit-differential matrix runs on Ubuntu, macOS, and Windows with Go 1.26.6 and Rust 1.98.0", "FreeBSD and other native-platform evidence remains blocked until a native runner executes; cross-compilation does not count"]
+      "acceptance": ["make audit-differential (repeat twice from clean target/audit outputs)", "cargo test -p symvault-store --test audit --locked", "cargo clippy -p symvault-store --all-targets --all-features --locked -- -D warnings", "native CI audit-differential matrix runs on Ubuntu and macOS with Go 1.26.6 and Rust 1.98.0", "FreeBSD artifacts are dropped at the Rust cutover (maintainer decision D3, 2026-11-02); other native-platform evidence needs a native runner, and cross-compilation does not count"]
     },
     {
       "id": "RUST-007",
@@ -61,7 +61,7 @@
       "status": "in_progress",
       "depends_on": ["RUST-005"],
       "contract_rows": ["CFG-001", "CFG-002", "CFG-003", "SESSION-001", "SESSION-002", "SESSION-003", "PLATFORM-001", "PLATFORM-002", "QUOTA-002"],
-      "acceptance": ["make config-session-differential", "CFG-002 YAML field-presence/config override handling remains in RUST-007", "CFG-002 section field-presence and the loader deprecation warnings: 110 Go cases in testdata/port/config/sections.json (cfg-sections-fixtures-check) pass locally against the Rust loader, including the post-review authMethod empty/null, useTouchID null, vault.last_rotated null and printByDefault ordering cases; Go drops vault.manifest_generation/listing_cache_ttl: danieljustus/symaira-vault#1482; native three-OS CI evidence pending. Root flag/env path overrides now replay 59 Go-generated cases (44 successful paths, 7 profile errors, 2 config errors, 6 parser errors) via make cfg-overrides-fixtures-check, included in rust-007-differential/config-session-differential/port-contract; explicit empty --vault and empty profile-path handling are fixed. The actual Go order is --vault > SYMVAULT_VAULT > nonblank --profile > SYMVAULT_PROFILE > valid defaultProfile > discovered data dir; no generic typed SYMVAULT_* merge or root --config exists. All eight root flags are inventoried; comparison is normalized paths and error classes, not presentation/diagnostic bytes or command-local --file/subsystem overrides. Repeatability, reserved env and altered-answer controls pass locally; override acceptance stays in_progress pending native three-OS CI. yaml-edit remains pinned to 0.3.3: 0.3.2 regressed block-scalar output, 0.3.4+ changes document-start-only set handling (#1433)", "QUOTA-002 .quotas.json filesystem adapter and public AgentRateLimiter wrapper fixtures after RUST-005 storage foundations", "Unix flock and Windows LockFileEx concurrency/error evidence", "cargo nextest run -p symvault-platform", "macOS native adapters compile; non-interactive Touch ID/capability and plist tests pass; exact-head disposable-runner CI proves Go-write/Rust-update/Go-read-delete OS-keyring interoperability on Linux, macOS, and Windows, verifies the private macOS test keychain is provisioned, and installs/queries/removes a temporary LaunchAgent under a private HOME", "QUOTA-002 passed in run 34893584462; SESSION-002 native cross-language keyring proof and PLATFORM-002 daemon lifecycle passed at a4e0469 in run 36050829754. Clipboard set/read/clear now has a CI-only disposable macOS proof but awaits native execution. Touch ID authentication and GUI/autotype/secure-UI delivery remain unproven: hosted CI has no biometric device or authorized interactive Accessibility session. CFG-001..003, SESSION-001, SESSION-003, PLATFORM-001, and PLATFORM-002 remain open; RUST-007 stays in_progress.",
+      "acceptance": ["make config-session-differential", "CFG-002 YAML field-presence/config override handling remains in RUST-007", "CFG-002 section field-presence and the loader deprecation warnings: 110 Go cases in testdata/port/config/sections.json (cfg-sections-fixtures-check) pass locally against the Rust loader, including the post-review authMethod empty/null, useTouchID null, vault.last_rotated null and printByDefault ordering cases; Go drops vault.manifest_generation/listing_cache_ttl: danieljustus/symaira-vault#1482; native Linux/macOS CI evidence pending. Root flag/env path overrides now replay 59 Go-generated cases (44 successful paths, 7 profile errors, 2 config errors, 6 parser errors) via make cfg-overrides-fixtures-check, included in rust-007-differential/config-session-differential/port-contract; explicit empty --vault and empty profile-path handling are fixed. The actual Go order is --vault > SYMVAULT_VAULT > nonblank --profile > SYMVAULT_PROFILE > valid defaultProfile > discovered data dir; no generic typed SYMVAULT_* merge or root --config exists. All eight root flags are inventoried; comparison is normalized paths and error classes, not presentation/diagnostic bytes or command-local --file/subsystem overrides. Repeatability, reserved env and altered-answer controls pass locally; override acceptance stays in_progress pending native Linux/macOS CI. yaml-edit remains pinned to 0.3.3: 0.3.2 regressed block-scalar output, 0.3.4+ changes document-start-only set handling (#1433)", "QUOTA-002 .quotas.json filesystem adapter and public AgentRateLimiter wrapper fixtures after RUST-005 storage foundations", "Unix flock concurrency/error evidence (Windows LockFileEx void since #1550/#1551)", "cargo nextest run -p symvault-platform", "macOS native adapters compile; non-interactive Touch ID/capability and plist tests pass; exact-head disposable-runner CI proves Go-write/Rust-update/Go-read-delete OS-keyring interoperability on Linux and macOS, verifies the private macOS test keychain is provisioned, and installs/queries/removes a temporary LaunchAgent under a private HOME", "QUOTA-002 passed in run 34893584462; SESSION-002 native cross-language keyring proof and PLATFORM-002 daemon lifecycle passed at a4e0469 in run 36050829754. Clipboard set/read/clear now has a CI-only disposable macOS proof but awaits native execution. Touch ID authentication and GUI/autotype/secure-UI delivery remain unproven: hosted CI has no biometric device or authorized interactive Accessibility session. CFG-001..003, SESSION-001, SESSION-003, PLATFORM-001, and PLATFORM-002 remain open; RUST-007 stays in_progress.",
         "SESSION-003 non-interactive half (#1243 slice 2): make biometric-differential (biometricgen fixture at oracle d13e5d0b, symvault-core biometric_contract replay, macOS-only symvault-platform native_biometric_item on disposable keychains). The Rust Touch ID item is now Go's raw generic-password item. The Touch ID prompt, the default-keychain/access-control path and signed-app proof stay pending (no biometric hardware, no operator keychain); SESSION-003 remains in_progress."]
     },
     {
@@ -111,27 +111,30 @@
     },
     {
       "id": "RUST-013",
-      "title": "Run value gate and ship dual-binary prerelease",
+      "title": "Run value gate and ship Rust-only prerelease",
       "status": "blocked",
       "depends_on": ["RUST-009", "RUST-011", "RUST-012"],
       "contract_rows": ["DIST-001", "DIST-002", "DIST-003", "DIST-004", "DIST-005", "VALUE-001"],
-      "acceptance": ["make rust-full-gate", "make release-contract", "go run ./scripts/rust-port/cmd/valuegate --check"]
+      "acceptance": ["make rust-full-gate", "make release-contract", "go run ./scripts/rust-port/cmd/valuegate --check (VALUE-001 is measured and reported, not blocking)"],
+      "decision": "Value gate reported, not blocking, per maintainer decision D5 (2026-11-02): VALUE-001 is measured and its result is recorded with the prerelease; a miss does not stop the Rust-only prerelease."
     },
     {
       "id": "RUST-014",
-      "title": "Stable Rust cutover with Go fallback",
+      "title": "Stable Rust-only cutover",
       "status": "blocked",
       "depends_on": ["RUST-013"],
       "contract_rows": ["DIST-001", "DIST-002", "DIST-003", "DIST-004", "DIST-005"],
-      "acceptance": ["all contract matrix rows PASS", "native release smoke green", "public artifact readback green", "rollback exercise green"]
+      "acceptance": ["all contract matrix rows PASS", "native release smoke green", "public artifact readback green", "Rust opens existing Go-created vault state unchanged", "automatic pre-migration backup created and restore exercise green"],
+      "decision": "Rust-only cutover per maintainer decision 2026-10-30: no Go fallback binary, no Go rollback, no observation window. Data-safety gate per maintainer decision D1 (2026-11-02): on the first vault-mutating command when no Rust marker exists in the vault, Rust creates a backup through the existing backup path, restores it into a temp dir and verifies it before the write proceeds. FreeBSD artifacts are dropped at the cutover (D3, 2026-11-02)."
     },
     {
       "id": "RUST-015",
-      "title": "Remove Go backend after one stable Rust release",
+      "title": "Remove Go backend at the Rust-only cutover",
       "status": "blocked",
       "depends_on": ["RUST-014"],
       "contract_rows": [],
-      "acceptance": ["zero tracked backend .go files", "Rust full gate green", "Swift/editor gates green", "immutable dual-binary rollback release verified"]
+      "acceptance": ["zero tracked backend .go files", "Rust full gate green", "Swift/editor gates green"],
+      "decision": "Maintainer decision 2026-11-02: Go removal is done locally and merged into local/rust-port; push, PR and release remain separate authorizations. Per D6 the generator .go files under scripts/rust-port/cmd are not backend code: at Go removal they are archived on the tag legacy/go-oracle, and frozen fixtures stay."
     }
   ]
 }
