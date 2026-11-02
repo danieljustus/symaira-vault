@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages release-contract rust-cli manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-generate ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages release-contract release-contract-selftest rust-cli manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-generate ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
 
 # Variables
 BINARY_NAME := symvault
@@ -217,6 +217,12 @@ RELEASE_CONTRACT_DIST ?= /Volumes/1TB_NVMe_SN850X/Dev/Symaira_Dev/builds/symaira
 .PHONY: release-contract
 release-contract:
 	python3 scripts/rust-port/release_contract.py --dist "$(RELEASE_CONTRACT_DIST)"
+
+# Self-test of the checker on a synthetic dist (no build, no docker, no disk):
+# it must accept a well-formed dist and reject every tamper control.
+release-contract-selftest:
+	python3 scripts/rust-port/test_release_contract.py
+	python3 scripts/test_supported_platforms.py
 
 # Go-oracle fixtures and neutral black-box harness for the staged Rust port.
 PORT_ORACLE_COMMIT ?= caadd5e
