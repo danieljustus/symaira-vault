@@ -25,6 +25,31 @@ pub fn set_entry(
     totp_issuer: Option<&str>,
     totp_account: Option<&str>,
 ) -> Result<String, String> {
+    let (path, data) = set_entry_data(
+        query,
+        value,
+        allow_empty,
+        force,
+        totp_secret,
+        totp_issuer,
+        totp_account,
+    )?;
+    set_fields(root, identity, &path, data)?;
+    Ok(path)
+}
+
+/// Validates a `set` request and builds the fields it writes, without
+/// touching the vault: Go runs every one of these checks before `WithVault`
+/// resolves and unlocks it (cmd/crud/set.go).
+pub fn set_entry_data(
+    query: &str,
+    value: String,
+    allow_empty: bool,
+    force: bool,
+    totp_secret: Option<&str>,
+    totp_issuer: Option<&str>,
+    totp_account: Option<&str>,
+) -> Result<(String, BTreeMap<String, Value>), String> {
     let (path, field) = query
         .rsplit_once('.')
         .filter(|(path, _)| !path.is_empty())
@@ -57,8 +82,7 @@ pub fn set_entry(
         }
         data.insert("totp".to_owned(), Value::Object(totp_data));
     }
-    set_fields(root, identity, path, data)?;
-    Ok(path.to_owned())
+    Ok((path.to_owned(), data))
 }
 
 #[allow(dead_code)]
