@@ -32,7 +32,11 @@ requests and per-slice hosted CI runs are suspended for the port.
      pins mirror `.github/workflows/ci.yml`), `rust-gates-core port-contract
      mcp-approval-pty-acceptance`. Miri (about one hour) is opt-in with
      `RUN_MIRI=1` and required for slices that change `crates/symvault-core`.
-   Each run appends a receipt (SHA, target, exit, log) to
+   - Both lanes also run the area process contracts of the former area
+     workflows through `make local-area` (see "Area process contracts" below),
+     one make target at a time; the log has an `area-target: <name> exit=<n>`
+     line per target and `area-summary:` at the end.
+   Each run appends a receipt (SHA, target, exit, log, `area_targets`) to
    `target/local-gate/receipts.jsonl` unless `LOCAL_GATE_RECEIPTS` points
    elsewhere. The gate runs in the live working tree (only the clean check
    happens at start): do not edit, stash-pop or generate fixtures in this
@@ -71,13 +75,100 @@ requests and per-slice hosted CI runs are suspended for the port.
   (`symvault-gate-target-<sha256(root)[:12]>`); a shared volume reused test
   binaries with another worktree's compile-time fixture paths. Old volumes
   of removed worktrees are caches and may be deleted with `docker volume rm`.
-- The local gate mirrors `ci.yml` only. The 25 area workflows
-  (`rust-http-*`, `rust-mcp-*`, `rust-pairing`, `rust-tui`, `rust-intake-cli`,
-  `vault-read-resource-policy`, `kdf-resource-policy`, ...) also run Python
-  process contracts with receipts; their cargo tests are mostly inside
-  nextest, their process contracts are not. A slice that touches one of those
-  areas runs that workflow's contract steps by hand and names them in its
-  evidence; everything else is first exercised by the closing CI run.
+- The area process contracts run locally (next section), but their hosted
+  receipts, artifact uploads and the Windows legs do not exist locally;
+  differences are listed there. `keychain-native` (hosted macOS keychain) and
+  the TUI contract on macOS stay out (real pasteboard).
+
+## Area process contracts
+
+The 25 area workflows (`rust-http-*`, `rust-mcp-*`, `rust-broker-*`, ...) ran
+Python process contracts that nextest does not. `make local-area`
+(`LOCAL_AREA_TARGETS` in the Makefile) now runs the following on top of the
+older differential targets; `make local-area-list LOCAL_AREA_LANE=macos|linux`
+prints the exact list of a lane. Each target runs the workflow's contract step
+plus the `test_*_contract.py` / `*_mutation.py` negative controls the workflow
+ran with it, and then `scripts/rust-port/gate_area_check.py` (receipt passed,
+clean tree before and after, candidate commit is HEAD, no undeclared
+differences, Go and Rust case sets equal, `cligap` report free of gaps for the
+owned command paths, required Go/cargo tests present and not skipped).
+Platform scope is macOS arm64 and Linux; Windows steps are void. Every target
+below runs in both lanes, because hosted CI ran each contract on ubuntu and
+macOS (`rust-http-*.yml` on ubuntu, the same HTTP contracts on macOS through
+`rust-http-macos.yml`); the two lane-only targets are marked.
+
+| Target | Workflow(s) | Contract step and negative controls |
+|---|---|---|
+| `http-framing-contract` | rust-http-framing | `http_framing_contract.py` |
+| `http-head-contract` | rust-http-head | `http_head_contract.py` |
+| `http-origin-contract` | rust-http-origin | `http_origin_contract.py` |
+| `http-slow-peer-contract` | rust-http-read-deadlines | `http_slow_peer_contract.py` |
+| `http-timeout-contract` | rust-http-timeouts | `http_timeout_contract.py` |
+| `http-tls-contract` | rust-http-tls | `http_tls_contract.py` |
+| `http-write-contract` | rust-http-write | `test_http_write_contract.py`, `go test ./scripts/rust-port/internal/diff`, `test_oracle_build.py`, `http_write_contract.py --tls-output-probe-only`, `http_write_mutation.py` (edits `crates/` and rebuilds, then restores), `http_write_contract.py` |
+| `http-oauth-contract` | rust-http-oauth | oracle-runner build and `test_oracle_build.py`, `http_oauth_contract.py` |
+| `http-process-contract` | rust-mcp-http-process | `test_http_process_contract.py`, `http_process_contract.py` |
+| `mcp-process-contract` | rust-mcp-process | `test_mcp_oracle.py`, `test_mcp_process_contract.py`, `make mcp-ordered-fixtures-check`, `mcp_process_contract.py --reference mcp-anomaly-ordered-v1` |
+| `api-transport-contract` | rust-api-transport | `test_api_transport_contract.py`, `api_transport_contract.py` (probe example) |
+| `broker-connect-contract` | rust-broker-connect | `connect_contract.py` (probe example) |
+| `broker-egress-contract` | rust-broker-egress | `egress_contract.py` (CLI and probe), `cligap` for `symvault broker` / `symvault run` |
+| `cli-artifacts-contract` | rust-cli-artifacts | `go test ./scripts/rust-port/cmd/cligap`, Go manual-page tests, `make port-fixtures-check`, `manual_path_contract_test.py`, `test_cli_artifacts_contract.py`, `cli_artifacts_contract.py --require-native-shells`, `cligap` |
+| `intake-cli-contract` | rust-intake-cli | `intake_watch_contract.py`, `cligap` for `symvault intake` |
+| `serve-cli-contract` | rust-serve-cli | `serve_contract.py`, `cligap` for `symvault serve` |
+| `kdf-resource-policy-contract` | kdf-resource-policy | `check_argon2_upstream.py`, `kdf_policy_fixtures.py`, third-party argon2 tests, Go `-race` KDF tests (required names), `symvault-crypto` and migration tests, `migrate_kdf_differential` against a Go CLI built for that one command |
+| `read-resource-policy-contract` | vault-read-resource-policy | Go `-race` `TestResourcePolicy*` (required names), `refresh-read-policy-fixtures.py --check`, Rust store/template/mcp policy tests |
+| `mcp-http-shutdown-contract` | mcp-http-shutdown | Go `-race` shutdown, approval and authorization tests (required names) |
+| `tui-contract` (linux only) | rust-tui | `tui_harness_test.py`, `tui_contract.py` (fifteen Go/Rust cases under a private Xvfb/xclip), receipt replay, `tui_mutation_test.py` |
+| `tui-harness-check` (macos only) | rust-tui | `tui_harness_test.py` only |
+
+Where the gate differs from the hosted workflows:
+
+- **TUI on macOS.** `tui_contract.py` on Darwin reads and writes the real
+  pasteboard and asserts `GITHUB_ACTIONS=true` plus
+  `SYMVAULT_DISPOSABLE_NATIVE_RUNNER=1`. The local gate never touches the
+  clipboard, so the macOS lane runs the harness checks only. The macOS half of
+  the contract (and native clipboard TTL behavior) stays a closing-CI result.
+- **Fixed counts.** The workflows' inline `python3 - <<PY` checks assert exact
+  case counts and declared-difference counts. The gate asserts Go and Rust case
+  sets are equal (with a minimum for the small suites) and relies on the
+  contracts' own internal assertions; the counts are not re-checked.
+- **Live Go.** `kdf-resource-policy-contract`, `read-resource-policy-contract`,
+  `mcp-http-shutdown-contract` and several contracts run the frozen Go oracle
+  (race tests, oracle builds). They are the first things to retire or re-source
+  when Go is removed (P40a).
+- **Toolchains.** HTTP and `mcp-process` contracts pin `GO_TOOLCHAIN`
+  (go1.26.6, the MCP oracle refuses anything else); the other contracts use
+  `BUILD_GO_TOOLCHAIN` like their workflows. All Python runs use python3.13
+  when present (the TUI contract asserts it). The Linux image installs it from
+  deadsnakes, plus zsh, fish, xvfb and xclip (the workflows' own apt steps);
+  macOS needs Homebrew `python3.13`, `bash` and `fish`.
+- **Binaries.** Contracts run against a private copy of the CLI/probe under
+  `$(CARGO_TARGET_DIR)/area-evidence/bin`, because another build in the shared
+  target dir changes the hash a contract checks before and after. The TUI
+  candidate is built with the acceptance profile
+  (`CARGO_PROFILE_DEV_DEBUG=0`, no incremental) into
+  `area-evidence/tui-candidate` (about 1 GB), as `tui_contract.py` rebuilds and
+  byte-compares.
+- **Evidence.** Receipts and logs live in `$(CARGO_TARGET_DIR)/area-evidence`
+  (`AREA_EVIDENCE`), not in uploaded artifacts.
+
+Running them:
+
+- `scripts/rust-port/local-gate.sh macos-area|linux-area` runs only that lane's
+  `local-area` targets (receipt target `macos-area` / `linux-area`);
+  `LOCAL_AREA_ONLY="<targets>"` narrows further. `make <target>` runs one
+  contract directly; the contracts need a clean tree.
+- Never run both lanes, or a gate and a contract, against the same worktree or
+  cargo target dir at once: `http_write_mutation.py` edits `crates/` and
+  rebuilds, and the contracts compare source inventories and binary hashes
+  before and after (concurrent lanes produced "tree dirty" and "binary hash
+  changed" failures during development of this change).
+- `LOCAL_GATE_MOUNT_AS=<path of another worktree>` makes the Linux lane mount
+  this worktree at that path and reuse that worktree's cargo target volume,
+  instead of creating a new multi-GB volume when disk is tight.
+- Each receipt carries `area_targets` (`name:exit,...`) parsed from the log, so
+  it names every area target it covered. The `Summary`/`area-summary` rule from
+  rule 3 applies.
 
 ## Pull requests folded in at the start
 
