@@ -32,6 +32,7 @@ func fakeOracle(t *testing.T, doctorJSON bool) string {
 for a in "$@"; do
   if [ "$a" = doctor ]; then ` + doctor + `; exit 1; fi
 done
+if [ "$3" = auth ] && [ "$4" = status ]; then printf 'Auth method: password\n'; exit 0; fi
 prev=""; file=""
 for a in "$@"; do
   if [ "$prev" = "--file" ]; then file="$a"; fi
