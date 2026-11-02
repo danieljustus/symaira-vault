@@ -3989,8 +3989,8 @@ fn emit_get_result(
 /// Go's default `get <path.field>` on a terminal: copy to the clipboard, count
 /// down, clear and verify (`cmd/crud/get.go`, PLATFORM-001 slice 2). Returns
 /// `false` when the value should be printed instead. Go prints the copy failure
-/// through cobra and again through `ExecuteRoot`; the first line is emitted
-/// here and the caller prints the second.
+/// through cobra and again through `ExecuteRoot`; both lines come from the
+/// caller's `finish_vault_result_doubled_exit3`, so nothing is printed here.
 fn copy_get_field_to_clipboard(
     vault: &Path,
     format: &str,
@@ -4028,10 +4028,7 @@ fn copy_get_field_to_clipboard(
         environment.clock,
         stderr,
     )
-    .map_err(|error| {
-        let _ = writeln!(stderr, "Error: {error}");
-        error.to_string()
-    })?;
+    .map_err(|error| error.to_string())?;
     Ok(true)
 }
 
@@ -6509,19 +6506,16 @@ mod get_clipboard_wiring_tests {
     }
 
     #[test]
-    fn a_failed_copy_reports_once_here_and_leaks_nothing() {
+    fn a_failed_copy_is_left_to_the_caller_and_leaks_nothing() {
         let vault = vault_with_config(None);
         let outcome = run(vault.path(), secret_field(), "text", false, true, true);
         assert_eq!(
             outcome.result,
             Err("copy to clipboard: no clipboard tool".to_owned())
         );
-        assert_eq!(
-            outcome.stderr,
-            "Error: copy to clipboard: no clipboard tool\n"
-        );
+        // `finish_vault_result_doubled_exit3` prints both Go lines.
+        assert_eq!(outcome.stderr, "");
         assert_eq!(outcome.stdout, "");
-        assert!(!outcome.stderr.contains(SECRET));
     }
 
     #[test]
