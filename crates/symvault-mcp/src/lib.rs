@@ -30,6 +30,7 @@ pub mod render;
 mod request_context;
 pub use request_context::RequestContext;
 pub mod store_adapter;
+pub mod toolhash;
 mod tools;
 pub use call::{
     CommandExecution, CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig,
@@ -415,6 +416,7 @@ pub struct ProtocolHandler {
     tool_call_runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>,
     initialized: bool,
     token_allowed_tools: Option<Vec<String>>,
+    token_registry_hash: Option<String>,
     request_context: RequestContext,
 }
 
@@ -427,6 +429,7 @@ impl ProtocolHandler {
             tool_call_runtime: None,
             initialized: false,
             token_allowed_tools: None,
+            token_registry_hash: None,
             request_context: RequestContext::default(),
         }
     }
@@ -445,6 +448,7 @@ impl ProtocolHandler {
             tool_call_runtime: None,
             initialized: false,
             token_allowed_tools: None,
+            token_registry_hash: None,
             request_context: RequestContext::default(),
         }
     }
@@ -464,6 +468,7 @@ impl ProtocolHandler {
             tool_call_runtime: Some(runtime),
             initialized: false,
             token_allowed_tools: None,
+            token_registry_hash: None,
             request_context: RequestContext::default(),
         }
     }
@@ -529,6 +534,14 @@ impl ProtocolHandler {
         self.token_allowed_tools = Some(allowed_tools.to_vec());
     }
 
+    /// Records the tool-registry hash the authenticated HTTP token was issued
+    /// against. An empty hash is a legacy token and never drifts; `None` (stdio
+    /// and untokened callers) performs no drift check, as in Go where only the
+    /// HTTP middleware puts a token into the call context.
+    pub fn set_token_registry_hash(&mut self, hash: &str) {
+        self.token_registry_hash = Some(hash.to_owned());
+    }
+
     /// Set context on this session, never on its shared application runtime.
     pub fn set_request_context(&mut self, context: RequestContext) {
         self.request_context = context;
@@ -544,6 +557,7 @@ impl ProtocolHandler {
             tool_call_runtime: self.tool_call_runtime.clone(),
             initialized: false,
             token_allowed_tools: self.token_allowed_tools.clone(),
+            token_registry_hash: self.token_registry_hash.clone(),
             request_context: RequestContext::default(),
         }
     }
@@ -755,7 +769,20 @@ impl ProtocolHandler {
                 None,
             ));
         }
-        if let Err(result) = runtime.authorize(&name, &arguments) {
+        // Go order inside validateToolAccess: availability, tier and token
+        // scope, UpdateLastUsed, registry drift, then entry policy. The drift
+        // refusal therefore sits between the tier checks and the policy gate,
+        // so the runtime sequences it; this only decides whether it applies.
+        let registry_drift = match self.token_registry_hash.as_deref() {
+            Some(token_hash) if !token_hash.is_empty() => {
+                let current = toolhash::current_tool_registry_hash().map_err(Error::Catalog)?;
+                toolhash::is_drift(token_hash, &current)
+            }
+            _ => false,
+        };
+        if let Err(result) =
+            runtime.authorize_with_registry_drift(&name, &arguments, registry_drift)
+        {
             if result.authorization_internal_error {
                 return Ok(Message::error_response(
                     msg.id.clone(),

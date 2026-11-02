@@ -490,12 +490,16 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
                 return OAuthResponse::Http(error(400, "invalid_grant"));
             }
             let label = format!("oauth-{}", &pending.client_id[..8]);
+            // Go's CreateWithRefresh stamps CurrentToolRegistryHash.
+            let Ok(registry_hash) = crate::toolhash::current_tool_registry_hash() else {
+                return OAuthResponse::Http(error(500, "server_error"));
+            };
             let new = NewToken {
                 label: &label,
                 allowed_tools: vec!["*".into()],
                 agent_name: &state.agent_name,
                 ttl: Some(state.access_token_ttl),
-                tool_registry_hash: "",
+                tool_registry_hash: &registry_hash,
             };
             match token_registry::create_with_refresh(
                 &state.root,
@@ -520,10 +524,14 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
                     "refresh_token is required",
                 ));
             };
+            let Ok(registry_hash) = crate::toolhash::current_tool_registry_hash() else {
+                return OAuthResponse::Http(error(500, "server_error"));
+            };
             match token_registry::rotate_via_refresh_token_with_access_ttl(
                 &state.root,
                 refresh,
                 state.access_token_ttl,
+                &registry_hash,
                 now,
             ) {
                 Ok((record, access, refresh)) => {

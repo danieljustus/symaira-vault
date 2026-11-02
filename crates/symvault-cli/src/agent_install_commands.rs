@@ -1631,12 +1631,13 @@ fn create_agent_token_in_registry(
         return Ok("<not-generated-dry-run>".to_owned());
     }
     validate_agent_name(name)?;
+    let registry_hash = tool_registry_hash()?;
     let request = NewToken {
         label: &format!("agent-install-{name}"),
         allowed_tools: vec!["*".to_owned()],
         agent_name: name,
         ttl: None,
-        tool_registry_hash: PINNED_TOOL_REGISTRY_HASH,
+        tool_registry_hash: &registry_hash,
     };
     let (record, raw_token) = token_registry::create(vault, &request, OffsetDateTime::now_utc())
         .map_err(|error| map_scoped_token_error(&error, "create token: "))?;
@@ -1685,13 +1686,14 @@ struct HttpConfig {
     headers: BTreeMap<String, String>,
 }
 
-/// Tool-registry hash the pinned Oracle stamps into every install token.
-// ponytail: Go computes this in `server.init()` as sha256 over the compiled
-// MCP tool definitions; the Rust port has no equivalent registry hash yet, so
-// the install slice pins the Oracle-observed constant. Upgrade path: compute
-// the hash from the Rust tool definitions and share it with the store.
-pub(crate) const PINNED_TOOL_REGISTRY_HASH: &str =
-    "01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f";
+/// Tool-registry hash stamped into every token this binary issues. Go computes
+/// it in `server.init()` over the full compiled tool registry; the Rust port
+/// computes the identical digest from its tool catalog (`symvault-mcp`), so a
+/// token issued by either binary is accepted by the other.
+pub(crate) fn tool_registry_hash() -> Result<String, String> {
+    symvault_mcp::toolhash::current_tool_registry_hash()
+        .map_err(|error| format!("compute tool registry hash: {error}"))
+}
 
 // Remembers that `SYMVAULT_MCP_TOKEN` was consumed. Go calls
 // `os.Unsetenv`, which `#![deny(unsafe_code)]` forbids here
@@ -1913,12 +1915,13 @@ fn build_http_server_config(
 ) -> Result<(CfgVal, String), String> {
     let http = resolve_http_config(vault, agent_name, stderr, quiet)?;
     let (raw_token, token_id) = if !dry_run {
+        let registry_hash = tool_registry_hash()?;
         let request = NewToken {
             label: &format!("mcp-install-{agent_name}"),
             allowed_tools: vec!["*".to_owned()],
             agent_name,
             ttl: Some(Duration::days(30)),
-            tool_registry_hash: PINNED_TOOL_REGISTRY_HASH,
+            tool_registry_hash: &registry_hash,
         };
         let (record, raw) = token_registry::create(vault, &request, OffsetDateTime::now_utc())
             .map_err(|error| map_scoped_token_error(&error, "create scoped token: "))?;
