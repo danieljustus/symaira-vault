@@ -1044,6 +1044,8 @@ func main() {
 	encoder.SetIndent("", " ")
 	must(encoder.Encode(fixture{pinnedOracleCommit, sources, digest, generatorDigest, cases}))
 
+	writeOrCheckLimit(root, *check, sources, digest)
+
 	path := filepath.Join(root, fixturePath)
 	if *check {
 		actual, err := os.ReadFile(path) // #nosec G304 -- fixed fixture path under the repository root

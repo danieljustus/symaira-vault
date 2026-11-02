@@ -11,7 +11,7 @@
 //! names), so restore reads the stream with this port instead. Bodies are read
 //! like Go's `regFileReader` and `sparseFileReader`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 use std::io::{self, Read};
 
@@ -74,6 +74,21 @@ impl fmt::Display for TarError {
 impl std::error::Error for TarError {}
 
 impl TarError {
+    /// A copy that prints and classifies like the original, for the sticky
+    /// `Reader.err` that every later call returns again.
+    fn duplicate(&self) -> Self {
+        match self {
+            Self::Eof => Self::Eof,
+            Self::UnexpectedEof => Self::UnexpectedEof,
+            Self::Header => Self::Header,
+            Self::FieldTooLong => Self::FieldTooLong,
+            Self::SparseTooLong => Self::SparseTooLong,
+            Self::MissData => Self::MissData,
+            Self::UnrefData => Self::UnrefData,
+            Self::Io(error) => Self::Io(io::Error::new(error.kind(), error.to_string())),
+        }
+    }
+
     /// The `io::Error` a body read reports: the lower layer's own error stays
     /// untouched, an unexpected end keeps its kind, every other tar error is
     /// carried as a [`TarError`] so the caller can print Go's text.
@@ -101,7 +116,9 @@ enum Curr {
     /// `sparseFileReader` over a `regFileReader`.
     Sparse {
         physical: u64,
-        holes: Vec<(i64, i64)>,
+        /// `sparseFileReader.sp`; consumed from the front like Go's
+        /// `sr.sp = sr.sp[1:]`, in constant time.
+        holes: VecDeque<(i64, i64)>,
         pos: i64,
     },
 }
@@ -567,11 +584,11 @@ impl<R: Read> GoTar<R> {
     fn sparse_read(
         &mut self,
         physical: &mut u64,
-        holes: &mut Vec<(i64, i64)>,
+        holes: &mut VecDeque<(i64, i64)>,
         pos: &mut i64,
         buf: &mut [u8],
     ) -> (usize, Option<TarError>) {
-        let end_of_last = |holes: &[(i64, i64)]| {
+        let end_of_last = |holes: &VecDeque<(i64, i64)>| {
             let (offset, length) = holes[holes.len() - 1];
             offset + length
         };
@@ -612,7 +629,7 @@ impl<R: Read> GoTar<R> {
             done += nf;
             *pos += nf as i64;
             if *pos >= hole_end && holes.len() > 1 {
-                holes.remove(0);
+                holes.pop_front();
             }
         }
         let logical_after = end_of_last(holes) - *pos;
@@ -845,7 +862,7 @@ impl<R: Read> GoTar<R> {
             if is_header_only_type(header.typeflag) || !validate_sparse_entries(&spd, header.size) {
                 return Err(TarError::Header);
             }
-            let holes = invert_sparse_entries(&spd, header.size);
+            let holes = invert_sparse_entries(&spd, header.size).into();
             let physical = self.physical_remaining();
             self.curr = Curr::Sparse {
                 physical,
@@ -873,13 +890,23 @@ impl<R: Read> GoTar<R> {
 
     /// `Reader.Next`. `Ok(None)` is the clean end of the archive.
     pub(crate) fn next(&mut self) -> Result<Option<GoTarHeader>, TarError> {
-        if let Some(error) = self.sticky.take() {
-            return Err(error);
+        // `if tr.err != nil { return nil, tr.err }`: the error stays for every
+        // later call, and `tr.err = err` records `Next`'s own failure (and its
+        // clean `io.EOF`) the same way.
+        match self.sticky.as_ref().map(TarError::duplicate) {
+            Some(TarError::Eof) => return Ok(None),
+            Some(error) => return Err(error),
+            None => {}
         }
         match self.next_inner() {
             Ok(header) => Ok(Some(header)),
-            Err(TarError::Eof) => Ok(None),
-            Err(error) => Err(error),
+            Err(error) => {
+                self.sticky = Some(error.duplicate());
+                match error {
+                    TarError::Eof => Ok(None),
+                    error => Err(error),
+                }
+            }
         }
     }
 
@@ -915,7 +942,10 @@ impl<R: Read> GoTar<R> {
                     let buf = self.read_special_file()?;
                     pax = parse_pax(&buf)?;
                     if header.typeflag == TYPE_XGLOBAL {
-                        merge_pax(&mut header, &pax)?;
+                        // Go: `mergePAX(hdr, paxHdrs)` for a global header, whose
+                        // error `Next` drops: the caller still gets the
+                        // Name/Typeflag-only header.
+                        let _ = merge_pax(&mut header, &pax);
                         return Ok(header);
                     }
                 }
@@ -951,18 +981,267 @@ impl<R: Read> GoTar<R> {
 /// Reads the body of the member `next` returned, like `tar.Reader.Read`.
 impl<R: Read> Read for GoTar<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // `if tr.err != nil { return 0, tr.err }`
+        match self.sticky.as_ref().map(TarError::duplicate) {
+            Some(TarError::Eof) => return Ok(0),
+            Some(error) => return Err(error.into_io()),
+            None => {}
+        }
         let (n, error) = self.curr_read(buf);
+        // `if err != nil && err != io.EOF { tr.err = err }`, whatever `n` is.
+        let error = error.filter(|error| !matches!(error, TarError::Eof));
         if n > 0 {
             // Like `io.CopyN`, a caller that has all the bytes it asked for
             // never sees the error; `Next` reports it.
-            if let Some(error) = error.filter(|error| !matches!(error, TarError::Eof)) {
-                self.sticky = Some(error);
-            }
+            self.sticky = error;
             return Ok(n);
         }
         match error {
-            None | Some(TarError::Eof) => Ok(0),
-            Some(error) => Err(error.into_io()),
+            None => Ok(0),
+            Some(error) => {
+                self.sticky = Some(error.duplicate());
+                Err(error.into_io())
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+    use std::time::{Duration, Instant};
+
+    fn octal(value: u64, width: usize) -> Vec<u8> {
+        let mut out = format!("{value:0w$o}", w = width - 1).into_bytes();
+        out.push(0);
+        out
+    }
+
+    /// A USTAR header block with a valid checksum.
+    fn header(name: &[u8], size: u64, typeflag: u8) -> Vec<u8> {
+        let mut block = vec![0u8; BLOCK];
+        block[..name.len()].copy_from_slice(name);
+        block[100..108].copy_from_slice(&octal(0o644, 8));
+        block[108..116].copy_from_slice(&octal(0, 8));
+        block[116..124].copy_from_slice(&octal(0, 8));
+        block[124..136].copy_from_slice(&octal(size, 12));
+        block[136..148].copy_from_slice(&octal(0, 12));
+        block[156] = typeflag;
+        block[257..263].copy_from_slice(b"ustar\0");
+        block[263..265].copy_from_slice(b"00");
+        block[148..156].fill(b' ');
+        let sum: u32 = block.iter().map(|byte| u32::from(*byte)).sum();
+        block[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+        block
+    }
+
+    fn padded(mut data: Vec<u8>) -> Vec<u8> {
+        data.resize(data.len().div_ceil(BLOCK) * BLOCK, 0);
+        data
+    }
+
+    fn pax_record(key: &str, value: &str) -> Vec<u8> {
+        let body = format!(" {key}={value}\n");
+        let mut length = body.len() + 1;
+        while length.to_string().len() + body.len() != length {
+            length = length.to_string().len() + body.len();
+        }
+        format!("{length}{body}").into_bytes()
+    }
+
+    fn pax_member(typeflag: u8, records: &[(&str, &str)]) -> Vec<u8> {
+        let body: Vec<u8> = records
+            .iter()
+            .flat_map(|(key, value)| pax_record(key, value))
+            .collect();
+        let mut out = header(b"PaxHeader", body.len() as u64, typeflag);
+        out.extend(padded(body));
+        out
+    }
+
+    fn read_all(tar: &mut GoTar<impl Read>) -> io::Result<Vec<u8>> {
+        let mut out = Vec::new();
+        let mut buf = [0u8; 8192];
+        loop {
+            match tar.read(&mut buf)? {
+                0 => return Ok(out),
+                n => out.extend_from_slice(&buf[..n]),
+            }
+        }
+    }
+
+    /// PAX 0.1 sparse member: `entries` one-byte data fragments at even
+    /// offsets, so the reader walks `2 * entries + 1` holes and data runs.
+    fn sparse_archive(entries: usize) -> Vec<u8> {
+        let map = (0..entries)
+            .map(|index| format!("{},1", 2 * index))
+            .collect::<Vec<_>>()
+            .join(",");
+        let numblocks = entries.to_string();
+        let realsize = (2 * entries + 1).to_string();
+        let mut tar = pax_member(
+            b'x',
+            &[
+                ("GNU.sparse.major", "0"),
+                ("GNU.sparse.minor", "1"),
+                ("GNU.sparse.numblocks", &numblocks),
+                ("GNU.sparse.map", &map),
+                ("GNU.sparse.realsize", &realsize),
+            ],
+        );
+        tar.extend(header(b"a", entries as u64, b'0'));
+        tar.extend(padded(vec![b'x'; entries]));
+        tar.extend(vec![0u8; 2 * BLOCK]);
+        tar
+    }
+
+    fn expanded_sparse(entries: usize) -> Vec<u8> {
+        let mut out = vec![0u8; 2 * entries + 1];
+        for index in 0..entries {
+            out[2 * index] = b'x';
+        }
+        out
+    }
+
+    /// The hole queue is consumed from the front in constant time (Go's
+    /// `sr.sp = sr.sp[1:]`): 100,000 map entries fit the 1 MiB special-file
+    /// cap and used to cost seconds with `Vec::remove(0)` (3.5 s in debug).
+    #[test]
+    fn sparse_expansion_is_linear_in_the_map_size() {
+        let entries = 100_000;
+        let tar = sparse_archive(entries);
+        assert!(tar.len() < 1 << 20, "map must stay under the 1 MiB cap");
+        let started = Instant::now();
+        let mut reader = GoTar::new(Cursor::new(tar));
+        let member = reader.next().unwrap().expect("member");
+        assert_eq!(member.name, b"a");
+        let body = read_all(&mut reader).unwrap();
+        let elapsed = started.elapsed();
+        assert_eq!(body, expanded_sparse(entries));
+        assert!(reader.next().unwrap().is_none());
+        assert!(
+            elapsed < Duration::from_millis(1000),
+            "100k sparse entries took {elapsed:?} (quadratic hole queue?)"
+        );
+    }
+
+    /// Complexity form of the same check, immune to a slow machine: 2.5x the
+    /// entries must cost well under the 6.25x of a quadratic queue.
+    #[test]
+    fn sparse_expansion_time_grows_with_the_entry_count() {
+        let best_of_three = |entries: usize| {
+            let tar = sparse_archive(entries);
+            (0..3)
+                .map(|_| {
+                    let started = Instant::now();
+                    let mut reader = GoTar::new(Cursor::new(tar.clone()));
+                    reader.next().unwrap().expect("member");
+                    let body = read_all(&mut reader).unwrap();
+                    assert_eq!(body.len(), 2 * entries + 1);
+                    started.elapsed()
+                })
+                .min()
+                .unwrap()
+        };
+        let small = best_of_three(40_000).max(Duration::from_millis(1));
+        let large = best_of_three(100_000);
+        assert!(
+            large < small * 4,
+            "2.5x the entries took {large:?} against {small:?}"
+        );
+    }
+
+    /// Go's `Next` drops `mergePAX`'s error for a global header and returns
+    /// the Name/Typeflag header; the same record in a local header is an error.
+    #[test]
+    fn global_header_ignores_invalid_pax_fields_like_go() {
+        for (key, value) in [
+            ("uid", "zz"),
+            ("gid", "zz"),
+            ("size", "zz"),
+            ("mtime", "zz"),
+            ("atime", "1.2.3"),
+        ] {
+            let mut tar = pax_member(b'g', &[(key, value)]);
+            tar.extend(vec![0u8; 2 * BLOCK]);
+            let mut reader = GoTar::new(Cursor::new(tar));
+            let global = reader.next().unwrap().expect("global header is returned");
+            assert_eq!(global.typeflag, TYPE_XGLOBAL, "{key}={value}");
+
+            let mut local = pax_member(b'x', &[(key, value)]);
+            local.extend(header(b"a", 0, b'0'));
+            local.extend(vec![0u8; 2 * BLOCK]);
+            let mut reader = GoTar::new(Cursor::new(local));
+            assert!(
+                matches!(reader.next(), Err(TarError::Header)),
+                "local {key}={value}"
+            );
+        }
+    }
+
+    /// Yields `good` bytes, then one hard error, then more data: a reader
+    /// that recovers after the error, which Go's sticky `Reader.err` ignores.
+    struct Flaky {
+        data: Cursor<Vec<u8>>,
+        fail_at: u64,
+        failed: bool,
+    }
+
+    impl Read for Flaky {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if !self.failed && self.data.position() >= self.fail_at {
+                self.failed = true;
+                return Err(io::Error::other("boom"));
+            }
+            let limit = if self.failed {
+                buf.len()
+            } else {
+                buf.len()
+                    .min((self.fail_at - self.data.position()) as usize)
+            };
+            self.data.read(&mut buf[..limit])
+        }
+    }
+
+    #[test]
+    fn read_errors_are_sticky_even_without_data() {
+        let mut tar = header(b"a", 1024, b'0');
+        tar.extend(vec![b'y'; 1024]);
+        tar.extend(vec![0u8; 2 * BLOCK]);
+        let source = Flaky {
+            data: Cursor::new(tar),
+            fail_at: (BLOCK + 100) as u64,
+            failed: false,
+        };
+        let mut reader = GoTar::new(source);
+        reader.next().unwrap().expect("member");
+        let mut buf = [0u8; 4096];
+        // 100 bytes arrive; the error is held back (`io.CopyN` has no use for it).
+        assert_eq!(reader.read(&mut buf).unwrap(), 100);
+        // Now the error comes with no data and is remembered.
+        let first = reader.read(&mut buf).unwrap_err();
+        assert_eq!(first.to_string(), "boom");
+        // The source works again, yet every call repeats the error.
+        let again = reader.read(&mut buf).unwrap_err();
+        assert_eq!(again.to_string(), "boom");
+        for _ in 0..2 {
+            match reader.next() {
+                Err(TarError::Io(error)) => assert_eq!(error.to_string(), "boom"),
+                other => panic!("Next must repeat the sticky error, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn next_remembers_its_own_end_of_archive() {
+        let mut tar = header(b"a", 0, b'0');
+        tar.extend(vec![0u8; 2 * BLOCK]);
+        let mut reader = GoTar::new(Cursor::new(tar));
+        assert!(reader.next().unwrap().is_some());
+        assert!(reader.next().unwrap().is_none());
+        assert!(reader.next().unwrap().is_none());
+        let mut buf = [0u8; 8];
+        assert_eq!(reader.read(&mut buf).unwrap(), 0);
     }
 }

@@ -1106,7 +1106,7 @@ mcp-prompts-differential: mcp-ordered-fixtures-check
 .PHONY: zip-errors-differential
 zip-errors-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/zipgen -check
-	$(CARGO) test -p symvault-sync --test zip_errors_contract --locked
+	$(CARGO) test -p symvault-sync --test zip_errors_contract --test zip_limit_contract --locked
 
 .PHONY: cxf-import-differential
 cxf-import-differential:

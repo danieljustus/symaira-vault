@@ -1,0 +1,496 @@
+{
+ "commit": "ab1fad20166c7658e0f50bdd3b8fdc9185c1a1d4",
+ "source_files": [
+  "internal/importer/cxf.go",
+  "internal/importer/importer.go",
+  "internal/importer/onepux.go",
+  "internal/importer/totp.go",
+  "go.mod",
+  "go.sum"
+ ],
+ "source_digest": "82d561de3ed081bdc5470b61a48f6983e8d935fef0955dc46b7bc22f59558057",
+ "generator_digest": "3e5d63548fe93839653cd646b8d8f07c7bc6dfce34c02ffed0e7e30fc8e90b16",
+ "limit": 104857600,
+ "cases": [
+  {
+   "id": "limit-1pux-limit-minus1-good",
+   "importer": "1pux",
+   "zeros": 104857599,
+   "variant": "good",
+   "archive_sha256": "558914325e2d2999bef3c4df118beb3d3397278c3c04a13e36e98eae7edb89e0",
+   "expected": {
+    "error": "parse export.json: invalid character '\\x00' looking for beginning of value"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-minus1-bad-crc",
+   "importer": "1pux",
+   "zeros": 104857599,
+   "variant": "bad-crc",
+   "archive_sha256": "9391905b6d1d98da620ece56555f7eacd50468b8dee4238ecac37dcc97fc8604",
+   "expected": {
+    "error": "read export.json: zip: checksum error"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-minus1-crc-zero",
+   "importer": "1pux",
+   "zeros": 104857599,
+   "variant": "crc-zero",
+   "archive_sha256": "78befb6d23c635f40ac5d15cb77b71cfe99ec121949fc26a65affcaafd71125c",
+   "expected": {
+    "error": "parse export.json: invalid character '\\x00' looking for beginning of value"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-minus1-size-minus1",
+   "importer": "1pux",
+   "zeros": 104857599,
+   "variant": "size-minus1",
+   "archive_sha256": "0ca35f432ac8b67b40bf3a9c9478a24359a47ab1d8acf5e8ad2e7f4be36e0e96",
+   "expected": {
+    "error": "read export.json: zip: not a valid zip file"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-minus1-size-plus1",
+   "importer": "1pux",
+   "zeros": 104857599,
+   "variant": "size-plus1",
+   "archive_sha256": "8fad3522b22ece85d2595091add3905e3267e9b12e193cd03cc15ca9bba23366",
+   "expected": {
+    "error": "read export.json: unexpected EOF"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-minus1-size-zero",
+   "importer": "1pux",
+   "zeros": 104857599,
+   "variant": "size-zero",
+   "archive_sha256": "b32ac6ff6157b1a00072c039bfbcc6c71ac2e7311117cd37b982b904320d8f00",
+   "expected": {
+    "error": "read export.json: zip: not a valid zip file"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-minus1-dd-good",
+   "importer": "1pux",
+   "zeros": 104857599,
+   "variant": "dd-good",
+   "archive_sha256": "07ea89c16d408d9febe60f3f6c37aead5ec589a18ef871818d42a1d9217069de",
+   "expected": {
+    "error": "parse export.json: invalid character '\\x00' looking for beginning of value"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-minus1-dd-bad-crc",
+   "importer": "1pux",
+   "zeros": 104857599,
+   "variant": "dd-bad-crc",
+   "archive_sha256": "0e7eefbaccd866fcb54d791b88ecf4957f43a257587d1808ca21d706b4746693",
+   "expected": {
+    "error": "read export.json: zip: checksum error"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-good",
+   "importer": "1pux",
+   "zeros": 104857600,
+   "variant": "good",
+   "archive_sha256": "fdc455ef9ddea9d697b2122a505ef2a5d3f88c6d15375d61acdedad383f970fd",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-bad-crc",
+   "importer": "1pux",
+   "zeros": 104857600,
+   "variant": "bad-crc",
+   "archive_sha256": "93682d4a56abc2d1c8a35d7d8ed19cf15301d86ce2e5433a1c02f2df17ef2f16",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-crc-zero",
+   "importer": "1pux",
+   "zeros": 104857600,
+   "variant": "crc-zero",
+   "archive_sha256": "07e2064fd550bbb97d785491e5db2fbbedc3ad57361f1d06d965bb7beca4dc40",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-size-minus1",
+   "importer": "1pux",
+   "zeros": 104857600,
+   "variant": "size-minus1",
+   "archive_sha256": "ac2efba2427cde50f9d8c659ace2d42bbc0f04a81242816c01354565c84ea5f3",
+   "expected": {
+    "error": "read export.json: zip: not a valid zip file"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-size-plus1",
+   "importer": "1pux",
+   "zeros": 104857600,
+   "variant": "size-plus1",
+   "archive_sha256": "c681ccad410e7cf711f3255cf8ebb8485169748d022856ef9d6be5d624897694",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-size-zero",
+   "importer": "1pux",
+   "zeros": 104857600,
+   "variant": "size-zero",
+   "archive_sha256": "33f3a17bc232683b49381e46a73ee0ca67983e8f814395093186ee1fd47bc9bc",
+   "expected": {
+    "error": "read export.json: zip: not a valid zip file"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-dd-good",
+   "importer": "1pux",
+   "zeros": 104857600,
+   "variant": "dd-good",
+   "archive_sha256": "3ea1dcd0ed121f20ef5ed9e068c57dd837d3c65749b11457502182b960f89b89",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-dd-bad-crc",
+   "importer": "1pux",
+   "zeros": 104857600,
+   "variant": "dd-bad-crc",
+   "archive_sha256": "546d66a468b351810d245fa0cec892ff83205db9ef0980d0c8e1cb7cc278bcd7",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-plus1-good",
+   "importer": "1pux",
+   "zeros": 104857601,
+   "variant": "good",
+   "archive_sha256": "041ceee74a5cca2a180a2f77615c8c1bb0038638e5279765442df1eeb2677787",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-plus1-bad-crc",
+   "importer": "1pux",
+   "zeros": 104857601,
+   "variant": "bad-crc",
+   "archive_sha256": "7b823a9fd8091b3c11ccbaeaa667a4b175d5981ec7a212d7b408d00955f6147c",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-plus1-crc-zero",
+   "importer": "1pux",
+   "zeros": 104857601,
+   "variant": "crc-zero",
+   "archive_sha256": "9f41e8ac2f2a8aa42cdb4c8edb742d844b2280811b2b2f4b4ad98eb5e1bcd3cf",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-plus1-size-minus1",
+   "importer": "1pux",
+   "zeros": 104857601,
+   "variant": "size-minus1",
+   "archive_sha256": "264c31162cd2afefbcfec3de71b3be743422413f436f5bec0f92a2fce7c0da48",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-plus1-size-plus1",
+   "importer": "1pux",
+   "zeros": 104857601,
+   "variant": "size-plus1",
+   "archive_sha256": "a3335a1cb3b387ca12cc9c193cefe1cd46e19db353e4249ed58ad9508ff4c425",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-plus1-size-zero",
+   "importer": "1pux",
+   "zeros": 104857601,
+   "variant": "size-zero",
+   "archive_sha256": "d0f09bbfa138e1565a356628e85a1e42612add50640a60d0f38a77e67182562e",
+   "expected": {
+    "error": "read export.json: zip: not a valid zip file"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-plus1-dd-good",
+   "importer": "1pux",
+   "zeros": 104857601,
+   "variant": "dd-good",
+   "archive_sha256": "4714e87541b22ea0f069661570b89be4daae5942ab0a134886addfa04744c699",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-1pux-limit-plus1-dd-bad-crc",
+   "importer": "1pux",
+   "zeros": 104857601,
+   "variant": "dd-bad-crc",
+   "archive_sha256": "31d427ee79cec5100326686b3a91895f292d2a9ba117fb358571e9d50a4de68b",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-minus1-good",
+   "importer": "cxf",
+   "zeros": 104857599,
+   "variant": "good",
+   "archive_sha256": "ab5f41567773cfa7ba358e9d906b772cb20f4580c80697f8747410fd7ba54382",
+   "expected": {
+    "error": "parse CXF JSON document: invalid character '\\x00' looking for beginning of value"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-minus1-bad-crc",
+   "importer": "cxf",
+   "zeros": 104857599,
+   "variant": "bad-crc",
+   "archive_sha256": "37872a8a1d093165707dbb0b5e0cccd2d463b37e25298acea017eb2353354a12",
+   "expected": {
+    "error": "read cxf.json: zip: checksum error"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-minus1-crc-zero",
+   "importer": "cxf",
+   "zeros": 104857599,
+   "variant": "crc-zero",
+   "archive_sha256": "37509d0516b22c11288e681574e32865ec00f3a00bbb36ffb277f898a9c8368a",
+   "expected": {
+    "error": "parse CXF JSON document: invalid character '\\x00' looking for beginning of value"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-minus1-size-minus1",
+   "importer": "cxf",
+   "zeros": 104857599,
+   "variant": "size-minus1",
+   "archive_sha256": "9e78588629a317c7b5923d89fb859ebc5e8d651839d118baa766e93792078806",
+   "expected": {
+    "error": "read cxf.json: zip: not a valid zip file"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-minus1-size-plus1",
+   "importer": "cxf",
+   "zeros": 104857599,
+   "variant": "size-plus1",
+   "archive_sha256": "c7857a9d485ec86e3f8a287cbcedc11552548c21d80b3784d268ee6220c65af4",
+   "expected": {
+    "error": "read cxf.json: unexpected EOF"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-minus1-size-zero",
+   "importer": "cxf",
+   "zeros": 104857599,
+   "variant": "size-zero",
+   "archive_sha256": "262ab848ce090e745998e53ca1a875df147e242f0a1941afba180804c086a03e",
+   "expected": {
+    "error": "read cxf.json: zip: not a valid zip file"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-minus1-dd-good",
+   "importer": "cxf",
+   "zeros": 104857599,
+   "variant": "dd-good",
+   "archive_sha256": "1c718b2e26a76cd630c1a99b8a2240453ca0f8f451a84720d127c2d2939ccf4b",
+   "expected": {
+    "error": "parse CXF JSON document: invalid character '\\x00' looking for beginning of value"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-minus1-dd-bad-crc",
+   "importer": "cxf",
+   "zeros": 104857599,
+   "variant": "dd-bad-crc",
+   "archive_sha256": "69357370a52b90ec1dc09150cf039f920062c074e5054f329a27da2cab2092fe",
+   "expected": {
+    "error": "read cxf.json: zip: checksum error"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-good",
+   "importer": "cxf",
+   "zeros": 104857600,
+   "variant": "good",
+   "archive_sha256": "071e245dbbaa8c2d026d5dee42fda11f5f9c9124894ebd9667f952e0790bee32",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-bad-crc",
+   "importer": "cxf",
+   "zeros": 104857600,
+   "variant": "bad-crc",
+   "archive_sha256": "d3b120730727b536d9258be8e8f118d4d42a9ea803866cb5e00d535ac93afc2e",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-crc-zero",
+   "importer": "cxf",
+   "zeros": 104857600,
+   "variant": "crc-zero",
+   "archive_sha256": "bebef86f4300835bc91206f9e05fab5c164e9ff371989ee545fbd950c4feae4c",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-size-minus1",
+   "importer": "cxf",
+   "zeros": 104857600,
+   "variant": "size-minus1",
+   "archive_sha256": "4b72026403c0fd51b440328d61ba10d0e22d16d234f44a950b79ea8ee7c73bb9",
+   "expected": {
+    "error": "read cxf.json: zip: not a valid zip file"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-size-plus1",
+   "importer": "cxf",
+   "zeros": 104857600,
+   "variant": "size-plus1",
+   "archive_sha256": "0196abea309ed0ab318fad525513964ab3b8633cc1830232ca9d8fb74eff4c27",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-size-zero",
+   "importer": "cxf",
+   "zeros": 104857600,
+   "variant": "size-zero",
+   "archive_sha256": "42cd8db1608ecb7391fccbd6f87483fbaf7b0c7e22f60dc9061e11b7b56ad582",
+   "expected": {
+    "error": "read cxf.json: zip: not a valid zip file"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-dd-good",
+   "importer": "cxf",
+   "zeros": 104857600,
+   "variant": "dd-good",
+   "archive_sha256": "e63f2264c878f933c64281a3ea724f6162e22982c941f62adae691dc09be2c5f",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-dd-bad-crc",
+   "importer": "cxf",
+   "zeros": 104857600,
+   "variant": "dd-bad-crc",
+   "archive_sha256": "a9ded2fb9996b20d41908b27e204ef3f7ecb54b874086185234497be2bdabd31",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-plus1-good",
+   "importer": "cxf",
+   "zeros": 104857601,
+   "variant": "good",
+   "archive_sha256": "94f891c83315b2c23d9ca6583303cf9236437d3b4acb59d441fb50b5aba11ff6",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-plus1-bad-crc",
+   "importer": "cxf",
+   "zeros": 104857601,
+   "variant": "bad-crc",
+   "archive_sha256": "3731439ed3d266e5c96367a22990b8250b77ab82dff406bc4411308e239f8a18",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-plus1-crc-zero",
+   "importer": "cxf",
+   "zeros": 104857601,
+   "variant": "crc-zero",
+   "archive_sha256": "876c85d669061d14070b6d401c898665664636500b931f4e305953547030ab85",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-plus1-size-minus1",
+   "importer": "cxf",
+   "zeros": 104857601,
+   "variant": "size-minus1",
+   "archive_sha256": "5c4c5fcbb4815fd1b67b3b87c36b6065f487251163e9ae00e423c16ad7d1d5a6",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-plus1-size-plus1",
+   "importer": "cxf",
+   "zeros": 104857601,
+   "variant": "size-plus1",
+   "archive_sha256": "27b628112e00688fa17d06c27003ec48f5f55baf3192ffc0223c4e9020edf004",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-plus1-size-zero",
+   "importer": "cxf",
+   "zeros": 104857601,
+   "variant": "size-zero",
+   "archive_sha256": "242c5dd324c94e94d700b9c3f13a597cf936d6be59ffd5ad1f5fc08ad1b32119",
+   "expected": {
+    "error": "read cxf.json: zip: not a valid zip file"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-plus1-dd-good",
+   "importer": "cxf",
+   "zeros": 104857601,
+   "variant": "dd-good",
+   "archive_sha256": "af8af9c09394e78a2eb8f3ad35870a0fc37c24f8cd15c727ab2f6e78ae060b0f",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  },
+  {
+   "id": "limit-cxf-limit-plus1-dd-bad-crc",
+   "importer": "cxf",
+   "zeros": 104857601,
+   "variant": "dd-bad-crc",
+   "archive_sha256": "579a8130ccf8e2bd8e48da3c104b4239eed9cdd3413dc22d9b157ce588531967",
+   "expected": {
+    "error": "zip entry exceeds maximum size of 104857600 bytes"
+   }
+  }
+ ]
+}

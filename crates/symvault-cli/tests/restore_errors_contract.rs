@@ -22,6 +22,12 @@ struct Fixture {
 }
 
 #[derive(Deserialize)]
+struct TarPart {
+    b64: String,
+    repeat: usize,
+}
+
+#[derive(Deserialize)]
 struct Case {
     name: String,
     #[serde(default)]
@@ -30,7 +36,11 @@ struct Case {
     #[serde(default)]
     unix_only_reason: String,
     wrap: String,
+    #[serde(default)]
     tar_b64: String,
+    /// Archives with long runs of one byte: `b64` decoded, `repeat` times.
+    #[serde(default)]
+    tar_parts: Vec<TarPart>,
     #[serde(default)]
     pre: Vec<Pre>,
     dest: String,
@@ -296,9 +306,7 @@ fn run_case(case: &Case) -> Result<(), String> {
     fs::create_dir_all(root_path.join("outside")).unwrap();
     set_mode(&root_path.join("outside"), 0o700);
     seed(&root_path, &case.pre);
-    let tar = base64::engine::general_purpose::STANDARD
-        .decode(&case.tar_b64)
-        .unwrap();
+    let tar = case_tar(case);
     let archive = root_path.join("input.tar.gz");
     if !case.missing {
         fs::write(&archive, wrapped(&case.wrap, &tar)).unwrap();
@@ -355,13 +363,34 @@ fn run_case(case: &Case) -> Result<(), String> {
     }
 }
 
+/// The recorded tar stream, expanding the run-length `tar_parts` form.
+fn case_tar(case: &Case) -> Vec<u8> {
+    let decode = |text: &str| {
+        base64::engine::general_purpose::STANDARD
+            .decode(text)
+            .unwrap()
+    };
+    if case.tar_parts.is_empty() {
+        return decode(&case.tar_b64);
+    }
+    assert!(case.tar_b64.is_empty(), "{}: both tar forms set", case.name);
+    let mut tar = Vec::new();
+    for part in &case.tar_parts {
+        let unit = decode(&part.b64);
+        for _ in 0..part.repeat {
+            tar.extend_from_slice(&unit);
+        }
+    }
+    tar
+}
+
 #[test]
 fn restore_errors_and_side_effects_match_go_corpus() {
     let fixture: Fixture = serde_json::from_str(include_str!(
         "../../../testdata/port/sync/restore-errors.json"
     ))
     .unwrap();
-    assert_eq!(fixture.cases.len(), 281, "corpus size changed");
+    assert_eq!(fixture.cases.len(), 290, "corpus size changed");
     let mut failures = Vec::new();
     let mut executed = 0;
     for case in &fixture.cases {
@@ -379,8 +408,8 @@ fn restore_errors_and_side_effects_match_go_corpus() {
             failures.push(message);
         }
     }
-    // 281 recorded cases, 14 of them Unix-only: 267 run on Windows, all 281 on Unix.
-    assert!(executed >= 267, "only {executed} cases executed");
+    // 290 recorded cases, 14 of them Unix-only: 276 run on Windows, all 290 on Unix.
+    assert!(executed >= 276, "only {executed} cases executed");
     assert!(
         failures.is_empty(),
         "{} of {} cases diverge from Go:\n{}",
@@ -492,9 +521,7 @@ fn colon_member_names_are_refused_on_windows() {
         assert!(case.unix_only, "{name} must stay Unix-only");
         let root = tempfile::tempdir().unwrap();
         let archive = root.path().join("input.tar.gz");
-        let tar = base64::engine::general_purpose::STANDARD
-            .decode(&case.tar_b64)
-            .unwrap();
+        let tar = case_tar(&case);
         fs::write(&archive, wrapped(&case.wrap, &tar)).unwrap();
         let dest = root.path().join("vault");
         let error = backup_commands::restore(&dest, &archive).unwrap_err();

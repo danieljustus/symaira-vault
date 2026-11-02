@@ -22,6 +22,8 @@ const FILE_HEADER_LEN: usize = 30;
 const DIRECTORY_HEADER_LEN: usize = 46;
 const DIRECTORY_END_LEN: usize = 22;
 const DATA_DESCRIPTOR_LEN: usize = 16;
+/// `compress/flate`'s history window: the size of its output flushes.
+const FLATE_WINDOW: usize = 32 * 1024;
 const DIRECTORY64_LOC_LEN: usize = 20;
 const DIRECTORY64_END_LEN: usize = 56;
 const ZIP64_EXTRA_ID: u16 = 0x0001;
@@ -433,10 +435,23 @@ impl<'a> GoZip<'a> {
 
     /// `io.ReadAll(io.LimitReader(file.Open(), limit))`.
     ///
-    /// The result carries at most `limit` bytes; a member that reaches the
-    /// limit is returned as is (the caller turns `len == limit` into Go's
-    /// "exceeds maximum size" error), exactly as Go stops reading there
-    /// without ever observing the member's checksum.
+    /// The result carries at most `limit` bytes. `LimitReader` answers
+    /// `io.EOF` as soon as `limit` bytes were handed out, without asking the
+    /// member for more, so whether the member's own end (checksum, declared
+    /// size, data descriptor, a damaged stream tail) is ever observed depends
+    /// on whether that end already arrived *with* the last bytes:
+    ///
+    /// * stored: `SectionReader` returns the last bytes without an error; the
+    ///   end is a separate, never issued read, so a member of exactly `limit`
+    ///   bytes is returned as is;
+    /// * deflate: `compress/flate` hands out its output in 32 KiB window
+    ///   flushes and reports the end of the final block together with the
+    ///   unflushed remainder only. A stream that ends on a window boundary
+    ///   (`limit` is a multiple of 32 KiB) has delivered its last byte one
+    ///   read before its end, so the end stays unobserved; with a remainder
+    ///   the end comes with the last bytes and is checked like any other.
+    ///
+    /// The caller turns `len == limit` into Go's "exceeds maximum size" error.
     pub fn read_limited(&self, file: &GoZipFile, limit: usize) -> Result<Vec<u8>, EntryError> {
         let body_offset = self.find_body_offset(file).map_err(EntryError::Open)?;
         if file.name.last() == Some(&b'/') {
@@ -470,10 +485,15 @@ impl<'a> GoZip<'a> {
         if observed as u64 > file.uncompressed_size {
             return Err(EntryError::Read(ZipError::Format));
         }
-        // Go stops reading at the limit. A stored member's end of file is then
-        // never observed; a deflate stream that ends exactly there still
-        // delivers its end together with the last bytes.
-        if out.len() > limit || (file.method == METHOD_STORE && out.len() >= limit) {
+        // Go stops reading at the limit (see above for when the end of the
+        // member is still seen there).
+        let end_after_last_flush = file.method == METHOD_DEFLATE
+            && out.len() == limit
+            && limit.is_multiple_of(FLATE_WINDOW);
+        if out.len() > limit
+            || (file.method == METHOD_STORE && out.len() >= limit)
+            || end_after_last_flush
+        {
             out.truncate(limit);
             return Ok(out);
         }

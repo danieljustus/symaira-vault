@@ -440,9 +440,17 @@ impl<'a> Inflater<'a> {
                 return Err(FlateEnd::Corrupt(self.roffset));
             }
             let start = self.out.len() - dist;
-            for k in 0..length {
-                let byte = self.out[start + k];
-                self.out.push(byte);
+            if dist == 1 {
+                // A run of one byte (the common bomb shape): fill, don't loop.
+                let byte = self.out[start];
+                self.out.resize(self.out.len() + length, byte);
+            } else if dist >= length {
+                self.out.extend_from_within(start..start + length);
+            } else {
+                for k in 0..length {
+                    let byte = self.out[start + k];
+                    self.out.push(byte);
+                }
             }
         }
     }

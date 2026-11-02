@@ -9,7 +9,7 @@
   "go.sum"
  ],
  "source_digest": "82d561de3ed081bdc5470b61a48f6983e8d935fef0955dc46b7bc22f59558057",
- "generator_digest": "4a628512042d598221def396c8f88c6b30ffe4c9d3d41b3ae9cb4addbfeeb31b",
+ "generator_digest": "38a643311de4a4c370ad280d2f88b393cfe6acc5f72e8ff41b793588d2e5262f",
  "cases": [
   {
    "id": "zip-1pux-ok-deflate",

@@ -68,6 +68,45 @@ type node struct {
 	Target string `json:"target,omitempty"`
 }
 
+// tarPart is `b64` decoded and repeated `repeat` times; a tar stream is the
+// concatenation of its parts.
+type tarPart struct {
+	B64    string `json:"b64"`
+	Repeat int    `json:"repeat"`
+}
+
+// minTarRun is the shortest run of one byte stored as a repeat count.
+const minTarRun = 8192
+
+// compactTar returns the plain base64 form for ordinary archives, or the
+// run-length parts for archives holding long runs of one byte.
+func compactTar(data []byte) (string, []tarPart) {
+	var parts []tarPart
+	literal := 0
+	flush := func(end int) {
+		if end > literal {
+			parts = append(parts, tarPart{base64.StdEncoding.EncodeToString(data[literal:end]), 1})
+		}
+	}
+	for i := 0; i < len(data); {
+		j := i
+		for j < len(data) && data[j] == data[i] {
+			j++
+		}
+		if j-i >= minTarRun {
+			flush(i)
+			parts = append(parts, tarPart{base64.StdEncoding.EncodeToString(data[i : i+1]), j - i})
+			literal = j
+		}
+		i = j
+	}
+	if parts == nil {
+		return base64.StdEncoding.EncodeToString(data), nil
+	}
+	flush(len(data))
+	return "", parts
+}
+
 type restoreCase struct {
 	Name string `json:"name"`
 	// UnixOnly marks a case whose recorded outcome cannot be reproduced on
@@ -75,8 +114,11 @@ type restoreCase struct {
 	UnixOnly       bool   `json:"unix_only,omitempty"`
 	UnixOnlyReason string `json:"unix_only_reason,omitempty"`
 	Wrap           string `json:"wrap"`
-	TarB64         string `json:"tar_b64"`
-	Pre            []pre  `json:"pre,omitempty"`
+	// TarB64 is the whole tar stream; large archives use TarParts instead, so
+	// a megabyte-long run of one byte is stored as a repeat count.
+	TarB64   string    `json:"tar_b64,omitempty"`
+	TarParts []tarPart `json:"tar_parts,omitempty"`
+	Pre      []pre     `json:"pre,omitempty"`
 	// Dest is the restore destination relative to the case root.
 	Dest string `json:"dest"`
 	// Missing leaves the archive file absent (the CLI's own stat check).
@@ -381,12 +423,14 @@ func runAt(name, wrap string, format tar.Format, members []member, trailer bool,
 			osError = true
 		}
 	}
+	tarB64, tarParts := compactTar(tarBytes)
 	return restoreCase{
 		Name:           name,
 		UnixOnly:       unixReason != "",
 		UnixOnlyReason: unixReason,
 		Wrap:           wrap,
-		TarB64:         base64.StdEncoding.EncodeToString(tarBytes),
+		TarB64:         tarB64,
+		TarParts:       tarParts,
 		Pre:            setup,
 		Dest:           destRel,
 		Missing:        missing,
@@ -758,6 +802,17 @@ func buildCases() []restoreCase {
 	withHeader("pax/mtime-invalid", nil, extBlocks('x', paxRecords("mtime", "zz"), nil))
 	withHeader("pax/uid-invalid", nil, extBlocks('x', paxRecords("uid", "zz"), nil))
 	withHeader("pax/global-then-member", nil, extBlocks('g', paxRecords("comment", "g"), nil))
+	// Go's Next ignores mergePAX's error for a global ('g') header: the invalid
+	// record is dropped and the caller gets the Name/Typeflag-only header, so
+	// restore reports the unsupported member type instead of a PAX field error.
+	// The same records in a local ('x') header are errors (cases above).
+	for _, c := range []struct{ key, value string }{
+		{"uid", "zz"}, {"gid", "zz"}, {"uid", "99999999999999999999"}, {"size", "zz"},
+		{"size", "-1"}, {"mtime", "zz"}, {"atime", "1.2.3"}, {"ctime", "zz"},
+	} {
+		withHeader("pax/global-invalid-"+c.key+"-"+c.value, nil, extBlocks('g', paxRecords(c.key, c.value), nil))
+	}
+	withHeader("pax/global-malformed-record", nil, extBlocks('g', []byte("garbage"), nil))
 	withHeader("pax/longname-only-in-name-field-prefix", func(data []byte) []byte {
 		data = patchHeader(data, 5, 0, "fieldcase"+strings.Repeat("\x00", 91))
 		return patchHeader(data, 5, 345, "entries\x00")
