@@ -2236,6 +2236,57 @@ fn rooted_walk_rejects_entry_count_overflow() {
         Err(StoreError::ValueLimit(_))
     ));
 }
+#[cfg(unix)]
+#[test]
+fn vault_root_walk_skips_git_like_go_legacy_scan() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    // A `.git` object directory the walker cannot read stands in for one that
+    // `git gc --auto` removes while the walk runs; Go never descends into it.
+    fs::create_dir_all(temp.path().join(".git/objects/42")).unwrap();
+    fs::write(temp.path().join(".git/objects/42/obj"), b"x").unwrap();
+    fs::set_permissions(
+        temp.path().join(".git/objects"),
+        fs::Permissions::from_mode(0o000),
+    )
+    .unwrap();
+    fs::create_dir_all(temp.path().join("entries/.git")).unwrap();
+    fs::write(temp.path().join("entries/.git/kept.age"), b"1").unwrap();
+    fs::write(temp.path().join("legacy.age"), b"2").unwrap();
+    let root = fs::File::open(temp.path()).unwrap();
+    let walked = rooted::walk_vault_root_with_limits(&root, temp.path(), None, None);
+    fs::set_permissions(
+        temp.path().join(".git/objects"),
+        fs::Permissions::from_mode(0o700),
+    )
+    .unwrap();
+    let mut relative = walked
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.relative)
+        .collect::<Vec<_>>();
+    relative.sort();
+    let expected: Vec<PathBuf> = [
+        ".git",
+        "entries",
+        "entries/.git",
+        "entries/.git/kept.age",
+        "legacy.age",
+    ]
+    .iter()
+    .map(PathBuf::from)
+    .collect();
+    assert_eq!(relative, expected);
+    // The plain walk still reports everything (and fails on the unreadable dir).
+    let root = fs::File::open(temp.path()).unwrap();
+    assert!(
+        rooted::walk_with_limits(&root, temp.path(), None, None)
+            .unwrap()
+            .iter()
+            .any(|entry| entry.relative == Path::new(".git/objects/42/obj"))
+    );
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 struct Store004Fixture {
     schema_version: u32,
