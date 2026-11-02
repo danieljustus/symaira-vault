@@ -75,3 +75,35 @@ Go oracle, never a reading of the source alone.
   memory address or nil pointer dereference`, exit 2 with a goroutine trace.
 - **Expected:** a validation error (`profiles.p: profile must not be null`).
 - **Rust:** returns that error (declared deviation, CONFIG-RESID).
+
+## 8. `Config.SaveTo` drops `mcp.oauth`
+
+- **Where:** the `raw.MCP = &MCPConfig{...}` copy in `config_save.go` lists the fields one by one and never copies
+  `OAuth`.
+- **Repro:** `mcp: {oauth: {access_token_ttl: 2h, refresh_token_ttl: 90m}}`, then `agent uninstall other --yes`:
+  the `oauth` block is gone and the OAuth server falls back to its default token lifetimes.
+- **Expected:** the block survives.
+- **Rust:** keeps it (`write_mcp`), a declared difference like 1 and 2 (`declared_line_differences` of
+  `rewrite.json`, case `mcp_oauth`; live: `agent_uninstall_keeps_every_mcp_field_go_keeps`).
+
+## 9. yaml.v3 writes literal blocks that start with a line break or a space wrongly
+
+- **Where:** `gopkg.in/yaml.v3` emitter, hit by `Config.SaveTo` for any string value.
+- **Repro (a):** `scan_patterns: [{name: n, pattern: p, description: "\nlead", severity: low}]`, or
+  `agents.bot.allowedPaths: ["\nlead", " sp\nx"]`, then any rewriting command. The saved file contains
+  `severity: |4-` / `- |4-` with the content indented by the emitter's depth, and **neither Go nor Rust can load
+  it** (`yaml: line N: did not find expected key`): the `4` indentation indicator is relative to the parent
+  column while the emitter wrote the content at its own indent, and the two agree only at mapping depth 4 / 8.
+  Recorded: cases `leading_break_list_item`, `leading_break_scan_pattern` (`go_saved_faithful: false`).
+- **Repro (b):** `vault.path: "\nlead\nx"`: the file loads, but as `lead\nx` (the leading break is lost).
+- **Expected:** a double-quoted scalar for these strings (or a correct indicator).
+- **Rust:** writes them double-quoted (`yaml::string_value`), so the file always loads and reloads equal; every
+  other string, multi-line included, is byte-identical to Go.
+
+## 10. `Config.SaveTo` also drops `mcp.perplexity`, `mcp.approval_required`, `git.author`, `git.email`, `clipboard.printByDefault`
+
+- Same `raw` copy. `mcp.perplexity.api_key` and `base_url` are lost on every rewrite, so a configured Perplexity
+  client stops working silently after `agent install`. Recorded in `dropped_by_save_to` of `rewrite.json` (case
+  `all_fields_non_zero`).
+- **Rust:** does not model them and drops them like Go (fix both sides together).
+

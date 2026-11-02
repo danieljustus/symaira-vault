@@ -3,9 +3,10 @@
 //!
 //! Go's `SaveTo` drops the top-level `paymentPolicies` and `security`
 //! sections; Rust keeps them on purpose (`docs/rust-port/upstream-go-bugs.md`).
-//! Those two sections are the only declared difference: the Rust file minus
-//! them must equal Go's file byte for byte, and the Rust file must still hold
-//! them.
+//! Those two sections and the nested `mcp.oauth` block (also dropped by Go) are
+//! the only declared differences: the Rust file minus them must equal Go's
+//! file byte for byte, the Rust file must still hold them, and both the Rust
+//! and the Go loader must accept the file Rust wrote.
 
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
@@ -52,6 +53,52 @@ scan_patterns:
     severity: high
 ";
 
+/// A multi-line description in a literal block, a multi-line list item and a
+/// multi-line map key survive a rewrite (yaml.v3 block scalars).
+const MULTILINE: &str = "\
+vaultDir: /fixture/vault
+agents:
+  bot:
+    canWrite: true
+    allowedPaths: [\"a\\nb\", plain]
+    perToolRedactFields:
+      get: []
+  other:
+    canWrite: true
+scan_patterns:
+  - name: aws
+    pattern: '^AKIA'
+    description: |
+      Matches AWS keys.
+      Second line.
+    severity: high
+";
+
+/// Every MCP field Go keeps (approval mTLS, the trusted-proxy allowlist,
+/// OTLP), in a mix with `oauth`, which Go drops.
+const MCP: &str = "\
+vaultDir: /fixture/vault
+agents:
+  other:
+    canWrite: true
+mcp:
+  port: 9091
+  bind: 127.0.0.1
+  httpTokenFile: /tmp/tok
+  otlp_endpoint: localhost:4317
+  stdio: true
+  read_timeout: 1m30s
+  trusted_proxy_ips: [10.0.0.1, 192.168.0.0/24]
+  tls_cert_file: /c.pem
+  tls_key_file: /k.pem
+  approval_tls_cert_file: certs/approval-client.pem
+  approval_tls_key_file: certs/approval-client.key
+  mtls_enabled: true
+  oauth:
+    access_token_ttl: 2h
+    refresh_token_ttl: 90m
+";
+
 /// `doctor --fix` repairs: zero audit size (fix 3) and a negative clipboard
 /// timer (fix 4) next to a payment-bound agent.
 const BROKEN: &str = "\
@@ -64,6 +111,7 @@ agents:
 paymentPolicies:
   card:
     instrument: cards/visa
+    allowed_merchants: [acme]
 audit:
   maxSizeMb: 0
   maxBackups: 4
@@ -127,6 +175,24 @@ fn without_sections(yaml: &str, sections: &[&str]) -> String {
         if !skipping {
             out.push_str(line);
         }
+    }
+    out
+}
+
+/// Removes the nested `    oauth:` block of `mcp` (Go's SaveTo drops it).
+fn without_oauth(yaml: &str) -> String {
+    let mut out = String::new();
+    let mut skipping = false;
+    for line in yaml.split_inclusive('\n') {
+        if line.starts_with("    oauth:") {
+            skipping = true;
+            continue;
+        }
+        if skipping && line.starts_with("        ") {
+            continue;
+        }
+        skipping = false;
+        out.push_str(line);
     }
     out
 }
@@ -199,10 +265,35 @@ fn compare(label: &str, config: &str, args: &[&str]) {
         );
     }
     assert_eq!(
-        without_sections(&rust_file, &DECLARED),
+        rust_file.contains("\n    oauth:\n"),
+        config.contains("\n  oauth:\n"),
+        "{label}: Rust must keep mcp.oauth exactly when the input had it"
+    );
+    assert_eq!(
+        without_oauth(&without_sections(&rust_file, &DECLARED)),
         go_file,
         "{label}: config.yaml bytes\n--- rust ---\n{rust_file}"
     );
+    // The file Rust wrote loads in both implementations.
+    for (name, binary) in [("rust", &rust_binary), ("go", &go_binary)] {
+        let reload = side(&rust_file);
+        // `config validate` reads the default config path, not `--vault`.
+        let default_config = reload.home.join(".symvault").join("config.yaml");
+        fs::create_dir_all(default_config.parent().expect("parent")).expect("config dir");
+        fs::write(&default_config, &rust_file).expect("write default config");
+        let output = run(binary, &reload, &["config", "validate"]);
+        assert!(
+            output.status.success(),
+            "{label}: {name} cannot load the file Rust wrote: {}{}\n{rust_file}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            config_of(&reload),
+            rust_file,
+            "{label}: {name} validate rewrote the file"
+        );
+    }
 }
 
 #[test]
@@ -210,6 +301,24 @@ fn agent_uninstall_rewrites_the_config_like_go() {
     compare(
         "agent uninstall",
         CONFIG,
+        &["agent", "uninstall", "other", "--yes"],
+    );
+}
+
+#[test]
+fn agent_uninstall_keeps_a_multi_line_description_like_go() {
+    compare(
+        "agent uninstall (multi-line)",
+        MULTILINE,
+        &["agent", "uninstall", "other", "--yes"],
+    );
+}
+
+#[test]
+fn agent_uninstall_keeps_every_mcp_field_go_keeps() {
+    compare(
+        "agent uninstall (mcp)",
+        MCP,
         &["agent", "uninstall", "other", "--yes"],
     );
 }

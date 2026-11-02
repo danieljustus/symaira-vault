@@ -463,8 +463,8 @@ section; Go kept them.
   between `logging` and `vaultDir`, the struct positions). Go evidence: the recorded bytes of
   `testdata/port/config/rewrite.json` and the live oracle in `config_rewrite_differential.rs`. Entry 1 and 2
   of `upstream-go-bugs.md`.
-- **Evidence (Go-recorded, byte level):** `scripts/rust-port/cmd/configrewritegen` records 21 real Go
-  `Load` -> mutation -> `SaveTo` runs (oracle `690647c5`, source digest enforced) into
+- **Evidence (Go-recorded, byte level):** `scripts/rust-port/cmd/configrewritegen` records real Go
+  `Load` -> mutation -> `SaveTo` runs (21 in the first round, 47 after the fix round) (oracle `690647c5`, source digest enforced) into
   `testdata/port/config/rewrite.json`; `config_rewrite_contract.rs` requires the Rust bytes minus exactly the
   two declared sections to equal Go's, checks the declared sections survive, and carries negative controls
   (dropping `paymentPolicy`, `skillVersion`, the `audit` block or reordering fields is rejected). Live:
@@ -484,18 +484,67 @@ section; Go kept them.
   cases / 960 comparisons, the 249 earlier cases byte-identical, only `oracle.generator_digest` changed after
   the two comment fixes in `yamlsyntaxgen`: `--quiet` does **not** silence the loader warnings).
 
-### Residuals (probed, not fixed)
+### CONFIG-WRITER fix round (review of e74bdd9c: REQUEST_CHANGES)
 
-- Rust holds plain values for the agent's pointer fields, so a key the operator wrote with an *explicit zero*
-  (`approvalTimeout: 0s`, `max_reads_per_hour: 0`, `skillVersion: ''`, `paymentPolicy: ''`,
-  `exposePaymentValues: false`, an explicit `5m` on a built-in preset) is not written back where Go writes it;
-  no non-zero value is lost. A built-in preset's default (`approvalTimeout: 5m`, `promptInjectionMode: off`)
-  is likewise treated as unset.
+- **Scalars and keys are emitted by the yaml.v3 emitter port** (`symvault-gojson` `yaml::string_in_mapping`,
+  `string_in_sequence`, `mapping_key`), at the depth the writer puts them. Before, `yaml_scalar` handed a
+  multi-line string to `serde_yaml_ng`, which wrote a block scalar at the wrong indentation: the rewritten
+  `config.yaml` no longer loaded in Go or Rust (`scan_patterns[].description: |`, `allowedPaths`, `dynamicProviders`,
+  `perToolRedactFields`, `paymentPolicies`, vault/git/profile strings). Quoting (`'&amp'`, `'#c'`,
+  `"2026-01-02"`, `"\U0001F600"`), the `? key` / `:` form of a multi-line key and `[]` for an empty list under
+  `perToolRedactFields`/`dynamicProviders` now follow yaml.v3 byte for byte.
+- **Durations** are `time.Duration.String()` (`90s` -> `1m30s`, `1.5s` -> `1.5s`), also `sessionTimeout`,
+  `sessionMaxLifetime`, the mcp timeouts and `oauth` TTLs.
+- **`McpConfig` models `otlp_endpoint`, the trusted-proxy allowlist `trusted_proxy_ips`,
+  `approval_tls_cert_file` and `approval_tls_key_file`** and writes them in Go's order (`port`, `bind`,
+  `httpTokenFile`, `otlp_endpoint`, `stdio`, timeouts, `rate_limit`, `trusted_proxy_ips`,
+  `metrics_auth_required`, `tls_*`, `approval_tls_*`, `mtls_enabled`, `allow_insecure_bind`). A rewrite used to
+  disable approval mTLS and the trusted-proxy allowlist silently. `mcp.oauth` is kept (Go drops it:
+  `upstream-go-bugs.md` 8).
+- **A true capability is always written** (`canManageConfig`, `canUseClipboard`, `canUseAutotype`,
+  `canReadValues`, `autoUnseal` on a custom profile were dropped, which turned them off on the next load).
+- **`approvalTimeout: 0s`** is modelled (`AgentProfile::approval_timeout_zero_set`, the loader records a written
+  zero) and written back; it reloaded as the 5 minute default before.
+- **`vault.last_rotated`** is printed like `time.Time.Format(RFC3339Nano)` for every timestamp shape yaml.v3
+  reads (`2026-1-2`, `2026-01-02 03:04:05`, fractions, offsets); a quoted string made Rust's own loader reject
+  the file.
+- **Evidence:** the recorded fixture now has 47 Go cases (multi-line description, multi-line list items and keys
+  in every position, full mcp fields, stdio + httpTokenFile, oauth, durations, quoting, emoji, date-like
+  strings, empty lists, `approvalTimeout: 0s`, tier-only profiles, false/zero values, timestamps) plus the
+  **field-coverage probe** in `configrewritegen`: it walks every yaml key of Go's `Config` by reflection and
+  fails unless some case input sets it, and unless the set of keys Go reads but `SaveTo` does not write back
+  equals `droppedBySaveTo` (`dropped_by_save_to` in the fixture, `agents.*.pre_call_hooks|post_call_hooks`,
+  `clipboard.printByDefault`, `envAllowlist|envWhitelist`, `git.author|email`, `mcp.approval_required|oauth|perplexity*`,
+  `paymentPolicies*`, `security*`, `vault.listing_cache_ttl|manifest_generation|sync*`). The Rust contract proves
+  the probe case writes every key outside that set. `config_rewrite_differential.rs` additionally runs
+  `agent uninstall` on a multi-line config and on a full-mcp config against the live Go binary and loads the
+  file Rust wrote with **both** `symvault config validate` binaries.
+
+### Residuals (probed; every difference below is a `declared_line_differences` entry of `rewrite.json`
+with its reason, or a byte-level residual named here)
+
+- **Rust writes, Go drops (declared, `rust_adds`):** `mcp.oauth` (Go: TTLs fall back to defaults);
+  `git.auto_push: false` / `auto_pull: false` and `clipboard.copyByDefault: false` (Go's `omitempty` drops them
+  and the loader default `true` turns the opt-out into an opt-in: the older CONFIG-LOAD-001 deviation);
+  `mcp.port: 0`, `read_timeout: 0s`, `rate_limit: 0`, `metrics_auth_required: false` (Go drops them and the
+  defaults 8080 / 10s / 60 / true replace them); the top-level `paymentPolicies` and `security`.
+- **Go writes, Rust omits (declared, `go_only`):** an explicit `false` for `canRunCommands`, `canManageConfig`,
+  `canUseClipboard`, `canUseAutotype`, `canReadValues`, `autoUnseal`, `exposePaymentValues` on a *custom*
+  profile (Go's `*bool` is set; Rust's `bool` omits it, which reloads as the same `false`). Tiered and built-in
+  profiles write their full preset set on both sides (cases `tier_only_profiles`, `tier_with_overrides`).
+- **Double-quoted where yaml.v3 is unsafe (declared, `go_saved_faithful: false`):** a string that starts with a
+  line break (yaml.v3 drops the break) and a string that starts with a space inside a sequence item or a
+  mapping nested in one (yaml.v3's `|4` indicator is wrong there and the file does not parse back):
+  `upstream-go-bugs.md` 9. Cases `leading_break_*`.
+- **Other explicit zeros still unwritten:** `max_reads_per_hour: 0`, `max_reads_per_day: 0`,
+  `max_secrets_in_session: 0`, `skillVersion: ''`, `paymentPolicy: ''`, `exposePaymentValues: false`, an explicit
+  `5m` / `off` on a built-in preset; no non-zero value is lost and each reloads as its default.
+- **Not modelled in Rust, dropped like Go:** `git.author`/`email`, `mcp.perplexity` (its `api_key` too),
+  `mcp.approval_required`, `agents.*.pre_call_hooks|post_call_hooks`, `envAllowlist|envWhitelist`,
+  `vault.sync`/`listing_cache_ttl`/`manifest_generation` (`upstream-go-bugs.md` 3, 4, 6, 10).
 - Go loads the global config once at startup for every `__complete` and for `completion <shell>`; Rust's
   completion path loads only what the completer needs, so Go prints a loader warning twice / once where Rust
   prints it once / not at all (`__complete get ''`, `completion bash`). Ordinary commands match.
-- `envAllowlist`/`envWhitelist` and `vault.sync`/`listing_cache_ttl`/`manifest_generation` are dropped on
-  rewrite, exactly as Go drops them (`upstream-go-bugs.md` 3 and 4).
 
 ## SET-003 fix round: vault-open errors, hidden reads, piped input
 

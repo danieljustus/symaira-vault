@@ -17,6 +17,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use symvault_gojson::yaml;
 use thiserror::Error;
 use unicode_categories::UnicodeCategories;
 
@@ -238,6 +239,12 @@ pub struct AgentProfile {
     pub auto_unseal: bool,
     pub require_approval: bool,
     pub approval_timeout: Duration,
+    /// Go's `approvalTimeout` is a `*time.Duration`: an explicit `0s` is a set
+    /// pointer and is written back, while an unset one writes nothing. The
+    /// plain `Duration` above cannot tell the two apart, so the loader records
+    /// a written key whose value is zero here.
+    #[serde(default)]
+    pub approval_timeout_zero_set: bool,
     pub allowed_tools: Vec<String>,
     pub max_reads_per_hour: i64,
     pub max_reads_per_day: i64,
@@ -324,16 +331,24 @@ pub struct McpConfig {
     pub bind: String,
     pub stdio: bool,
     pub http_token_file: String,
+    #[serde(default)]
+    pub otlp_endpoint: String,
     pub read_header_timeout: Duration,
     pub read_timeout: Duration,
     pub write_timeout: Duration,
     pub shutdown_timeout: Duration,
     pub approval_timeout: Duration,
     pub rate_limit: i64,
+    #[serde(default)]
+    pub trusted_proxy_ips: Vec<String>,
     pub metrics_auth_required: bool,
     pub tls_cert_file: String,
     pub tls_key_file: String,
     pub tls_client_ca_file: String,
+    #[serde(default)]
+    pub approval_tls_cert_file: String,
+    #[serde(default)]
+    pub approval_tls_key_file: String,
     pub mtls_enabled: bool,
     pub allow_insecure_bind: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -383,16 +398,20 @@ impl Default for McpConfig {
             bind: "127.0.0.1".into(),
             stdio: false,
             http_token_file: "auto".into(),
+            otlp_endpoint: String::new(),
             read_header_timeout: Duration::from_secs(5),
             read_timeout: Duration::from_secs(10),
             write_timeout: Duration::from_secs(10),
             shutdown_timeout: Duration::from_secs(5),
             approval_timeout: Duration::from_secs(30),
             rate_limit: 60,
+            trusted_proxy_ips: Vec::new(),
             metrics_auth_required: true,
             tls_cert_file: String::new(),
             tls_key_file: String::new(),
             tls_client_ca_file: String::new(),
+            approval_tls_cert_file: String::new(),
+            approval_tls_key_file: String::new(),
             mtls_enabled: false,
             allow_insecure_bind: false,
             oauth: None,
@@ -1062,8 +1081,9 @@ impl Config {
         if !self.agents.is_empty() {
             out.push_str("agents:\n");
             for (name, profile) in yaml_entries(&self.agents) {
-                out.push_str(&format!("    {}:\n", yaml_scalar(name)?));
-                write_agent(&mut out, name, profile)?;
+                let mut body = String::new();
+                write_agent(&mut body, name, profile)?;
+                push_entry(&mut out, &map_key(name, 4), 4, &body);
             }
         }
         if let Some(vault) = &self.vault {
@@ -1073,7 +1093,7 @@ impl Config {
             write_git(&mut out, git)?;
         }
         if let Some(mcp) = &self.mcp {
-            write_mcp(&mut out, mcp)?;
+            write_mcp(&mut out, mcp);
         }
         if let Some(update) = &self.update {
             write_update(&mut out, update)?;
@@ -1093,12 +1113,12 @@ impl Config {
             write_security(&mut out, security);
         }
         if !self.vault_dir.is_empty() {
-            out.push_str(&format!("vaultDir: {}\n", yaml_scalar(&self.vault_dir)?));
+            out.push_str(&format!("vaultDir: {}\n", map_value(&self.vault_dir, 0)));
         }
         if !self.default_agent.is_empty() {
             out.push_str(&format!(
                 "defaultAgent: {}\n",
-                yaml_scalar(&self.default_agent)?
+                map_value(&self.default_agent, 0)
             ));
         }
         if self.session_timeout > Duration::ZERO {
@@ -1130,21 +1150,19 @@ impl Config {
         {
             out.push_str("profiles:\n");
             for (name, profile) in yaml_entries(profiles) {
-                out.push_str(&format!("    {}:", yaml_scalar(name)?));
+                let key = map_key(name, 4);
                 if profile.vault_path.is_empty() {
-                    out.push_str(" {}\n");
+                    out.push_str(&format!("    {key} {{}}\n"));
                 } else {
-                    out.push('\n');
-                    out.push_str("        vault: ");
-                    out.push_str(&yaml_scalar(&profile.vault_path)?);
-                    out.push('\n');
+                    let body = format!("        vault: {}\n", map_value(&profile.vault_path, 8));
+                    push_entry(&mut out, &key, 4, &body);
                 }
             }
         }
         if !self.default_profile.is_empty() {
             out.push_str(&format!(
                 "defaultProfile: {}\n",
-                yaml_scalar(&self.default_profile)?
+                map_value(&self.default_profile, 0)
             ));
         }
         if !self.scan_patterns.is_empty() {
@@ -1654,19 +1672,9 @@ fn go_duration_quote(value: &str) -> String {
     quoted
 }
 
+/// yaml.v3 writes a `time.Duration` as `Duration.String()`.
 fn format_duration(value: Duration) -> String {
-    let secs = value.as_secs();
-    let nanos = value.subsec_nanos();
-    if nanos == 0 {
-        if secs.is_multiple_of(3600) {
-            return format!("{}h0m0s", secs / 3600);
-        }
-        if secs.is_multiple_of(60) {
-            return format!("{}m0s", secs / 60);
-        }
-        return format!("{secs}s");
-    }
-    format!("{}.{:09}s", secs, nanos)
+    go_duration_string(i128::try_from(value.as_nanos()).unwrap_or(i128::MAX))
 }
 
 /// Applies a tier preset to a loaded agent profile, mirroring Go's
@@ -1777,6 +1785,7 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
         bool_field!("requireApproval", require_approval);
         if let Some(v) = set("approvalTimeout") {
             profile.approval_timeout = duration_field(v, "approvalTimeout")?;
+            profile.approval_timeout_zero_set = profile.approval_timeout.is_zero();
         }
         if wrote("allowed_tools")
             && let Some(v) = set("allowed_tools")
@@ -2242,6 +2251,9 @@ fn parse_mcp(
     if let Some(v) = written(map, "httpTokenFile") {
         out.http_token_file = string_field(v, "httpTokenFile")?;
     }
+    if let Some(v) = written(map, "otlp_endpoint") {
+        out.otlp_endpoint = string_field(v, "otlp_endpoint")?;
+    }
     for (k, d) in [
         ("read_header_timeout", &mut out.read_header_timeout),
         ("read_timeout", &mut out.read_timeout),
@@ -2261,6 +2273,9 @@ fn parse_mcp(
     if let Some(v) = written(map, "rate_limit") {
         out.rate_limit = int_field(v, "rate_limit")?;
     }
+    if let Some(v) = written(map, "trusted_proxy_ips") {
+        out.trusted_proxy_ips = string_list(Some(v), "trusted_proxy_ips")?;
+    }
     if let Some(v) = written(map, "metrics_auth_required") {
         out.metrics_auth_required = bool_field(v, "metrics_auth_required")?;
     }
@@ -2268,6 +2283,8 @@ fn parse_mcp(
         ("tls_cert_file", &mut out.tls_cert_file),
         ("tls_key_file", &mut out.tls_key_file),
         ("tls_client_ca_file", &mut out.tls_client_ca_file),
+        ("approval_tls_cert_file", &mut out.approval_tls_cert_file),
+        ("approval_tls_key_file", &mut out.approval_tls_key_file),
     ] {
         if let Some(v) = written(map, key_name) {
             *target = string_field(v, key_name)?;
@@ -2505,71 +2522,107 @@ fn yaml_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     a.len().cmp(&b.len())
 }
 
-fn yaml_scalar(value: &str) -> Result<String, ConfigError> {
-    // Go's yaml.v3 quotes strings that would otherwise decode as another scalar.
-    let resolved = serde_yaml_ng::from_str::<serde_yaml_ng::Value>(value);
-    let legacy_bool = matches!(
-        value,
-        "y" | "Y"
-            | "yes"
-            | "Yes"
-            | "YES"
-            | "on"
-            | "On"
-            | "ON"
-            | "n"
-            | "N"
-            | "no"
-            | "No"
-            | "NO"
-            | "off"
-            | "Off"
-            | "OFF"
-    );
-    if matches!(
-        resolved,
-        Ok(serde_yaml_ng::Value::Number(_)
-            | serde_yaml_ng::Value::Bool(_)
-            | serde_yaml_ng::Value::Null)
-    ) || value.replace('_', "").parse::<f64>().is_ok()
-        || legacy_bool
-        || is_base60(value)
-    {
-        return serde_json::to_string(value)
-            .map_err(|error| ConfigError::Serialize(error.to_string()));
-    }
-    serde_yaml_ng::to_string(&serde_yaml_ng::Value::String(value.into()))
-        .map(|v| v.trim_end().to_owned())
-        .map_err(|e| ConfigError::Serialize(e.to_string()))
-}
-fn is_base60(value: &str) -> bool {
-    let value = value.strip_prefix(['+', '-']).unwrap_or(value);
-    let (whole, fraction) = value
-        .split_once('.')
-        .map_or((value, None), |(w, f)| (w, Some(f)));
-    if fraction.is_some_and(|f| !f.bytes().all(|b| b.is_ascii_digit() || b == b'_')) {
-        return false;
-    }
-    let mut parts = whole.split(':');
-    let first = parts.next().unwrap_or_default();
-    if !first.as_bytes().first().is_some_and(u8::is_ascii_digit)
-        || !first.bytes().all(|b| b.is_ascii_digit() || b == b'_')
-    {
-        return false;
-    }
-    let mut count = 0;
-    for part in parts {
-        let valid = match part.as_bytes() {
-            [digit] => digit.is_ascii_digit(),
-            [tens, digit] => *tens >= b'0' && *tens <= b'5' && digit.is_ascii_digit(),
-            _ => false,
-        };
-        if !valid {
-            return false;
+/// yaml.v3's timestamp forms (`2006-1-2T15:4:5.999999999Z07:00`, the same with
+/// a lower-case `t`, `2006-1-2 15:4:5.999999999` and `2006-1-2`) as
+/// `time.Time.Format(time.RFC3339Nano)` prints the parsed instant: a missing
+/// time of day is midnight, a missing or zero offset is `Z`, and trailing
+/// zeros of the fraction are dropped. `None` for anything else.
+fn yaml_timestamp_rfc3339(text: &str) -> Option<String> {
+    fn number(part: &str, min_digits: usize, max_digits: usize) -> Option<u32> {
+        if part.len() < min_digits
+            || part.len() > max_digits
+            || !part.bytes().all(|b| b.is_ascii_digit())
+        {
+            return None;
         }
-        count += 1;
+        part.parse().ok()
     }
-    count > 0
+    let (date, rest) = match text.find(['T', 't', ' ']) {
+        Some(at) => (&text[..at], Some(&text[at + 1..])),
+        None => (text, None),
+    };
+    let mut parts = date.split('-');
+    let (year, month, day) = (parts.next()?, parts.next()?, parts.next()?);
+    if parts.next().is_some() {
+        return None;
+    }
+    let (year, month, day) = (
+        number(year, 4, 4)?,
+        number(month, 1, 2)?,
+        number(day, 1, 2)?,
+    );
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return None,
+    };
+    if day == 0 || day > days {
+        return None;
+    }
+    let (mut hour, mut minute, mut second, mut fraction, mut offset) =
+        (0, 0, 0, String::new(), String::from("Z"));
+    if let Some(rest) = rest {
+        let space = text.as_bytes()[date.len()] == b' ';
+        let (clock, zone) = match rest.find(['Z', '+', '-']) {
+            Some(at) => (&rest[..at], Some(&rest[at..])),
+            None => (rest, None),
+        };
+        if space && zone.is_some() {
+            return None;
+        }
+        let (whole, frac) = clock
+            .split_once('.')
+            .map_or((clock, None), |(w, f)| (w, Some(f)));
+        let mut hms = whole.split(':');
+        let (h, m, sec) = (hms.next()?, hms.next()?, hms.next()?);
+        if hms.next().is_some() {
+            return None;
+        }
+        (hour, minute, second) = (number(h, 1, 2)?, number(m, 1, 2)?, number(sec, 1, 2)?);
+        if hour > 23 || minute > 59 || second > 59 {
+            return None;
+        }
+        if let Some(frac) = frac {
+            number(frac, 1, 9).map(|_| ())?;
+            fraction = frac.trim_end_matches('0').to_owned();
+        }
+        match zone {
+            None | Some("Z") => {}
+            Some(zone) => {
+                let sign = &zone[..1];
+                let (zh, zm) = zone[1..].split_once(':')?;
+                let (zh, zm) = (number(zh, 2, 2)?, number(zm, 2, 2)?);
+                if sign == "Z" || zh > 23 || zm > 59 {
+                    return None;
+                }
+                if zh != 0 || zm != 0 {
+                    offset = format!("{sign}{zh:02}:{zm:02}");
+                }
+            }
+        }
+    }
+    let fraction = if fraction.is_empty() {
+        String::new()
+    } else {
+        format!(".{fraction}")
+    };
+    Some(format!(
+        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}{fraction}{offset}"
+    ))
+}
+
+/// A string value of the block mapping whose keys sit at column `indent`, as
+/// yaml.v3 emits it (plain, single- or double-quoted, or a literal block).
+fn map_value(value: &str, indent: i32) -> String {
+    yaml::string_in_mapping(value, indent)
+}
+
+/// A key of the block mapping whose keys sit at column `indent`, with its `:`.
+fn map_key(key: &str, indent: i32) -> String {
+    yaml::mapping_key(key, indent)
 }
 
 fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), ConfigError> {
@@ -2577,28 +2630,23 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
     // emission order is the declaration order and an unset pointer writes
     // nothing at all — `tier` leads the block (`internal/config/config.go:144`).
     if let Some(v) = p.tier.as_deref().filter(|value| !value.is_empty()) {
-        out.push_str(&format!("        tier: {}\n", yaml_scalar(v)?));
+        out.push_str(&format!("        tier: {}\n", map_value(v, 8)));
     }
     if let Some(v) = &p.approval_mode {
-        out.push_str(&format!("        approvalMode: {}\n", yaml_scalar(v)?));
+        out.push_str(&format!("        approvalMode: {}\n", map_value(v, 8)));
     }
     if !p.allowed_paths.is_empty() {
         out.push_str("        allowedPaths:\n");
-        for v in &p.allowed_paths {
-            out.push_str(&format!("            - {}\n", yaml_scalar(v)?));
-        }
+        write_string_list_body(out, 12, &p.allowed_paths);
     }
     if !p.redact_fields.is_empty() {
         out.push_str("        redactFields:\n");
-        for v in &p.redact_fields {
-            out.push_str(&format!("            - {}\n", yaml_scalar(v)?));
-        }
+        write_string_list_body(out, 12, &p.redact_fields);
     }
     if !p.per_tool_redact_fields.is_empty() {
         out.push_str("        perToolRedactFields:\n");
         for (tool, fields) in yaml_entries(&p.per_tool_redact_fields) {
-            out.push_str(&format!("            {}:\n", yaml_scalar(tool)?));
-            write_string_list_body(out, 16, fields)?;
+            write_keyed_list(out, 12, tool, fields);
         }
     }
     let builtin = matches!(
@@ -2619,24 +2667,25 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
     if builtin || tiered || p.can_run_commands {
         out.push_str(&format!("        canRunCommands: {}\n", p.can_run_commands));
     }
-    if tiered {
-        out.push_str(&format!("        canManageConfig: {}", p.can_manage_config));
-        out.push('\n');
-        out.push_str(&format!("        canUseClipboard: {}", p.can_use_clipboard));
-        out.push('\n');
-        out.push_str(&format!("        canUseAutotype: {}", p.can_use_autotype));
-        out.push('\n');
-        out.push_str(&format!("        canReadValues: {}", p.can_read_values));
-        out.push('\n');
+    // A capability that is true is always written (dropping it would turn it
+    // off on reload); a false one only where Go's profile holds a set pointer
+    // (tiered and builtin profiles).
+    for (key, value) in [
+        ("canManageConfig", p.can_manage_config),
+        ("canUseClipboard", p.can_use_clipboard),
+        ("canUseAutotype", p.can_use_autotype),
+        ("canReadValues", p.can_read_values),
+    ] {
+        if tiered || value {
+            out.push_str(&format!("        {key}: {value}\n"));
+        }
     }
     out.push_str(&format!(
-        "        exposeValueTools: {}",
+        "        exposeValueTools: {}\n",
         p.expose_value_tools
     ));
-    out.push('\n');
-    if builtin || tiered {
-        out.push_str(&format!("        autoUnseal: {}", p.auto_unseal));
-        out.push('\n');
+    if builtin || tiered || p.auto_unseal {
+        out.push_str(&format!("        autoUnseal: {}\n", p.auto_unseal));
     }
     if tiered || p.require_approval || p.approval_mode.as_deref() == Some("none") {
         out.push_str(&format!(
@@ -2647,7 +2696,9 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
     // Go writes the remaining pointer fields only when set. Rust stores plain
     // values, so a zero (or, for the builtin presets, the preset default that
     // `AgentProfile::deny_all` fills in) reads as "not written".
-    if !p.approval_timeout.is_zero()
+    if p.approval_timeout.is_zero() && p.approval_timeout_zero_set {
+        out.push_str("        approvalTimeout: 0s\n");
+    } else if !p.approval_timeout.is_zero()
         && !(builtin && p.approval_timeout == Duration::from_secs(5 * 60))
     {
         out.push_str(&format!(
@@ -2657,7 +2708,7 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
     }
     if !p.allowed_tools.is_empty() {
         out.push_str("        allowed_tools:\n");
-        write_string_list_body(out, 12, &p.allowed_tools)?;
+        write_string_list_body(out, 12, &p.allowed_tools);
     }
     for (key, value) in [
         ("max_reads_per_hour", p.max_reads_per_hour),
@@ -2671,28 +2722,27 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
     if !p.dynamic_providers.is_empty() {
         out.push_str("        dynamicProviders:\n");
         for (provider, hosts) in yaml_entries(&p.dynamic_providers) {
-            out.push_str(&format!("            {}:\n", yaml_scalar(provider)?));
-            write_string_list_body(out, 16, hosts)?;
+            write_keyed_list(out, 12, provider, hosts);
         }
     }
     if !p.allowed_env_vars.is_empty() {
         out.push_str("        allowedEnvVars:\n");
-        write_string_list_body(out, 12, &p.allowed_env_vars)?;
+        write_string_list_body(out, 12, &p.allowed_env_vars);
     }
     if !p.allowed_executables.is_empty() {
         out.push_str("        allowedExecutables:\n");
-        write_string_list_body(out, 12, &p.allowed_executables)?;
+        write_string_list_body(out, 12, &p.allowed_executables);
     }
     if !p.prompt_injection_mode.is_empty() && !(builtin && p.prompt_injection_mode == "off") {
         out.push_str(&format!(
             "        promptInjectionMode: {}\n",
-            yaml_scalar(&p.prompt_injection_mode)?
+            map_value(&p.prompt_injection_mode, 8)
         ));
     }
     if !p.skill_path.is_empty() {
         out.push_str(&format!(
             "        skillPath: {}\n",
-            yaml_scalar(&p.skill_path)?
+            map_value(&p.skill_path, 8)
         ));
     }
     // Go's declaration order closes with skillPath, skillVersion,
@@ -2700,7 +2750,7 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
     if !p.skill_version.is_empty() {
         out.push_str(&format!(
             "        skillVersion: {}\n",
-            yaml_scalar(&p.skill_version)?
+            map_value(&p.skill_version, 8)
         ));
     }
     if p.expose_payment_values {
@@ -2709,32 +2759,55 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
     if let Some(policy) = &p.payment_policy {
         out.push_str(&format!(
             "        paymentPolicy: {}\n",
-            yaml_scalar(policy)?
+            map_value(policy, 8)
         ));
     }
     Ok(())
 }
 /// A block sequence of scalars, `indent` spaces deep.
-fn write_string_list_body(
-    out: &mut String,
-    indent: usize,
-    items: &[String],
-) -> Result<(), ConfigError> {
+fn write_string_list_body(out: &mut String, indent: usize, items: &[String]) {
     for item in items {
-        out.push_str(&format!("{:indent$}- {}\n", "", yaml_scalar(item)?));
+        out.push_str(&format!(
+            "{:indent$}- {}\n",
+            "",
+            yaml::string_in_sequence(item, indent as i32)
+        ));
     }
-    Ok(())
+}
+/// `key:` and its string list, `indent` being the column of the key. yaml.v3
+/// writes an empty (or nil) list as `[]`.
+fn write_keyed_list(out: &mut String, indent: usize, key: &str, items: &[String]) {
+    let key = yaml::mapping_key(key, indent as i32);
+    if items.is_empty() {
+        out.push_str(&format!("{:indent$}{key} []\n", ""));
+        return;
+    }
+    let mut body = String::new();
+    write_string_list_body(&mut body, indent + 4, items);
+    push_entry(out, &key, indent, &body);
+}
+/// A mapping entry whose value is a non-empty block collection: `key` (as
+/// [`map_key`] returns it) written at column `indent`, and `body`, the
+/// collection's lines already indented `indent + 4`. After a complex key
+/// (`? key` / `:`) yaml.v3 starts the collection on the line of the `:`.
+fn push_entry(out: &mut String, key: &str, indent: usize, body: &str) {
+    out.push_str(&format!("{:indent$}{key}", ""));
+    if key.contains('\n') {
+        out.push_str("   ");
+        out.push_str(body.trim_start_matches(' '));
+    } else {
+        out.push('\n');
+        out.push_str(body);
+    }
 }
 fn write_vault(out: &mut String, v: &VaultConfig) -> Result<(), ConfigError> {
     let mut body = String::new();
     if !v.path.is_empty() {
-        body.push_str(&format!("    path: {}\n", yaml_scalar(&v.path)?));
+        body.push_str(&format!("    path: {}\n", map_value(&v.path, 4)));
     }
     if !v.default_recipients.is_empty() {
         body.push_str("    default_recipients:\n");
-        for r in &v.default_recipients {
-            body.push_str(&format!("        - {}\n", yaml_scalar(r)?));
-        }
+        write_string_list_body(&mut body, 8, &v.default_recipients);
     }
     if v.confirm_remove {
         body.push_str("    confirm_remove: true\n");
@@ -2744,11 +2817,12 @@ fn write_vault(out: &mut String, v: &VaultConfig) -> Result<(), ConfigError> {
     // to a different KDF/search/format configuration on the next load.
     body.push_str(&format!(
         "    authMethod: {}\n",
-        yaml_scalar(
+        map_value(
             v.invalid_auth_method
                 .as_deref()
-                .unwrap_or_else(|| v.auth_method.as_str())
-        )?
+                .unwrap_or_else(|| v.auth_method.as_str()),
+            4
+        )
     ));
     if v.use_touch_id {
         body.push_str("    useTouchID: true\n");
@@ -2787,10 +2861,12 @@ fn write_vault(out: &mut String, v: &VaultConfig) -> Result<(), ConfigError> {
         body.push_str("    auto_heal_zero_key: true\n");
     }
     if let Some(last_rotated) = &v.last_rotated {
-        body.push_str(&format!(
-            "    last_rotated: {}\n",
-            yaml_scalar(last_rotated)?
-        ));
+        // Go's `time.Time` is written as a plain RFC 3339 timestamp (a string
+        // would have been quoted); the other timestamp forms yaml.v3 reads
+        // are normalised the way `time.Time.Format(RFC3339Nano)` prints them.
+        let text =
+            yaml_timestamp_rfc3339(last_rotated).unwrap_or_else(|| map_value(last_rotated, 4));
+        body.push_str(&format!("    last_rotated: {text}\n"));
     }
     if v.format_version != 0 {
         body.push_str(&format!("    format_version: {}\n", v.format_version));
@@ -2823,7 +2899,7 @@ fn write_git(out: &mut String, v: &GitConfig) -> Result<(), ConfigError> {
     if !v.commit_template.is_empty() {
         body.push_str(&format!(
             "    commit_template: {}\n",
-            yaml_scalar(&v.commit_template)?
+            map_value(&v.commit_template, 4)
         ));
     }
     // Preserve an explicit false. Go's raw SaveTo struct uses `omitempty`
@@ -2845,17 +2921,25 @@ fn write_git(out: &mut String, v: &GitConfig) -> Result<(), ConfigError> {
     }
     Ok(())
 }
-fn write_mcp(out: &mut String, v: &McpConfig) -> Result<(), ConfigError> {
+/// The `mcp` block in Go's `MCPConfig` field order. Go's `SaveTo` drops
+/// `oauth`; Rust keeps it (declared in `upstream-go-bugs.md`).
+fn write_mcp(out: &mut String, v: &McpConfig) {
     out.push_str("mcp:\n");
     out.push_str(&format!("    port: {}\n", v.port));
-    out.push_str(&format!("    bind: {}\n", yaml_scalar(&v.bind)?));
+    out.push_str(&format!("    bind: {}\n", map_value(&v.bind, 4)));
+    out.push_str(&format!(
+        "    httpTokenFile: {}\n",
+        map_value(&v.http_token_file, 4)
+    ));
+    if !v.otlp_endpoint.is_empty() {
+        out.push_str(&format!(
+            "    otlp_endpoint: {}\n",
+            map_value(&v.otlp_endpoint, 4)
+        ));
+    }
     if v.stdio {
         out.push_str("    stdio: true\n");
     }
-    out.push_str(&format!(
-        "    httpTokenFile: {}\n",
-        yaml_scalar(&v.http_token_file)?
-    ));
     for (key, value) in [
         ("read_header_timeout", v.read_header_timeout),
         ("read_timeout", v.read_timeout),
@@ -2866,6 +2950,9 @@ fn write_mcp(out: &mut String, v: &McpConfig) -> Result<(), ConfigError> {
         out.push_str(&format!("    {key}: {}\n", format_duration(value)));
     }
     out.push_str(&format!("    rate_limit: {}\n", v.rate_limit));
+    if !v.trusted_proxy_ips.is_empty() {
+        write_keyed_list(out, 4, "trusted_proxy_ips", &v.trusted_proxy_ips);
+    }
     out.push_str(&format!(
         "    metrics_auth_required: {}\n",
         v.metrics_auth_required
@@ -2874,9 +2961,11 @@ fn write_mcp(out: &mut String, v: &McpConfig) -> Result<(), ConfigError> {
         ("tls_cert_file", &v.tls_cert_file),
         ("tls_key_file", &v.tls_key_file),
         ("tls_client_ca_file", &v.tls_client_ca_file),
+        ("approval_tls_cert_file", &v.approval_tls_cert_file),
+        ("approval_tls_key_file", &v.approval_tls_key_file),
     ] {
         if !value.is_empty() {
-            out.push_str(&format!("    {key_name}: {}\n", yaml_scalar(value)?));
+            out.push_str(&format!("    {key_name}: {}\n", map_value(value, 4)));
         }
     }
     if v.mtls_enabled {
@@ -2893,7 +2982,6 @@ fn write_mcp(out: &mut String, v: &McpConfig) -> Result<(), ConfigError> {
             format_duration(oauth.refresh_token_ttl)
         ));
     }
-    Ok(())
 }
 /// Go's `AuditConfig`: `maxSizeMb` is `omitempty`, the other two are not, and
 /// `SaveTo` writes the megabyte count (integer division of the byte size).
@@ -2913,10 +3001,10 @@ fn write_logging(out: &mut String, v: &LoggingConfig) -> Result<(), ConfigError>
     }
     out.push_str("logging:\n");
     if !v.level.is_empty() {
-        out.push_str(&format!("    level: {}\n", yaml_scalar(&v.level)?));
+        out.push_str(&format!("    level: {}\n", map_value(&v.level, 4)));
     }
     if !v.format.is_empty() {
-        out.push_str(&format!("    format: {}\n", yaml_scalar(&v.format)?));
+        out.push_str(&format!("    format: {}\n", map_value(&v.format, 4)));
     }
     Ok(())
 }
@@ -2936,13 +3024,13 @@ fn write_security(out: &mut String, v: &SecurityConfig) {
 fn write_scan_patterns(out: &mut String, patterns: &[ScanPattern]) -> Result<(), ConfigError> {
     out.push_str("scan_patterns:\n");
     for p in patterns {
-        out.push_str(&format!("    - name: {}\n", yaml_scalar(&p.name)?));
-        out.push_str(&format!("      pattern: {}\n", yaml_scalar(&p.pattern)?));
+        out.push_str(&format!("    - name: {}\n", map_value(&p.name, 6)));
+        out.push_str(&format!("      pattern: {}\n", map_value(&p.pattern, 6)));
         out.push_str(&format!(
             "      description: {}\n",
-            yaml_scalar(&p.description)?
+            map_value(&p.description, 6)
         ));
-        out.push_str(&format!("      severity: {}\n", yaml_scalar(&p.severity)?));
+        out.push_str(&format!("      severity: {}\n", map_value(&p.severity, 6)));
     }
     Ok(())
 }
@@ -2954,39 +3042,38 @@ fn write_payment_policies(
 ) -> Result<(), ConfigError> {
     out.push_str("paymentPolicies:\n");
     for (name, policy) in yaml_entries(policies) {
-        out.push_str(&format!("    {}:\n", yaml_scalar(name)?));
-        out.push_str(&format!(
+        let mut body = String::new();
+        body.push_str(&format!(
             "        instrument: {}\n",
-            yaml_scalar(&policy.instrument)?
+            map_value(&policy.instrument, 8)
         ));
         if !policy.allowed_merchants.is_empty() {
-            out.push_str("        allowed_merchants:\n");
-            for merchant in &policy.allowed_merchants {
-                out.push_str(&format!("            - {}\n", yaml_scalar(merchant)?));
-            }
+            body.push_str("        allowed_merchants:\n");
+            write_string_list_body(&mut body, 12, &policy.allowed_merchants);
         }
         let amount = &policy.max_amount;
         if !amount.per_transaction.is_empty() || !amount.per_day.is_empty() {
-            out.push_str("        max_amount:\n");
+            body.push_str("        max_amount:\n");
             if !amount.per_transaction.is_empty() {
-                out.push_str(&format!(
+                body.push_str(&format!(
                     "            per_transaction: {}\n",
-                    yaml_scalar(&amount.per_transaction)?
+                    map_value(&amount.per_transaction, 12)
                 ));
             }
             if !amount.per_day.is_empty() {
-                out.push_str(&format!(
+                body.push_str(&format!(
                     "            per_day: {}\n",
-                    yaml_scalar(&amount.per_day)?
+                    map_value(&amount.per_day, 12)
                 ));
             }
         }
         if !policy.currency.is_empty() {
-            out.push_str(&format!(
+            body.push_str(&format!(
                 "        currency: {}\n",
-                yaml_scalar(&policy.currency)?
+                map_value(&policy.currency, 8)
             ));
         }
+        push_entry(out, &map_key(name, 4), 4, &body);
     }
     Ok(())
 }
@@ -3210,6 +3297,27 @@ mod tests {
         }
         let _ = fs::remove_dir_all(root);
     }
+    #[test]
+    fn yaml_timestamps_are_printed_like_rfc3339_nano() {
+        for (input, want) in [
+            ("2026-01-02T03:04:05Z", Some("2026-01-02T03:04:05Z")),
+            ("2026-01-02T03:04:05.50Z", Some("2026-01-02T03:04:05.5Z")),
+            (
+                "2026-01-02T03:04:05.5+02:00",
+                Some("2026-01-02T03:04:05.5+02:00"),
+            ),
+            ("2026-1-2t3:4:5+00:00", Some("2026-01-02T03:04:05Z")),
+            ("2026-01-02 03:04:05", Some("2026-01-02T03:04:05Z")),
+            ("2026-01-02", Some("2026-01-02T00:00:00Z")),
+            ("2025-02-29", None),
+            ("2026-01-02 03:04:05 +02:00", None),
+            ("2026-13-01", None),
+            ("yesterday", None),
+        ] {
+            assert_eq!(yaml_timestamp_rfc3339(input).as_deref(), want, "{input}");
+        }
+    }
+
     #[test]
     fn defaults_match_go_contract() {
         let c = Config::default();
