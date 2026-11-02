@@ -1043,14 +1043,17 @@ http-tls-contract:
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-tls.json"
 
 # rust-http-write.yml: negative controls, TLS backpressure probe and its
-# mutation, then the full write contract.
+# mutation, then the full write contract. http_write_mutation.py insists on
+# the cargo output path and edits crates/ in the working tree for a rebuild
+# (restored afterwards): do not run another lane or a gate against the same
+# worktree or cargo target dir at the same time.
 http-write-contract: area-oracle-runner
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_write_contract.py
 	$(AREA_BUILD_CLI)
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/http_write_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-tls-output.json" --tls-output-probe-only
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/http_write_mutation.py \
-		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-tls-output-mutation.json"
+		--rust "$(RUST_BINARY)" --receipt "$(AREA_EVIDENCE)/native-tls-output-mutation.json"
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) scripts/rust-port/http_write_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-write.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-write.json"
@@ -1252,7 +1255,7 @@ tui-harness-check: $(AREA_VENV)/.ready
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_harness_test.py
 
 tui-contract: $(AREA_VENV)/.ready
-	@mkdir -p "$(AREA_EVIDENCE)/tui"
+	@mkdir -p "$(AREA_EVIDENCE)/tui" && rm -f "$(AREA_EVIDENCE)"/tui/native-*.json
 	$(AREA_BUILD_CLI)
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_harness_test.py
 	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
