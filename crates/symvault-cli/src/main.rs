@@ -5111,9 +5111,8 @@ fn run_set(
     quiet: bool,
 ) -> ExitCode {
     let result = (|| {
-        let vault = resolve_vault(explicit_vault, profile)?;
-        require_initialized(&vault)?;
-        let identity = device::unlock_vault(&vault)?;
+        // Go reads and validates the value before `WithVault` resolves and
+        // unlocks the vault, so input errors never trigger an unlock.
         let value = if stdin_value {
             let mut line = String::new();
             io::stdin()
@@ -5126,11 +5125,10 @@ fn run_set(
         } else if let Some(value) = value {
             value
         } else {
-            interactive_set_value(query, allow_empty)?
+            interactive_set_value(query, allow_empty)
+                .map_err(empty_sensitive_value_is_invalid_input)?
         };
-        let path = write_commands::set_entry(
-            &vault,
-            &identity,
+        let (path, data) = write_commands::set_entry_data(
             query,
             value,
             allow_empty,
@@ -5138,13 +5136,29 @@ fn run_set(
             totp_secret.as_deref(),
             totp_issuer.as_deref(),
             totp_account.as_deref(),
-        )?;
+        )
+        .map_err(empty_sensitive_value_is_invalid_input)?;
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        write_commands::set_fields(&vault, &identity, &path, data)?;
         if !quiet {
             println!("Entry saved: {path}");
         }
         Ok::<(), String>(())
     })();
     finish_vault_result(result)
+}
+
+/// Go's `set` rejects an empty sensitive value with a CLIError carrying
+/// ExitInvalidInput (9) (cmd/crud/set.go); every other failure keeps the
+/// command's usual reporting.
+fn empty_sensitive_value_is_invalid_input(error: String) -> String {
+    if error.starts_with("cannot set empty value for sensitive field") {
+        reported(9, &error, None)
+    } else {
+        error
+    }
 }
 
 fn interactive_set_value(query: &str, allow_empty: bool) -> Result<String, String> {

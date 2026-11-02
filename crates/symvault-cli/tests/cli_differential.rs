@@ -1505,38 +1505,49 @@ fn add_noninteractive_matches_go_and_preserves_existing_entries() {
         b"damaged ciphertext"
     );
 
-    // An empty sensitive value is Go's ExitInvalidInput (9), printed twice.
-    let empty = |binary: &PathBuf| {
-        run(
-            binary,
-            &[
-                "--vault",
-                root.to_str().unwrap(),
-                "add",
-                "work/empty",
-                "--value",
-                "",
-            ],
-            &root,
-            &home,
-        )
-    };
-    let (go_empty, rust_empty) = (empty(&go_binary), empty(&rust_binary));
-    assert_eq!(
-        go_empty.status.code(),
-        Some(9),
-        "Go empty sensitive value exit"
-    );
-    assert_eq!(
-        rust_empty.status.code(),
-        go_empty.status.code(),
-        "empty value exit"
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&rust_empty.stderr),
-        String::from_utf8_lossy(&go_empty.stderr),
-        "empty value stderr"
-    );
+    // An empty sensitive value is Go's ExitInvalidInput (9) for `add` and
+    // `set` alike (cmd/crud/add.go, cmd/crud/set.go).
+    for args in [["add", "work/empty"], ["set", "work/empty.password"]] {
+        let empty = |binary: &PathBuf| {
+            run(
+                binary,
+                &[
+                    "--vault",
+                    root.to_str().unwrap(),
+                    args[0],
+                    args[1],
+                    "--value",
+                    "",
+                ],
+                &root,
+                &home,
+            )
+        };
+        let (go_empty, rust_empty) = (empty(&go_binary), empty(&rust_binary));
+        assert_eq!(
+            go_empty.status.code(),
+            Some(9),
+            "Go {} empty sensitive value exit",
+            args[0]
+        );
+        assert_eq!(
+            rust_empty.status.code(),
+            go_empty.status.code(),
+            "{} empty value exit",
+            args[0]
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&rust_empty.stderr),
+            String::from_utf8_lossy(&go_empty.stderr),
+            "{} empty value stderr",
+            args[0]
+        );
+        assert!(
+            !root.join("work/empty.age").exists(),
+            "{} wrote nothing",
+            args[0]
+        );
+    }
 
     fs::remove_dir_all(home).expect("cleanup home");
     fs::remove_dir_all(root).expect("cleanup add vault");
