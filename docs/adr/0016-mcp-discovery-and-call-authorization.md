@@ -287,3 +287,39 @@ the existing treatment. The product Windows entrypoint already contains the
 timeout child repair and must match its pin without another repair. These are
 admission rules; native replay, genuine current-product recaptures, independent
 review and native Windows acceptance remain separate required gates.
+
+## Go-recorded call-time matrix, 2026-11-02 (MCP-AUTHZ-MATRIX)
+
+`scripts/rust-port/mcp_authz_matrix.py` builds the corrected oracle
+(`24acdb08`, non-CGO, `-buildvcs=false`, out of tree), seeds the same 22
+disposable profiles as the process contract and records the response of a
+minimal `tools/call` (`{}` arguments, so no clipboard, autotype, payment,
+Perplexity, network or child process runs) for each of the 35 registered tools
+plus one unknown name, three times each: no token, a token scope excluding the
+tool, and a token scope naming exactly the tool. Stdio cannot carry a token, so
+the probe (`mcp_authz_probe.go.txt`) drives the production `ProtocolHandler`
+with `auth.WithToken`, exactly as the HTTP middleware places it. The result is
+frozen as `testdata/port/mcp/authz-matrix.json` (2376 cases, each profile
+recorded twice and required to be identical after masking the two documented
+random/audit-trail results and the host Touch ID capability). `make
+mcp-authz-differential` re-derives it from the oracle (`--check`) and replays
+every case through the production CLI assembly
+(`symvault-cli/tests/mcp_authz_matrix.rs`: config profile, runtime config,
+encrypted store runtime).
+
+Rust divergences found and fixed:
+
+| Divergence | Go order / behavior | Fix |
+| --- | --- | --- |
+| Token scope vs unknown tool (MCP-003) | tool definition lookup, then availability, tier, token scope, drift, entry policy, handler | The protocol layer resolves the tool first; the runtime sequences access, token, drift, policy and capability phases (`authorize_with_token_scope`) |
+| Token scope before availability/tier | an excluded token reports availability or tier text first | same split (`authorize_access` / `authorize_dispatch`) |
+| Token scope before command capability | the capability error comes from the handler, after the token check | same split |
+| `autotype` tool absent | capability (RPC `-32603`), `path`, scope, approval refusal, entry/field checks, typing | implemented with the application-owned autotype backend |
+| `get_entry_value` approval gate ran before argument validation | `path`, scope, quarantine, then the approval gate | gate moved into the handler; the ADR's legacy value-denial decision is unchanged |
+| `SYMVAULT_SECUREUI=none` ignored | `secure_input`/`request_credential` unavailable | honored by the CLI's capability decision |
+
+Differences that stay, each asserted exactly and counted by the replay: the
+operator `allowed_tools` restriction on calls (297) and in `symaira_whoami` (2),
+the canonical delete alias tier (21), and Go's four share tools (44), which
+dereference a never-installed `ShareStore` and would crash a real Go serve
+process (the probe records the recovered panic; Rust serves them).

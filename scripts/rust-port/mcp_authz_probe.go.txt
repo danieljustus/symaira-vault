@@ -1,0 +1,104 @@
+// Records one agent profile's tools/call outcomes through the production Go
+// MCP protocol handler (the same ProtocolHandler stdio serves), over a
+// disposable vault seeded by mcp_process_seed.go.txt. Token scoping cannot be
+// expressed on stdio, so the handler context carries an auth.ScopedToken
+// exactly as the HTTP middleware places it (auth.WithToken). Arguments are
+// inert: every call sends {} so no tool reaches a clipboard, autotype, payment,
+// perplexity, network or child-process side effect.
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/danieljustus/symaira-vault/internal/approval"
+	"github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/mcp/server"
+	"github.com/danieljustus/symaira-vault/internal/mcp/transport"
+	"github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+type tokenMode struct {
+	Name  string
+	Scope func(tool string) []string
+}
+
+func main() {
+	root := flag.String("root", "", "seeded disposable vault")
+	agent := flag.String("agent", "fixture", "agent profile name")
+	tools := flag.String("tools", "", "comma separated tool names, including the unknown name chosen by the driver")
+	flag.Parse()
+	v, err := vault.OpenWithPassphrase(*root, []byte(os.Getenv("SYMVAULT_PASSPHRASE")))
+	must(err)
+	srv, err := server.New(v, *agent, "stdio")
+	must(err)
+	srv.AttachApprovalQueue(approval.NewQueue())
+	defer func() { _ = srv.Close() }()
+	handler := server.NewProtocolHandler("symaira", "1.0.0", srv)
+	modes := []tokenMode{
+		{"none", nil},
+		// Scope that excludes the tool: a token for one unrelated tool.
+		{"excluding", func(tool string) []string {
+			if tool == "health" {
+				return []string{"symaira_whoami"}
+			}
+			return []string{"health"}
+		}},
+		// Positive control: a scope that names exactly the called tool.
+		{"including", func(tool string) []string { return []string{tool} }},
+	}
+	send := func(ctx context.Context, line string) (encoded json.RawMessage) {
+		var msg transport.Message
+		must(json.Unmarshal([]byte(line), &msg))
+		// The production Server never installs a ShareStore, so the four share
+		// tools dereference nil and would crash a real Go serve process. Record
+		// that fact instead of aborting the matrix.
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				encoded, _ = json.Marshal(map[string]any{"go_panic": fmt.Sprint(recovered)})
+			}
+		}()
+		response, err := handler.HandleMessage(ctx, &msg)
+		must(err)
+		if response == nil {
+			return nil
+		}
+		encoded, err = json.Marshal(response)
+		must(err)
+		return encoded
+	}
+	send(context.Background(), `{"jsonrpc":"2.0","id":1,"method":"initialize"}`)
+	type row struct {
+		Tool     string          `json:"tool"`
+		Token    string          `json:"token"`
+		Response json.RawMessage `json:"response"`
+	}
+	var rows []row
+	id := 100
+	for _, name := range strings.Split(*tools, ",") {
+		for _, mode := range modes {
+			ctx := context.Background()
+			if mode.Scope != nil {
+				token := &auth.ScopedToken{TokenData: auth.TokenData{ID: "fixture-token", AllowedTools: mode.Scope(name)}}
+				ctx = auth.WithToken(ctx, token)
+			}
+			id++
+			line, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": "tools/call",
+				"params": map[string]any{"name": name, "arguments": map[string]any{}}})
+			must(err)
+			rows = append(rows, row{name, mode.Name, send(ctx, string(line))})
+		}
+	}
+	must(json.NewEncoder(os.Stdout).Encode(rows))
+}
+
+func must(err error) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
