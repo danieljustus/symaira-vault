@@ -152,6 +152,17 @@ Where the gate differs from the hosted workflows:
 - **Evidence.** Receipts and logs live in `$(CARGO_TARGET_DIR)/area-evidence`
   (`AREA_EVIDENCE`), not in uploaded artifacts.
 
+Known state of the added targets (change under review on `local/gate-area`;
+macOS arm64 host and Ubuntu 24.04 arm64 container, receipts bound to the code
+commit before the docs commits): all 20 targets of each lane pass. Known
+fragility, not product defects: `kdf-resource-policy-contract` failed on macOS
+in three of eight runs within one to two seconds, at the
+`go run ./cmd/kdf-policy-oracle` inside `kdf_policy_fixtures.py` (the script
+discards the child's stderr; cause not identified, passes when rerun alone or
+in sequence), and `http-write-contract` breaks if anything else rebuilds
+`target/debug/symvault` in the same cargo target dir while its mutation step
+runs (see below). No contract is known-red on the current tree.
+
 Running them:
 
 - `scripts/rust-port/local-gate.sh macos-area|linux-area` runs only that lane's
