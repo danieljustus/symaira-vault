@@ -9,6 +9,35 @@
 > `scripts/rust-port/local-gate.sh`, one closing pull request. See
 > [local-first.md](local-first.md).
 
+## Cutover decision (2026-10-30)
+
+The maintainer replaced the dual-binary cutover with the EraseMe model. The
+stable release ships Rust only: no Go fallback binary, no Go-to-Rust-to-Go
+rollback exercise and no seven-day observation window. Go sources are removed
+at the cutover. Data safety is kept and becomes a cutover gate instead: Rust
+must open existing Go-created state unchanged, and the first Rust run creates
+an automatic backup whose restore is verified. Windows is out of scope.
+Remaining work is completed locally on the MacBook and pushed once complete.
+
+## Decisions 2026-11-02
+
+Maintainer decisions of 2026-11-02:
+
+- **D1 data-safety gate:** on the first vault-mutating command when no Rust
+  marker exists in the vault, Rust creates a backup through the existing backup
+  path, restores it into a temp dir and verifies it before the write proceeds
+  (contract row DIST-005).
+- **D3:** FreeBSD artifacts are dropped at the Rust cutover.
+- **D5:** VALUE-001 is measured and reported, not blocking.
+- **D6:** the generator `.go` files under `scripts/rust-port/cmd` are not
+  backend code; at Go removal they are archived on the tag `legacy/go-oracle`,
+  and frozen fixtures stay.
+- **D7:** the Rust-stricter divergences listed in
+  [ADR 0032](../adr/0032-ratified-rust-stricter-divergences.md) are ratified as
+  approved divergences. No row is promoted to `PASS` by it.
+- **RUST-015:** Go removal is done locally and merged into `local/rust-port`;
+  push, PR and release remain separate authorizations.
+
 > **Status:** accepted for staged implementation
 > **Go oracle:** commit `caadd5e`, release `v0.22.1`
 > **Scope:** the Go backend and mobile bridge; Swift clients and editor plugins stay in their current languages
@@ -51,12 +80,14 @@ passes. The measured Go baseline is in
    tokens, pairing data, exports, and release archives remain compatible.
 3. MCP stdout contains only protocol frames; diagnostics stay on stderr.
 4. Secret values never enter logs, errors, snapshots, fixtures, or benchmark data.
-5. Go remains buildable and testable until a stable Rust release has operated
-   without unexplained parity defects. Removal is a separate final change.
+5. Go remains buildable and testable until the Rust-only cutover; it is then
+   removed (see the cutover decision above and RUST-015). This replaces the
+   earlier rule of keeping Go until a stable Rust release had operated.
 6. `#![deny(unsafe_code)]` is the default. Any exception requires a documented
    invariant, focused tests, Miri where applicable, and review.
-7. macOS, Linux, Windows, and the currently shipped FreeBSD artifacts stay in
-   scope unless a separate compatibility decision explicitly removes one.
+7. macOS arm64 and Linux stay in scope. Windows and Intel Macs are out of scope
+   (#1550/#1551); the FreeBSD artifacts are dropped at the Rust cutover
+   (decision D3, 2026-11-02).
 8. Swift clients continue using Symaira AppKit. TypeScript/editor code is not
    rewritten merely to make the repository “all Rust”.
 9. The Apache-2.0 self-hosted and standalone-first product boundary does not change.
