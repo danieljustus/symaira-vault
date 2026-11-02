@@ -244,13 +244,67 @@ Still open:
 
 | Class | Go | Rust |
 | --- | --- | --- |
-| read-only commands (`get`, `list`, `find`, `delete` without a match) after a successful open | leave `.lock` and `manifest.age` in the vault | write neither (the prompt differential ignores the two names for these commands) |
-| vault-open failure of `verify` (probed; `run` matches, the rest were not probed) | `Error:` twice | once (only `set` and the six commands above were re-pinned) |
-| legacy zero-key vault (identity wrapped under the pre-#476 bug, valid `recipients.txt`) | heals the file and opens | refuses with `zero-key recovery failed: decryption failed` |
 | non-UTF-8 passphrase bytes at the unlock prompt | raw bytes are the passphrase | each invalid byte is U+FFFD |
-| age header larger than 2 MiB; `%q` of exotic Unicode in the quoted intro | `header exceeds 2 MiB`; `strconv.Quote` | not ported; an approximation of `unicode.IsPrint` |
+| `%q` of exotic Unicode in the quoted intro | `strconv.Quote` | an approximation of `unicode.IsPrint` |
 | Go's `bufio` fill when the writer is slower than the reader | takes one `read(2)` of whatever arrived | same model, so the same timing dependence |
 | Windows hidden read | `term.ReadPassword` | `rpassword` plus the stderr line feed (no native run) |
+
+## SET-004 fix round: legacy zero-key heal, `unlock`/`verify` errors, Go's `Open` bookkeeping
+
+Fixed, each pinned against the non-CGO Go oracle in
+`crates/symvault-cli/tests/zero_key_differential.rs` (25 heal cases, 15 header cases, 7 manifest
+cases, Touch ID warning, 4 Ctrl-D prompt cases) and, for the error shape, `set_differential.rs`
+(`unlock` and `verify` joined the 12 open-failure damages of the other seven commands):
+
+- **Legacy zero-key vaults heal.** `vault.OpenWithPassphrase` calls `tryHealZeroKeyIdentity` when an
+  Argon2id unwrap fails with a non-resource error. The shared implementation is
+  `symvault_store::zero_key::heal_zero_key_identity` (CLI and C ABI): `recipients.txt` is read first
+  (byte-exact `bufio.Scanner` rules: regular file, never a symlink, CRLF stripped, 64 KiB lines refused,
+  comments/blank lines skipped, every other line a valid `age1` key, duplicates folded), the identity is
+  recovered once with a zero key of the passphrase length (`recover_zero_key_identity_with_authorities`,
+  Go's `RecoverZeroKeyIdentityWithAuthorities`: authorities, then the 1..=1024 length, then the unwrap),
+  `recipients.txt` is re-read and must be unchanged, then `identity.age.bak` (mode 0600, atomic) receives
+  the old bytes, `identity.age` is re-wrapped with Argon2id under the real passphrase (mode 0600,
+  atomic), re-read and opened with the passphrase, and rolled back from the backup if that fails. Go
+  prints no notice and writes no audit record for a heal (`HealedFromZeroKey` has no reader). Callers
+  traced from Go's `OpenWithPassphrase` users: every unlock (`device.rs`, including the cached-session
+  passphrase), `unlock`, `auth rotate-passphrase`, `auth set touchid` and the FFI; `migrate kdf` only
+  reaches it for a scrypt identity (never healed) and `serve`'s OAuth consent check still verifies by
+  decrypting (below).
+- A heal that finds a passphrase longer than 1024 bytes reports `zero-key length is invalid` (after the
+  `recipients.txt` checks, as in Go); the heal refusals and a vault healed by either binary opening in
+  the other are pinned.
+- `unlock` and `verify` print a wrong-passphrase failure twice as `open vault: load identity: …`, exit 1.
+- The `Touch ID skipped (no GUI session); …` warning is printed by the non-interactive unlock path
+  (`get`, `list`, …) when `authMethod: touchid` and no GUI session exists; `--quiet` silences it.
+- An `identity.age` header over 2 MiB fails with `header exceeds 2 MiB` in the accounting of Go's
+  `headerReader` (intro, stanza lines, footer line and the 3-byte footer peek are charged) and no longer
+  reaches the `age` crate or the mirror parser unbounded. The `age` crate is also superlinear in the length
+  of a header line (a 64 KiB argument line takes it 17 s); identity headers over 16 KiB, with a line over
+  1 KiB or more than 1024 stanzas are therefore never handed to it and are reported as an identity the
+  passphrase does not open (an `argon2id` stanza line that long is Go's `malformed argon2id stanza`).
+  **Deliberate deviation:** a Go-valid identity with such a header cannot be opened; no vault writes one.
+- Every vault open rebuilds a missing, stale (older than `manifest_generation`) or incomplete (`.age` files
+  the manifest does not list) `manifest.age`, best effort, like `Vault.Open` (`Store::reconcile_manifest_on_open`),
+  so `verify` on a manifest-less vault verifies instead of printing `No manifest found`, and read commands
+  leave `.lock` and `manifest.age` as Go does.
+- Hidden terminal input: Ctrl-D (one zero-byte read) is ignored while the terminal is open, as in
+  `x/term`'s `readPasswordLine` loop; the terminal attributes are restored by a drop guard. Password and
+  line buffers are `Zeroizing` with their capacity reserved (growth wipes the old allocation) and the
+  consumed range of the shared 4096-byte `bufio` buffer is zeroed.
+  **Deliberate deviation:** a terminal that has hung up (the zero-byte read returns at once, 64 times in a
+  row) ends the read as `EOF`; Go spins at full CPU forever.
+  **Signals:** both binaries are killed by SIGINT/SIGTERM/SIGHUP at the prompt without running their
+  restore (`ISIG` stays on; Go's `defer` and Rust's drop guard do not run on death by signal), so both
+  leave echo off. Neither installs a handler for the hidden read.
+
+Still open:
+
+| Class | Go | Rust |
+| --- | --- | --- |
+| `serve` OAuth consent passphrase check on a legacy zero-key vault | `OpenWithPassphrase` heals the file | decrypts only; a zero-key vault is refused at consent (the vault must have been unlocked once by any command) |
+| `Touch ID skipped` warning on a host with a GUI session | not printed | not printed; the warning branch is only exercised against the oracle on hosts without one (unit test in the binary on others) |
+| `FlushManifestUpdates`, filesystem-sync reports, git relocation of `Open` | run on open | not part of the Rust open |
 
 ## Historical measurement, 2026-09-27
 

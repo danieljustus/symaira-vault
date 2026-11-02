@@ -8,15 +8,15 @@ use std::path::{Path, PathBuf};
 
 use symvault_core::config::{Config, VaultConfig};
 use symvault_crypto::{
-    Argon2idParams, EnvelopeFormat, FailureClass, Identity, SecretBytes, ZeroKeyAuthority, decrypt,
-    decrypt_identity, detect_envelope, encrypt_identity_argon2id, generate_identity,
-    identity_string, recover_zero_key_identity,
+    Argon2idParams, EnvelopeFormat, Identity, SecretBytes, decrypt, decrypt_identity,
+    detect_envelope, encrypt_identity_argon2id, generate_identity, identity_string,
 };
+use symvault_store::zero_key::{heal_zero_key_identity, is_argon2_resource_error};
 use symvault_store::{Store, StoreError};
 use zeroize::Zeroizing;
 
 use crate::gotext::agehdr::{self, Identity as AgeIdentity};
-use crate::gotext::bech32::{validate_identity, validate_recipient};
+use crate::gotext::bech32::validate_identity;
 use crate::gotext::entryjson::{ScrubbedEntry, decode_entry};
 use crate::gotext::timefmt::now_rfc3339_nano;
 use crate::gotext::{errno_text, path_error, trim_space};
@@ -202,86 +202,6 @@ pub(crate) fn init_vault(dir: &str, passphrase: &[u8]) -> R<()> {
 // OpenVaultWithPassphrase
 // ---------------------------------------------------------------------------
 
-/// `trustedZeroKeyAuthorities`: recipients.txt is the only trust anchor.
-fn zero_key_authorities(dir: &str) -> R<(Vec<String>, Vec<u8>)> {
-    let path = Path::new(dir).join("recipients.txt");
-    let snapshot = match fs::symlink_metadata(&path) {
-        Ok(meta) if meta.is_file() => fs::read(&path).ok(),
-        _ => None,
-    }
-    .ok_or_else(|| "zero-key recovery requires a trusted recipients.txt".to_owned())?;
-    let invalid = || "zero-key recovery requires valid recipients.txt authority".to_owned();
-    let text = std::str::from_utf8(&snapshot).map_err(|_| invalid())?;
-    let mut recipients = Vec::new();
-    for line in text.lines() {
-        let line = trim_space(line);
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        validate_recipient(line).map_err(|_| invalid())?;
-        if !recipients.iter().any(|seen| seen == line) {
-            recipients.push(line.to_owned());
-        }
-    }
-    if recipients.is_empty() {
-        return Err(invalid());
-    }
-    Ok((recipients, snapshot))
-}
-
-/// `tryHealZeroKeyIdentity`.
-fn heal_zero_key(dir: &str, raw: &[u8], passphrase: &[u8]) -> R<Identity> {
-    let (recipients, snapshot) = zero_key_authorities(dir)?;
-    let mut recovered = None;
-    for recipient in &recipients {
-        if let Ok(identity) = recover_zero_key_identity(
-            raw,
-            passphrase.len(),
-            ZeroKeyAuthority::recipient(recipient),
-        ) {
-            recovered = Some(identity);
-            break;
-        }
-    }
-    let Some(identity) = recovered else {
-        return Err("zero-key recovery failed: decryption failed".to_owned());
-    };
-    let recipients_path = Path::new(dir).join("recipients.txt");
-    if fs::read(&recipients_path).ok().as_deref() != Some(snapshot.as_slice()) {
-        return Err("zero-key recovery authority changed; refusing to re-key the vault".to_owned());
-    }
-    let identity_path = Path::new(dir).join("identity.age");
-    let backup = Path::new(dir).join("identity.age.bak");
-    let original = fs::read(&identity_path).map_err(|error| {
-        format!(
-            "atomic rewrite of healed identity: read original identity: {}",
-            errno_text(&error)
-        )
-    })?;
-    if original != raw {
-        return Err("atomic rewrite of healed identity: identity changed during zero-key recovery; refusing to re-key the vault".to_owned());
-    }
-    atomic_write(&backup, &original, 0o600).map_err(|error| {
-        format!(
-            "atomic rewrite of healed identity: write backup: {}",
-            errno_text(&error)
-        )
-    })?;
-    let sealed = encrypt_identity_argon2id(
-        &identity,
-        &SecretBytes::new(passphrase),
-        Argon2idParams::default(),
-    )
-    .map_err(|error| format!("atomic rewrite of healed identity: save new identity: {error}"))?;
-    atomic_write(&identity_path, &sealed, 0o600).map_err(|error| {
-        format!(
-            "atomic rewrite of healed identity: save new identity: {}",
-            errno_text(&error)
-        )
-    })?;
-    Ok(identity)
-}
-
 pub(crate) fn open_with_passphrase(dir: &str, passphrase: &[u8]) -> R<Zeroizing<String>> {
     if dir.is_empty() {
         return Err("vaultDir is empty".to_owned());
@@ -300,12 +220,13 @@ pub(crate) fn open_with_passphrase(dir: &str, passphrase: &[u8]) -> R<Zeroizing<
         Ok(identity) => identity,
         Err(error) => {
             let reason = if detect_envelope(&raw) == EnvelopeFormat::Argon2id {
-                match error.class() {
-                    FailureClass::ResourceBusy | FailureClass::ResourcePolicy => error.to_string(),
-                    _ => match heal_zero_key(dir, &raw, passphrase) {
+                if is_argon2_resource_error(error) {
+                    error.to_string()
+                } else {
+                    match heal_zero_key_identity(Path::new(dir), &raw, passphrase) {
                         Ok(identity) => return finish_open(dir, identity),
                         Err(reason) => reason,
-                    },
+                    }
                 }
             } else {
                 scrypt_identity_error(&raw, passphrase)

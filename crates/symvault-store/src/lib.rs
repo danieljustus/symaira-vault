@@ -40,6 +40,9 @@ pub mod sharing;
 /// Go-compatible agent-scoped MCP token registry mutations.
 pub mod token_registry;
 
+/// Go's legacy zero-key identity heal (`tryHealZeroKeyIdentity`).
+pub mod zero_key;
+
 mod entry_budget;
 mod entry_resources;
 mod file_digest;
@@ -2819,6 +2822,51 @@ impl Store {
     /// Rebuilds the manifest from regular fresh-layout entry files.
     pub fn rebuild_manifest(&self, identity: &Identity) -> Result<Manifest, StoreError> {
         self.with_write_lock(|store| store.rebuild_manifest_locked(identity))
+    }
+
+    /// The manifest consistency block of Go's `Vault.Open`: a missing
+    /// `manifest.age`, one older than the configured generation counter, or one
+    /// that does not list every `.age` file under `entries/` (typically after
+    /// a git pull or rsync) is rebuilt from the entries on disk. Every failure
+    /// is ignored, as in Go (`_ = RebuildManifest(...)`).
+    pub fn reconcile_manifest_on_open(&self, identity: &Identity) {
+        let missing = matches!(
+            fs::metadata(self.root.join(MANIFEST_FILE)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound
+        );
+        if missing {
+            let _ = self.rebuild_manifest(identity);
+            return;
+        }
+        let generation = self.config.manifest_generation;
+        let Ok(manifest) = self.load_manifest(identity) else {
+            // `DetectOutOfBandEntries` needs the manifest too; with a
+            // configured generation a failed load is not examined further.
+            return;
+        };
+        if generation > 0 && manifest.generation < i64::try_from(generation).unwrap_or(i64::MAX) {
+            let _ = self.rebuild_manifest(identity);
+            return;
+        }
+        if self.has_out_of_band_entries(&manifest, identity) == Some(true) {
+            let _ = self.rebuild_manifest(identity);
+        }
+    }
+
+    /// `DetectOutOfBandEntries`: whether an entry file is absent from `manifest`
+    /// (`None` when the listing fails).
+    fn has_out_of_band_entries(&self, manifest: &Manifest, identity: &Identity) -> Option<bool> {
+        let mut expected = BTreeSet::new();
+        for logical in manifest.entries.keys() {
+            let target = self.configured_entry_path(logical, identity).ok()?;
+            expected.insert(self.relative_path(&target).ok()?);
+        }
+        let candidates = self.entry_candidates().ok()?;
+        Some(
+            candidates
+                .iter()
+                .any(|candidate| candidate.fresh && !expected.contains(&candidate.relative)),
+        )
     }
 
     /// Rebuilds the manifest while the caller already holds `with_write_lock`.

@@ -1,103 +1,65 @@
-//! The text Go's `vault.OpenWithPassphrase` gives for an identity file the
-//! passphrase cannot open (`internal/vault/vault.go`, `internal/crypto`).
+//! Go's `vault.OpenWithPassphrase` identity step: the identity file is opened
+//! with the passphrase, a legacy zero-key Argon2id file is healed, and a file
+//! the passphrase cannot open gets Go's `load identity: ...` text.
 //!
 //! The Go error chain is reproduced in order, not by outcome class:
 //!
 //! * An Argon2id envelope that fails to unwrap (and is not a resource-policy
-//!   error) goes through `tryHealZeroKeyIdentity`, whose
-//!   `trustedZeroKeyAuthorities` reads `recipients.txt` first and so replaces
-//!   the unwrap error with its own: a missing, symlinked, non-regular or
-//!   unreadable file is `requires a trusted recipients.txt`; an empty, garbled
-//!   or comment-only file is `requires valid recipients.txt authority`; only a
-//!   valid file lets `RecoverZeroKeyIdentityWithAuthorities` run and report
-//!   `zero-key recovery failed: decryption failed`.
+//!   error) goes through `tryHealZeroKeyIdentity` (`symvault_store::zero_key`,
+//!   shared with the C ABI), which reads `recipients.txt` first, so its refusal
+//!   replaces the unwrap error: a missing, symlinked, non-regular or unreadable
+//!   file is `requires a trusted recipients.txt`; an empty, garbled or
+//!   comment-only file is `requires valid recipients.txt authority`; only a
+//!   valid file lets the zero-key recovery run. A recovery that verifies re-wraps
+//!   `identity.age` under the real passphrase and the open continues; otherwise
+//!   it reports `zero-key recovery failed: decryption failed`.
 //! * Any other envelope is read by `LoadIdentity`, which wraps the age library
 //!   error as `decryption failed: <age error>`. The age header parser
 //!   (`internal/format`) is mirrored here because its messages quote the
 //!   offending bytes.
 
-use std::{fs, path::Path};
+use std::path::Path;
 
-use symvault_crypto::{EnvelopeFormat, FailureClass};
+use symvault_crypto::{EnvelopeFormat, Identity, SecretBytes, decrypt_identity};
+use symvault_store::zero_key::{heal_zero_key_identity, is_argon2_resource_error};
 
-const TRUSTED: &str = "load identity: zero-key recovery requires a trusted recipients.txt";
-const VALID_AUTHORITY: &str =
-    "load identity: zero-key recovery requires valid recipients.txt authority";
 const INTRO: &[u8] = b"age-encryption.org/v1\n";
-const MAX_SCAN_TOKEN: usize = 64 * 1024;
+/// `format.maxHeaderBytes`.
+const MAX_HEADER: usize = 2 << 20;
+const EXCEEDS: &str = "header exceeds 2 MiB";
 
-/// `vault.OpenWithPassphrase`'s `load identity: ...` failure for `envelope`
-/// opened with a non-empty `passphrase` (an empty one is refused before the
-/// identity is read); `class` is why the Rust crypto layer refused it.
-pub(crate) fn load_identity_error(
+/// The identity step of `vault.OpenWithPassphrase` for `envelope` (the bytes of
+/// `identity.age`) and `passphrase`. On failure the error is Go's
+/// `load identity: ...`, or `passphrase is empty` for an empty one.
+///
+/// A legacy zero-key identity is healed here, before any error text is built,
+/// exactly where Go does it: after the real passphrase failed to unwrap an
+/// Argon2id envelope with a non-resource error.
+pub(crate) fn open_identity(
     vault: &Path,
     envelope: &[u8],
     passphrase: &[u8],
-    class: FailureClass,
-) -> String {
+) -> Result<Identity, String> {
+    if passphrase.is_empty() {
+        // `OpenWithPassphrase` refuses before it reads the identity file.
+        return Err("passphrase is empty".to_owned());
+    }
+    let error = match decrypt_identity(envelope, &SecretBytes::new(passphrase)) {
+        Ok(identity) => return Ok(identity),
+        Err(error) => error,
+    };
     if symvault_crypto::detect_envelope(envelope) == EnvelopeFormat::Argon2id {
         // `IsArgon2ResourceError` errors are returned as they are.
-        match class {
-            FailureClass::ResourcePolicy => {
-                return "load identity: argon2id resource policy: use migrate kdf --allow-legacy-kdf for a historical identity"
-                    .to_owned();
-            }
-            FailureClass::ResourceBusy => {
-                return "load identity: argon2id resources busy".to_owned();
-            }
-            FailureClass::ParameterBounds => {
-                return "load identity: argon2id parameters out of bounds".to_owned();
-            }
-            _ => {}
+        if is_argon2_resource_error(error) {
+            return Err(format!("load identity: {error}"));
         }
-        return match trusted_authority(vault) {
-            Err(message) => message.to_owned(),
-            Ok(()) if passphrase.len() > 1024 => {
-                "load identity: zero-key length is invalid".to_owned()
-            }
-            Ok(()) => "load identity: zero-key recovery failed: decryption failed".to_owned(),
-        };
+        return heal_zero_key_identity(vault, envelope, passphrase)
+            .map_err(|message| format!("load identity: {message}"));
     }
-    format!("load identity: decryption failed: {}", age_error(envelope))
-}
-
-/// `trustedZeroKeyAuthorities`: `recipients.txt` must be a regular, readable
-/// file (`SafeReadFile` refuses a symlink) listing at least one valid
-/// recipient, with every other line blank or a comment.
-fn trusted_authority(vault: &Path) -> Result<(), &'static str> {
-    let path = vault.join("recipients.txt");
-    let regular = fs::symlink_metadata(&path).is_ok_and(|meta| meta.file_type().is_file());
-    let snapshot = if regular { fs::read(&path).ok() } else { None };
-    let snapshot = snapshot.ok_or(TRUSTED)?;
-
-    let mut recipients = 0usize;
-    let mut rest = snapshot.as_slice();
-    while !rest.is_empty() {
-        let (line, terminated, next) = match rest.iter().position(|&byte| byte == b'\n') {
-            Some(end) => (&rest[..end], true, &rest[end + 1..]),
-            None => (rest, false, &rest[rest.len()..]),
-        };
-        // bufio.Scanner gives up on a line that fills its 64 KiB buffer.
-        let held = line.len() + usize::from(terminated);
-        if held > MAX_SCAN_TOKEN || (!terminated && held >= MAX_SCAN_TOKEN) {
-            return Err(VALID_AUTHORITY);
-        }
-        rest = next;
-        let line = line.strip_suffix(b"\r").unwrap_or(line);
-        let text = String::from_utf8_lossy(line);
-        let text = text.trim();
-        if text.is_empty() || text.starts_with('#') {
-            continue;
-        }
-        if !text.starts_with("age1") || symvault_crypto::parse_recipient(text).is_err() {
-            return Err(VALID_AUTHORITY);
-        }
-        recipients += 1;
-    }
-    if recipients == 0 {
-        return Err(VALID_AUTHORITY);
-    }
-    Ok(())
+    Err(format!(
+        "load identity: decryption failed: {}",
+        age_error(envelope)
+    ))
 }
 
 struct Stanza {
@@ -161,22 +123,27 @@ fn age_error(raw: &[u8]) -> String {
 fn parse_header(raw: &[u8]) -> Result<Vec<Stanza>, String> {
     let parse_error = |message: String| format!("parsing age header: {message}");
     let mut position = 0usize;
-    // Reads one line (delimiter included); the flag is false at EOF.
-    let read_line = |position: &mut usize| -> (Vec<u8>, bool) {
+    // `headerReader.n`: header bytes consumed so far.
+    let mut consumed = 0usize;
+    // Reads one line (delimiter included); the flag is false at EOF. `None` is
+    // `headerReader`'s refusal of a line that takes the header past 2 MiB.
+    let read_line = |position: &mut usize, consumed: &mut usize| -> Option<(Vec<u8>, bool)> {
         let rest = &raw[*position..];
-        match rest.iter().position(|&byte| byte == b'\n') {
-            Some(end) => {
-                *position += end + 1;
-                (rest[..=end].to_vec(), true)
-            }
-            None => {
-                *position = raw.len();
-                (rest.to_vec(), false)
-            }
+        let (length, complete) = match rest.iter().position(|&byte| byte == b'\n') {
+            Some(end) => (end + 1, true),
+            None => (rest.len(), false),
+        };
+        if length > MAX_HEADER - *consumed {
+            return None;
         }
+        *consumed += length;
+        *position += length;
+        Some((rest[..length].to_vec(), complete))
     };
 
-    let (line, complete) = read_line(&mut position);
+    let Some((line, complete)) = read_line(&mut position, &mut consumed) else {
+        return Err(parse_error(EXCEEDS.to_owned()));
+    };
     if !complete {
         if line.is_empty() {
             return Err(parse_error("file is empty".to_owned()));
@@ -195,12 +162,21 @@ fn parse_header(raw: &[u8]) -> Result<Vec<Stanza>, String> {
 
     let mut stanzas: Vec<Stanza> = Vec::new();
     loop {
+        // `headerReader.Peek(3)` refuses to look past 2 MiB.
+        if consumed + 3 > MAX_HEADER {
+            return Err(parse_error(EXCEEDS.to_owned()));
+        }
         let remaining = &raw[position..];
         if remaining.len() < 3 {
             return Err(parse_error("failed to read header: EOF".to_owned()));
         }
         if &remaining[..3] == b"---" {
-            let (line, complete) = read_line(&mut position);
+            let Some((line, complete)) = read_line(&mut position, &mut consumed) else {
+                return Err(format!(
+                    "failed to read header: {}",
+                    parse_error(EXCEEDS.to_owned())
+                ));
+            };
             if !complete {
                 return Err("failed to read header: EOF".to_owned());
             }
@@ -234,7 +210,7 @@ fn parse_header(raw: &[u8]) -> Result<Vec<Stanza>, String> {
             ));
         }
         stanzas.push(
-            read_stanza(raw, &mut position)
+            read_stanza(raw, &mut position, &mut consumed)
                 .map_err(|message| format!("failed to parse header: {message}"))?,
         );
     }
@@ -246,21 +222,27 @@ fn parse_header(raw: &[u8]) -> Result<Vec<Stanza>, String> {
 
 /// `StanzaReader.ReadStanza`; its errors are `ParseError`s only where Go
 /// builds them with `errorf`.
-fn read_stanza(raw: &[u8], position: &mut usize) -> Result<Stanza, String> {
-    let next_line = |position: &mut usize| -> Result<Vec<u8>, String> {
+fn read_stanza(raw: &[u8], position: &mut usize, consumed: &mut usize) -> Result<Stanza, String> {
+    let next_line = |position: &mut usize, consumed: &mut usize| -> Result<Vec<u8>, String> {
         let rest = &raw[*position..];
-        match rest.iter().position(|&byte| byte == b'\n') {
-            Some(end) => {
-                *position += end + 1;
-                Ok(rest[..=end].to_vec())
-            }
-            None => {
-                *position = raw.len();
-                Err("failed to read line: EOF".to_owned())
-            }
+        let (length, complete) = match rest.iter().position(|&byte| byte == b'\n') {
+            Some(end) => (end + 1, true),
+            None => (rest.len(), false),
+        };
+        if length > MAX_HEADER - *consumed {
+            return Err(format!(
+                "failed to read line: parsing age header: {EXCEEDS}"
+            ));
+        }
+        *consumed += length;
+        *position += length;
+        if complete {
+            Ok(rest[..length].to_vec())
+        } else {
+            Err("failed to read line: EOF".to_owned())
         }
     };
-    let line = next_line(position)?;
+    let line = next_line(position, consumed)?;
     if !line.starts_with(b"->") {
         return Err(format!(
             "malformed stanza opening line: {}",
@@ -277,7 +259,7 @@ fn read_stanza(raw: &[u8], position: &mut usize) -> Result<Stanza, String> {
         body_len: 0,
     };
     loop {
-        let line = next_line(position)?;
+        let line = next_line(position, consumed)?;
         let text = line.strip_suffix(b"\n").unwrap_or(&line);
         let text = String::from_utf8_lossy(text);
         let decoded = if text.contains(['\n', '\r']) {
