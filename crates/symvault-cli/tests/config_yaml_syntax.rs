@@ -627,6 +627,30 @@ fn mutated_expectation_is_detected() {
         results: wrong_doctor,
     };
     assert!(run_doctor_observation(&bytes, &mutated, &fixture.doctor_ids).is_some());
+
+    // The `auth status` observation must also be able to fail: the merged
+    // useTouchID case resolves to touchid, so expecting passphrase is a diff.
+    let merge = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "load_vault_use_touch_id_via_merge")
+        .expect("load_vault_use_touch_id_via_merge is part of the corpus");
+    let merge_bytes = decode_hex(&merge.config_hex);
+    let auth = merge
+        .auth_method
+        .as_ref()
+        .expect("the merge case records an auth_method observation");
+    assert_eq!(auth.method, "touchid");
+    assert_eq!(run_auth_method_observation(&merge_bytes, auth), None);
+    let wrong_method = AuthObservation {
+        args: auth.args.clone(),
+        exit_code: auth.exit_code,
+        method: "passphrase".into(),
+    };
+    assert!(
+        run_auth_method_observation(&merge_bytes, &wrong_method).is_some(),
+        "a wrong resolved auth method must fail the replay"
+    );
 }
 
 /// Runs every command recorded for an open divergence and returns, per command,

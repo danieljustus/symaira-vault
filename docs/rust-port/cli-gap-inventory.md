@@ -362,6 +362,15 @@ configs; 344 of 4,767 comparisons before).
   `AgentProfile`/`McpConfig` (unchanged).
 - A key written both as an integer and as the same text under a merge (`1: a` own, `"1"` merged) is one
   key here and two in Go's `mergedFields` (interface-typed keys).
+- An explicitly empty or null `vault.authMethod` loads as `""` in Go and `passphrase` in Rust. No command
+  shows it (delta review probed 6 configs across `config get vault.authMethod`/`authMethod`, `config list`,
+  `auth status [--json]`, `config validate`, `agent list`, `doctor --no-network`): Go's
+  `EffectiveAuthMethod` reads `Vault.AuthMethod` only when the top-level method is empty. It could only
+  surface in file text after a save when the top-level method is touchid, and the top-level key wins on
+  reload; no save path was exercised.
+- `agent profile show/export` still read the raw YAML (`agent_profile_commands.rs`), so a duplicate agent
+  key reached through an alias (`&a x: {...}` then `*a : {...}`) fails there with `agents: duplicate entry
+  with key "x"` (exit 1) where Go loads it (exit 0); `config validate` and `agent list` agree with Go.
 - `get`/`set` observations of `custom_tag_on_value` (node layer, `textCommands`) are no longer recorded
   with the promoted case; they were never part of the `accepted` class.
 
