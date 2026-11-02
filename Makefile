@@ -1323,9 +1323,12 @@ sync-observations-contract:
 
 # rust-pairing.yml: oracle-bound steps not covered by pairing-differential,
 # config-profile-differential and device-list-differential.
+# The macOS trusted-alias auth case needs TMPDIR below the root-owned /var ->
+# /private/var alias (the same rule as config-cli-differential in local-gate.sh).
+AREA_PAIRING_TMP := $(if $(filter Darwin,$(shell uname -s)),TMPDIR="$(shell getconf DARWIN_USER_TEMP_DIR)")
 pairing-oracle-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_ENV) CARGO="$(CARGO)" GO="$(GO)" BUILD_GO_TOOLCHAIN="$(BUILD_GO_TOOLCHAIN)" AREA_CHECK="$(AREA_CHECK)" \
+	$(AREA_ENV) $(AREA_PAIRING_TMP) CARGO="$(CARGO)" GO="$(GO)" BUILD_GO_TOOLCHAIN="$(BUILD_GO_TOOLCHAIN)" AREA_CHECK="$(AREA_CHECK)" \
 		scripts/rust-port/area_pairing_oracle.sh "$(abspath $(AREA_EVIDENCE))"
 
 # rust-tui.yml: the named browser tests of `cargo test -p symvault-cli
