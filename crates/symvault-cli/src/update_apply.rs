@@ -1122,16 +1122,16 @@ mod tests {
         let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/update-apply-transaction/cases.json");
         let fixture: Fixture = serde_json::from_slice(&fs::read(fixture_path).unwrap()).unwrap();
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/go-snapshots");
         let mut hasher = Sha256::new();
         for name in &fixture.oracle.source_files {
             hasher.update(name.as_bytes());
             hasher.update([0]);
-            hasher.update(fs::read(root.join(name)).unwrap());
+            hasher.update(fs::read(root.join(format!("{name}.txt"))).unwrap());
             hasher.update([0]);
         }
         assert_eq!(hex::encode(hasher.finalize()), fixture.oracle.source_digest);
-        let go_mod = fs::read_to_string(root.join("go.mod")).unwrap();
+        let go_mod = fs::read_to_string(root.join("go.mod.txt")).unwrap();
         assert!(go_mod.contains(&fixture.oracle.corekit_pin));
         assert_eq!(fixture.oracle.corekit_revision.len(), 40);
         assert_eq!(

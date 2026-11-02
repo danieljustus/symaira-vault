@@ -89,8 +89,10 @@ fn fixture() -> Fixture {
     assert_eq!(
         f.generator_digest,
         digest(
-            &fs::read(Path::new(ROOT).join("scripts/rust-port/cmd/manifestkeygen/main.go"))
-                .unwrap()
+            &fs::read(Path::new(ROOT).join(
+                "testdata/port/go-snapshots/scripts/rust-port/cmd/manifestkeygen/main.go.txt"
+            ))
+            .unwrap()
         )
     );
     f

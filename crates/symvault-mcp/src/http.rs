@@ -2953,7 +2953,8 @@ mod tests {
         use sha2::Sha256;
         use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-        let go_local = include_str!("../../../internal/approval/local.go");
+        let go_local =
+            include_str!("../../../testdata/port/go-snapshots/internal/approval/local.go.txt");
         assert!(go_local.contains("/api/v1/local/approvals"));
         assert!(go_local.contains("/api/v1/local/approvals/"));
 
@@ -4742,7 +4743,9 @@ mod tests {
 
     #[test]
     fn keep_alive_idle_timeout_matches_go_source_and_closes_socket() {
-        let go_http = include_str!("../../../internal/mcp/serverbootstrap/http.go");
+        let go_http = include_str!(
+            "../../../testdata/port/go-snapshots/internal/mcp/serverbootstrap/http.go.txt"
+        );
         let compact_go = go_http
             .chars()
             .filter(|character| !character.is_whitespace())
@@ -4795,7 +4798,9 @@ mod tests {
 
     #[test]
     fn idle_connection_does_not_block_twenty_keep_alive_requests() {
-        let source = include_str!("../../../internal/mcp/serverbootstrap/http.go");
+        let source = include_str!(
+            "../../../testdata/port/go-snapshots/internal/mcp/serverbootstrap/http.go.txt"
+        );
         assert!(source.contains("IdleTimeout:       120 * time.Second"));
         fn test_handler(_: &str) -> Result<ProtocolHandler, String> {
             Ok(ProtocolHandler::new("symaira", "1.0.0"))

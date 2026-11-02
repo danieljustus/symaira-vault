@@ -84,10 +84,10 @@ fn unsupported_install_method_matches_go_and_stops_before_side_effects() {
 #[test]
 fn fixture_binds_go_sources_and_corekit_pin() {
     let fixture = fixture();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/go-snapshots");
     let mut hasher = Sha256::new();
     for name in &fixture.oracle.source_files {
-        let bytes = std::fs::read(root.join(name))
+        let bytes = std::fs::read(root.join(format!("{name}.txt")))
             .unwrap_or_else(|error| panic!("read Go oracle source {name}: {error}"));
         hasher.update(name.as_bytes());
         hasher.update([0]);
@@ -99,6 +99,6 @@ fn fixture_binds_go_sources_and_corekit_pin() {
         fixture.oracle.source_digest,
         "pinned Go update-apply sources changed"
     );
-    let go_mod = std::fs::read_to_string(root.join("go.mod")).expect("read go.mod");
+    let go_mod = std::fs::read_to_string(root.join("go.mod.txt")).expect("read go.mod");
     assert!(go_mod.contains(&fixture.oracle.corekit_pin));
 }

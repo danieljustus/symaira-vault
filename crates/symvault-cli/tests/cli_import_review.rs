@@ -182,11 +182,11 @@ fn fixture_source_digest_matches_checkout() {
         "source_files must be stored sorted for a stable digest"
     );
 
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/go-snapshots");
     let mut hasher = Sha256::new();
     for name in &names {
-        let content =
-            std::fs::read(root.join(name)).unwrap_or_else(|error| panic!("read {name}: {error}"));
+        let content = std::fs::read(root.join(format!("{name}.txt")))
+            .unwrap_or_else(|error| panic!("read {name}: {error}"));
         hasher.update(name.as_bytes());
         hasher.update([0u8]);
         hasher.update(&content);

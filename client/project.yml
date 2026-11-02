@@ -84,8 +84,11 @@ targets:
             cp "$SRC" "$DST/symvault"
             chmod +x "$DST/symvault"
             echo "Embedded symvault into $DST/symvault"
+          elif [ "$CONFIGURATION" = "Release" ]; then
+            echo "error: symvault not found at $SRC — run 'cargo build --release -p symvault-cli --locked && cp target/release/symvault symvault' first"
+            exit 1
           else
-            echo "warning: symvault not found at $SRC — run 'make build' first"
+            echo "warning: symvault not found at $SRC — run 'cargo build -p symvault-cli --locked && cp target/debug/symvault symvault' first"
           fi
         runOnlyWhenInstalling: false
         basedOnDependencyAnalysis: false
