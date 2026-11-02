@@ -2909,9 +2909,17 @@ fn run_add(
         }
         let path = options.path.clone();
         // Go returns every `add` failure from `RunE`, so cobra and
-        // `ExecuteRoot` both print it (doubled `Error:` line, exit 1).
-        add_commands::add(&vault, &identity, &options)
-            .map_err(|error| reported(1, &error, None))?;
+        // `ExecuteRoot` both print it (doubled `Error:` line). The exit status
+        // is 1, except for the empty sensitive value, a CLIError with
+        // ExitInvalidInput (9) in `cmd/crud/add.go`.
+        add_commands::add(&vault, &identity, &options).map_err(|error| {
+            let code = if error.starts_with("cannot set empty value for sensitive field") {
+                9
+            } else {
+                1
+            };
+            reported(code, &error, None)
+        })?;
         if !quiet {
             println!("Entry created: {path}");
         }
