@@ -152,8 +152,88 @@ fn setup_env(command: &mut Command, sandbox: &Sandbox) {
         .env("NO_COLOR", "1");
 }
 
-fn binary() -> &'static str {
-    env!("CARGO_BIN_EXE_symvault")
+/// `CARGO_BIN_EXE_symvault` is `target/debug/symvault`, a hard link that any
+/// other cargo invocation sharing the target directory (a workspace build, a
+/// run from another worktree, another feature set) replaces while this test is
+/// still running: cargo drops its build lock before it executes test binaries.
+/// The test then spawned a different build for later cases, e.g. one from a
+/// tree without the Linux clipboard wiring, which answers
+/// `clipboard copy failed: clipboard backend unavailable` on whichever case
+/// happened to be running. Each test therefore pins the binary it started
+/// with: a hard link to the same inode, which keeps the original content when
+/// the path is later unlinked or re-linked (it lives next to the original so
+/// the link never crosses a filesystem), removed when the test thread ends.
+struct PinnedBinary(PathBuf);
+
+impl PinnedBinary {
+    fn new(source: &Path) -> Self {
+        let tag: String = format!("{}-{:?}", std::process::id(), std::thread::current().id())
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect();
+        let pinned = source.with_file_name(format!(
+            "{}.pinned-{tag}",
+            source.file_name().unwrap().to_string_lossy()
+        ));
+        let _ = fs::remove_file(&pinned);
+        fs::hard_link(source, &pinned).expect("pin the symvault binary under test");
+        Self(pinned)
+    }
+}
+
+impl Drop for PinnedBinary {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+thread_local! {
+    static ACTIVE_PIN: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Holds the pin of the test that created it; dropping it (also on panic)
+/// removes the link.
+struct PinGuard(#[allow(dead_code)] PinnedBinary);
+
+impl Drop for PinGuard {
+    fn drop(&mut self) {
+        ACTIVE_PIN.with(|active| *active.borrow_mut() = None);
+    }
+}
+
+/// First statement of every test that spawns the binary.
+fn pin_binary() -> PinGuard {
+    let pinned = PinnedBinary::new(Path::new(env!("CARGO_BIN_EXE_symvault")));
+    let path = pinned.0.to_str().unwrap().to_owned();
+    ACTIVE_PIN.with(|active| *active.borrow_mut() = Some(path));
+    PinGuard(pinned)
+}
+
+/// The symvault binary the calling test pinned with [`pin_binary`].
+fn binary() -> String {
+    ACTIVE_PIN.with(|active| {
+        active
+            .borrow()
+            .clone()
+            .expect("pin_binary() must run first in the test")
+    })
+}
+
+#[test]
+fn pinned_binary_keeps_its_content_when_the_original_is_relinked() {
+    let dir = test_temp_root::TempRoot::existing("symvault-clip-pin-");
+    let exe = dir.join("symvault");
+    fs::write(&exe, "first build").unwrap();
+    let pinned = PinnedBinary::new(&exe);
+    // What a concurrent cargo build does to `target/debug/symvault`: unlink,
+    // then link (or write) another build at the same path.
+    fs::remove_file(&exe).unwrap();
+    fs::write(&exe, "other build").unwrap();
+    assert_eq!(fs::read_to_string(&exe).unwrap(), "other build");
+    assert_eq!(fs::read_to_string(&pinned.0).unwrap(), "first build");
+    let path = pinned.0.clone();
+    drop(pinned);
+    assert!(!path.exists(), "the pin is removed with its owner");
 }
 
 fn assert_success(output: &Output, label: &str) {
@@ -391,6 +471,7 @@ fn read_calls(rec: &Path) -> Vec<Call> {
 
 #[test]
 fn mcp_copy_to_clipboard_matches_go_on_linux_through_the_real_binary() {
+    let _pin = pin_binary();
     let fixture: McpFixture = serde_json::from_str(include_str!(
         "../../../testdata/port/mcp/copy-clipboard-linux.json"
     ))
@@ -640,6 +721,7 @@ fn get_matches_go_on_linux_through_the_real_binary_on_a_pty() {
         eprintln!("SKIP: python3 with the pty module is required for the terminal run");
         return;
     }
+    let _pin = pin_binary();
     let fixture: GetFixture = serde_json::from_str(include_str!(
         "../../../testdata/port/platform/get_clipboard_linux.json"
     ))
