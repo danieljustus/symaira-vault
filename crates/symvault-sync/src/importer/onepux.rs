@@ -8,11 +8,9 @@ use super::gojson::{
     self, Context, GoDecode, GoStruct, RawMessage, Reader, decode_struct, go_struct,
 };
 use super::{ImportError, ImportedEntry, insert_totp};
+use crate::gozip::{EntryError, GoZip};
 use serde_json::Value;
-use std::{
-    collections::BTreeMap,
-    io::{Cursor, Read},
-};
+use std::collections::BTreeMap;
 
 const LOGIN_CATEGORY: &str = "001";
 const MAX_IMPORT_BYTES: usize = 100 * 1024 * 1024;
@@ -129,23 +127,27 @@ fn parse_1pux_with_limits(
             "import source exceeds maximum size of {max_import_bytes} bytes"
         )));
     }
-    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| {
-        ImportError::Decode(format!("open 1pux zip: {}", super::cxf::zip_open_error(&e)))
-    })?;
+    let archive = GoZip::new(bytes)
+        .map_err(|error| ImportError::Decode(format!("open 1pux zip: {error}")))?;
+    // Go reads the first member named `export.json` (or ending in
+    // `/export.json`) and stops there, whatever the outcome.
     let mut raw = None;
-    for index in 0..zip.len() {
-        let file = zip
-            .by_index(index)
-            .map_err(|e| ImportError::Parse(e.to_string()))?;
-        let name = file.name().map_err(|e| ImportError::Parse(e.to_string()))?;
-        if name != "export.json" && !name.ends_with("/export.json") {
+    for file in &archive.files {
+        if file.name != b"export.json" && !file.name.ends_with(b"/export.json") {
             continue;
         }
-        let mut data = Vec::new();
-        file.take(max_zip_entry)
-            .read_to_end(&mut data)
-            .map_err(|e| ImportError::Decode(format!("read export.json: {e}")))?;
-        if data.len() as u64 >= max_zip_entry {
+        let data =
+            archive
+                .read_limited(file, max_zip_entry as usize)
+                .map_err(|error| match error {
+                    EntryError::Open(error) => {
+                        ImportError::Decode(format!("open export.json: {error}"))
+                    }
+                    EntryError::Read(error) => {
+                        ImportError::Decode(format!("read export.json: {error}"))
+                    }
+                })?;
+        if data.len() as u64 == max_zip_entry {
             return Err(ImportError::Decode(format!(
                 "zip entry exceeds maximum size of {max_zip_entry} bytes"
             )));
@@ -248,7 +250,7 @@ fn otp_value(raw: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::{Cursor, Write};
 
     fn zip_with(name: &str, payload: &[u8]) -> Vec<u8> {
         let mut out = zip::ZipWriter::new(Cursor::new(Vec::new()));

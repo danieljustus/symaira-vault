@@ -1,10 +1,7 @@
+use crate::gozip::{EntryError, GoZip};
 use base64::{Engine as _, engine::general_purpose};
 use serde_json::{Map, Value};
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    io::{Cursor, Read},
-};
-use zip::{ZipArchive, result::ZipError};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::gojson::{
     self, Context, EditableValue, GoDecode, GoStruct, RawMessage, Reader, decode_struct, go_struct,
@@ -150,16 +147,6 @@ go_struct!(CxfCreditCard, "cxfCreditCard", {
     "verificationNumber" => verification_number, "expiryDate" => expiry_date,
 });
 
-/// Go's text for a failure of `zip.NewReader`.
-pub(super) fn zip_open_error(error: &ZipError) -> String {
-    match error {
-        ZipError::InvalidArchive(_) | ZipError::UnsupportedArchive(_) => {
-            "zip: not a valid zip file".into()
-        }
-        other => other.to_string(),
-    }
-}
-
 /// A diagnostic reproduced verbatim from Go's `Parse`, like the Bitwarden
 /// importer's: the CLI prints `parse import source: <text>` on both sides.
 fn go_error(text: impl Into<String>) -> ImportError {
@@ -174,9 +161,8 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
             "import source exceeds maximum size of {MAX_IMPORT_BYTES} bytes"
         )));
     }
-    let mut archive = ZipArchive::new(Cursor::new(bytes))
-        .map_err(|error| go_error(format!("open cxf zip: {}", zip_open_error(&error))))?;
-    let payload = read_payload(&mut archive)?;
+    let archive = GoZip::new(bytes).map_err(|error| go_error(format!("open cxf zip: {error}")))?;
+    let payload = read_payload(&archive)?;
     let mut export = CxfExport::default();
     gojson::unmarshal_document(&payload, &mut export)
         .map_err(|error| go_error(format!("parse CXF JSON document: {error}")))?;
@@ -188,42 +174,29 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
     Ok(entries)
 }
 
-struct JsonCandidate {
-    index: usize,
-    name: String,
-    size: u64,
-}
-
-fn read_payload<R: Read + std::io::Seek>(
-    archive: &mut ZipArchive<R>,
-) -> Result<Vec<u8>, ImportError> {
-    let mut candidates = Vec::new();
-    for index in 0..archive.len() {
-        let file = archive
-            .by_index(index)
-            .map_err(|error| go_error(format!("inspect cxf zip: {error}")))?;
-        let name = file
-            .name()
-            .map_err(|error| go_error(format!("inspect cxf zip: {error}")))?;
-        if file.is_dir() || !name.to_ascii_lowercase().ends_with(".json") {
-            continue;
-        }
-        candidates.push(JsonCandidate {
-            index,
-            name: name.into_owned(),
-            size: file.size(),
-        });
-    }
+/// Go's `readCXFJSON`: a `cxf.json` or `payload.json` member wins, otherwise
+/// the first (or largest, by declared size) `.json` member is read through
+/// the checksum-verifying reader, bounded like Go.
+fn read_payload(archive: &GoZip<'_>) -> Result<Vec<u8>, ImportError> {
+    let candidates: Vec<_> = archive
+        .files
+        .iter()
+        .filter(|file| !file.is_dir() && has_json_suffix(&file.name))
+        .collect();
     if candidates.is_empty() {
         return Err(go_error("no CXF JSON document found in cxf zip"));
     }
 
-    let mut selected = &candidates[0];
+    let mut selected = candidates[0];
     let mut preferred = false;
     for candidate in &candidates {
-        let basename = candidate.name.rsplit('/').next().unwrap_or(&candidate.name);
-        if basename.eq_ignore_ascii_case("cxf.json")
-            || basename.eq_ignore_ascii_case("payload.json")
+        let basename = candidate
+            .name
+            .rsplit(|byte| *byte == b'/')
+            .next()
+            .unwrap_or(&candidate.name);
+        if basename.eq_ignore_ascii_case(b"cxf.json")
+            || basename.eq_ignore_ascii_case(b"payload.json")
         {
             selected = candidate;
             preferred = true;
@@ -232,31 +205,31 @@ fn read_payload<R: Read + std::io::Seek>(
     }
     if !preferred {
         for candidate in candidates.iter().skip(1) {
-            if candidate.size > selected.size {
+            if candidate.uncompressed_size > selected.uncompressed_size {
                 selected = candidate;
             }
         }
     }
-    if selected.size >= MAX_ZIP_ENTRY {
-        return Err(go_error(format!(
-            "zip entry exceeds maximum size of {MAX_ZIP_ENTRY} bytes"
-        )));
-    }
 
-    let mut file = archive
-        .by_index(selected.index)
-        .map_err(|error| go_error(format!("open {}: {error}", selected.name)))?;
-    let mut payload = Vec::new();
-    file.by_ref()
-        .take(MAX_ZIP_ENTRY)
-        .read_to_end(&mut payload)
-        .map_err(|error| go_error(format!("read {}: {error}", selected.name)))?;
-    if payload.len() as u64 >= MAX_ZIP_ENTRY {
+    let name = String::from_utf8_lossy(&selected.name).into_owned();
+    let payload = archive
+        .read_limited(selected, MAX_ZIP_ENTRY as usize)
+        .map_err(|error| match error {
+            EntryError::Open(error) => go_error(format!("open {name}: {error}")),
+            EntryError::Read(error) => go_error(format!("read {name}: {error}")),
+        })?;
+    if payload.len() as u64 == MAX_ZIP_ENTRY {
         return Err(go_error(format!(
             "zip entry exceeds maximum size of {MAX_ZIP_ENTRY} bytes"
         )));
     }
     Ok(payload)
+}
+
+/// `strings.HasSuffix(strings.ToLower(name), ".json")`: no non-ASCII rune
+/// lower-cases to a letter of `.json`, so ASCII folding is exact.
+fn has_json_suffix(name: &[u8]) -> bool {
+    name.len() >= 5 && name[name.len() - 5..].eq_ignore_ascii_case(b".json")
 }
 
 fn account_entries(account: &CxfAccount) -> Vec<ImportedEntry> {
