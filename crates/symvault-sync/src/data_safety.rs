@@ -14,12 +14,27 @@
 //! there would be archived into itself and, being inside a git-synced vault,
 //! would be pushed to the remote. The state directory is per-user, local and
 //! never synced. It is created `0700`, archives `0600`.
+//!
+//! The directory is the *default*: a host that has no `$XDG_STATE_HOME`/`$HOME`
+//! to offer (an iOS app through the FFI) passes an explicit directory with
+//! [`set_backup_dir`]. Excluding that directory from cloud backup (iCloud) is
+//! the host's responsibility: the archive holds the same encrypted vault files
+//! as the vault itself.
+//!
+//! Durability and crash safety: the archive is written as
+//! `pre-rust-<label>-<stamp>.tar.gz.<pid>.partial`, flushed to disk, verified
+//! and only then renamed to its final name; the backup directory is flushed
+//! before the receipt (and with it the marker) is produced. A process killed
+//! halfway (SIGXFSZ, power loss) leaves a `.partial` file or a `.verify-<pid>-*`
+//! scratch directory, never a final-named archive that is incomplete; the next
+//! gate sweeps stale leftovers of dead processes.
 
 use std::{
     collections::BTreeMap,
     fs,
     io::Read,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use sha2::{Digest, Sha256};
@@ -49,13 +64,42 @@ impl PreMutationGuard for BackupGuard {
     }
 }
 
+static EXPLICIT_BACKUP_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+/// Sets the backup directory for this process, taking precedence over
+/// `$XDG_STATE_HOME`/`$HOME`. For hosts without a usable home directory (the
+/// iOS app through the FFI). The directory is created `0700` on first use;
+/// keeping it out of cloud backup is the host's responsibility. `None` goes
+/// back to the environment-derived default.
+pub fn set_backup_dir(dir: Option<PathBuf>) {
+    if let Ok(mut slot) = EXPLICIT_BACKUP_DIR.lock() {
+        *slot = dir;
+    }
+}
+
+/// The directory set by [`set_backup_dir`], else
 /// `$XDG_STATE_HOME/symvault/backups`, else `$HOME/.local/state/symvault/backups`
 /// (`USERPROFILE` where `HOME` is unset).
 ///
 /// # Errors
 /// No usable base directory.
 pub fn backup_dir() -> Result<PathBuf, String> {
-    let env = |name: &str| std::env::var_os(name).filter(|value| !value.is_empty());
+    let explicit = EXPLICIT_BACKUP_DIR
+        .lock()
+        .ok()
+        .and_then(|slot| slot.clone());
+    resolve_backup_dir(explicit, |name| {
+        std::env::var_os(name).filter(|value| !value.is_empty())
+    })
+}
+
+fn resolve_backup_dir(
+    explicit: Option<PathBuf>,
+    env: impl Fn(&str) -> Option<std::ffi::OsString>,
+) -> Result<PathBuf, String> {
+    if let Some(dir) = explicit {
+        return Ok(dir);
+    }
     let base = if let Some(state) = env("XDG_STATE_HOME") {
         PathBuf::from(state)
     } else if let Some(home) = env("HOME").or_else(|| env("USERPROFILE")) {
@@ -72,25 +116,35 @@ pub fn backup_dir() -> Result<PathBuf, String> {
 /// # Errors
 /// A human-readable reason.
 pub fn create_verified_backup(vault: &Path, dir: &Path) -> Result<BackupReceipt, String> {
-    let archive_path = write_backup(vault, dir)?;
-    match verify_backup(vault, &archive_path, dir) {
-        Ok(files) => receipt(&archive_path, files),
+    // Leftovers of an earlier, killed run (never of a live one) go first.
+    sweep_stale(dir);
+    let partial = write_backup_partial(vault, dir)?;
+    match verify_backup(vault, &partial, dir) {
+        Ok(files) => {
+            let archive_path = promote(&partial, dir)?;
+            receipt(&archive_path, files)
+        }
         Err(reason) => {
-            let _ = fs::remove_file(&archive_path);
-            Err(format!(
-                "verification of {}: {reason}",
-                archive_path.display()
-            ))
+            let _ = fs::remove_file(&partial);
+            Err(format!("verification of {}: {reason}", partial.display()))
         }
     }
 }
 
 /// Writes the Go-faithful full backup (`.git` included, like `backup` without
-/// `--exclude-git`) to a fresh name inside `dir`.
+/// `--exclude-git`) to a fresh name inside `dir`, flushed to disk, and returns
+/// its final path. Nothing carries the final name until the archive is
+/// complete and durable.
 ///
 /// # Errors
 /// A human-readable reason; a partial archive is removed.
 pub fn write_backup(vault: &Path, dir: &Path) -> Result<PathBuf, String> {
+    let partial = write_backup_partial(vault, dir)?;
+    promote(&partial, dir)
+}
+
+/// Writes the archive to `<final name>.<pid>.partial` and flushes it.
+fn write_backup_partial(vault: &Path, dir: &Path) -> Result<PathBuf, String> {
     let vault_real = vault
         .canonicalize()
         .map_err(|error| format!("resolve vault {}: {error}", vault.display()))?;
@@ -107,19 +161,136 @@ pub fn write_backup(vault: &Path, dir: &Path) -> Result<PathBuf, String> {
     }
     let stamp = timestamp();
     let label = label(&vault_real);
-    let mut candidate = dir_real.join(format!("pre-rust-{label}-{stamp}.tar.gz"));
-    let mut counter = 1_u32;
-    while fs::symlink_metadata(&candidate).is_ok() {
-        candidate = dir_real.join(format!("pre-rust-{label}-{stamp}-{counter}.tar.gz"));
+    let pid = std::process::id();
+    let name = |counter: u32| {
+        if counter == 0 {
+            format!("pre-rust-{label}-{stamp}.tar.gz")
+        } else {
+            format!("pre-rust-{label}-{stamp}-{counter}.tar.gz")
+        }
+    };
+    let mut counter = 0_u32;
+    let partial = loop {
+        let final_name = name(counter);
+        let candidate = dir_real.join(&final_name);
+        let partial = dir_real.join(format!("{final_name}.{pid}.partial"));
+        if fs::symlink_metadata(&candidate).is_err() && fs::symlink_metadata(&partial).is_err() {
+            break partial;
+        }
         counter += 1;
-    }
-    match backup_writer::create_backup(&vault_real, &candidate, false) {
-        Ok(()) => Ok(candidate),
+    };
+    let written = backup_writer::create_backup(&vault_real, &partial, false)
+        .map_err(|reason| format!("write backup: {reason}"))
+        .and_then(|()| sync_file(&partial));
+    match written {
+        Ok(()) => Ok(partial),
         Err(reason) => {
-            let _ = fs::remove_file(&candidate);
-            Err(format!("write backup: {reason}"))
+            let _ = fs::remove_file(&partial);
+            Err(reason)
         }
     }
+}
+
+/// Flushes a file's data to stable storage through a fresh handle.
+fn sync_file(path: &Path) -> Result<(), String> {
+    fs::File::open(path)
+        .and_then(|file| file.sync_all())
+        .map_err(|error| format!("flush {} to disk: {error}", path.display()))
+}
+
+/// Flushes a directory entry change (create, rename) to stable storage.
+fn sync_dir(dir: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        match fs::File::open(dir).and_then(|handle| handle.sync_all()) {
+            Ok(()) => Ok(()),
+            // A filesystem that cannot flush directories offers nothing better.
+            Err(error) if error.kind() == std::io::ErrorKind::Unsupported => Ok(()),
+            Err(error) => Err(format!("flush {} to disk: {error}", dir.display())),
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = dir;
+        Ok(())
+    }
+}
+
+/// `<final>.<pid>.partial` -> `<final>`, then the backup directory is flushed
+/// (and its parent, which may just have been created).
+fn promote(partial: &Path, dir: &Path) -> Result<PathBuf, String> {
+    let file_name = partial
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "backup name is not valid UTF-8".to_owned())?;
+    let stem = file_name
+        .strip_suffix(".partial")
+        .and_then(|rest| rest.rsplit_once('.').map(|(stem, _pid)| stem))
+        .ok_or_else(|| format!("unexpected partial backup name {file_name}"))?;
+    let parent = partial.parent().unwrap_or(dir);
+    let target = parent.join(stem);
+    if let Err(error) = fs::rename(partial, &target) {
+        let _ = fs::remove_file(partial);
+        return Err(format!("publish backup {}: {error}", target.display()));
+    }
+    sync_dir(parent)?;
+    if let Some(grandparent) = parent.parent() {
+        let _ = sync_dir(grandparent);
+    }
+    Ok(target)
+}
+
+/// Removes `*.partial` archives and `.verify-*` scratch directories that a
+/// killed process left in `dir`. Ones owned by a live process (a gate running
+/// right now for another vault) stay; the owning pid is part of the name.
+/// Best effort: a leftover that cannot be removed is not an error.
+pub fn sweep_stale(dir: &Path) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let owner = if let Some(rest) = name.strip_prefix(".verify-") {
+            rest.split('-')
+                .next()
+                .and_then(|pid| pid.parse::<u32>().ok())
+        } else if name.starts_with("pre-rust-")
+            && let Some(rest) = name.strip_suffix(".partial")
+        {
+            rest.rsplit_once('.')
+                .and_then(|(_, pid)| pid.parse::<u32>().ok())
+        } else {
+            continue;
+        };
+        if owner.is_some_and(process_alive) {
+            continue;
+        }
+        let path = entry.path();
+        let is_dir = fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_dir());
+        let _ = if is_dir {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+    }
+}
+
+#[cfg(unix)]
+fn process_alive(pid: u32) -> bool {
+    use rustix::process::{Pid, test_kill_process};
+    let Some(pid) = i32::try_from(pid).ok().and_then(Pid::from_raw) else {
+        return false;
+    };
+    match test_kill_process(pid) {
+        Ok(()) => true,
+        Err(error) => error != rustix::io::Errno::SRCH,
+    }
+}
+
+#[cfg(not(unix))]
+fn process_alive(_pid: u32) -> bool {
+    // Without a cheap liveness probe, leave other processes' files alone.
+    true
 }
 
 /// Creates `dir` and its missing parents `0700`. Unlike `mkdir(2)` with a mode
@@ -157,7 +328,7 @@ pub fn verify_backup(
     scratch_parent: &Path,
 ) -> Result<u64, String> {
     let scratch = tempfile::Builder::new()
-        .prefix(".verify-")
+        .prefix(&format!(".verify-{}-", std::process::id()))
         .tempdir_in(scratch_parent)
         .map_err(|error| format!("create scratch directory: {error}"))?;
     #[cfg(unix)]
@@ -377,4 +548,93 @@ fn compare(live: &BTreeMap<String, Node>, restored: &BTreeMap<String, Node>) -> 
         return Err(format!("{path} exists only in the restored copy"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn vault() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("vault");
+        fs::write(dir.path().join("identity.age"), b"identity").unwrap();
+        fs::write(dir.path().join("config.yaml"), b"vault: {}\n").unwrap();
+        fs::create_dir(dir.path().join("entries")).unwrap();
+        dir
+    }
+
+    /// A pid that belonged to a process that has exited.
+    #[cfg(unix)]
+    fn dead_pid() -> u32 {
+        let mut child = std::process::Command::new("true").spawn().expect("spawn");
+        let pid = child.id();
+        child.wait().expect("wait");
+        pid
+    }
+
+    #[test]
+    fn a_verified_backup_is_published_whole_and_leaves_no_scratch() {
+        let vault = vault();
+        let dir = tempfile::tempdir().unwrap();
+        let backups = dir.path().join("backups");
+        let receipt = create_verified_backup(vault.path(), &backups).expect("backup");
+        assert!(receipt.path.to_string_lossy().ends_with(".tar.gz"));
+        assert_eq!(fs::metadata(&receipt.path).unwrap().len(), receipt.bytes);
+        let names: Vec<String> = fs::read_dir(&backups)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names.len(), 1, "unexpected leftovers: {names:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stale_partial_archives_and_scratch_dirs_of_dead_processes_are_swept() {
+        let vault = vault();
+        let dir = tempfile::tempdir().unwrap();
+        let backups = dir.path().join("backups");
+        fs::create_dir(&backups).unwrap();
+        let dead = dead_pid();
+        let live = std::process::id();
+        let stale_partial = backups.join(format!("pre-rust-v-1.tar.gz.{dead}.partial"));
+        let stale_scratch = backups.join(format!(".verify-{dead}-abc123"));
+        let live_partial = backups.join(format!("pre-rust-v-2.tar.gz.{live}.partial"));
+        let live_scratch = backups.join(format!(".verify-{live}-abc123"));
+        let unrelated = backups.join("pre-rust-v-3.tar.gz");
+        fs::write(&stale_partial, b"half an archive").unwrap();
+        fs::create_dir(&stale_scratch).unwrap();
+        fs::write(stale_scratch.join("vault"), b"half a restore").unwrap();
+        fs::write(&live_partial, b"in progress").unwrap();
+        fs::create_dir(&live_scratch).unwrap();
+        fs::write(&unrelated, b"a finished backup").unwrap();
+
+        create_verified_backup(vault.path(), &backups).expect("backup");
+
+        assert!(!stale_partial.exists(), "stale .partial kept");
+        assert!(!stale_scratch.exists(), "stale .verify-* kept");
+        assert!(live_partial.exists(), "a live process's .partial was swept");
+        assert!(live_scratch.exists(), "a live process's scratch was swept");
+        assert!(unrelated.exists(), "a finished backup was swept");
+    }
+
+    #[test]
+    fn an_explicit_backup_dir_wins_over_the_environment_default() {
+        let env = |name: &str| match name {
+            "XDG_STATE_HOME" => Some("/xdg".into()),
+            "HOME" => Some("/home/u".into()),
+            _ => None,
+        };
+        assert_eq!(
+            resolve_backup_dir(Some("/host/chosen".into()), env).unwrap(),
+            PathBuf::from("/host/chosen")
+        );
+        assert_eq!(
+            resolve_backup_dir(None, env).unwrap(),
+            PathBuf::from("/xdg/symvault/backups")
+        );
+        assert_eq!(
+            resolve_backup_dir(None, |name| (name == "HOME").then(|| "/home/u".into())).unwrap(),
+            PathBuf::from("/home/u/.local/state/symvault/backups")
+        );
+        assert!(resolve_backup_dir(None, |_| None).is_err());
+    }
 }

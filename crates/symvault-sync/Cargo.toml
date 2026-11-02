@@ -28,6 +28,10 @@ thiserror = "=2.0.21"
 time = { version = "=0.3.55", features = ["formatting", "parsing"] }
 zip = { version = "=9.1.0", default-features = false, features = ["deflate"] }
 
+[dev-dependencies]
+# Fixtures mark their throw-away vaults as Rust-created (test-only helper).
+symvault-store = { path = "../symvault-store", version = "=0.0.0", features = ["test-support"] }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = [
     "Win32_Foundation",

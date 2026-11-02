@@ -107,6 +107,19 @@ pub fn init_vault(vault_dir: &str, passphrase: &[u8]) -> R<()> {
     vault::init_vault(vault_dir, passphrase)
 }
 
+/// Sets (or, with an empty string, clears) the directory for the verified
+/// pre-migration backup of a Go-created vault (data-safety decision D1). A
+/// host without `$HOME`/`$XDG_STATE_HOME` of its own (the iOS app) must set it
+/// before the first write; without it the gate falls back to the environment.
+/// The directory is created `0700`; excluding it from iCloud backup is the
+/// host's responsibility.
+pub fn set_backup_dir(dir: &str) -> R<()> {
+    symvault_sync::data_safety::set_backup_dir(
+        (!dir.is_empty()).then(|| std::path::PathBuf::from(dir)),
+    );
+    Ok(())
+}
+
 /// `OpenVaultWithPassphrase`.
 pub fn open_vault_with_passphrase(vault_dir: &str, passphrase: &[u8]) -> R<Zeroizing<String>> {
     vault::open_with_passphrase(vault_dir, passphrase)

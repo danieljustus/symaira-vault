@@ -28,6 +28,8 @@ serde_json.workspace = true
 zeroize = { version = "=1.9.1", features = ["alloc"] }
 
 [dev-dependencies]
+# Fixtures mark their throw-away vaults as Rust-created (test-only helper).
+symvault-store = { path = "../symvault-store", version = "=0.0.0", features = ["test-support"] }
 base64 = "=0.23.1"
 sha2 = "=0.11.1"
 tempfile = "=3.27.0"

@@ -33,6 +33,8 @@ symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
 time = { version = "=0.3.55", features = ["formatting"] }
 
 [dev-dependencies]
+# Fixtures mark their throw-away vaults as Rust-created (test-only helper).
+symvault-store = { path = "../symvault-store", version = "=0.0.0", features = ["test-support"] }
 hex = "=0.4.3"
 sha2 = "=0.11.1"
 tempfile = "=3.27.0"

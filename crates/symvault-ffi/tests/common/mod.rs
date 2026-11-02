@@ -15,6 +15,22 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use symvault_ffi::abi::{self, SvBuf};
 
+/// Sends the data-safety gate's backups to a throw-away directory for the
+/// whole test process (the FFI's own `set_backup_dir`), so no replay can write
+/// into the developer's real state directory, and fails if that is not in
+/// effect. Every entry point of this harness calls it.
+pub fn isolate_backups() {
+    static DIR: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+    let dir = DIR.get_or_init(|| tempfile::tempdir().expect("backup tempdir"));
+    symvault_sync::data_safety::set_backup_dir(Some(dir.path().join("backups")));
+    let resolved = symvault_sync::data_safety::backup_dir().expect("backup dir");
+    assert!(
+        resolved.starts_with(dir.path()),
+        "the gate would back up into {}, outside the test sandbox",
+        resolved.display()
+    );
+}
+
 /// Where the recorded fixture lives, relative to this crate.
 pub const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -169,6 +185,7 @@ fn finish(status: i32, mut out: Out, kind: &str) -> Outcome {
 
 /// Calls one bridge function through the C ABI.
 pub fn call(function: &str, args: &Value, seed: &Value) -> Outcome {
+    isolate_backups();
     let identity = s(args, "identity").as_bytes();
     let vault_dir = s(args, "vaultDir").as_bytes();
     let passphrase = s(args, "passphrase").as_bytes();
@@ -814,6 +831,7 @@ pub fn replay_matching(
     fixture: &Value,
     select: impl Fn(&str) -> bool,
 ) -> (std::collections::BTreeMap<String, usize>, Vec<String>) {
+    isolate_backups();
     let mut counts = std::collections::BTreeMap::new();
     let mut failures = Vec::new();
     let divergences = known_divergences();

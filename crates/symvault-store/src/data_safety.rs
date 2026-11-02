@@ -20,16 +20,33 @@
 //! written atomically (temporary file, fsync, rename, directory fsync) and only
 //! after the backup has been verified. A vault that Rust creates itself gets
 //! the marker without a backup because there is nothing to lose.
+//!
+//! A marker is evidence only for the vault it was written for. It carries a
+//! `vault_id` (SHA-256 over the canonical vault path and, on Unix, the inode of
+//! the vault directory), and a marker whose id does not match the vault in
+//! front of us counts as no marker: a marker copied (`cp -r`, git clone,
+//! restore into a new directory) from another vault never suppresses the
+//! backup. A `go-vault-backup` marker also has to prove its backup: the
+//! archive must exist as a regular file with the recorded size and SHA-256.
+//! Any mismatch means "no marker" and the gate backs the vault up again.
+//!
+//! The id deliberately does *not* include `identity.age`: Rust itself rewrites
+//! that file (KDF migration, password change, zero-key heal), and an id that
+//! changed under such an operation would make the gate fire between the
+//! identity rewrite and the writes that depend on it.
 
 use std::{
     cell::Cell,
+    collections::HashSet,
     fs,
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
-    sync::OnceLock,
+    sync::{Mutex, OnceLock},
+    time::SystemTime,
 };
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
@@ -133,8 +150,97 @@ struct Marker {
     /// `go-vault-backup` (existing state backed up first) or `rust-created`.
     kind: String,
     created_at: String,
+    /// Binds the marker to one vault, see [`vault_id`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    vault_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     backup: Option<BackupReceipt>,
+}
+
+const KIND_GO_BACKUP: &str = "go-vault-backup";
+const KIND_RUST_CREATED: &str = "rust-created";
+
+/// The identity a marker is bound to: SHA-256 over a domain tag, the canonical
+/// vault path and (Unix) the inode of the vault directory. A directory that is
+/// copied, recreated or moved is a different vault; files inside it may change
+/// freely.
+#[must_use]
+pub fn vault_id(root: &Path) -> String {
+    let canonical = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    #[cfg(unix)]
+    let inode = {
+        use std::os::unix::fs::MetadataExt;
+        fs::metadata(&canonical).ok().map(|meta| meta.ino())
+    };
+    #[cfg(not(unix))]
+    let inode = None;
+    vault_id_of(&canonical, inode)
+}
+
+/// [`vault_id`] for a path that is already canonical and an inode taken from
+/// the caller's retained handle. The retained-root gate uses this form with
+/// the path the store was opened with: re-resolving the path there would
+/// follow a directory swapped in under it.
+fn vault_id_of(canonical: &Path, inode: Option<u64>) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"symvault-vault-id-v2\0");
+    hasher.update(canonical.as_os_str().as_encoded_bytes());
+    hasher.update([0_u8]);
+    match inode {
+        Some(inode) => hasher.update(inode.to_be_bytes()),
+        None => hasher.update(b"-"),
+    }
+    hex::encode(hasher.finalize())
+}
+
+/// A backup already hashed by this process: (path, size, mtime, sha256).
+type VerifiedBackup = (PathBuf, u64, Option<SystemTime>, String);
+
+static VERIFIED_BACKUPS: Mutex<Option<HashSet<VerifiedBackup>>> = Mutex::new(None);
+
+/// The archive a receipt names is a regular file of the recorded size and
+/// SHA-256. A hash match is remembered per process (keyed by size and mtime),
+/// so a command that gates several times hashes the archive once.
+fn backup_intact(receipt: &BackupReceipt) -> bool {
+    let Ok(meta) = fs::symlink_metadata(&receipt.path) else {
+        return false;
+    };
+    if !meta.file_type().is_file() || meta.len() != receipt.bytes {
+        return false;
+    }
+    if receipt.sha256.len() != 64 || !receipt.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return false;
+    }
+    let key = (
+        receipt.path.clone(),
+        meta.len(),
+        meta.modified().ok(),
+        receipt.sha256.to_ascii_lowercase(),
+    );
+    if let Ok(guard) = VERIFIED_BACKUPS.lock()
+        && guard.as_ref().is_some_and(|set| set.contains(&key))
+    {
+        return true;
+    }
+    let Ok(mut file) = fs::File::open(&receipt.path) else {
+        return false;
+    };
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 64 * 1024];
+    loop {
+        match file.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => hasher.update(&buffer[..count]),
+            Err(_) => return false,
+        }
+    }
+    if hex::encode(hasher.finalize()) != key.3 {
+        return false;
+    }
+    if let Ok(mut guard) = VERIFIED_BACKUPS.lock() {
+        guard.get_or_insert_with(HashSet::new).insert(key);
+    }
+    true
 }
 
 fn refuse(detail: impl Into<String>) -> StoreError {
@@ -172,22 +278,27 @@ fn marker_present(root: &Path) -> Result<bool, StoreError> {
         path: path.clone(),
         source,
     })?;
-    // A marker that arrived through git sync from another device describes
-    // that device's backup. The marker is kept out of git (see
-    // `exclude_marker_from_git`), and a backup this machine does not have never
-    // counts as one.
-    Ok(marker_bytes_valid(&bytes))
+    // A marker that arrived through git sync, a copy or a restore describes
+    // another vault or machine. It only counts when it is bound to this vault
+    // and its backup (if any) is intact here.
+    Ok(marker_bytes_valid(&bytes, &vault_id(root)))
 }
 
-/// A parseable marker of a known schema whose backup (if any) still exists.
-pub(crate) fn marker_bytes_valid(bytes: &[u8]) -> bool {
-    serde_json::from_slice::<Marker>(bytes).is_ok_and(|marker| {
-        marker.schema >= 1
-            && marker
-                .backup
-                .as_ref()
-                .is_none_or(|backup| fs::symlink_metadata(&backup.path).is_ok())
-    })
+/// A marker of a known schema, bound to `expected_id`, whose evidence holds:
+/// `rust-created` carries no backup, `go-vault-backup` carries a backup that
+/// exists with the recorded size and SHA-256.
+pub(crate) fn marker_bytes_valid(bytes: &[u8], expected_id: &str) -> bool {
+    let Ok(marker) = serde_json::from_slice::<Marker>(bytes) else {
+        return false;
+    };
+    if marker.schema < 1 || marker.vault_id.as_deref() != Some(expected_id) {
+        return false;
+    }
+    match (marker.kind.as_str(), &marker.backup) {
+        (KIND_RUST_CREATED, None) => true,
+        (KIND_GO_BACKUP, Some(receipt)) => backup_intact(receipt),
+        _ => false,
+    }
 }
 
 /// Looks for the marker through the retained root capability, so a directory
@@ -198,10 +309,12 @@ pub(crate) fn marker_via_capability(root_cap: &fs::File, root: &Path) -> Result<
     #[cfg(unix)]
     {
         let name = Path::new(MARKER_FILE);
-        if let Ok(bytes) = crate::rooted::read(root_cap, name, &root.join(name))
-            && marker_bytes_valid(&bytes)
-        {
-            return Ok(true);
+        if let Ok(bytes) = crate::rooted::read(root_cap, name, &root.join(name)) {
+            use std::os::unix::fs::MetadataExt;
+            let inode = root_cap.metadata().ok().map(|meta| meta.ino());
+            if marker_bytes_valid(&bytes, &vault_id_of(root, inode)) {
+                return Ok(true);
+            }
         }
         if crate::root_identity_from_file(root_cap)? != crate::root_identity(root)? {
             return Err(StoreError::RootChanged(root.to_path_buf()));
@@ -215,8 +328,9 @@ pub(crate) fn marker_via_capability(root_cap: &fs::File, root: &Path) -> Result<
     }
 }
 
-fn write_marker(root: &Path, marker: &Marker) -> Result<(), StoreError> {
+fn write_marker(root: &Path, marker: &mut Marker) -> Result<(), StoreError> {
     use std::hash::{BuildHasher, Hasher};
+    marker.vault_id = Some(vault_id(root));
     let mut bytes = serde_json::to_vec_pretty(marker)
         .map_err(|error| refuse(format!("encode marker: {error}")))?;
     bytes.push(b'\n');
@@ -317,10 +431,11 @@ pub(crate) fn ensure_locked(root_cap: &fs::File, root: &Path) -> Result<(), Stor
     })?;
     write_marker(
         root,
-        &Marker {
+        &mut Marker {
             schema: MARKER_SCHEMA,
-            kind: "go-vault-backup".to_owned(),
+            kind: KIND_GO_BACKUP.to_owned(),
             created_at: now(),
+            vault_id: None,
             backup: Some(receipt),
         },
     )
@@ -369,6 +484,10 @@ pub fn ensure_marker(root: &Path) -> Result<(), StoreError> {
 /// are Rust-created by construction. Marks `root` (errors, such as a missing
 /// directory, are ignored so negative tests keep their original failure) and
 /// returns it for use inside an expression.
+///
+/// Only compiled with the `test-support` feature, which the workspace crates
+/// enable through their `dev-dependencies` and never in a production build.
+#[cfg(feature = "test-support")]
 #[doc(hidden)]
 pub fn test_support_pre_marked<P: AsRef<Path>>(root: P) -> P {
     let _ = mark_created(root.as_ref());
@@ -409,10 +528,11 @@ pub fn mark_created(root: &Path) -> Result<(), StoreError> {
     }
     write_marker(
         root,
-        &Marker {
+        &mut Marker {
             schema: MARKER_SCHEMA,
-            kind: "rust-created".to_owned(),
+            kind: KIND_RUST_CREATED.to_owned(),
             created_at: now(),
+            vault_id: None,
             backup: None,
         },
     )
@@ -458,7 +578,7 @@ mod tests {
             fs::write(&path, b"x").unwrap();
             Ok(BackupReceipt {
                 path,
-                sha256: "00".into(),
+                sha256: hex::encode(Sha256::digest(b"x")),
                 bytes: 1,
                 files: 1,
             })
@@ -506,6 +626,108 @@ mod tests {
         fs::remove_file(root.join("fake-backup.tar.gz")).unwrap();
         ensure_marker(&root).expect("gate again");
         assert_eq!(CALLS.with(Cell::get), 2);
+    }
+
+    #[test]
+    fn a_rust_created_marker_copied_from_another_vault_does_not_count() {
+        let source = enforced_vault();
+        let source_root = source.path().canonicalize().unwrap();
+        mark_created(&source_root).expect("mark source");
+        let copy = enforced_vault();
+        let copy_root = copy.path().canonicalize().unwrap();
+        fs::copy(source_root.join(MARKER_FILE), copy_root.join(MARKER_FILE)).unwrap();
+        ensure_marker(&copy_root).expect("gate");
+        assert_eq!(
+            CALLS.with(Cell::get),
+            1,
+            "the copied marker skipped the backup"
+        );
+        let marker: Marker =
+            serde_json::from_slice(&fs::read(copy_root.join(MARKER_FILE)).unwrap()).unwrap();
+        assert_eq!(marker.kind, KIND_GO_BACKUP);
+        // Rust rewrites identity.age itself (KDF migration, heal): not a new vault.
+        fs::write(copy_root.join("identity.age"), b"another identity").unwrap();
+        ensure_marker(&copy_root).expect("gate after identity rewrite");
+        assert_eq!(CALLS.with(Cell::get), 1);
+    }
+
+    #[test]
+    fn a_vault_recreated_at_the_same_path_with_the_old_marker_is_a_new_vault() {
+        let dir = enforced_vault();
+        let root = dir.path().canonicalize().unwrap();
+        ensure_marker(&root).expect("gate");
+        assert_eq!(CALLS.with(Cell::get), 1);
+        let marker = fs::read(root.join(MARKER_FILE)).unwrap();
+        let archive = fs::read(root.join("fake-backup.tar.gz")).unwrap();
+        // The directory is replaced by a copy of itself, marker and all.
+        let aside = root.with_extension("aside");
+        fs::rename(&root, &aside).unwrap();
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("identity.age"), b"x").unwrap();
+        fs::write(root.join(MARKER_FILE), &marker).unwrap();
+        fs::write(root.join("fake-backup.tar.gz"), &archive).unwrap();
+        ensure_marker(&root).expect("gate");
+        assert_eq!(
+            CALLS.with(Cell::get),
+            2,
+            "a recreated directory kept the marker"
+        );
+        fs::remove_dir_all(&aside).unwrap();
+    }
+
+    fn rewrite_marker(root: &Path, edit: impl FnOnce(&mut Marker)) {
+        let path = root.join(MARKER_FILE);
+        let mut marker: Marker = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        edit(&mut marker);
+        fs::write(&path, serde_json::to_vec(&marker).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn a_go_backup_marker_needs_a_backup_that_matches_its_receipt() {
+        let dir = enforced_vault();
+        let root = dir.path().canonicalize().unwrap();
+        ensure_marker(&root).expect("gate");
+        assert_eq!(CALLS.with(Cell::get), 1);
+
+        // Points at a foreign file that exists (the review's /etc/hosts probe).
+        let foreign = tempfile::NamedTempFile::new().unwrap();
+        fs::write(foreign.path(), b"foreign").unwrap();
+        rewrite_marker(&root, |marker| {
+            let backup = marker.backup.as_mut().unwrap();
+            backup.path = foreign.path().to_path_buf();
+        });
+        ensure_marker(&root).expect("foreign file");
+        assert_eq!(CALLS.with(Cell::get), 2, "foreign backup file accepted");
+
+        // Right file, wrong digest.
+        rewrite_marker(&root, |marker| {
+            marker.backup.as_mut().unwrap().sha256 = "ab".repeat(32);
+        });
+        ensure_marker(&root).expect("wrong sha");
+        assert_eq!(CALLS.with(Cell::get), 3, "wrong sha256 accepted");
+
+        // Right file, wrong size.
+        rewrite_marker(&root, |marker| marker.backup.as_mut().unwrap().bytes += 1);
+        ensure_marker(&root).expect("wrong size");
+        assert_eq!(CALLS.with(Cell::get), 4, "wrong size accepted");
+
+        // A marker with no vault id (an older or hand-made one) does not count.
+        rewrite_marker(&root, |marker| marker.vault_id = None);
+        ensure_marker(&root).expect("no vault id");
+        assert_eq!(CALLS.with(Cell::get), 5);
+
+        // A symlink in place of the archive does not count either.
+        #[cfg(unix)]
+        {
+            let marker: Marker =
+                serde_json::from_slice(&fs::read(root.join(MARKER_FILE)).unwrap()).unwrap();
+            let archive = marker.backup.unwrap().path;
+            let target = root.join("moved-backup");
+            fs::rename(&archive, &target).unwrap();
+            std::os::unix::fs::symlink(&target, &archive).unwrap();
+            ensure_marker(&root).expect("symlinked archive");
+            assert_eq!(CALLS.with(Cell::get), 6);
+        }
     }
 
     #[test]

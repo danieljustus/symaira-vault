@@ -29,6 +29,31 @@ fn abi_version_is_stable() {
 }
 
 #[test]
+fn the_host_chooses_the_backup_directory() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let chosen = dir.path().join("host-backups");
+    let text_of = chosen.to_str().expect("utf-8").as_bytes();
+    let mut err = empty();
+    // SAFETY: the path bytes and `err` are valid for the call.
+    let status = unsafe { abi::symvault_set_backup_dir(text_of.as_ptr(), text_of.len(), &mut err) };
+    assert_eq!(status, 0);
+    assert!(err.ptr.is_null());
+    assert_eq!(
+        symvault_sync::data_safety::backup_dir().expect("dir"),
+        chosen
+    );
+    // An empty path restores the environment-derived default.
+    // SAFETY: a null pointer with length 0 is the documented empty input.
+    let status = unsafe { abi::symvault_set_backup_dir(ptr::null(), 0, &mut err) };
+    assert_eq!(status, 0);
+    assert_ne!(
+        symvault_sync::data_safety::backup_dir().ok(),
+        Some(chosen),
+        "the empty path must clear the host's choice"
+    );
+}
+
+#[test]
 fn a_panic_is_contained_and_reported() {
     let mut err = empty();
     // SAFETY: `err` is writable.

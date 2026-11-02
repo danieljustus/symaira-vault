@@ -24,6 +24,12 @@ time = { version = "=0.3.55", features = ["formatting", "parsing"] }
 walkdir = "=2.5.0"
 zeroize = { version = "=1.9.1", features = ["alloc"] }
 
+[features]
+# `data_safety::test_support_pre_marked` for fixtures. Enabled only through
+# dev-dependencies; no production build turns it on.
+test-support = []
+
 [dev-dependencies]
+symvault-store = { path = ".", features = ["test-support"] }
 base64 = "=0.23.1"
 tempfile = "=3.27.0"

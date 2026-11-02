@@ -19,7 +19,15 @@ Runs the real Rust CLI over Go-created vaults and checks, per seed vault:
      (tree untouched, no marker); a corrupted backup is refused by the
      production verification (no marker); with the restore verification
      short-circuited the corrupted backup is accepted by the gate and THIS
-     harness's independent restore comparison must then fail.
+     harness's independent restore comparison must then fail;
+  7. marker binding: a marker copied from another vault (go-vault-backup and
+     rust-created), a go-vault-backup marker whose backup points at a foreign
+     file, carries a wrong sha256 or a wrong size, is no marker at all and the
+     next mutation backs up again;
+  8. crash leftovers: a `.partial` archive and a `.verify-*` scratch directory
+     of a dead process are swept by the next gate, those of a live one stay;
+  9. the mutator sweep includes `remote init` on a git-backed Go vault (it
+     rewrites `.git/config`): marker and backup precede the config change.
 
 Seeds: the frozen Go-created passphrase vault of testdata/port/ffi/mobilebind.json
 (`seed.vault`), a vault made by the Go oracle's own `init` + `set`, and the
@@ -318,8 +326,24 @@ POLICY = (
 )
 
 
+def git_backed(sandbox):
+    """Makes the seed vault a git repository the way the Go oracle's git
+    integration leaves it: a committed worktree and a repository-local config."""
+    env = {"PATH": os.environ.get("PATH", ""), "HOME": str(sandbox.home),
+           "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
+    for args in (["init", "--quiet"],
+                 ["symbolic-ref", "HEAD", "refs/heads/master"],
+                 ["config", "user.name", "Symaira Vault"],
+                 ["config", "user.email", "symvault@example.com"],
+                 ["add", "--all"],
+                 ["commit", "--quiet", "-m", "seed"]):
+        out = subprocess.run(["git", *args], cwd=sandbox.vault, env=env,
+                             capture_output=True, text=True, check=False)
+        check(out.returncode == 0, f"git {args[0]} failed in the seed: {out.stderr.strip()}")
+
+
 def sweep_cases(inputs):
-    """(name, rust args, oracle setup args, must_mutate_tree)."""
+    """(name, rust args, oracle setup: Go args | callable(sandbox) | None, must_mutate_tree)."""
     kdf = json.loads((ROOT / "testdata/port/crypto/age-kdf.json").read_text())
     recipient = kdf["zero_key_cases"][0]["expected_recipient"]
     inputs.mkdir(exist_ok=True)
@@ -339,6 +363,8 @@ def sweep_cases(inputs):
         ("migrate pseudonymize", ["migrate", "pseudonymize", "--yes"], None, True),
         ("device pair", ["device", "pair"], None, True),
         ("import csv", ["import", str(inputs / "import.csv"), "--format", "csv"], None, True),
+        ("remote init", ["remote", "init", "git@backup.invalid", "--path", "vault.git"],
+         git_backed, True),
     ]
 
 
@@ -346,7 +372,8 @@ def run_sweep(base, rust, go):
     """Every Rust command that changes a Go-created vault must have taken the
     verified backup first: tree changed => marker + exactly one backup that
     restores to the pre-command tree."""
-    ignored = GO_READ_SIDE_EFFECTS | {".lock", MARKER}
+    # `.git/info/exclude` is where the marker hides itself from git add.
+    ignored = GO_READ_SIDE_EFFECTS | {".lock", MARKER, ".git/info/exclude", ".git/info"}
     names = [case[0] for case in sweep_cases(Path(base, "sweep-names"))]
     outcomes = []
     for index, name in enumerate(names):
@@ -354,7 +381,9 @@ def run_sweep(base, rust, go):
         sandbox = Sandbox(base, label)
         _, args, setup, must_mutate = sweep_cases(sandbox.base / "inputs")[index]
         materialize_ffi_seed(sandbox)
-        if setup:
+        if callable(setup):
+            setup(sandbox)
+        elif setup:
             out = sandbox.run(go, setup, SEED_PASS)
             check(out.returncode == 0, f"{label}: oracle setup {setup} failed: {out.stderr.strip()[:200]}")
         pre = tree(sandbox.vault)
@@ -372,6 +401,14 @@ def run_sweep(base, rust, go):
             backups = sandbox.backups()
             check(len(backups) == 1, f"{label}: expected one backup, found {len(backups)}")
             restore_and_compare(sandbox, rust, backups[0], pre, label, pre_audit)
+            if name == "remote init":
+                # The config rewrite is what the gate had to precede: the live
+                # config has the remote, the restored backup's does not.
+                check(post[".git/config"] != pre[".git/config"], f"{label}: .git/config unchanged")
+                restored = sandbox.base / f"restored-{label}"
+                check('[remote "origin"]' not in (restored / ".git/config").read_text()
+                      and '[remote "origin"]' in (sandbox.vault / ".git/config").read_text(),
+                      f"{label}: backup does not hold the pre-change .git/config")
         outcomes.append(f"{name}:{'mutated' if changed else 'unchanged'}")
     return outcomes
 
@@ -429,6 +466,103 @@ def negative_probe(base, rust, probe):
     raise Failure("neg-shortcircuit: harness did not notice a corrupted backup behind a short-circuited gate")
 
 
+def second_backup_taken(sandbox, rust, before, label):
+    """Runs a mutation and expects exactly one more backup and a valid marker."""
+    out = sandbox.run(rust, ["set", f"harness/{label}", "--value", STRONG], SEED_PASS)
+    check(out.returncode == 0, f"{label}: set failed: {out.stderr.strip()[:200]}")
+    check(len(sandbox.backups()) == before + 1,
+          f"{label}: expected the invalid marker to trigger a backup ({before} -> {len(sandbox.backups())})")
+    marker = read_marker(sandbox.vault)
+    archive = Path(marker["backup"]["path"])
+    check(archive.resolve().parent == sandbox.backups()[0].resolve().parent and marker["backup"]["sha256"]
+          == hashlib.sha256(archive.read_bytes()).hexdigest(), f"{label}: marker not rewritten with a real backup")
+    return marker
+
+
+def negative_marker_binding(base, rust):
+    # a marker copied from another (Go-seeded, then mutated) vault
+    donor = Sandbox(base, "neg-marker-donor")
+    materialize_ffi_seed(donor)
+    out = donor.run(rust, ["set", "harness/new", "--value", STRONG], SEED_PASS)
+    check(out.returncode == 0, f"neg-marker: donor set failed: {out.stderr.strip()[:200]}")
+    donor_marker = (donor.vault / MARKER).read_bytes()
+
+    copied = Sandbox(base, "neg-marker-copied")
+    materialize_ffi_seed(copied)
+    (copied.vault / MARKER).write_bytes(donor_marker)
+    check(not copied.backups(), "neg-marker: fixture already has a backup")
+    marker = second_backup_taken(copied, rust, 0, "copied-go-marker")
+    check(marker["vault_id"] != json.loads(donor_marker)["vault_id"], "neg-marker: vault_id not per vault")
+
+    # a rust-created marker (made by the real `init`) copied onto a Go vault
+    creator = Sandbox(base, "neg-marker-creator")
+    out = creator.run(rust, ["init", "--auth", "passphrase"], passphrase=INIT_PASS)
+    check(out.returncode == 0, f"neg-marker: rust init failed: {out.stderr.strip()[:200]}")
+    created = json.loads((creator.vault / MARKER).read_text())
+    check(created["kind"] == "rust-created" and "vault_id" in created, f"neg-marker: unexpected marker {created}")
+    check(not creator.backups(), "neg-marker: a vault Rust creates must not be backed up")
+    foreign = Sandbox(base, "neg-marker-rust-created")
+    materialize_ffi_seed(foreign)
+    shutil.copy(creator.vault / MARKER, foreign.vault / MARKER)
+    second_backup_taken(foreign, rust, 0, "copied-rust-created-marker")
+
+    # go-vault-backup marker with a backup that is not this vault's backup
+    victim = Sandbox(base, "neg-marker-backup")
+    materialize_ffi_seed(victim)
+    out = victim.run(rust, ["set", "harness/new", "--value", STRONG], SEED_PASS)
+    check(out.returncode == 0, f"neg-marker: victim set failed: {out.stderr.strip()[:200]}")
+    count = 1
+    check(len(victim.backups()) == count, "neg-marker: expected the first backup")
+    out = victim.run(rust, ["set", "harness/steady", "--value", STRONG], SEED_PASS)
+    check(out.returncode == 0 and len(victim.backups()) == count, "neg-marker: a valid marker took another backup")
+    other_file = victim.base / "foreign.bin"
+    other_file.write_bytes(b"not a backup of this vault")
+
+    def edit(change):
+        marker = read_marker(victim.vault)
+        change(marker)
+        (victim.vault / MARKER).write_text(json.dumps(marker))
+
+    edit(lambda m: m["backup"].update(path=str(other_file)))  # the review's /etc/hosts probe
+    second_backup_taken(victim, rust, count, "foreign-file"); count += 1
+    edit(lambda m: m["backup"].update(sha256="ab" * 32))
+    second_backup_taken(victim, rust, count, "wrong-sha256"); count += 1
+    edit(lambda m: m["backup"].update(bytes=m["backup"]["bytes"] + 1))
+    second_backup_taken(victim, rust, count, "wrong-size"); count += 1
+    edit(lambda m: m.pop("vault_id"))
+    second_backup_taken(victim, rust, count, "no-vault-id"); count += 1
+    edit(lambda m: m["backup"].update(path="/etc/hosts"))
+    second_backup_taken(victim, rust, count, "etc-hosts")
+
+
+def negative_stale_partials(base, rust):
+    sandbox = Sandbox(base, "neg-partials")
+    materialize_ffi_seed(sandbox)
+    backups = sandbox.state / "symvault" / "backups"
+    backups.mkdir(parents=True)
+    child = subprocess.Popen(["true"])
+    child.wait()
+    dead = child.pid
+    stale_partial = backups / f"pre-rust-vault-0.tar.gz.{dead}.partial"
+    stale_scratch = backups / f".verify-{dead}-leftover"
+    stale_partial.write_bytes(b"half an archive from a killed run")
+    stale_scratch.mkdir()
+    (stale_scratch / "vault").write_bytes(b"half a restore")
+    live = subprocess.Popen(["sleep", "60"])
+    try:
+        live_partial = backups / f"pre-rust-vault-1.tar.gz.{live.pid}.partial"
+        live_partial.write_bytes(b"another gate is writing this")
+        out = sandbox.run(rust, ["set", "harness/new", "--value", STRONG], SEED_PASS)
+        check(out.returncode == 0, f"neg-partials: set failed: {out.stderr.strip()[:200]}")
+        check(not stale_partial.exists(), "neg-partials: stale .partial archive was not swept")
+        check(not stale_scratch.exists(), "neg-partials: stale .verify-* scratch directory was not swept")
+        check(live_partial.exists(), "neg-partials: a live process's .partial was swept")
+        check(len(sandbox.backups()) == 1, "neg-partials: expected exactly one finished backup")
+    finally:
+        live.kill()
+        live.wait()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rust", required=True)
@@ -451,6 +585,8 @@ def main():
         swept = run_sweep(base, rust, go)
         negative_unwritable_backup_dir(base, rust)
         negative_probe(base, rust, probe)
+        negative_marker_binding(base, rust)
+        negative_stale_partials(base, rust)
     except Failure as failure:
         print(f"FAIL after {cases} checks: {failure}", file=sys.stderr)
         print(f"sandboxes kept in {base}", file=sys.stderr)
@@ -458,7 +594,7 @@ def main():
     if not args.keep:
         shutil.rmtree(base, ignore_errors=True)
     print(f"mutator sweep: {', '.join(swept)}")
-    print(f"data-safety contract: PASS ({cases} checks, 3 seed vaults, {len(swept)} mutators, 3 negative controls)")
+    print(f"data-safety contract: PASS ({cases} checks, 3 seed vaults, {len(swept)} mutators, 5 negative-control groups)")
     return 0
 
 
