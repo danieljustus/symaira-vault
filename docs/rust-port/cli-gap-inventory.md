@@ -306,6 +306,69 @@ Still open:
 | `Touch ID skipped` warning on a host with a GUI session | not printed | not printed; the warning branch is only exercised against the oracle on hosts without one (unit test in the binary on others) |
 | `FlushManifestUpdates`, filesystem-sync reports, git relocation of `Open` | run on open | not part of the Rust open |
 
+## SET-004b fix round: entry-ciphertext header cap and delta-review follow-ups
+
+Pinned against the non-CGO Go oracle (`set_differential`, `zero_key_differential`, `cli_differential`,
+`auth_differential`, `edit_differential`, `add_form_differential`, `error_taxonomy`, `session_commands`,
+`write_commands`) and, for the frozen manpage corpus, the freshly built pinned oracle
+(`make output-modes-cli-differential`).
+
+- **Entry ciphertext is untrusted; the `age` crate is superlinear in the length of a header line.** A
+  crafted `entries/w/zz-evil.age` (a 64 KiB `-> X25519 zzz…` line; a git pull or rsync can drop one in)
+  made `list` take 53 s in the review and 50-125 s in a debug build here (Go 0.1-1 s; the open-time
+  manifest reconcile and every later `get`/`list` reached the file). Every
+  `age::Decryptor::new` fed bytes the vault did not just produce is now preceded by
+  `symvault_crypto::entry_header_refused` (Go's 2 MiB header cap plus a 1 KiB line cap): `decrypt`,
+  `decrypt_bounded` (entries, manifest, `grant_key`, doctor round trip), `inspect_argon2id_policy`
+  and the two probes of the FFI `agehdr` diagnostic walk. `decrypt_scrypt`, `decrypt_argon2id*` and
+  `recover_zero_key_identity*` keep the stricter identity-only guard (16 KiB header budget, 1 KiB line,
+  1024 stanzas), which a multi-recipient entry would exceed, so entries do not get it. Every line Go
+  writes is far below 1 KiB: `age.Encrypt` emits only X25519 (`-> X25519 <43>`, 53 bytes), scrypt and
+  Symaira's argon2id stanzas (< 100 bytes), body lines are 64 columns and the footer is 48 bytes; age 1.3.2
+  adds no grease stanza outside its plugin client. A 171-recipient entry (header over 16 KiB) still decrypts.
+  Regression tests: `symvault-crypto` `entry_header_line_cap_…` (cap boundary at exactly 1 KiB, wide
+  header accepted) and `oversized_entry_header_line_is_refused_quickly_…` (all five entry points),
+  `symvault-store` `oversized_entry_header_line_never_reaches_the_age_parser` (open + reconcile + list +
+  get + verify + rebuild under 10 s; with the cap removed it fails at 20 s on the single `get`).
+  **How a capped entry fails (Rust-safer deviation):** `list` exits 0 and names the file, as in Go; `get`
+  exits 1 in both. Go prints `Error: cannot read entry: cannot read entry w/zz-evil: decryption failed: invalid
+  X25519 recipient block: decryption failed: invalid X25519 recipient block` (Go's parser accepts the line and
+  rejects the block); Rust prints `Error: cannot read entry: entry ciphertext is invalid: malformed age
+  envelope`, the text of every other envelope the crate cannot parse. Exit status matches; the Go wording for
+  an over-long header line is not reproduced (the FFI diagnostic still produces Go's text through its own
+  linear parser, and only its `age`-crate probes are guarded: an otherwise valid header with an over-long
+  extra line reports Go's `malformed header (N bytes)` fallback instead of the key-dependent text).
+- `atomic_write` in `zero_key.rs` now `fchmod`s the temporary file to the requested mode after creating it,
+  like `os.CreateTemp` + `File.Chmod`: under umask 0277 `identity.age` and `identity.age.bak` end up 0600 (they
+  were 0400). Pinned by `heal_files_keep_mode_0600_under_a_restrictive_umask_like_go` (fails without the
+  fix). **Still open, outside this heal:** Go creates `.lock`, `.symvault-migrated` and `manifest.age` with
+  the umask applied (0400 under 0277, and the next open then fails with `open lock file: permission
+  denied`); Rust creates them at a fixed 0600. A restrictive umask is not a supported configuration.
+- **Accepted deviation, I/O failures of the heal's atomic writes:** the text of a failing temp-file create,
+  write, sync or rename in `zero_key.rs` is the errno text (`write backup: …`), where Go reports its
+  `*PathError`/`*LinkError`, which names a randomly suffixed temporary file (`open /…/identity.age.bak.tmp-123456:
+  …`). The random name cannot be reproduced and is not compared; the exit status and the rollback behaviour are.
+- **Accepted deviation, `auth set touchid` with a cached session:** Go's `passphraseForBiometricSetup` returns
+  a cached-session passphrase without opening the vault; Rust opens (and so heals) in that branch too, before
+  saving the Touch ID item. Practically unreachable: a cached passphrase was verified (and healed) when it
+  was cached. Only the env-variable and prompt branches open in Go.
+- **FFI open reconciles the manifest.** `pkg/mobilebind` goes through `vault.Open` / `OpenWithPassphrase`, so
+  every FFI call that opens a vault rebuilds a missing, stale or incomplete manifest like the CLI; the FFI
+  used to rebuild only a missing one. `every_open_reconciles_the_manifest_like_go` (fails without the change).
+- **Accepted deviation, non-regular `*.age` files in `entries/`:** Go's `DetectOutOfBandEntries` counts any
+  non-directory ending in `.age`. A symlink makes Go's `list` ignore it and `verify` report it as unknown;
+  Rust refuses the whole open with `vault path is a symlink: …` (fail closed, STORE-003). A FIFO/socket named
+  `*.age` is counted by Go (whose rebuild would then `open` it, which can block); Rust skips it, so no
+  rebuild is triggered. Matching Go would mean hashing through a symlink or opening a FIFO, which is the
+  hazard the store's rooted walk exists to avoid.
+- **`generate manpages` corpus no longer expires daily.** cobra writes its generation date into the one
+  `.SH HISTORY` line it emits (`2-Nov-2026 Auto generated by spf13/cobra`, only in `symvault-version.1`), so the
+  recorded sha of that page went stale every day. Normalization rule 9 (`man-date`) now also rewrites the
+  date of exactly that line to `<MAN-DATE>`, in the generator (`outputmodegen`), the replay and the fixture
+  notes; the fixture was re-recorded through `make output-modes-regenerate` and differs from the old one only
+  in the generator digest, the rule-9 note and the five `symvault-version.1` hashes. The unit test pins the
+  shapes that must not be rewritten.
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate

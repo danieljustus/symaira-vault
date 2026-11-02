@@ -153,6 +153,13 @@ fn atomic_write(path: &Path, data: &[u8], mode: u32) -> io::Result<()> {
     let temporary = parent.join(format!(".{name}.tmp-{suffix}"));
     let result = (|| {
         let mut file = options.open(&temporary)?;
+        // `os.CreateTemp` + `File.Chmod(perm)`: the creation mode is subject to
+        // the umask (0600 & !0277 is 0400), the Chmod is not.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            file.set_permissions(fs::Permissions::from_mode(mode))?;
+        }
         file.write_all(data)?;
         file.sync_all()?;
         drop(file);

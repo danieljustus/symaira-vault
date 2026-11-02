@@ -764,6 +764,48 @@ fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
     assert!(matches!(error, StoreError::Config(message) if message.contains("replacement")));
 }
 
+/// A crafted `entries/**/*.age` (it can arrive by git pull or rsync) whose
+/// X25519 stanza line is 64 KiB. The `age` crate takes about a minute to parse
+/// such a line; Go takes microseconds. Opening the store (which reconciles the
+/// manifest), listing, reading and verifying must stay fast and fail the read
+/// with an ordinary envelope error.
+#[test]
+fn oversized_entry_header_line_never_reaches_the_age_parser() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    materialize(root, &value.vaults[0]);
+    let mut evil = b"age-encryption.org/v1\n-> X25519 ".to_vec();
+    evil.extend(std::iter::repeat_n(b'z', 64 * 1024));
+    evil.extend_from_slice(b"\nAAAA\n--- ");
+    evil.extend(std::iter::repeat_n(b'A', 43));
+    evil.push(b'\n');
+    evil.extend_from_slice(&[0; 64]);
+    fs::create_dir_all(root.join("entries/w")).unwrap();
+    fs::write(root.join("entries/w/zz-evil.age"), &evil).unwrap();
+
+    let started = std::time::Instant::now();
+    let store = Store::open(root, &identity).unwrap();
+    store.reconcile_manifest_on_open(&identity);
+    let listed = store.list(&identity).unwrap();
+    assert!(listed.contains(&"w/zz-evil".to_owned()));
+    let error = store.get("w/zz-evil", &identity).unwrap_err();
+    assert!(
+        error.to_string().contains("malformed age envelope"),
+        "{error}"
+    );
+    store.verify_manifest(&identity).unwrap();
+    store.rebuild_manifest(&identity).unwrap();
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < std::time::Duration::from_secs(10),
+        "a 64 KiB header line took {elapsed:?}; the unguarded age parser needs about a minute"
+    );
+    // A legitimate entry next to it is untouched.
+    assert!(store.get("minimal", &identity).is_ok());
+}
+
 #[test]
 fn entry_shape_budget_is_checked_before_entry_deserialization() {
     let too_many =

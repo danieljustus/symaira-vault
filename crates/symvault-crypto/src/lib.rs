@@ -340,6 +340,9 @@ pub fn encrypt(plaintext: &[u8], recipients: &[Recipient]) -> Result<Vec<u8>, Cr
 
 /// Decrypts an age entry with an X25519 identity.
 pub fn decrypt(ciphertext: &[u8], identity: &Identity) -> Result<Vec<u8>, CryptoError> {
+    if entry_header_refused(ciphertext) {
+        return Err(entry_header_error());
+    }
     let decryptor = age::Decryptor::new(ciphertext)
         .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope"))?;
     let mut reader = decryptor
@@ -361,6 +364,9 @@ pub fn decrypt_bounded(
     identity: &Identity,
     max_plaintext_bytes: u64,
 ) -> Result<Vec<u8>, CryptoError> {
+    if entry_header_refused(ciphertext) {
+        return Err(entry_header_error());
+    }
     let decryptor = age::Decryptor::new(ciphertext)
         .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope"))?;
     let mut reader = decryptor
@@ -695,6 +701,9 @@ impl age::Identity for ArgonPolicyInspector {
 
 /// Inspects historical header budgets without a KDF or authenticating its key.
 pub fn inspect_argon2id_policy(raw: &[u8]) -> Result<bool, CryptoError> {
+    if identity_header_refused(raw) {
+        return Err(malformed_argon2id());
+    }
     let decryptor = age::Decryptor::new(raw).map_err(|_| malformed_argon2id())?;
     let inspector = ArgonPolicyInspector {
         status: Cell::new(None),
@@ -1023,6 +1032,32 @@ fn identity_header_refused(raw: &[u8]) -> bool {
             IDENTITY_LINE_BUDGET,
             MAX_AGE_STANZAS,
         )
+}
+
+/// The longest header line the `age` crate is handed for an entry or manifest.
+/// Everything this vault (and Go) writes is X25519, scrypt or argon2id: stanza
+/// lines of about 55-100 bytes and 64-column body lines. The crate's header
+/// parser is superlinear in line length (a 64 KiB X25519 argument line costs it
+/// about a minute, Go's parser microseconds), and entry ciphertext is untrusted
+/// (a git pull or rsync can drop a file into `entries/`), so a longer line is
+/// refused without calling it. Only the line cap and Go's 2 MiB header cap apply
+/// here: a multi-recipient entry legitimately outgrows the identity-only 16 KiB
+/// budget and 1024-stanza cap.
+const ENTRY_LINE_BUDGET: usize = 1024;
+
+/// Whether `raw` (untrusted entry/manifest ciphertext) must not be handed to
+/// `age::Decryptor::new`: a header beyond Go's 2 MiB cap or with a line longer
+/// than [`ENTRY_LINE_BUDGET`]. Every caller that feeds the `age` crate bytes it
+/// did not just produce must check this first.
+#[must_use]
+pub fn entry_header_refused(raw: &[u8]) -> bool {
+    age_header_beyond(raw, MAX_AGE_HEADER_BYTES, ENTRY_LINE_BUDGET, usize::MAX)
+}
+
+/// The error for a refused entry header: the same class and text as any other
+/// envelope the `age` crate cannot parse.
+fn entry_header_error() -> CryptoError {
+    CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope")
 }
 
 /// The error for a refused identity header. An `argon2id` stanza whose line is
@@ -2337,6 +2372,81 @@ mod tests {
         let error = decrypt_identity(&long, &SecretBytes::new(b"passphrase")).unwrap_err();
         assert_eq!(error.to_string(), "malformed argon2id stanza");
         assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    }
+
+    #[test]
+    fn entry_header_line_cap_refuses_long_lines_but_not_multi_recipient_headers() {
+        let identity = generate_identity();
+        let recipients: Vec<Recipient> =
+            std::iter::once(parse_recipient(&recipient_string(&identity)).unwrap())
+                .chain(
+                    (0..170)
+                        .map(|_| parse_recipient(&recipient_string(&generate_identity())).unwrap()),
+                )
+                .collect();
+        // 171 recipients: well beyond the identity-only 16 KiB header budget,
+        // every line far below the entry line cap.
+        let wide = encrypt(b"payload", &recipients).unwrap();
+        let header_end = wide
+            .windows(5)
+            .position(|window| window == b"\n--- ")
+            .unwrap();
+        assert!(header_end > IDENTITY_HEADER_BUDGET);
+        assert!(!entry_header_refused(&wide));
+        assert!(identity_header_refused(&wide));
+        assert_eq!(decrypt(&wide, &identity).unwrap(), b"payload");
+        assert_eq!(decrypt_bounded(&wide, &identity, 64).unwrap(), b"payload");
+
+        // The cap is exactly 1 KiB per line, newline included.
+        let line = |arg: usize| {
+            [
+                b"age-encryption.org/v1\n-> X25519 ".as_slice(),
+                &vec![b'z'; arg],
+                b"\nAAAA\n--- ",
+                &[b'A'; 43],
+                b"\n",
+            ]
+            .concat()
+        };
+        let prefix = b"-> X25519 ".len() + 1;
+        assert!(!entry_header_refused(&line(ENTRY_LINE_BUDGET - prefix)));
+        assert!(entry_header_refused(&line(ENTRY_LINE_BUDGET - prefix + 1)));
+        // Header cap of 2 MiB still applies.
+        assert!(entry_header_refused(
+            &[b"age-encryption.org/v1\n".as_slice(), &vec![b'x'; 3 << 20]].concat()
+        ));
+        // Unrelated bytes are left to the real parser.
+        assert!(!entry_header_refused(b"garbage"));
+    }
+
+    #[test]
+    fn oversized_entry_header_line_is_refused_quickly_by_every_entry_decrypt() {
+        let identity = generate_identity();
+        let mut evil = b"age-encryption.org/v1\n-> X25519 ".to_vec();
+        evil.extend(vec![b'z'; 64 * 1024]);
+        evil.extend_from_slice(b"\nAAAA\n--- ");
+        evil.extend(vec![b'A'; 43]);
+        evil.push(b'\n');
+        evil.extend_from_slice(&[0; 64]);
+        let started = std::time::Instant::now();
+        for result in [
+            decrypt(&evil, &identity),
+            decrypt_bounded(&evil, &identity, 1024),
+            decrypt_scrypt(&evil, &SecretBytes::new(b"passphrase")),
+        ] {
+            let error = result.unwrap_err();
+            assert_eq!(error.class(), FailureClass::MalformedEnvelope);
+            assert_eq!(error.to_string(), "malformed age envelope");
+        }
+        assert_eq!(
+            inspect_argon2id_policy(&evil).unwrap_err().to_string(),
+            "malformed argon2id stanza"
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "the age parser was reached: {:?}",
+            started.elapsed()
+        );
     }
 
     #[test]

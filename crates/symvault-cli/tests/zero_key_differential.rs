@@ -115,7 +115,30 @@ fn run(
     args: &[&str],
     stdin: Option<&[u8]>,
 ) -> Out {
-    let mut child = Command::new(binary)
+    run_under(binary, root, home, passphrase, args, stdin, None)
+}
+
+fn run_under(
+    binary: &Path,
+    root: &Path,
+    home: &Path,
+    passphrase: Option<&str>,
+    args: &[&str],
+    stdin: Option<&[u8]>,
+    umask: Option<&str>,
+) -> Out {
+    let mut command = match umask {
+        Some(mask) => {
+            let mut shell = Command::new("/bin/sh");
+            shell
+                .arg("-c")
+                .arg(format!("umask {mask}; exec \"$0\" \"$@\""))
+                .arg(binary);
+            shell
+        }
+        None => Command::new(binary),
+    };
+    let mut child = command
         .args(args)
         .env_clear()
         .envs(environment(root, home, passphrase))
@@ -193,6 +216,8 @@ struct Case {
     follow: Vec<(&'static str, Vec<&'static str>)>,
     /// Whether the Go oracle is expected to have rewritten `identity.age`.
     healed: Option<bool>,
+    /// An octal `umask` the command runs under (through `sh`), if any.
+    umask: Option<&'static str>,
 }
 
 fn zero(name: &str, passphrase: &'static str, args: &[&'static str]) -> Case {
@@ -209,12 +234,17 @@ fn zero(name: &str, passphrase: &'static str, args: &[&'static str]) -> Case {
         stdin: None,
         follow: Vec::new(),
         healed: None,
+        umask: None,
     }
 }
 
 impl Case {
     fn healed(mut self, healed: bool) -> Self {
         self.healed = Some(healed);
+        self
+    }
+    fn umask(mut self, umask: &'static str) -> Self {
+        self.umask = Some(umask);
         self
     }
     fn follow(mut self, passphrase: &'static str, args: &[&'static str]) -> Self {
@@ -378,13 +408,14 @@ fn prepare(binary_for_init: &Path, parent: &Path, case: &Case) -> (PathBuf, Path
 
 fn observe(binary: &Path, go: &Path, rust: &Path, parent: &Path, case: &Case) -> Observed {
     let (root, home, original) = prepare(go, parent, case);
-    let out = run(
+    let out = run_under(
         binary,
         &root,
         &home,
         case.env_pass.then_some(case.passphrase),
         &case.args,
         case.stdin.as_deref(),
+        case.umask,
     );
     let mut files = BTreeMap::new();
     walk(&root, &root, &mut files);
@@ -576,6 +607,50 @@ fn zero_key_heal_matches_the_go_oracle() {
     compare(&cases, 120);
 }
 
+/// `fsutil.AtomicWriteFile` is `CreateTemp` + `Chmod(perm)`: under a umask that
+/// removes the owner's write bit the temporary file is created 0400 and the
+/// `Chmod` puts it back to 0600, so `identity.age` and `identity.age.bak` end up
+/// 0600. (The other files a run creates, `.lock`, `.symvault-migrated` and
+/// `manifest.age`, follow the umask in Go and are fixed 0600 in Rust; that is a
+/// recorded deviation in `cli-gap-inventory.md`, so only the files the heal
+/// writes are compared here.)
+#[test]
+fn heal_files_keep_mode_0600_under_a_restrictive_umask_like_go() {
+    let Some(go) = oracle() else {
+        return;
+    };
+    let rust = PathBuf::from(RUST);
+    let case = zero("heal under umask 0277", PASS23, &["list"])
+        .umask("0277")
+        .healed(true);
+    let temp = tempfile::Builder::new()
+        .prefix("symvault-zk-umask-")
+        .tempdir()
+        .expect("temp");
+    let go_run = observe(&go, &go, &rust, &temp.path().join("go"), &case);
+    let rust_run = observe(&rust, &go, &rust, &temp.path().join("rs"), &case);
+    assert!(go_run.identity_rewritten, "oracle did not heal: {go_run:?}");
+    let healed_files = |run: &Observed| -> BTreeMap<String, u32> {
+        run.files
+            .iter()
+            .filter(|(name, _)| name.starts_with("identity.age"))
+            .map(|(name, mode)| (name.clone(), *mode))
+            .collect()
+    };
+    assert_eq!(
+        healed_files(&go_run),
+        BTreeMap::from([
+            ("identity.age".to_owned(), 0o600),
+            ("identity.age.bak".to_owned(), 0o600)
+        ]),
+        "oracle modes"
+    );
+    assert_eq!(healed_files(&rust_run), healed_files(&go_run));
+    assert_eq!(rust_run.out, go_run.out);
+    assert_eq!(rust_run.identity_rewritten, go_run.identity_rewritten);
+    assert_eq!(rust_run.backup_is_original, go_run.backup_is_original);
+}
+
 fn header_case(name: &str, data: fn() -> Vec<u8>, recipients: Recipients) -> Case {
     Case {
         name: name.to_owned(),
@@ -590,6 +665,7 @@ fn header_case(name: &str, data: fn() -> Vec<u8>, recipients: Recipients) -> Cas
         stdin: None,
         follow: Vec::new(),
         healed: Some(false),
+        umask: None,
     }
 }
 
@@ -705,6 +781,7 @@ fn manifest_case(name: &str, manifest: Manifest, args: &[&'static str]) -> Case 
         stdin: None,
         follow: vec![(INIT_PASS, vec!["verify"])],
         healed: None,
+        umask: None,
     }
 }
 
@@ -749,6 +826,7 @@ fn touch_id_skipped_warning_matches_the_go_oracle() {
         stdin: None,
         follow: Vec::new(),
         healed: None,
+        umask: None,
     };
     let cases = vec![
         case("get with Touch ID configured", &["get", "w/a.password"]),

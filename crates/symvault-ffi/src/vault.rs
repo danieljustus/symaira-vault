@@ -345,9 +345,9 @@ fn open_store(dir: &str, identity: &Identity) -> R<Store> {
     detect_legacy_mode(dir, config)?;
     let store = Store::open_lenient_with_legacy_migration(dir, identity)
         .map_err(|error| map_store_error(&error))?;
-    if !Path::new(dir).join("manifest.age").exists() {
-        let _ = store.rebuild_manifest(identity);
-    }
+    // mobilebind opens through `vault.Open`, whose manifest consistency block
+    // rebuilds a missing, stale or incomplete manifest (best effort).
+    store.reconcile_manifest_on_open(identity);
     Ok(store)
 }
 
@@ -621,6 +621,43 @@ mod tests {
             .map(|entry| entry.file_name())
             .collect();
         assert_eq!(leftovers, vec![std::ffi::OsString::from("config.yaml")]);
+    }
+
+    /// `vault.Open` (and so every mobilebind call) rebuilds a manifest that does
+    /// not list an `.age` file dropped into `entries/` out of band, and one that
+    /// is missing; it used to be only the missing case here.
+    #[test]
+    fn every_open_reconciles_the_manifest_like_go() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let dir = directory.path().to_str().expect("utf-8 path");
+        init_vault(dir, b"correct horse battery staple").expect("init");
+        let id_text = open_with_passphrase(dir, b"correct horse battery staple").expect("open");
+        write_entry_json(dir, "one", r#"{"data":{"k":"v"}}"#, &id_text).expect("write");
+        let identity = validate_identity(&id_text).expect("identity");
+        let listed = |dir: &str| -> Vec<String> {
+            let store = Store::open(dir, &identity).expect("store");
+            store
+                .load_manifest(&identity)
+                .expect("manifest")
+                .entries
+                .into_keys()
+                .collect()
+        };
+        assert_eq!(listed(dir), vec!["one".to_owned()]);
+
+        // A git pull / rsync drops a second entry in; the manifest is stale.
+        fs::copy(
+            directory.path().join("entries/one.age"),
+            directory.path().join("entries/two.age"),
+        )
+        .expect("copy");
+        read_entry_json(dir, "one", &id_text).expect("read");
+        assert_eq!(listed(dir), vec!["one".to_owned(), "two".to_owned()]);
+
+        // A missing manifest is rebuilt too.
+        fs::remove_file(directory.path().join("manifest.age")).expect("remove");
+        read_entry_json(dir, "one", &id_text).expect("read");
+        assert_eq!(listed(dir), vec!["one".to_owned(), "two".to_owned()]);
     }
 
     #[test]
