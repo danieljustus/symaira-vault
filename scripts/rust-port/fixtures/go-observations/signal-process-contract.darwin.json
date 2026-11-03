@@ -1,0 +1,982 @@
+{
+  "args": [
+    "signal_process_contract.py",
+    "--capture-go"
+  ],
+  "contract": "signal-process-contract",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "material": {
+    "template": {
+      "vault": null,
+      "vault/.git": null,
+      "vault/.git/HEAD": "cmVmOiByZWZzL2hlYWRzL21hc3Rlcgo=",
+      "vault/.git/config": "W2NvcmVdCgliYXJlID0gZmFsc2UK",
+      "vault/.git/objects": null,
+      "vault/.git/objects/info": null,
+      "vault/.git/objects/pack": null,
+      "vault/.git/refs": null,
+      "vault/.git/refs/heads": null,
+      "vault/.git/refs/tags": null,
+      "vault/.gitignore": "IyBTeW1haXJhIFZhdWx0IHZhdWx0IC0gaWdub3JlIHNlbnNpdGl2ZSBmaWxlcwppZGVudGl0eS5hZ2UKLmRldmljZS1pZAoqLmtleQoqLnBlbQojIElnbm9yZSBTeW1haXJhIFZhdWx0IHJ1bnRpbWUgYXJ0aWZhY3RzCm1jcC10b2tlbgptY3AtdG9rZW5zLmpzb24KLnJ1bnRpbWUtcG9ydAojIElnbm9yZSBPUyBmaWxlcwouRFNfU3RvcmUKVGh1bWJzLmRiCiMgSWdub3JlIElERSBmaWxlcwouaWRlYS8KLnZzY29kZS8KKi5zd3AKKi5zd28KKn4K",
+      "vault/config.yaml": "YWdlbnRzOgogICAgY2xpOgogICAgICAgIGFsbG93ZWRQYXRoczoKICAgICAgICAgICAgLSAnKicKICAgICAgICBjYW5Xcml0ZTogdHJ1ZQogICAgICAgIHJlcXVpcmVBcHByb3ZhbDogZmFsc2UKdmF1bHQ6CiAgICBhdXRoTWV0aG9kOiBwYXNzcGhyYXNlCiAgICBzZWFyY2hfaW5kZXg6IHRydWUKICAgIGF1dG9faGVhbF96ZXJvX2tleTogdHJ1ZQpnaXQ6CiAgICBjb21taXRfdGVtcGxhdGU6IFVwZGF0ZSBmcm9tIFN5bWFpcmEgVmF1bHQKICAgIGF1dG9fcHVzaDogdHJ1ZQp2YXVsdERpcjogL3Zhci9mb2xkZXJzLzd2LzdicHEwZmpuNDRsZmxweGR5bHN4OHFzNDAwMDBnbi9UL3N5bXZhdWx0LXNpZ25hbHMtY2FwdHVyZS13bTFtMDNwMC90ZW1wbGF0ZS92YXVsdApkZWZhdWx0QWdlbnQ6IGNsaQpzZXNzaW9uVGltZW91dDogMTVtMHMKc2Vzc2lvbk1heExpZmV0aW1lOiA4aDBtMHMKYXV0aE1ldGhvZDogcGFzc3BocmFzZQp1c2VUb3VjaElEOiBmYWxzZQo=",
+      "vault/entries": null,
+      "vault/identity.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDFOQ3J0RWk4RnhuSlFubkk1VjJWOHcgdD0zLG09NjU1MzYscD00ClY2ZndLbmliNUt0SmV4eHhFR3NzT0JDOStvVStTRnluZDllTURlMTRKN0wvQzNxYzU1cEt1c1oxdWI4Ci0tLSBmMDNZeVJBRWN0bkhSM1VnNXkvRDhnUGdRWGFkSHZva2dCRFRIR2NVOUcwCviAOIIiNff6jAcNWW/sCUgGE41TSI/8Z+pA6uyErCLsR2hiHsea/iiJuPk926pkiwOOLzrgFj3//YAAwaYtfrPTK2cyXl35Yn4SOe6a7ImlmixjgX8Q4DJF8EJPvWMo/OKp4JoHuK9IxcE="
+    }
+  },
+  "observations": {
+    "go": [
+      {
+        "case": "broker-sigint",
+        "command": "broker",
+        "ending": [
+          "exit",
+          0
+        ],
+        "listener_closed": true,
+        "signal": "SIGINT",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:__PORT__\nCA certificate written to __CA__\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:__PORT__\n  HTTP_PROXY=http://127.0.0.1:__PORT__\n  SSL_CERT_FILE=__CA__\n  NODE_EXTRA_CA_CERTS=__CA__\n  REQUESTS_CA_BUNDLE=__CA__\n  NO_PROXY=127.0.0.1,localhost\n"
+      },
+      {
+        "case": "broker-sigterm",
+        "command": "broker",
+        "ending": [
+          "exit",
+          0
+        ],
+        "listener_closed": true,
+        "signal": "SIGTERM",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:__PORT__\nCA certificate written to __CA__\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:__PORT__\n  HTTP_PROXY=http://127.0.0.1:__PORT__\n  SSL_CERT_FILE=__CA__\n  NODE_EXTRA_CA_CERTS=__CA__\n  REQUESTS_CA_BUNDLE=__CA__\n  NO_PROXY=127.0.0.1,localhost\n"
+      },
+      {
+        "case": "broker-sighup",
+        "command": "broker",
+        "ending": [
+          "signal",
+          1
+        ],
+        "listener_closed": true,
+        "signal": "SIGHUP",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:__PORT__\nCA certificate written to __CA__\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:__PORT__\n  HTTP_PROXY=http://127.0.0.1:__PORT__\n  SSL_CERT_FILE=__CA__\n  NODE_EXTRA_CA_CERTS=__CA__\n  REQUESTS_CA_BUNDLE=__CA__\n  NO_PROXY=127.0.0.1,localhost\n"
+      },
+      {
+        "case": "broker-sigquit",
+        "command": "broker",
+        "ending": [
+          "exit",
+          2
+        ],
+        "listener_closed": true,
+        "signal": "SIGQUIT",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "<not compared: Go SIGQUIT goroutine dump>",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:__PORT__\nCA certificate written to __CA__\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:__PORT__\n  HTTP_PROXY=http://127.0.0.1:__PORT__\n  SSL_CERT_FILE=__CA__\n  NODE_EXTRA_CA_CERTS=__CA__\n  REQUESTS_CA_BUNDLE=__CA__\n  NO_PROXY=127.0.0.1,localhost\n"
+      },
+      {
+        "case": "intake-watch-sigint",
+        "command": "intake-watch",
+        "ending": [
+          "exit",
+          0
+        ],
+        "signal": "SIGINT",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": "Watching inbox (interval 1h0m0s, debounce 5s). Ctrl-C to stop.\n"
+      },
+      {
+        "case": "intake-watch-sigterm",
+        "command": "intake-watch",
+        "ending": [
+          "exit",
+          0
+        ],
+        "signal": "SIGTERM",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": "Watching inbox (interval 1h0m0s, debounce 5s). Ctrl-C to stop.\n"
+      },
+      {
+        "case": "intake-watch-sighup",
+        "command": "intake-watch",
+        "ending": [
+          "signal",
+          1
+        ],
+        "signal": "SIGHUP",
+        "state": [
+          "inbox",
+          "tmp",
+          "tmp/symvault-intake-__ID__",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": "Watching inbox (interval 1h0m0s, debounce 5s). Ctrl-C to stop.\n"
+      },
+      {
+        "case": "intake-watch-sigquit",
+        "command": "intake-watch",
+        "ending": [
+          "exit",
+          2
+        ],
+        "signal": "SIGQUIT",
+        "state": [
+          "inbox",
+          "tmp",
+          "tmp/symvault-intake-__ID__",
+          "vault"
+        ],
+        "stderr": "<not compared: Go SIGQUIT goroutine dump>",
+        "stdout": "Watching inbox (interval 1h0m0s, debounce 5s). Ctrl-C to stop.\n"
+      },
+      {
+        "case": "run-sigint",
+        "command": "run",
+        "ending": [
+          "signal",
+          2
+        ],
+        "orphaned_child_alive": true,
+        "signal": "SIGINT",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "run-sigterm",
+        "command": "run",
+        "ending": [
+          "signal",
+          15
+        ],
+        "orphaned_child_alive": true,
+        "signal": "SIGTERM",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "run-sighup",
+        "command": "run",
+        "ending": [
+          "signal",
+          1
+        ],
+        "orphaned_child_alive": true,
+        "signal": "SIGHUP",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "run-sigquit",
+        "command": "run",
+        "ending": [
+          "exit",
+          2
+        ],
+        "orphaned_child_alive": true,
+        "signal": "SIGQUIT",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "<not compared: Go SIGQUIT goroutine dump>",
+        "stdout": ""
+      },
+      {
+        "case": "run-group-sigint",
+        "command": "run-group",
+        "ending": [
+          "signal",
+          2
+        ],
+        "orphaned_child_alive": false,
+        "signal": "SIGINT",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "run-group-sigterm",
+        "command": "run-group",
+        "ending": [
+          "signal",
+          15
+        ],
+        "orphaned_child_alive": false,
+        "signal": "SIGTERM",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "run-broker-sigint",
+        "command": "run-broker",
+        "ending": [
+          "signal",
+          2
+        ],
+        "orphaned_child_alive": true,
+        "signal": "SIGINT",
+        "state": [
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "run-broker-sigterm",
+        "command": "run-broker",
+        "ending": [
+          "signal",
+          15
+        ],
+        "orphaned_child_alive": true,
+        "signal": "SIGTERM",
+        "state": [
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "run-broker-sighup",
+        "command": "run-broker",
+        "ending": [
+          "signal",
+          1
+        ],
+        "orphaned_child_alive": true,
+        "signal": "SIGHUP",
+        "state": [
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "run-broker-sigquit",
+        "command": "run-broker",
+        "ending": [
+          "exit",
+          2
+        ],
+        "orphaned_child_alive": true,
+        "signal": "SIGQUIT",
+        "state": [
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "<not compared: Go SIGQUIT goroutine dump>",
+        "stdout": ""
+      },
+      {
+        "case": "run-broker-group-sigint",
+        "command": "run-broker-group",
+        "ending": [
+          "signal",
+          2
+        ],
+        "orphaned_child_alive": false,
+        "signal": "SIGINT",
+        "state": [
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "run-broker-group-sigterm",
+        "command": "run-broker-group",
+        "ending": [
+          "signal",
+          15
+        ],
+        "orphaned_child_alive": false,
+        "signal": "SIGTERM",
+        "state": [
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "run-timeout-group-sigint",
+        "command": "run-group",
+        "ending": [
+          "signal",
+          2
+        ],
+        "orphaned_child_alive": false,
+        "signal": "SIGINT",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "broker-ignored-sighup",
+        "command": "broker",
+        "ending": [
+          "exit",
+          0
+        ],
+        "ignored": true,
+        "listener_closed": true,
+        "listener_open_after_ignored_signal": true,
+        "signal": "SIGHUP",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:__PORT__\nCA certificate written to __CA__\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:__PORT__\n  HTTP_PROXY=http://127.0.0.1:__PORT__\n  SSL_CERT_FILE=__CA__\n  NODE_EXTRA_CA_CERTS=__CA__\n  REQUESTS_CA_BUNDLE=__CA__\n  NO_PROXY=127.0.0.1,localhost\n",
+        "survived": true
+      },
+      {
+        "case": "broker-ignored-sigint",
+        "command": "broker",
+        "ending": [
+          "exit",
+          0
+        ],
+        "ignored": true,
+        "listener_closed": true,
+        "signal": "SIGINT",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:__PORT__\nCA certificate written to __CA__\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:__PORT__\n  HTTP_PROXY=http://127.0.0.1:__PORT__\n  SSL_CERT_FILE=__CA__\n  NODE_EXTRA_CA_CERTS=__CA__\n  REQUESTS_CA_BUNDLE=__CA__\n  NO_PROXY=127.0.0.1,localhost\n",
+        "survived": false
+      },
+      {
+        "case": "broker-ignored-sigterm",
+        "command": "broker",
+        "ending": [
+          "exit",
+          0
+        ],
+        "ignored": true,
+        "listener_closed": true,
+        "signal": "SIGTERM",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:__PORT__\nCA certificate written to __CA__\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:__PORT__\n  HTTP_PROXY=http://127.0.0.1:__PORT__\n  SSL_CERT_FILE=__CA__\n  NODE_EXTRA_CA_CERTS=__CA__\n  REQUESTS_CA_BUNDLE=__CA__\n  NO_PROXY=127.0.0.1,localhost\n",
+        "survived": false
+      },
+      {
+        "case": "broker-ignored-sigquit",
+        "command": "broker",
+        "ending": [
+          "exit",
+          2
+        ],
+        "ignored": true,
+        "listener_closed": true,
+        "signal": "SIGQUIT",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "<not compared: Go SIGQUIT goroutine dump>",
+        "stdout": "Symaira Vault egress broker listening on http://127.0.0.1:__PORT__\nCA certificate written to __CA__\nExport the following in the agent's environment:\n  HTTPS_PROXY=http://127.0.0.1:__PORT__\n  HTTP_PROXY=http://127.0.0.1:__PORT__\n  SSL_CERT_FILE=__CA__\n  NODE_EXTRA_CA_CERTS=__CA__\n  REQUESTS_CA_BUNDLE=__CA__\n  NO_PROXY=127.0.0.1,localhost\n",
+        "survived": false
+      },
+      {
+        "case": "intake-watch-ignored-sighup",
+        "command": "intake-watch",
+        "ending": [
+          "exit",
+          0
+        ],
+        "ignored": true,
+        "signal": "SIGHUP",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": "Watching inbox (interval 1h0m0s, debounce 5s). Ctrl-C to stop.\n",
+        "survived": true
+      },
+      {
+        "case": "intake-watch-ignored-sigint",
+        "command": "intake-watch",
+        "ending": [
+          "exit",
+          0
+        ],
+        "ignored": true,
+        "signal": "SIGINT",
+        "state": [
+          "inbox",
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": "Watching inbox (interval 1h0m0s, debounce 5s). Ctrl-C to stop.\n",
+        "survived": false
+      },
+      {
+        "case": "run-ignored-sighup",
+        "command": "run",
+        "ending": [
+          "signal",
+          15
+        ],
+        "ignored": true,
+        "orphaned_child_alive": true,
+        "signal": "SIGHUP",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": "",
+        "survived": true
+      },
+      {
+        "case": "run-ignored-sigint",
+        "command": "run",
+        "ending": [
+          "signal",
+          15
+        ],
+        "ignored": true,
+        "orphaned_child_alive": true,
+        "signal": "SIGINT",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": "",
+        "survived": true
+      },
+      {
+        "case": "run-ignored-sigterm",
+        "command": "run",
+        "ending": [
+          "signal",
+          15
+        ],
+        "ignored": true,
+        "orphaned_child_alive": true,
+        "signal": "SIGTERM",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": "",
+        "survived": false
+      },
+      {
+        "case": "run-ignored-sigquit",
+        "command": "run",
+        "ending": [
+          "exit",
+          2
+        ],
+        "ignored": true,
+        "orphaned_child_alive": true,
+        "signal": "SIGQUIT",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "<not compared: Go SIGQUIT goroutine dump>",
+        "stdout": "",
+        "survived": false
+      },
+      {
+        "case": "run-broker-ignored-sighup",
+        "command": "run-broker",
+        "ending": [
+          "signal",
+          15
+        ],
+        "ignored": true,
+        "orphaned_child_alive": true,
+        "signal": "SIGHUP",
+        "state": [
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": "",
+        "survived": true
+      },
+      {
+        "case": "run-broker-ignored-sigint",
+        "command": "run-broker",
+        "ending": [
+          "signal",
+          15
+        ],
+        "ignored": true,
+        "orphaned_child_alive": true,
+        "signal": "SIGINT",
+        "state": [
+          "tmp",
+          "vault",
+          "vault/broker-ca.pem"
+        ],
+        "stderr": "",
+        "stdout": "",
+        "survived": true
+      },
+      {
+        "case": "mcp-locked-sigint",
+        "command": "mcp-locked",
+        "ending": [
+          "exit",
+          0
+        ],
+        "signal": "SIGINT",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools.\n",
+        "stdout": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+      },
+      {
+        "case": "mcp-locked-sigterm",
+        "command": "mcp-locked",
+        "ending": [
+          "exit",
+          0
+        ],
+        "signal": "SIGTERM",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools.\n",
+        "stdout": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+      },
+      {
+        "case": "mcp-locked-sighup",
+        "command": "mcp-locked",
+        "ending": [
+          "signal",
+          1
+        ],
+        "signal": "SIGHUP",
+        "state": [
+          "tmp",
+          "vault",
+          "vault/.runtime-port"
+        ],
+        "stderr": "Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools.\n",
+        "stdout": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+      },
+      {
+        "case": "mcp-locked-sigquit",
+        "command": "mcp-locked",
+        "ending": [
+          "exit",
+          0
+        ],
+        "signal": "SIGQUIT",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools.\nReceived SIGQUIT, shutting down gracefully...\n",
+        "stdout": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+      },
+      {
+        "alt_screen_left": true,
+        "case": "ui-sigint",
+        "command": "ui",
+        "ending": [
+          "exit",
+          1
+        ],
+        "signal": "SIGINT",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "Error: ui failed: program was killed: program was interrupted\nError: ui failed: program was killed: program was interrupted\n",
+        "stdout": "",
+        "terminal_restored": true
+      },
+      {
+        "alt_screen_left": true,
+        "case": "ui-sigterm",
+        "command": "ui",
+        "ending": [
+          "exit",
+          0
+        ],
+        "signal": "SIGTERM",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": "",
+        "terminal_restored": true
+      },
+      {
+        "alt_screen_left": false,
+        "case": "ui-sighup",
+        "command": "ui",
+        "ending": [
+          "signal",
+          1
+        ],
+        "signal": "SIGHUP",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "",
+        "stdout": "",
+        "terminal_restored": false
+      },
+      {
+        "alt_screen_left": false,
+        "case": "ui-sigquit",
+        "command": "ui",
+        "ending": [
+          "exit",
+          2
+        ],
+        "signal": "SIGQUIT",
+        "state": [
+          "tmp",
+          "vault"
+        ],
+        "stderr": "<not compared: Go SIGQUIT goroutine dump>",
+        "stdout": "",
+        "terminal_restored": false
+      }
+    ],
+    "go_binary_sha256": "01eae877cbd702becccf7d22a139c1e2ceb349c59454496b1cb685204180c931",
+    "go_only": [
+      {
+        "case": "mcp-clipboard-armed-sigint",
+        "clipboard_events": [
+          "secret",
+          "clear"
+        ],
+        "command": "mcp-clipboard-armed",
+        "ending": [
+          "exit",
+          0
+        ],
+        "serving_after_signal": false,
+        "signal": "SIGINT"
+      },
+      {
+        "case": "mcp-clipboard-armed-sigterm",
+        "clipboard_events": [
+          "secret",
+          "clear"
+        ],
+        "command": "mcp-clipboard-armed",
+        "ending": [
+          "exit",
+          0
+        ],
+        "serving_after_signal": false,
+        "signal": "SIGTERM"
+      },
+      {
+        "case": "mcp-clipboard-armed-sighup",
+        "clipboard_events": [
+          "secret",
+          "clear"
+        ],
+        "command": "mcp-clipboard-armed",
+        "ending": null,
+        "serving_after_signal": true,
+        "signal": "SIGHUP"
+      },
+      {
+        "case": "ui-clipboard-armed-sigint",
+        "clipboard_events": [
+          "secret",
+          "clear"
+        ],
+        "command": "ui-clipboard-armed",
+        "ending": [
+          "exit",
+          1
+        ],
+        "second_ending": null,
+        "serving_after_signal": false,
+        "signal": "SIGINT"
+      },
+      {
+        "case": "ui-clipboard-armed-sigterm",
+        "clipboard_events": [
+          "secret",
+          "clear"
+        ],
+        "command": "ui-clipboard-armed",
+        "ending": [
+          "exit",
+          0
+        ],
+        "second_ending": null,
+        "serving_after_signal": false,
+        "signal": "SIGTERM"
+      },
+      {
+        "case": "ui-clipboard-armed-sighup",
+        "clipboard_events": [
+          "secret",
+          "clear"
+        ],
+        "command": "ui-clipboard-armed",
+        "ending": null,
+        "second_ending": [
+          "signal",
+          1
+        ],
+        "serving_after_signal": true,
+        "signal": "SIGHUP"
+      },
+      {
+        "case": "ui-clipboard-armed-sigquit",
+        "clipboard_events": [
+          "secret"
+        ],
+        "command": "ui-clipboard-armed",
+        "ending": [
+          "exit",
+          2
+        ],
+        "second_ending": null,
+        "serving_after_signal": false,
+        "signal": "SIGQUIT"
+      },
+      {
+        "armed": true,
+        "case": "mcp-http-clipboard-armed-sigint",
+        "clipboard_events": [
+          "secret",
+          "clear"
+        ],
+        "clipboard_events_acceptable": [
+          [
+            "secret"
+          ],
+          [
+            "secret",
+            "clear"
+          ]
+        ],
+        "command": "mcp-http-clipboard",
+        "ending": [
+          "exit",
+          0
+        ],
+        "final_ending": null,
+        "ignored": false,
+        "second_ending": null,
+        "serving_after_signal": false,
+        "signal": "SIGINT"
+      },
+      {
+        "armed": true,
+        "case": "mcp-http-clipboard-armed-sigterm",
+        "clipboard_events": [
+          "secret",
+          "clear"
+        ],
+        "clipboard_events_acceptable": [
+          [
+            "secret"
+          ],
+          [
+            "secret",
+            "clear"
+          ]
+        ],
+        "command": "mcp-http-clipboard",
+        "ending": [
+          "exit",
+          0
+        ],
+        "final_ending": null,
+        "ignored": false,
+        "second_ending": null,
+        "serving_after_signal": false,
+        "signal": "SIGTERM"
+      },
+      {
+        "armed": true,
+        "case": "mcp-http-clipboard-armed-sighup",
+        "clipboard_events": [
+          "secret",
+          "clear"
+        ],
+        "clipboard_events_acceptable": [
+          [
+            "secret",
+            "clear"
+          ]
+        ],
+        "command": "mcp-http-clipboard",
+        "ending": null,
+        "final_ending": null,
+        "ignored": false,
+        "second_ending": [
+          "signal",
+          1
+        ],
+        "serving_after_signal": true,
+        "signal": "SIGHUP"
+      },
+      {
+        "armed": false,
+        "case": "mcp-http-clipboard-idle-sighup",
+        "clipboard_events": [],
+        "clipboard_events_acceptable": [
+          []
+        ],
+        "command": "mcp-http-clipboard",
+        "ending": [
+          "signal",
+          1
+        ],
+        "final_ending": null,
+        "ignored": false,
+        "second_ending": null,
+        "serving_after_signal": false,
+        "signal": "SIGHUP"
+      },
+      {
+        "armed": true,
+        "case": "mcp-http-clipboard-armed-ignored-sighup",
+        "clipboard_events": [
+          "secret",
+          "clear"
+        ],
+        "clipboard_events_acceptable": [
+          [
+            "secret",
+            "clear"
+          ]
+        ],
+        "command": "mcp-http-clipboard",
+        "ending": null,
+        "final_ending": [
+          "exit",
+          0
+        ],
+        "ignored": true,
+        "second_ending": null,
+        "serving_after_signal": true,
+        "signal": "SIGHUP"
+      },
+      {
+        "armed": false,
+        "case": "mcp-http-clipboard-idle-ignored-sighup",
+        "clipboard_events": [],
+        "clipboard_events_acceptable": [
+          []
+        ],
+        "command": "mcp-http-clipboard",
+        "ending": null,
+        "final_ending": [
+          "exit",
+          0
+        ],
+        "ignored": true,
+        "second_ending": null,
+        "serving_after_signal": true,
+        "signal": "SIGHUP"
+      }
+    ],
+    "seed_sha256": "9b2f1eabe318a70ba75cbf3c59a234b6ffb72b54ffc04d64cee010814d1acf5f"
+  },
+  "oracle_commit": "45b8577e01ce1826e312ed970d0fc01a3a9b6e17",
+  "schema": 1
+}

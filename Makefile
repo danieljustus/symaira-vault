@@ -522,7 +522,8 @@ device-enroll-replay:
 DEVICE_LIST_REPORT ?= $(CARGO_TARGET_DIR)/device-list-differential-$(shell date -u +%Y%m%dT%H%M%SZ).json
 device-list-differential:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_device_list_differential.py
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/devicelistdriver --report "$(DEVICE_LIST_REPORT)"
+	$(CARGO) build -p symvault-cli --locked
+	python3 scripts/rust-port/device_list_differential.py --rust "$(RUST_BINARY)" --report "$(DEVICE_LIST_REPORT)"
 
 sync-io-differential: export-differential export-cli-differential restore-errors-differential cxf-import-differential onepass-import-differential zip-errors-differential pass-gpg-differential csv-import-differential pairing-fixtures-check git-io-differential
 	GOFLAGS= GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
@@ -2163,7 +2164,7 @@ ifeq ($(OS),Windows_NT)
 else
 	python3 -B scripts/rust-port/test_signal_process_contract.py
 	$(CARGO) build -p symvault-cli --bin symvault --locked
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/signal_process_contract.py \
+	python3 -B scripts/rust-port/signal_process_contract.py \
 		--rust "$(RUST_BINARY)" \
 		--receipt "$(CARGO_TARGET_DIR)/native-signals.json" $(SIGNAL_PROCESS_ARGS)
 endif
@@ -2270,6 +2271,8 @@ go-observations-capture-other:
 	$(GO_OBS_CAPTURE) scripts/rust-port/go_observations_common.py capture-checked cli-artifacts-port-fixture --file $(PORT_CLI_FIXTURE) -- $(GO) run ./scripts/rust-port/cmd/portgen --check --output $(PORT_CLI_FIXTURE)
 	$(GO_OBS_CAPTURE) scripts/rust-port/intake_watch_contract.py --capture-go
 	$(GO_OBS_CAPTURE) scripts/rust-port/serve_contract.py --capture-go
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/signal_process_contract.py --capture-go
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/device_list_differential.py --capture-go
 	$(GO_OBS_CAPTURE) scripts/rust-port/egress_contract.py --capture-go
 
 go-observations-selftest:
