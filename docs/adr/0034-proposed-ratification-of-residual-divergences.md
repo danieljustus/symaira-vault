@@ -1,7 +1,7 @@
 # ADR 0034: Proposed ratification list of residual Rust-vs-Go divergences
 
-Status: **Proposed** (maintainer decision pending). Nothing in this ADR is
-accepted until the owner fills the last column of the decision table. Affects
+Status: **Accepted** 2026-11-03 by the maintainer (Daniel Justus); decisions are in
+the last column of the decision table. Affects
 contract rows CLI-005, CLI-006, CLI-007, MCP-003, MCP-004, HTTP-001, HTTP-002,
 HTTP-004, PLATFORM-001, PLATFORM-002, SESSION-003 and IO-001. No row changes
 status, no code changes, and no fixture changes with this ADR.
@@ -545,35 +545,35 @@ Recommendation key: R = ratify, P = implement parity, M = maintainer decision.
 
 | Item | Rows | Recommendation | Maintainer decision |
 |---|---|---|---|
-| 1 YAML behaviour entries (4) | CLI-005 | R | |
-| 2 YAML root-shape/empty wording (10) | CLI-005 | R | |
-| 3 `config set` `1e3`, `y`, `2026-10-31`, `<<` | CLI-005/006 | R | |
-| 4 `config set` `010`, `0b11` | CLI-005/006 | P | |
-| 5 `config set` re-encode and typed-decode residue | CLI-005/006 | R | |
-| 6 YAML nesting depth 256 vs 10000 | CLI-005 | R | |
-| 7 `profiles: {x: null}` | CLI-005 | R | |
-| 8 `remote init` Go nil panic | CLI-006 | R | |
-| 9 completion loader warnings | CLI-005 | R | |
-| 10 `agent profile show` duplicate key via alias | CLI-005 | R | |
-| 11 SIGQUIT goroutine dump | CLI-007 | R | |
-| 12 `run --timeout` Ctrl-C to child | CLI-007 | P | |
-| 13 `execute_api_request` redirects | MCP-003 | R | |
-| 14 invalid UTF-8 request id | MCP-004 | R | |
-| 15 duplicate key inside `params` | MCP-004 | R | |
-| 16 HTTP SIGINT/SIGTERM drain | MCP-003, HTTP-001 | P | |
-| 17 `Expect: 100-continue` interim line | HTTP-001 | R | |
-| 18 request-line / header size limits | HTTP-001, HTTP-004 | R | |
-| 19 repeated `allowed_tools` with `null` | HTTP-002 | P | |
-| 20 ALPN HTTP/1.1 only | HTTP-004 | R | |
-| 21 colour on `cliout` lines | PLATFORM-001 | R | |
-| 22 non-string field copy (`%v`) | PLATFORM-001 | R | |
-| 23 macOS copy error text | PLATFORM-001 | R | |
-| 24 signal-death text | PLATFORM-001 | R | |
-| 25 scheduler-coincident tick | PLATFORM-001 | R | |
-| 26 Touch ID legacy prefix refusal | SESSION-003 | R | |
-| 27 non-UTF-8 zip member name, `zipinsecurepath` | IO-001 | R | |
-| 28 no GUI secure input/approval backend | PLATFORM-002 | M | |
-| 29 no anomaly detection/notifications | PLATFORM-002 | M | |
+| 1 YAML behaviour entries (4) | CLI-005 | R | R: ratified |
+| 2 YAML root-shape/empty wording (10) | CLI-005 | R | R: ratified |
+| 3 `config set` `1e3`, `y`, `2026-10-31`, `<<` | CLI-005/006 | R | R: ratified |
+| 4 `config set` `010`, `0b11` | CLI-005/006 | P | P: implement parity |
+| 5 `config set` re-encode and typed-decode residue | CLI-005/006 | R | R: ratified |
+| 6 YAML nesting depth 256 vs 10000 | CLI-005 | R | R: ratified |
+| 7 `profiles: {x: null}` | CLI-005 | R | R: ratified |
+| 8 `remote init` Go nil panic | CLI-006 | R | R: ratified |
+| 9 completion loader warnings | CLI-005 | R | R: ratified |
+| 10 `agent profile show` duplicate key via alias | CLI-005 | R | R: ratified |
+| 11 SIGQUIT goroutine dump | CLI-007 | R | R: ratified |
+| 12 `run --timeout` Ctrl-C to child | CLI-007 | P | P: implemented (a6c09463) |
+| 13 `execute_api_request` redirects | MCP-003 | R | R: ratified |
+| 14 invalid UTF-8 request id | MCP-004 | R | R: ratified |
+| 15 duplicate key inside `params` | MCP-004 | R | R: ratified |
+| 16 HTTP SIGINT/SIGTERM drain | MCP-003, HTTP-001 | P | P: implemented (b0ea8ea0) |
+| 17 `Expect: 100-continue` interim line | HTTP-001 | R | R: ratified |
+| 18 request-line / header size limits | HTTP-001, HTTP-004 | R | R: ratified |
+| 19 repeated `allowed_tools` with `null` | HTTP-002 | P | P: implement parity |
+| 20 ALPN HTTP/1.1 only | HTTP-004 | R | R: ratified |
+| 21 colour on `cliout` lines | PLATFORM-001 | R | R: ratified |
+| 22 non-string field copy (`%v`) | PLATFORM-001 | R | R: ratified |
+| 23 macOS copy error text | PLATFORM-001 | R | R: ratified |
+| 24 signal-death text | PLATFORM-001 | R | R: ratified |
+| 25 scheduler-coincident tick | PLATFORM-001 | R | R: ratified |
+| 26 Touch ID legacy prefix refusal | SESSION-003 | R | R: ratified |
+| 27 non-UTF-8 zip member name, `zipinsecurepath` | IO-001 | R | R: ratified |
+| 28 no GUI secure input/approval backend | PLATFORM-002 | M | Ratify, fail closed (no GUI backend; documented in PLATFORM-002) |
+| 29 no anomaly detection/notifications | PLATFORM-002 | M | Partial parity: port detector, `anomaly_<type>` audit rows and approval-cache invalidation; desktop notification ratified as absent (item 28) |
 
 ## Consequences
 
