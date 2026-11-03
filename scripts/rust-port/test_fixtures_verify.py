@@ -151,5 +151,67 @@ class FixturesVerifyControls(unittest.TestCase):
         self.assertIn(self.commit, proc.stdout)
 
 
+class OracleReachabilityScript(unittest.TestCase):
+    """check_oracle_reachability.sh collects pins from fixtures + mcp_oracle.py constants."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        git(self.root, "init", "-q", "-b", "main")
+        (self.root / "f.txt").write_text("x\n")
+        git(self.root, "add", "f.txt")
+        git(self.root, "commit", "-q", "-m", "c1")
+        self.held = git(self.root, "rev-parse", "HEAD")
+        tree = git(self.root, "rev-parse", "HEAD^{tree}")
+        self.orphan = git(self.root, "commit-tree", tree, "-m", "orphan")
+        scripts = self.root / "scripts/rust-port"
+        scripts.mkdir(parents=True)
+        for name in ("fixtures_verify.py", "check_oracle_reachability.sh"):
+            (scripts / name).write_bytes((SCRIPT.parent / name).read_bytes())
+        (scripts / "check_oracle_reachability.sh").chmod(0o755)
+        self.write_constants(self.held, self.held, self.held)
+        fixture = self.root / "testdata/port/x.json"
+        fixture.parent.mkdir(parents=True)
+        self.fixture = fixture
+        self.write_fixture(self.held)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def write_constants(self, historical, ordered, product):
+        scripts = self.root / "scripts/rust-port"
+        (scripts / "mcp_oracle.py").write_text(f"HISTORICAL = '{historical}'\nORDERED = '{ordered}'\n")
+        (scripts / "mcp_fixture_contract.py").write_text(f"PRODUCT_SOURCE = '{product}'\n")
+
+    def write_fixture(self, sha):
+        self.fixture.write_text(json.dumps({"oracle": {"commit_sha": sha, "commit": sha[:8]}}) + "\n")
+
+    def run_script(self):
+        return subprocess.run(
+            ["bash", str(self.root / "scripts/rust-port/check_oracle_reachability.sh")],
+            capture_output=True, text=True,
+        )
+
+    def test_reachable_pins_pass_with_a_branch_only(self):
+        proc = self.run_script()
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("PASS all 1 pinned", proc.stdout)
+
+    def test_fixture_pin_without_ref_fails(self):
+        self.write_fixture(self.orphan)
+        proc = self.run_script()
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("no branch or tag contains it", proc.stdout)
+
+    def test_constant_pin_without_ref_fails(self):
+        self.write_constants(self.held, self.orphan, self.held)
+        proc = self.run_script()
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+
+    def test_unknown_fixture_pin_fails(self):
+        self.write_fixture("d" * 40)
+        self.assertEqual(self.run_script().returncode, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
