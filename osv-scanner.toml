@@ -1,2 +1,28 @@
 # osv-scanner configuration. Cargo.lock is the only scanned lockfile; add
 # [[IgnoredVulns]] entries here only with a documented reason.
+
+# Mirrors .cargo/audit.toml and deny.toml (#1502).
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0387"
+reason = "crypto-bigint 0.5 only via age 0.12.1 -> p256 0.13 for tag/tagpq recipients symvault never constructs; remove when age adopts p256 0.14 (#1502)"
+
+# Unmaintained-crate notices (informational in cargo audit/deny, not vulnerabilities).
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0374"
+reason = "basic-toml unmaintained notice; proc-macro dependency of i18n-embed (via age), compile time only, no known vulnerability"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0449"
+reason = "unsafe-libyaml unmaintained notice; reached through the YAML parser stack, no known vulnerability; via serde_yaml_ng"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0370"
+reason = "zvariant unmaintained notice; transitive via the Linux keyring/D-Bus stack, no known vulnerability"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0371"
+reason = "zbus_names unmaintained notice; transitive via the Linux keyring/D-Bus stack, no known vulnerability"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0372"
+reason = "zvariant_derive unmaintained notice; transitive via the Linux keyring/D-Bus stack, no known vulnerability"

@@ -34,6 +34,8 @@ jobs:
             build-mode: none
           - language: ruby
             build-mode: none
+          - language: rust
+            build-mode: none
           - language: swift
             build-mode: autobuild
     steps:

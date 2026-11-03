@@ -60,7 +60,7 @@ make rust-security        # cargo audit + cargo deny
    ```
 2. Make your changes, then run the full test suite and lint:
    ```bash
-   make fmt-check test vet lint
+   make rust-lint rust-test
    ```
 3. Commit with a conventional message:
    ```bash
