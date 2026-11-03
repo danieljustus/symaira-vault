@@ -4,6 +4,7 @@
     "commit": "b1da45d1332fdb118b702dedf4addfb28b890cdf",
     "commit_sha": "b1da45d1332fdb118b702dedf4addfb28b890cdf",
     "source_files": [
+      "internal/approval/http.go",
       "internal/approval/local.go",
       "internal/config/config_merge.go",
       "internal/config/schema.go",
@@ -12,11 +13,11 @@
       "internal/mcp/serverbootstrap/http_setup.go",
       "internal/mcp/util.go"
     ],
-    "source_digest": "208feb94af4d7ef86b6fd7364174fa639292c82b4a51b4aab87c527e143016f3",
+    "source_digest": "8e2e0b56eeba4d4be1600e2f241a04d20b30e5a38ef9388ff7a6d89003c54e6d",
     "generator_files": [
       "scripts/rust-port/cmd/http002ratelimitgen/main.go"
     ],
-    "generator_digest": "d83be04bddbe1c452d1fda9c5599403fdf29e99d499a8f90cb28fb8443a936d4"
+    "generator_digest": "f67be139aa99aba09d26f220b10adfcf6c5548d0d9d7216defcea28eacb6f40d"
   },
   "server_name": "symaira",
   "server_version": "1.0.0",
@@ -443,6 +444,247 @@
       ]
     },
     {
+      "name": "limit_three_device_approval_routes_share_the_bucket",
+      "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 3\n",
+      "effective_config_rate_limit": 3,
+      "steps": [
+        {
+          "note": "slot 1: the device list without a bearer is answered 401 by the handler, which still consumes a slot",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "54",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "note": "slot 2: a device decision without a bearer shares the bucket",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/x/approve"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "54",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "note": "slot 3: a method the handler does not route is its own 404 inside the limiter",
+          "request": {
+            "method": "DELETE",
+            "path": "/api/v1/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Length": "19",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "note": "the device list is limited",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a device decision is limited",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/x/deny"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the device subtree root with a trailing slash is limited",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a device list with a query string is limited",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals?status=pending"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "/mcp shares the device bucket",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the local approval API shares the device bucket",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a path the mux cleans is redirected before the limiter",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/./approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 307,
+            "headers": {
+              "Content-Length": "53",
+              "Content-Type": "text/html; charset=utf-8",
+              "Location": "/api/v1/approvals"
+            },
+            "body": "\u003ca href=\"/api/v1/approvals\"\u003eTemporary Redirect\u003c/a\u003e.\n\n"
+          }
+        },
+        {
+          "note": "a sibling prefix is no device route and is not limited",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvalsx"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Length": "19",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "note": "the enrollment paths are not mounted here and are not limited",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Length": "19",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "note": "health stays reachable",
+          "request": {
+            "method": "GET",
+            "path": "/health"
+          },
+          "repeat": 1,
+          "compare": "status",
+          "response": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    {
       "name": "zero_disables_the_limiter",
       "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 0\n",
       "effective_config_rate_limit": 0,
@@ -488,6 +730,23 @@
               "Content-Type": "application/json"
             },
             "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "note": "the device approval API is not limited either",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals"
+          },
+          "repeat": 70,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "54",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
           }
         }
       ]
@@ -1133,6 +1392,85 @@
           "request": {
             "method": "GET",
             "path": "/api/v1/local/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the device approval API honours the same key",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a device decision for another forwarded client has its own bucket, slot 1",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/x/approve",
+            "headers": {
+              "X-Forwarded-For": "10.0.0.7"
+            }
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "54",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "note": "a device decision for that forwarded client, slot 2",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/x/approve",
+            "headers": {
+              "X-Forwarded-For": "10.0.0.7"
+            }
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "54",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "note": "a device decision for that forwarded client is exhausted",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/x/approve",
+            "headers": {
+              "X-Forwarded-For": "10.0.0.7"
+            }
           },
           "repeat": 1,
           "compare": "full",

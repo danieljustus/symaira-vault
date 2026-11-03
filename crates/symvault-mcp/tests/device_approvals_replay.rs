@@ -22,7 +22,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const ORACLE_COMMIT: &str = "8d2e5e156cd95f04e608182ab8179fdd49f1884a";
 const SOURCE_DIGEST: &str = "79d0307ea78ee1268163236ef54f8eb821c81ff91150357f486793b759186ea1";
-const GENERATOR_DIGEST: &str = "6aa4360a939ce208a05b1ed1707b84bca07431afef47f969f0e97a6cf099e379";
+const GENERATOR_DIGEST: &str = "ed4f8585247e7a57164f6a7651516a8a7c8a696131044c2d454f4cb11884a551";
 const EXPECTED_CASES: usize = 22;
 const EXPECTED_REQUESTS: usize = 88;
 const CONTRACT_HEADERS: [&str; 3] = ["Content-Type", "X-Content-Type-Options", "Location"];
@@ -220,7 +220,13 @@ impl Server {
                 |_| false,
                 None,
                 api,
-                HttpServerOptions::default(),
+                // The Go recording drove the handler on a bare mux, without the
+                // per-client limiter; throttling of these routes is recorded
+                // by http002ratelimitgen and replayed in http_ratelimit.rs.
+                HttpServerOptions {
+                    rate_limit: 0,
+                    ..HttpServerOptions::default()
+                },
                 Some(server_shutdown),
             )
             .expect("serve Rust MCP HTTP");

@@ -24,6 +24,7 @@ use symvault_mcp::ratelimit::{
     CLEANUP_INTERVAL, MAX_RATE_LIMITER_ENTRIES, REFUSED_BODY, RateLimiter, WINDOW,
 };
 use symvault_mcp::{ProtocolHandler, ToolCallResult, ToolCallRuntime};
+use symvault_sync::DeviceSessionStore;
 
 const BEARER: &str = "http002-ratelimit-fixture-token";
 
@@ -158,6 +159,7 @@ fn fixture_is_bound_to_the_pinned_oracle() {
     assert_eq!(
         fixture.oracle.source_files,
         [
+            "internal/approval/http.go",
             "internal/approval/local.go",
             "internal/config/config_merge.go",
             "internal/config/schema.go",
@@ -169,7 +171,7 @@ fn fixture_is_bound_to_the_pinned_oracle() {
     );
     assert_eq!(
         fixture.oracle.source_digest,
-        "208feb94af4d7ef86b6fd7364174fa639292c82b4a51b4aab87c527e143016f3"
+        "8e2e0b56eeba4d4be1600e2f241a04d20b30e5a38ef9388ff7a6d89003c54e6d"
     );
     assert_eq!(
         fixture.oracle.generator_files,
@@ -177,11 +179,11 @@ fn fixture_is_bound_to_the_pinned_oracle() {
     );
     assert_eq!(
         fixture.oracle.generator_digest,
-        "d83be04bddbe1c452d1fda9c5599403fdf29e99d499a8f90cb28fb8443a936d4"
+        "f67be139aa99aba09d26f220b10adfcf6c5548d0d9d7216defcea28eacb6f40d"
     );
     assert_eq!(fixture.server_name, "symaira");
     assert_eq!(fixture.server_version, "1.0.0");
-    assert_eq!(fixture.stack_scenarios.len(), 8);
+    assert_eq!(fixture.stack_scenarios.len(), 9);
     assert_eq!(fixture.limiter_scenarios.len(), 33);
     assert_eq!(fixture.eviction_scenarios.len(), 3);
 }
@@ -342,6 +344,8 @@ fn start(scenario: &StackScenario, server_name: &str, server_version: &str) -> R
     )
     .expect("write registry");
 
+    let sessions =
+        Arc::new(DeviceSessionStore::new(Some(registry.path())).expect("device session store"));
     let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
     let address = listener.local_addr().expect("address");
     let shutdown = HttpShutdown::default();
@@ -361,7 +365,8 @@ fn start(scenario: &StackScenario, server_name: &str, server_version: &str) -> R
             LocalApprovalApi::new(
                 Arc::new(ApprovalQueue::default()),
                 b"fixture-secret".to_vec(),
-            ),
+            )
+            .with_device_sessions(sessions),
             options,
             Some(server_shutdown),
         )
@@ -481,5 +486,5 @@ fn stack_scenarios_match_go_over_the_real_accept_loop() {
             }
         }
     }
-    assert_eq!((served, refused), (285, 22), "stack requests replayed");
+    assert_eq!((served, refused), (364, 30), "stack requests replayed");
 }

@@ -1131,7 +1131,8 @@ the Go tree. `scripts/rust-port/cmd/approvalgen` freezes the same contract befor
   A session with an empty device id is unauthorized (Go's `deviceFromRequest`).
 - **Rust divergences found and fixed.** Body JSON was not HTML-escaped (`<`, `>`, `&` become `\u003c`, `\u003e`, `\u0026`, Go's `Encoder` default; affected the local API too);
   `pending()` ordered by RFC 3339 text, which misorders `...05.12Z` vs `...05.123Z`; an empty `decided_by` was serialized.
-- **Not covered / residual.** Go's per-IP rate limiter on these routes (the Rust server has none on any route), the 15-minute store cleanup,
+- **Rate limiter.** Go's per-IP limiter (one bucket shared with `/mcp` and the local API) now wraps these routes in Rust too; the recording here ran the handler on a bare mux, so the replay disables the limiter (`rate_limit: 0`) and the throttling is frozen by `http002ratelimitgen` (scenario `limit_three_device_approval_routes_share_the_bucket`, plus the `rate_limit: 0` and trusted-proxy steps).
+- **Not covered / residual.** The device enrollment routes `/api/v1/devices/enroll` and `/api/v1/devices/enroll-code` (Go mounts them behind the same limiter; the Rust server does not serve them), the 15-minute store cleanup,
   HEAD body suppression on the generic 404, TLS/mTLS (owned by the HTTP fixtures).
 
 ## APPROVAL-001: Rust server + Rust CLI end to end, 2026-11-03

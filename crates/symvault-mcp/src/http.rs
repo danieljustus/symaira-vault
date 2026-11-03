@@ -8,7 +8,9 @@ mod envelope;
 pub(crate) mod shutdown;
 pub use shutdown::HttpShutdown;
 
-use crate::approval::{ApprovalQueue, handle_device_request, handle_local_request, is_local_route};
+use crate::approval::{
+    ApprovalQueue, handle_device_request, handle_local_request, is_device_route, is_local_route,
+};
 use crate::ratelimit::{REFUSED_BODY, RateLimiter, remote_addr_string};
 use crate::{Error, Message, ProtocolHandler, error_code, is_supported_protocol_version};
 use rustls::{
@@ -1421,11 +1423,17 @@ where
     let secure = stream.is_tls();
     let response_version = request.http_version.as_str();
     // Go wraps exactly these mux entries in `RateLimiterMiddleware`, outside
-    // the Origin, bearer and body checks: `/mcp` and the local approval API.
-    // A refused request is answered before any of them runs.
+    // the Origin, bearer and body checks: `/mcp`, the local approval API and
+    // (only when mounted) the device approval API. A refused request is
+    // answered before any of them runs.
     let request_path = request.path.split('?').next().unwrap_or_default();
+    let limited_route = request_path == "/mcp"
+        || local_approval.is_some_and(|api| {
+            is_local_route(request_path)
+                || (api.device_sessions.is_some() && is_device_route(request_path))
+        });
     if let Some(limiter) = rate_limiter
-        && (request_path == "/mcp" || (local_approval.is_some() && is_local_route(request_path)))
+        && limited_route
     {
         let key = limiter.client_key(
             &remote_addr_string(stream.peer_addr()?),

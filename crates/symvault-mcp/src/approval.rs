@@ -226,6 +226,13 @@ pub(crate) fn is_local_route(path: &str) -> bool {
     path == LOCAL_APPROVALS || path.starts_with(LOCAL_APPROVAL_ACTION)
 }
 
+/// Whether `path` (query stripped) is served by the device approval API: Go's
+/// mux match for `PathApprovals` and the `PathApprovalAction` subtree.
+pub(crate) fn is_device_route(path: &str) -> bool {
+    let path = path.split_once('?').map_or(path, |(path, _)| path);
+    path == DEVICE_APPROVALS || path.starts_with(DEVICE_APPROVAL_ACTION)
+}
+
 pub(crate) fn handle_local_request(
     queue: &ApprovalQueue,
     secret: &[u8],

@@ -457,7 +457,7 @@ func generate(root string) ([]byte, error) {
 		Scope: map[string]string{
 			"transport":      "raw HTTP/1.1 over a loopback TCP listener serving the Go http.ServeMux; only Content-Type, X-Content-Type-Options and Location response headers are contract, Date/Content-Length/Connection are HTTP-library artefacts",
 			"mounting":       "the Go server mounts the handler on both patterns of an http.ServeMux when the approval handler option is given; the generator rebuilds that mux and pins the mounting source lines (mounting)",
-			"rate_limit":     "serverbootstrap wraps the chain in auth.RateLimiterMiddleware (default 60 requests/minute/IP); the Rust server has no rate limiter on any route, so no throttling case is recorded",
+			"rate_limit":     "serverbootstrap wraps the chain in auth.RateLimiterMiddleware (default 60 requests/minute/IP); this recording drives the handler on a bare mux, so no throttling case is recorded here and the replay disables the Rust limiter (rate_limit 0); throttling of the device routes is recorded by http002ratelimitgen",
 			"store_cleanup":  "Go also runs DeviceSessionStore.StartCleanup every 15 minutes; Validate rejects expired sessions regardless, so only the expiry itself is recorded",
 			"expiry_cases":   "request expiry uses a 150 ms lifetime and a 450 ms settle pause; the recorded outcome (409 already expired / absent from the list) is not timing dependent beyond that margin",
 			"decision_order": "listing order is newest first by creation instant; requests are enqueued in order with at least 5 ms between them",

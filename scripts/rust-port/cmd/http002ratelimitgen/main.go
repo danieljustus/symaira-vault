@@ -39,6 +39,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	mcpserver "github.com/danieljustus/symaira-vault/internal/mcp/server"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
+	"github.com/danieljustus/symaira-vault/internal/pairing"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
 )
@@ -48,6 +49,7 @@ import (
 const oracleCommit = "b1da45d1332fdb118b702dedf4addfb28b890cdf"
 
 var sources = []string{
+	"internal/approval/http.go",
 	"internal/approval/local.go",
 	"internal/config/config_merge.go",
 	"internal/config/schema.go",
@@ -284,6 +286,13 @@ func localApprovals(method, path string) stackRequest {
 	return stackRequest{Method: method, Path: path}
 }
 
+// deviceApprovals targets the device-token approval transport. No bearer is
+// sent: an unauthenticated request is answered 401 by the handler, which has
+// still consumed a limiter slot, and a wrong method is the handler's own 404.
+func deviceApprovals(method, path string) stackRequest {
+	return stackRequest{Method: method, Path: path}
+}
+
 type plannedStep struct {
 	note    string
 	request stackRequest
@@ -329,9 +338,25 @@ func stackScenarios(scratch string) []stackScenario {
 			step("health stays reachable", stackRequest{Method: http.MethodGet, Path: "/health"}, 1, "status"),
 			step("unrouted paths stay reachable", stackRequest{Method: http.MethodGet, Path: "/missing"}, 1, "full"),
 		}},
+		{name: "limit_three_device_approval_routes_share_the_bucket", limit: 3, steps: []plannedStep{
+			step("slot 1: the device list without a bearer is answered 401 by the handler, which still consumes a slot", deviceApprovals(http.MethodGet, "/api/v1/approvals"), 1, "full"),
+			step("slot 2: a device decision without a bearer shares the bucket", deviceApprovals(http.MethodPost, "/api/v1/approvals/x/approve"), 1, "full"),
+			step("slot 3: a method the handler does not route is its own 404 inside the limiter", deviceApprovals(http.MethodDelete, "/api/v1/approvals"), 1, "full"),
+			step("the device list is limited", deviceApprovals(http.MethodGet, "/api/v1/approvals"), 1, "full"),
+			step("a device decision is limited", deviceApprovals(http.MethodPost, "/api/v1/approvals/x/deny"), 1, "full"),
+			step("the device subtree root with a trailing slash is limited", deviceApprovals(http.MethodPost, "/api/v1/approvals/"), 1, "full"),
+			step("a device list with a query string is limited", deviceApprovals(http.MethodGet, "/api/v1/approvals?status=pending"), 1, "full"),
+			step("/mcp shares the device bucket", unauthMCP(nil), 1, "full"),
+			step("the local approval API shares the device bucket", localApprovals(http.MethodGet, "/api/v1/local/approvals"), 1, "full"),
+			step("a path the mux cleans is redirected before the limiter", deviceApprovals(http.MethodGet, "/api/v1/./approvals"), 1, "full"),
+			step("a sibling prefix is no device route and is not limited", deviceApprovals(http.MethodGet, "/api/v1/approvalsx"), 1, "full"),
+			step("the enrollment paths are not mounted here and are not limited", deviceApprovals(http.MethodPost, "/api/v1/devices/enroll"), 1, "full"),
+			step("health stays reachable", stackRequest{Method: http.MethodGet, Path: "/health"}, 1, "status"),
+		}},
 		{name: "zero_disables_the_limiter", limit: 0, steps: []plannedStep{
 			step("70 requests exceed the default of 60 yet none is limited", unauthMCP(nil), 70, "full"),
 			step("the local approval API is not limited either", localApprovals(http.MethodGet, "/api/v1/local/approvals"), 70, "full"),
+			step("the device approval API is not limited either", deviceApprovals(http.MethodGet, "/api/v1/approvals"), 70, "full"),
 		}},
 		{name: "negative_limit_falls_back_to_sixty", limit: -5, steps: []plannedStep{
 			step("60 requests are served", unauthMCP(nil), 60, "full"),
@@ -362,6 +387,10 @@ func stackScenarios(scratch string) []stackScenario {
 			step("the socket-address bucket is still at slot 1: slot 2", unauthMCP(nil), 1, "full"),
 			step("the socket-address bucket is exhausted", unauthMCP(nil), 1, "full"),
 			step("the local approval API honours the same key", localApprovals(http.MethodGet, "/api/v1/local/approvals"), 1, "full"),
+			step("the device approval API honours the same key", deviceApprovals(http.MethodGet, "/api/v1/approvals"), 1, "full"),
+			step("a device decision for another forwarded client has its own bucket, slot 1", stackRequest{Method: http.MethodPost, Path: "/api/v1/approvals/x/approve", Headers: map[string]string{"X-Forwarded-For": "10.0.0.7"}}, 1, "full"),
+			step("a device decision for that forwarded client, slot 2", stackRequest{Method: http.MethodPost, Path: "/api/v1/approvals/x/approve", Headers: map[string]string{"X-Forwarded-For": "10.0.0.7"}}, 1, "full"),
+			step("a device decision for that forwarded client is exhausted", stackRequest{Method: http.MethodPost, Path: "/api/v1/approvals/x/approve", Headers: map[string]string{"X-Forwarded-For": "10.0.0.7"}}, 1, "full"),
 		}},
 		{name: "trusted_cidr_with_invalid_entries_ignored", limit: 1, trusted: []string{"bogus", "127.0.0.0/8", "10.0.0.0/33"}, steps: []plannedStep{
 			step("10.1.1.1 slot 1", unauthMCP(map[string]string{"X-Forwarded-For": "10.1.1.1"}), 1, "full"),
@@ -403,6 +432,8 @@ func runStack(scratch, name string, cfg *config.Config, steps []plannedStep) []s
 	_, token, err := registry.Create("default", []string{"*"}, "default", time.Hour)
 	check(err)
 	vault := &vaultpkg.Vault{Dir: vaultDir, Config: cfg}
+	deviceSessions, err := pairing.NewDeviceSessionStore(vaultDir)
+	check(err)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	check(err)
@@ -411,6 +442,7 @@ func runStack(scratch, name string, cfg *config.Config, steps []plannedStep) []s
 	go func() {
 		done <- serverbootstrap.RunHTTPServerOnListener(ctx, listener, vault, vaultDir, "fixture",
 			func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error) { return &mcpserver.Server{}, nil },
+			serverbootstrap.WithApprovalAPI(approval.NewHTTPHandler(approval.NewQueue(), deviceSessions)),
 			serverbootstrap.WithLocalApprovalAPI(approval.NewLocalHTTPHandler(approval.NewQueue(), []byte("fixture-enroll-secret"), mcputil.IsLoopbackHost)))
 	}()
 	defer func() {
