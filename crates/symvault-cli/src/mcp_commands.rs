@@ -165,8 +165,25 @@ pub fn run(
         // Go subscribes SIGINT/SIGTERM/SIGQUIT here, after the cleartext
         // confirmation and before the listener exists.
         let runtime_metadata = Arc::new(Mutex::new(RuntimeMetadataGuard::new(root)));
+        // Go drains for MCP.shutdown_timeout (5 s unless configured positive).
         #[cfg(unix)]
-        mcp_shutdown::install_http(http_signal_cleanup(&runtime_metadata))?;
+        let drain = {
+            let drain = symvault_mcp::http::HttpShutdown::for_process();
+            let timeout = config
+                .mcp
+                .as_ref()
+                .map(|mcp| mcp.shutdown_timeout)
+                .filter(|timeout| !timeout.is_zero())
+                .unwrap_or(Duration::from_secs(5));
+            mcp_shutdown::install_http(
+                drain.clone(),
+                timeout,
+                http_signal_cleanup(&runtime_metadata),
+            )?;
+            Some(drain)
+        };
+        #[cfg(not(unix))]
+        let drain: Option<symvault_mcp::http::HttpShutdown> = None;
         let (tls_cert, tls_key, tls_ca, mtls_enabled) =
             effective_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca);
         let generated = if !config
@@ -338,7 +355,7 @@ pub fn run(
                 })
             })
         };
-        let result = symvault_mcp::http::serve_with_oauth_and_approval_options(
+        let result = symvault_mcp::http::serve_with_oauth_and_approval_options_until(
             listener,
             registry_path,
             handler_for_agent,
@@ -348,7 +365,11 @@ pub fn run(
             tls,
             symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
             http_options,
+            drain,
         );
+        // A signal-driven shutdown is a success and finishes in its own thread:
+        // it clears the runtime records after the drain and exits 0.
+        mcp_shutdown::park_if_requested();
         result.map_err(|error| format!("MCP HTTP: {error}"))
     } else {
         #[cfg(unix)]
@@ -613,6 +634,14 @@ impl RuntimeMetadataGuard {
         remove_if_unchanged(&self.port_path, self.port_record.take().as_deref());
         remove_if_unchanged(&self.tls_path, self.tls_record.take().as_deref());
     }
+
+    /// Go's signal shutdown clears both records unconditionally once the
+    /// server returned (`ClearRuntimePort` / `ClearRuntimeTLSCert`).
+    fn clear_all(&mut self) {
+        self.release();
+        let _ = fs::remove_file(&self.port_path);
+        let _ = fs::remove_file(&self.tls_path);
+    }
 }
 
 /// Signal-time cleanup for the HTTP transport.
@@ -632,7 +661,7 @@ fn http_signal_cleanup(
             let mut guard = runtime_metadata
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            guard.release();
+            guard.clear_all();
             // ponytail: leaking the guard keeps the mutex locked until the
             // imminent process::exit; only the signal path calls this.
             std::mem::forget(guard);

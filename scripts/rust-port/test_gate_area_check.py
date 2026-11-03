@@ -235,13 +235,23 @@ def good_signal():
     return base(expect_mismatch=False, **per_impl(lambda _: [{"n": i} for i in range(33)]))
 
 
+def good_http_drain():
+    from http_drain_contract import GO_EXPECTED, RUNS
+
+    def make(_):
+        return [{"case": case, "signal": name, "exit_code": 0, "stdout": "", "in_window": True,
+                 "listener_closed": True, "runtime_records": [], "outcome": GO_EXPECTED[case][0]}
+                for case, name in RUNS]
+    return base(expect_mismatch=False, mismatch="", drain_seconds=5.0, **per_impl(make))
+
+
 GOOD = {
     "http-framing": good_framing, "http-head": good_head, "http-origin": good_origin,
     "http-read-deadlines": good_deadlines, "http-timeouts": good_timeouts, "http-tls": good_tls,
     "http-write": good_write, "http-oauth": good_oauth, "http-process": good_http_process,
     "mcp-process": good_mcp_process, "api-transport": good_api, "cli-artifacts": good_cli_artifacts,
     "intake": good_intake, "serve": good_serve, "egress": good_egress, "connect": good_connect,
-    "signal": good_signal,
+    "signal": good_signal, "http-drain": good_http_drain,
 }
 
 # Keys a profile does not read (the workflow did not assert them either).
@@ -396,6 +406,17 @@ class ReceiptProfiles(unittest.TestCase):
             ("connect", lambda r: r["rust"].pop()),
             ("signal", lambda r: r.update(expect_mismatch=True)),
             ("signal", lambda r: r["rust"].pop()),
+            ("http-drain", lambda r: r.update(expect_mismatch=True)),
+            ("http-drain", lambda r: r.update(mismatch="x")),
+            ("http-drain", lambda r: r.update(drain_seconds=1.0)),
+            ("http-drain", lambda r: r["rust"].pop()),
+            ("http-drain", lambda r: r["go"].append(copy.deepcopy(r["go"][-1]))),
+            ("http-drain", lambda r: r["rust"][0].update(exit_code=1)),
+            ("http-drain", lambda r: r["rust"][3].update(outcome="force-closed-empty")),
+            ("http-drain", lambda r: r["rust"][3].update(in_window=False)),
+            ("http-drain", lambda r: r["rust"][3].update(runtime_records=[".runtime-port"])),
+            ("http-drain", lambda r: r["rust"][3].update(stdout="x")),
+            ("http-drain", lambda r: r["go"].reverse()),
         ]
         for profile, mutate in mutations:
             with self.subTest(profile=profile, mutation=mutate.__code__.co_firstlineno):

@@ -7,12 +7,15 @@
 //! default action. These helpers exist only on Unix; Windows console events
 //! use a different mechanism and are not covered here.
 //!
+//! HTTP (ADR 0009): the first SIGINT/SIGTERM/SIGQUIT stops accepting, cancels
+//! the request context (a request that reaches the handler afterwards gets
+//! Go's 403 `context canceled`), closes idle keep-alive transports and lets
+//! in-flight requests finish for up to `MCP.shutdown_timeout` (5 s default).
+//! Whatever is still open then is force-closed. The runtime port/TLS records
+//! are cleared unconditionally afterwards and the process exits 0; a second
+//! signal during the drain is swallowed.
+//!
 //! Known residuals against Go (#1242):
-//! - HTTP: Go drains in-flight requests for up to 5 s; Rust exits at once and
-//!   aborts them (before this module Rust died by the signal, which also
-//!   aborted them).
-//! - HTTP: Rust removes only the runtime records it published; Go removes
-//!   them unconditionally.
 //! - stdio: a signal while a clipboard auto-clear is armed outside a secure-input
 //!   prompt only clears the clipboard and the server keeps running; Go also shuts down.
 //!   (During a secure-input prompt the signal also ends the process, see
@@ -147,14 +150,24 @@ mod unix {
         }
     }
 
-    /// Subscribes the HTTP server to SIGINT/SIGTERM/SIGQUIT. `cleanup` removes
-    /// the server's own runtime records; the process then exits 0.
-    pub fn install_http(cleanup: Arc<dyn Fn() + Send + Sync>) -> Result<(), String> {
+    /// Subscribes the HTTP server to SIGINT/SIGTERM/SIGQUIT, like Go's
+    /// `signal.Notify`: the first signal drains the server for at most
+    /// `timeout` (stop accepting, close idle transports, let in-flight requests
+    /// finish, then force-close), `cleanup` clears the runtime records and the
+    /// process exits 0. The listener thread is busy until it exits, so a second
+    /// signal is swallowed, as Go's buffered channel swallows it.
+    pub fn install_http(
+        drain: symvault_mcp::http::HttpShutdown,
+        timeout: Duration,
+        cleanup: Arc<dyn Fn() + Send + Sync>,
+    ) -> Result<(), String> {
         symvault_platform::approval::spawn_signal_listener(
             &[SIGINT, SIGTERM, SIGQUIT],
             move |signal| {
                 REQUESTED.store(true, Ordering::Release);
                 warn_quit(signal);
+                // Go ignores the drain error too: the process exits 0 either way.
+                let _ = drain.drain(timeout);
                 cleanup();
                 std::process::exit(0);
             },

@@ -864,6 +864,45 @@ the store API are pre-marked with `symvault_store::data_safety::test_support_pre
 `test-support`, dev-dependencies only); the store crate's own unit
 tests run with the gate off (`cfg(test)`) except `data_safety::tests`.
 
+## MCP-003 / HTTP-004 / CLI-007: `mcp` HTTP signal drain, 2026-11-03
+
+Before this slice `symvault mcp` over HTTP exited 0 at once on SIGINT/SIGTERM/SIGQUIT and
+aborted every request in flight, and removed only the runtime records it had published;
+Go drains. Go's sequence, measured on the oracle (`cmd/mcp/serve_deps.go`,
+`serverbootstrap/http_lifecycle.go`, ADR 0009):
+
+1. The first of SIGINT/SIGTERM/SIGQUIT cancels the serving context (SIGQUIT first prints
+   `Received SIGQUIT, shutting down gracefully...` on stderr). Later signals are swallowed.
+2. The listener closes (new connections are refused), idle keep-alive transports close,
+   `/mcp` requests that reach the handler get `403` with JSON-RPC error `-32603`
+   `context canceled`, and a reply written during the drain carries `Connection: close`.
+3. Requests in flight run for up to `MCP.shutdown_timeout` (5 s unless a positive value is
+   configured). A tool call that ignores cancellation (`run_command`) completes normally.
+4. At the deadline everything still open is force-closed; the exit does not wait for
+   uncooperative callbacks (the started command keeps running).
+5. `.runtime-port` and `.runtime-tls-cert` are removed unconditionally, nothing is printed
+   (except the SIGQUIT warning) and the exit status is 0.
+
+Rust now does the same through `HttpShutdown::drain` (`begin_drain`: stop admission, cancel the
+request context, close idle transports; `cancel` at the deadline), wired by
+`mcp_shutdown::install_http` and `serve_with_oauth_and_approval_options_until`. The CLI uses
+`HttpShutdown::for_process()` (blocking socket I/O, cancelled by closing the transport) so the
+data path is unchanged; Windows keeps its previous behavior because `install_http` is Unix only.
+Evidence: `make mcp-http-shutdown-contract` (Go `-race` tests, then the Rust leg):
+`http_drain_contract.py` runs the real Go oracle `24acdb08` and the Rust CLI through 15 signal
+runs each (SIGINT and SIGTERM for idle keep-alive, in-flight command inside the window, the same
+as a keep-alive request, in-flight command beyond it, partial body completed inside the window,
+partial body never completed, second signal during the drain; SIGQUIT for the in-flight command)
+and compares peer outcome (status, headers except `Date`, body), exit status, stdout, stderr,
+listener state, started-command survival and the on-disk delta. `test_http_drain_contract.py`
+rejects each mutated observation and the pre-drain behavior; the receipt profile `http-drain`
+pins 15 runs per implementation. Local Darwin/arm64 only; native Linux CI is the coordinator's lane.
+
+Residuals (probed, not fixed): the HTTP drain is Unix only; Rust removes the runtime records
+unconditionally like Go (a successor's records are not protected); a drain that hits the deadline
+does not report Go's `HTTPShutdownError` anywhere (Go drops it too: exit 0); Rust replies carry no
+`Date` header, which the contract excludes from the comparison like the other HTTP contracts.
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate
