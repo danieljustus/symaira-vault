@@ -270,7 +270,24 @@ pub(crate) fn format_go_value(value: &Value) -> String {
     match value {
         Value::Null => "<nil>".to_owned(),
         Value::Bool(value) => value.to_string(),
-        Value::Number(value) => value.to_string(),
+        Value::Number(value) => {
+            let value = value.as_f64().expect("finite JSON number");
+            if value == 0.0 && value.is_sign_negative() {
+                return "-0".to_owned();
+            }
+            let scientific = format!("{value:e}");
+            let (mantissa, exponent) = scientific.split_once('e').expect("scientific float");
+            let exponent: i32 = exponent.parse().expect("float exponent");
+            if !(-4..6).contains(&exponent) {
+                format!(
+                    "{mantissa}e{}{:02}",
+                    if exponent < 0 { "-" } else { "+" },
+                    exponent.abs()
+                )
+            } else {
+                value.to_string()
+            }
+        }
         Value::String(value) => value.clone(),
         Value::Array(values) => {
             let values = values.iter().map(format_go_value).collect::<Vec<_>>();
