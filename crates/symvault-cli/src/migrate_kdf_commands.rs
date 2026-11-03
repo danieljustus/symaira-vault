@@ -301,6 +301,12 @@ mod tests;
 /// Explicit local migration: historical reads stay exclusive, defaults remain
 /// unchanged, and both original files are retained without replacing old backups.
 pub fn migrate_resource_policy(root: &Path, passphrase: &SecretBytes) -> Result<(), String> {
+    // D1 data-safety gate BEFORE this command's own `.lock`: the gate takes the
+    // vault write lock itself (a second descriptor, so a lock held here would
+    // make it wait out its 30 s deadline and refuse with "vault is currently
+    // locked by another process"). Once the marker exists, the path-gated
+    // writes below find it and never touch the lock again.
+    symvault_store::data_safety::ensure_marker(root).map_err(|e| e.to_string())?;
     let lock = safeio::open_append(&root.join(".lock")).map_err(|e| e.to_string())?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
