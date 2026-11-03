@@ -30,8 +30,6 @@ jobs:
         include:
           - language: actions
             build-mode: none
-          - language: go
-            build-mode: autobuild
           - language: javascript-typescript
             build-mode: none
           - language: ruby
@@ -64,13 +62,6 @@ jobs:
           git config --global url."https://x-access-token:${APPKIT_TOKEN}@github.com/danieljustus/symaira-appkit.git".insteadOf "https://github.com/danieljustus/symaira-appkit.git"
         env:
           APPKIT_TOKEN: ${{ secrets.SYMAIRA_APPKIT_GITHUB_TOKEN }}
-
-      - name: Set up Go
-        if: matrix.language == 'swift'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1

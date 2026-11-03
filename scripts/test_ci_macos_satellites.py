@@ -37,7 +37,7 @@ BASELINE_PATH = os.path.join(ROOT, "scripts", "ci_macos_satellites_baseline.json
 SELECTOR_PATH = os.path.join(ROOT, "scripts", "ci_macos_satellites.py")
 CONSOLIDATED_PATH = os.path.join(ROOT, ".github", "workflows", "rust-http-macos.yml")
 GROUP_PATH = os.path.join(ROOT, ".github", "workflows", "rust-macos-satellites.yml")
-PINNED_BASE = "861ad93813e3ee43c4ec989f45940d14b05b6eaf"
+PINNED_BASE = "c069d3f2b17d704525cedc1bd42840cc6a3e9896"
 ORDER = ["head", "origin", "oauth", "deadline", "timeout", "write", "framing", "tls"]
 FILES = {
     "head": "rust-http-head.yml",
@@ -52,7 +52,6 @@ FILES = {
 NEW_FILES = {
     "mcp_process": "rust-mcp-process.yml",
     "mcp_http_process": "rust-mcp-http-process.yml",
-    "mcp_http_shutdown": "mcp-http-shutdown.yml",
     "broker_connect": "rust-broker-connect.yml",
     "broker_egress": "rust-broker-egress.yml",
     "audit": "rust-audit.yml",
@@ -62,8 +61,6 @@ NEW_FILES = {
     "serve_cli": "rust-serve-cli.yml",
     "kdf_policy": "kdf-resource-policy.yml",
     "vault_read_policy": "vault-read-resource-policy.yml",
-    "store_observations": "rust-store-observations.yml",
-    "sync_observations": "rust-sync-observations.yml",
 }
 GROUP_NAMES = ["mcp", "broker", "rest"]
 ASSERT_NAME = "Assert actual native macOS arm64"
@@ -130,7 +127,7 @@ def strip_expr(cond):
 def is_prologue(step):
     uses = step.get("uses") or ""
     return (step.get("name") == ASSERT_NAME or uses.startswith("actions/checkout")
-            or uses.startswith("actions/setup-go") or (step.get("name") or "").startswith("Install pinned Rust"))
+            or (step.get("name") or "").startswith("Install pinned Rust"))
 
 
 def mac_applicable_indexes(steps):
@@ -174,21 +171,19 @@ def validate_group(doc, group, bl):
     if job.get("defaults") != {"run": {"shell": "bash"}}:
         errs.append("defaults")
     steps = job.get("steps", [])
-    if len(steps) < 5:
+    if len(steps) < 4:
         return errs + ["too few steps"]
-    head = [s.get("name") for s in steps[:5]]
-    if head != [ASSERT_NAME, "Checkout code", "Set up pinned Go", "Install pinned Rust", "Shared prologue complete"]:
+    head = [s.get("name") for s in steps[:4]]
+    if head != [ASSERT_NAME, "Checkout code", "Install pinned Rust", "Shared prologue complete"]:
         errs.append(f"prologue names {head}")
     first_raw = bl["satellites"][g["satellites"][0]]["steps"]
     if mac_run_text(steps[0].get("run", "")) != mac_run_text(first_raw[0]["run"]):
         errs.append("assert command differs from baseline")
     if steps[1].get("with") != {"fetch-depth": 0, "persist-credentials": False}:
         errs.append("checkout with")
-    if steps[2].get("with") != {"go-version": "1.26.10"}:
-        errs.append("go version")
-    if (steps[3].get("run") or "").strip() != RUST_INSTALL:
+    if (steps[2].get("run") or "").strip() != RUST_INSTALL:
         errs.append("rust install command")
-    if steps[4].get("id") != "prologue":
+    if steps[3].get("id") != "prologue":
         errs.append("prologue id")
     if steps[0].get("if") is not None:
         errs.append("assert step must not be gated by matrix")
@@ -444,16 +439,14 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(self.groups([".github/workflows/rust-macos-satellites.yml"]), ["broker", "mcp", "rest"])
         self.assertEqual(self.groups(["Cargo.lock"]), ["broker", "http", "mcp", "rest"])
         self.assertEqual(self.groups([".github/workflows/rust-audit.yml"]), ["rest"])
-        self.assertEqual(self.groups([".github/workflows/mcp-http-shutdown.yml"]), ["mcp"])
+        self.assertEqual(self.groups([".github/workflows/rust-mcp-http-process.yml"]), ["mcp"])
         self.assertEqual(self.groups([".github/workflows/rust-broker-egress.yml"]), ["broker"])
-        # internal/config/config.go is on the original path lists of kdf and cli-artifacts only
-        self.assertEqual(self.groups(["internal/config/config.go"]), ["rest"])
-        self.assertEqual(self.chosen(["internal/config/config.go"], self.sel.ALL_KEYS),
-                         ["cli_artifacts", "kdf_policy"])
+        # third_party/argon2 is a shared input of every group
+        self.assertIn("rest", self.groups(["third_party/argon2/src/lib.c"]))
 
     def test_group_members_select_exactly_their_satellite(self):
-        self.assertEqual(self.chosen([".github/workflows/mcp-http-shutdown.yml"], self.sel.ALL_KEYS),
-                         ["mcp_http_shutdown"])
+        self.assertEqual(self.chosen([".github/workflows/rust-mcp-http-process.yml"], self.sel.ALL_KEYS),
+                         ["mcp_http_process"])
         self.assertEqual(self.chosen([".github/workflows/rust-audit.yml"], self.sel.ALL_KEYS), ["audit"])
 
     def test_group_membership_matches_baseline(self):
@@ -586,7 +579,7 @@ class ConsolidatedHttpWorkflowTests(unittest.TestCase):
             self._baseline_run(ORDER[0], ASSERT_NAME)))
         install = by_name["Install pinned Rust"]
         self.assertEqual(install["run"], self._baseline_run(ORDER[0], "Install pinned Rust"))
-        self.assertEqual(by_name["Set up pinned Go"]["with"]["go-version"], "1.26.6")
+        self.assertNotIn("Set up pinned Go", by_name)
         self.assertEqual(by_name["Checkout code"]["with"], {"fetch-depth": 0, "persist-credentials": False})
 
     def _baseline_run(self, key, name):
@@ -599,10 +592,9 @@ class ConsolidatedHttpWorkflowTests(unittest.TestCase):
         for key in ORDER:
             with self.subTest(satellite=key):
                 base_steps = [s for s in self.baseline["satellites"][key]["steps"]
-                              if s["name"] not in {ASSERT_NAME, "Checkout code", "Set up pinned Go",
+                              if s["name"] not in {ASSERT_NAME, "Checkout code",
                                                    "Set up pinned Python", "Install pinned Rust",
-                                                   "Checkout retained Go oracle and candidate",
-                                                   "Checkout retained oracle and candidate",
+                                                   "Checkout candidate and frozen observations",
                                                    "Shared prologue complete"}
                               and not is_prologue(s)]
                 expected_runs = [mac_run_text(s["run"]) for s in base_steps if s.get("run")]
@@ -629,9 +621,9 @@ class ConsolidatedHttpWorkflowTests(unittest.TestCase):
     def test_steps_are_gated_and_chained(self):
         for step in self.steps:
             name = step.get("name", "")
-            if name in {ASSERT_NAME, "Checkout code", "Set up pinned Go", "Set up pinned Python",
-                        "Install pinned Rust", "Checkout retained Go oracle and candidate",
-                        "Checkout retained oracle and candidate", "Shared prologue complete"}:
+            if name in {ASSERT_NAME, "Checkout code", "Set up pinned Python",
+                        "Install pinned Rust", "Checkout candidate and frozen observations",
+                         "Shared prologue complete"}:
                 continue
             cond = str(step.get("if", ""))
             self.assertIn("!cancelled()", cond, name)
@@ -735,10 +727,10 @@ class GroupMutationTests(unittest.TestCase):
 
     def test_dropped_step_env_override_is_rejected(self):
         def fn(job):
-            # mcp_process-5 carries GOTOOLCHAIN=go1.26.6 from the original step
-            i = self.index_by_id(job, "mcp_process-5")
-            self.assertEqual(job["steps"][i]["env"]["GOTOOLCHAIN"], "go1.26.6")
-            job["steps"][i]["env"].pop("GOTOOLCHAIN")
+            # mcp_process-3 carries SYMVAULT_TEST_KEYRING=memory from the original step
+            i = self.index_by_id(job, "mcp_process-3")
+            self.assertEqual(job["steps"][i]["env"]["SYMVAULT_TEST_KEYRING"], "memory")
+            job["steps"][i]["env"].pop("SYMVAULT_TEST_KEYRING")
         self.assertTrue(self.mutate("mcp", fn))
 
     def test_removed_gate_is_rejected(self):
@@ -749,9 +741,9 @@ class GroupMutationTests(unittest.TestCase):
 
     def test_gate_pointing_at_another_satellite_is_rejected(self):
         def fn(job):
-            i = self.index_by_id(job, "store_observations-1")
+            i = self.index_by_id(job, "vault_read_policy-1")
             job["steps"][i]["if"] = job["steps"][i]["if"].replace(
-                "needs.select.outputs.store_observations", "needs.select.outputs.sync_observations")
+                "needs.select.outputs.vault_read_policy", "needs.select.outputs.kdf_policy")
         self.assertTrue(self.mutate("rest", fn))
 
     def test_dropped_reset_is_rejected(self):
@@ -761,7 +753,7 @@ class GroupMutationTests(unittest.TestCase):
 
     def test_dropped_upload_is_rejected(self):
         def fn(job):
-            del job["steps"][self.upload_index(job, "store_observations")]
+            del job["steps"][self.upload_index(job, "vault_read_policy")]
         self.assertTrue(self.mutate("rest", fn))
 
     def test_explicit_upload_made_chained_is_rejected(self):

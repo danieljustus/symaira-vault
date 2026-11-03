@@ -12,22 +12,13 @@ on:
       - '.gitattributes'
       - 'testdata/**'
       - 'third_party/**'
-      - 'internal/mcp/apitemplates/builtin/**'
       - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/test_build_timeout.py'
       - 'scripts/rust-port/mcp_process*'
       - 'scripts/rust-port/mcp_oracle.py'
       - 'scripts/rust-port/mcp_fixture_contract.py'
       - 'scripts/rust-port/test_mcp_oracle.py'
-      - 'scripts/rust-port/cmd/mcpcallgen/**'
-      - 'scripts/rust-port/cmd/http001initgen/**'
-      - 'scripts/rust-port/cmd/execute_secret_*/*'
-      - 'scripts/rust-port/internal/provenance/**'
-      - 'scripts/rust-port/internal/oracletest/**'
-      - 'go.mod'
-      - 'go.sum'
       - 'scripts/rust-port/fixtures/mcp-anomaly/**'
-      - 'internal/mcp/server/**'
       - 'docs/adr/0016-mcp-discovery-and-call-authorization.md'
   workflow_dispatch:
 
@@ -51,8 +42,6 @@ jobs:
       run:
         shell: bash
     env:
-      GOTOOLCHAIN: go1.26.10
-      GOWORK: 'off'
       RUSTUP_TOOLCHAIN: '1.98.0'
       RUST_TEST_THREADS: '1'
       TZ: UTC
@@ -67,15 +56,11 @@ jobs:
           test "$(uname -s)" = Darwin
           test "$(uname -m)" = arm64
           sw_vers
-      - name: Checkout retained Go oracle and candidate
+      - name: Checkout candidate and frozen observations
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Set up pinned Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
       - name: Set up pinned Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -160,7 +145,7 @@ jobs:
           # Two existing host-specific tests are Unix-only: symlink template
           # rejection and clipboard signal clearing. The stdio and HTTP
           # regressions below must execute on every OS.
-          expected_count = 244 if os.environ['RUNNER_OS']=='Windows' else 246
+          expected_count = 246
           assert results and sum(int(n) for n,_ in results)==expected_count
           assert all(int(ignored)==0 for _,ignored in results)
           for case in ['tier_overrides_never_reach_handlers_or_storage', 'explicit_operator_allowlist_restricts_discovery_and_direct_calls', 'command_capability_denial_preserves_rpc_error_without_dispatch', 'oversized_stdio_frame_is_drained_with_bounded_storage', 'exact_frame_limit_is_accepted_and_next_request_recovers_after_oversize', 'oversized_unterminated_fragment_keeps_the_eof_contract', 'public_http_adapter_bounds_oversized_json_before_deserialization', 'nonmcp_oversized_prefixes_preserve_accepted_main_wire_response', 'oversized_body_errors_follow_admission_without_creating_sessions', 'cancelled_stdio_answers_the_frame_it_was_blocked_on_then_stops', 'stdio_cancelled_before_the_first_read_answers_nothing']:
@@ -178,13 +163,9 @@ jobs:
           PY
           cargo build -p symvault-cli --bin symvault --locked
       - name: Execute actual Go and Rust native profiles and hostile stdio
-        env:
-          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
-          test "$(go env GOVERSION)" = "go1.26.6"
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/mcp_process_contract.py --reference mcp-anomaly-ordered-v1 --rust "$rust_cli" --receipt target/native-mcp-process.json
           python3 - <<'PY'
           import json, subprocess
@@ -196,7 +177,7 @@ jobs:
           assert receipt['passed'] and receipt['candidate_worktree_clean'] and receipt['candidate_worktree_clean_at_end'] and not receipt['differences']
           assert not subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=normal']).strip()
           assert receipt['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          assert receipt['native_os'] in {'Linux','Darwin','Windows'}
+          assert receipt['native_os'] in {'Linux','Darwin'}
           expected_profiles = {'legacy','tier-read-only','tier-standard','tier-admin','admin-value-hidden','admin-value-visible','standard-command-override','readonly-capability-overrides','admin-command-disabled','admin-tools-health-only','admin-tools-self-only','admin-api-explicit','standard-no-value-capabilities','builtin-default','builtin-claude-code','builtin-codex','builtin-hermes','builtin-openclaw','builtin-opencode','tier-read-only-real-child','tier-standard-real-child','tier-admin-real-child'}
           expected_hostile = {'unterminated','crlf','blank-line','null-frame','nul-byte','two-objects-one-line','duplicate-envelope-id','frame-exact-limit','frame-over-limit','unterminated-over-limit','depth-10000','depth-10001'}
           assert set(receipt['loaded_go_profiles'])==set(receipt['fixture_snapshots'])==expected_profiles
@@ -207,10 +188,10 @@ jobs:
               rows = receipt[implementation+'_hostile']
               assert len(rows)==12 and {row['case'] for row in rows}==expected_hostile
               assert all(row['stdout_is_only_protocol'] for row in rows)
-          expected_differences = 72 if receipt['native_os']=='Windows' else 67
+          expected_differences = 67
           assert len(receipt['declared_differences'])==expected_differences
           windows_denials = [row for row in receipt['declared_differences'] if row['decision']=='windows-headless-approval-denial']
-          assert len(windows_denials)==(5 if receipt['native_os']=='Windows' else 0)
+          assert len(windows_denials)==0
           assert sum(len(row['frames']) for name in ['go','rust','go_hostile','rust_hostile'] for row in receipt[name])==1022
           PY
       - name: Upload complete actual native observations

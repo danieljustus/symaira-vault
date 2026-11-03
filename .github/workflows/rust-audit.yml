@@ -11,16 +11,12 @@ on:
       - '.github/workflows/ci.yml'
       - 'Cargo.toml'
       - 'Cargo.lock'
-      - 'go.mod'
-      - 'go.sum'
       - 'rust-toolchain.toml'
       - 'Makefile'
       - 'crates/symvault-store/Cargo.toml'
       - 'crates/symvault-store/src/audit.rs'
       - 'crates/symvault-store/tests/audit.rs'
       - 'crates/symvault-store/examples/audit-emit.rs'
-      - 'internal/audit/**'
-      - 'scripts/rust-port/cmd/auditverify/**'
       - 'testdata/port/audit/**'
       - 'docs/rust-port/contract-matrix.md'
       - 'docs/rust-port/work-items.json'
@@ -31,16 +27,12 @@ on:
       - '.github/workflows/ci.yml'
       - 'Cargo.toml'
       - 'Cargo.lock'
-      - 'go.mod'
-      - 'go.sum'
       - 'rust-toolchain.toml'
       - 'Makefile'
       - 'crates/symvault-store/Cargo.toml'
       - 'crates/symvault-store/src/audit.rs'
       - 'crates/symvault-store/tests/audit.rs'
       - 'crates/symvault-store/examples/audit-emit.rs'
-      - 'internal/audit/**'
-      - 'scripts/rust-port/cmd/auditverify/**'
       - 'testdata/port/audit/**'
       - 'docs/rust-port/contract-matrix.md'
       - 'docs/rust-port/work-items.json'
@@ -56,7 +48,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GOTOOLCHAIN: go1.26.10
   RUSTUP_TOOLCHAIN: 1.98.0
 
 jobs:
@@ -85,12 +76,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Set up pinned Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
-
       - name: Install pinned Rust toolchain
         shell: bash
         run: rustup toolchain install 1.98.0 --profile minimal
@@ -99,7 +84,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(go env GOVERSION)" = "go1.26.10"
           test "$(rustc --version | awk '{print $2}')" = "1.98.0"
 
       - name: Run clean audit differential
