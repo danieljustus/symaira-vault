@@ -312,7 +312,7 @@ fn byte_entry_point_passes_valid_frames_through() {
 fn corpus_is_not_empty() {
     let fx = load();
     assert!(fx.cases.len() >= 15, "corpus shrank unexpectedly");
-    assert_eq!(fx.bounds.len(), 4);
+    assert_eq!(fx.bounds.len(), 9);
     assert_eq!(fx.divergences.len(), 2);
 }
 
@@ -547,5 +547,155 @@ fn duplicate_and_wrong_typed_params_members_follow_encoding_json() {
                 }
             }
         }
+    }
+}
+
+/// PIN-LOW: the decoder error text of `initialize` params is compared EXACTLY,
+/// not through the mask. Every recorded case and bounds probe whose Go answer
+/// is an `InitializeParams`/`ClientInfo` decode error must be reproduced byte
+/// for byte by Rust, so the struct and field path in the message
+/// (`ClientInfo.clientInfo.name`, not `ClientInfo.name`) cannot drift behind
+/// the `<runtime-error-text>` sentinel.
+#[test]
+fn initialize_decode_error_text_matches_go_exactly() {
+    let fx = load();
+    let mut inputs: Vec<(String, String, String)> = fx
+        .cases
+        .iter()
+        .map(|c| (c.name.clone(), c.input.clone(), c.stdout_raw.clone()))
+        .collect();
+    for probe in &fx.bounds {
+        let input = format!(
+            "{}{}{}{}",
+            probe.prefix,
+            probe.fill_rune.repeat(probe.fill_count),
+            probe.close_rune.repeat(probe.close_count),
+            probe.suffix
+        );
+        inputs.push((probe.name.clone(), input, probe.stdout_raw.clone()));
+    }
+
+    let mut compared = Vec::new();
+    for (name, input, go_stdout) in &inputs {
+        if !go_stdout.contains("Go struct field InitializeParams.")
+            && !go_stdout.contains("Go struct field ClientInfo.")
+            && !go_stdout.contains("into Go value of type server.InitializeParams")
+        {
+            continue;
+        }
+        let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+        let written = run_stream(input, &mut handler).expect("rust transport ran");
+        assert_eq!(
+            &as_stdout(&written),
+            go_stdout,
+            "{name}: initialize decode error text differs from the recorded Go frame"
+        );
+        compared.push(name.as_str());
+    }
+    for required in [
+        "duplicate_params_wrong_typed_first",
+        "duplicate_params_wrong_typed_last",
+        "duplicate_params_clientinfo_wrong_typed_then_null",
+        "clientinfo_inner_member_wrong_typed",
+        "clientinfo_inner_duplicate_wrong_typed_first",
+        "initialize_deep_unknown_member_then_wrong_typed_version",
+        "initialize_deep_clientinfo_extra_member_then_wrong_typed_name",
+    ] {
+        assert!(
+            compared.contains(&required),
+            "{required} must be among the exactly-compared error texts: {compared:?}"
+        );
+    }
+    assert!(
+        inputs
+            .iter()
+            .any(|(n, _, out)| n == "clientinfo_inner_member_wrong_typed"
+                && out.contains("Go struct field ClientInfo.clientInfo.name of type string")),
+        "the recorded Go frame must carry the ClientInfo.clientInfo.name path"
+    );
+}
+
+/// PIN-LOW: `encoding/json` accepts a lone surrogate escape in `params`
+/// (decoded to U+FFFD) and nesting up to the 10000-level frame limit, inside
+/// `capabilities` (a `json.RawMessage`), unknown members, keys and
+/// `clientInfo`; a `serde_json::Value` parse rejects the former and stops at
+/// 128 levels. The Go frames are asserted first so the expectation is the
+/// oracle's, then Rust must produce the same bytes.
+#[test]
+fn lone_surrogates_and_deep_params_are_accepted_like_go() {
+    let fx = load();
+    let expectations = [
+        (
+            "initialize_lone_surrogate_in_protocol_version",
+            "2025-11-25",
+        ),
+        (
+            "initialize_lone_surrogate_in_unknown_members_and_keys",
+            "2024-11-05",
+        ),
+        (
+            "initialize_lone_surrogate_in_capabilities_and_clientinfo",
+            "2025-03-26",
+        ),
+        (
+            "initialize_escaped_field_name_selects_the_field",
+            "2024-11-05",
+        ),
+        (
+            "initialize_lone_surrogate_pair_halves_are_not_merged",
+            "2024-11-05",
+        ),
+    ];
+    for (name, version) in expectations {
+        let case = fx
+            .cases
+            .iter()
+            .find(|c| c.name == name)
+            .unwrap_or_else(|| panic!("missing Go-recorded case {name}"));
+        assert_eq!(
+            case.frames[0]["result"]["protocolVersion"], version,
+            "{name}: Go"
+        );
+        let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+        let written = run_stream(&case.input, &mut handler).expect("rust transport ran");
+        assert_eq!(
+            as_stdout(&written),
+            case.stdout_raw,
+            "{name}: Rust vs Go bytes"
+        );
+    }
+
+    for (name, version) in [
+        (
+            "initialize_capabilities_nested_to_the_depth_limit",
+            "2024-11-05",
+        ),
+        (
+            "initialize_unknown_member_nested_to_the_depth_limit",
+            "2025-03-26",
+        ),
+    ] {
+        let probe = fx
+            .bounds
+            .iter()
+            .find(|p| p.name == name)
+            .unwrap_or_else(|| panic!("missing Go-recorded probe {name}"));
+        let go: serde_json::Value =
+            serde_json::from_str(probe.stdout_raw.trim_end()).expect("Go frame is JSON");
+        assert_eq!(go["result"]["protocolVersion"], version, "{name}: Go");
+        let input = format!(
+            "{}{}{}{}",
+            probe.prefix,
+            probe.fill_rune.repeat(probe.fill_count),
+            probe.close_rune.repeat(probe.close_count),
+            probe.suffix
+        );
+        let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+        let written = run_stream(&input, &mut handler).expect("rust transport ran");
+        assert_eq!(
+            as_stdout(&written),
+            probe.stdout_raw,
+            "{name}: Rust vs Go bytes"
+        );
     }
 }

@@ -1153,7 +1153,7 @@ AREA_KDF_MIGRATION_TESTS := 10
 # 52 result lines, 0 failed, 0 ignored); the
 # gate asserts the real count, so a shrunken run still fails. Raise it together
 # with the new tests (and the workflows' constant when they run again).
-AREA_MCP_TEST_COUNT := 373
+AREA_MCP_TEST_COUNT := 383
 
 .PHONY: area-oracle-runner
 area-oracle-runner:

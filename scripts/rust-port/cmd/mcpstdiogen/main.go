@@ -344,6 +344,46 @@ func caseInputs() []struct{ name, why, input string } {
 			initializeFrame(`{"clientInfo":{"name":"a","name":"b","version":null},"protocolVersion":"2025-03-26"}`),
 		},
 		{
+			"initialize_lone_surrogate_in_protocol_version",
+			"PIN-LOW: encoding/json accepts a lone surrogate escape in a string and decodes it to U+FFFD, so protocolVersion \"\\uD800\" is just an unsupported version and negotiates the latest, where a serde Value parse rejects the escape",
+			initializeFrame(`{"protocolVersion":"\uD800"}`),
+		},
+		{
+			"initialize_lone_surrogate_in_unknown_members_and_keys",
+			"lone high and low surrogate escapes in an unknown member's key and value, nested in an array, are skipped; the real protocolVersion after them is honoured (2024-11-05)",
+			initializeFrame(`{"\uDC00":"\uD800","x":["\uDBFF",{"\uD800":1}],"protocolVersion":"2024-11-05"}`),
+		},
+		{
+			"initialize_lone_surrogate_in_capabilities_and_clientinfo",
+			"capabilities is a json.RawMessage and clientInfo.name/version/extra are strings or skipped: lone surrogates in any of them decode (or are skipped) without failing the request",
+			initializeFrame(`{"clientInfo":{"name":"\uD800","version":"\uD800x","extra":"\uDFFF"},"capabilities":{"experimental":"\uD800"},"protocolVersion":"2025-03-26"}`),
+		},
+		{
+			"initialize_escaped_field_name_selects_the_field",
+			"member names are unquoted before matching: \"\\u0070rotocolVersion\" selects protocolVersion (2024-11-05)",
+			initializeFrame(`{"\u0070rotocolVersion":"2024-11-05"}`),
+		},
+		{
+			"initialize_lone_surrogate_pair_halves_are_not_merged",
+			"a high surrogate followed by a non-low escape is U+FFFD plus the second escape, not an error; the trailing real version after it wins",
+			initializeFrame(`{"protocolVersion":"\uD800\u0041","protocolVersion":"2024-11-05"}`),
+		},
+		{
+			"method_lone_surrogate_is_replacement_char",
+			"PIN-LOW: the envelope's method is a Go string too: a lone surrogate escape decodes to U+FFFD and the request is answered Method not found with the replacement character, not a parse error",
+			`{"jsonrpc":"2.0","id":1,"method":"a\uD800b"}` + "\n",
+		},
+		{
+			"prompts_get_lone_surrogate_argument_value",
+			"prompts/get arguments are map[string]string: a lone surrogate in a value decodes to U+FFFD and the decode succeeds, so the error is the first missing required argument (to_agent) instead of -32602 Invalid params (a rendered prompt is not used here: it carries a random per-call nonce)",
+			initializeFrame(`{}`) + promptsGetFrame(`{"name":"share-credential","arguments":{"path":"\uD800"}}`),
+		},
+		{
+			"prompts_get_unknown_member_nested_beyond_serde_limit",
+			"an unknown prompts/get member is skipped without being decoded, so 200 nested levels (serde_json's Value parse stops at 128) are fine and the answer is the unknown-prompt error, not -32602 Invalid params",
+			initializeFrame(`{}`) + promptsGetFrame(`{"name":"nope","arguments":{"query":"x"},"zz":`+strings.Repeat("[", 200)+strings.Repeat("]", 200)+`}`),
+		},
+		{
 			"prompts_get_duplicate_name_wrong_typed_first",
 			"prompts/get decodes name as a string: 5 followed by a valid name still fails the decode (-32602 Invalid params)",
 			initializeFrame(`{}`) + promptsGetFrame(`{"name":5,"name":"find-and-use","arguments":{"query":"x"}}`),
@@ -418,6 +458,31 @@ func buildBounds() ([]boundsProbe, error) {
 			"escaped_quote_before_bracket_fill_is_still_a_string",
 			"the depth scanner has to track backslash escapes, not just quotes: after an escaped quote the scanner is STILL inside the string, so these brackets are characters and the frame is dispatched. A scanner that treated the escaped quote as closing the string would count them as nesting and wrongly reject",
 			`{"jsonrpc":"2.0","id":1,"method":"ping","p":"\"`, "[", "", `"}` + "\n", 10001, 0,
+		},
+		{
+			"initialize_capabilities_nested_to_the_depth_limit",
+			"PIN-LOW: initialize capabilities is a json.RawMessage, so nesting up to the 10000-level total limit (frame 1 + params 1 + 9998 arrays) is accepted and answered; a serde Value parse of params stops at 128 levels",
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":`, "[", "]", "}}" + "\n", 9998, 9998,
+		},
+		{
+			"initialize_unknown_member_nested_to_the_depth_limit",
+			"an unknown params member is skipped, not decoded, so it may nest to the same limit; the protocolVersion after it is still honoured",
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"x":`, "[", "]", `,"protocolVersion":"2025-03-26"}}` + "\n", 9998, 9998,
+		},
+		{
+			"initialize_deep_unknown_member_then_wrong_typed_version",
+			"the deep skipped member does not mask a later error: protocolVersion 123 is still -32602 with Go's exact text",
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"x":`, "[", "]", `,"protocolVersion":123}}` + "\n", 9998, 9998,
+		},
+		{
+			"initialize_deep_clientinfo_extra_member_then_wrong_typed_name",
+			"an unknown member nested to the limit inside clientInfo (frame 1 + params 1 + clientInfo 1 + 9997 arrays) is skipped and the wrong-typed name after it is -32602 with the ClientInfo.clientInfo.name path",
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"extra":`, "[", "]", `,"name":1}}}` + "\n", 9997, 9997,
+		},
+		{
+			"initialize_params_one_level_past_the_depth_limit",
+			"control: one level deeper than the limit is -32700 before the handler runs, in both implementations",
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":`, "[", "]", "}}" + "\n", 9999, 9999,
 		},
 		{
 			"pathological_nesting_is_rejected",
@@ -560,7 +625,7 @@ func main() {
 		Bounds:                  bounds,
 		Divergences: []divergence{{
 			Name:                "duplicate_object_keys_last_wins",
-			OracleBehavior:      "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A plain duplicate key INSIDE params is last-wins in both the oracle and the port (cases duplicate_key_inside_params and duplicate_params_*), and a wrong-typed earlier duplicate there fails the decode with -32602 in both, as encoding/json does; neither is a divergence. A duplicate inside an id or an unknown top-level key is also accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. Duplicates nested inside tools/call arguments are carried as raw bytes to the tool layer in both implementations and are covered by the MCP-002/003 fixtures, not here.",
+			OracleBehavior:      "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A plain duplicate key INSIDE params is last-wins in both the oracle and the port (cases duplicate_key_inside_params and duplicate_params_*), and a wrong-typed earlier duplicate there fails the decode with -32602 in both, as encoding/json does; neither is a divergence. A duplicate inside an id or an unknown top-level key is also accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. NOT covered here: tools/call. Go keeps arguments as a json.RawMessage; Rust re-parses them as a serde_json::Value (last-wins per object like encoding/json into a map, but duplicate-key fidelity INSIDE arguments is untested), and a Value nests at most 128 levels where Go accepts up to 10000, so deeper arguments are -32602 in Rust (declared in ADR 0034 item 15). tools/call is not exercised by this fixture at all: the oracle answers 'vault locked' before it decodes params when no tool runtime is attached.",
 			OracleStdoutB64Note: strings.TrimSuffix(dupOut, "\n"),
 			RustBehavior:        "Rust answers -32700 and does not dispatch the frame.",
 			Rationale:           "serde rejects duplicate struct fields and the adjudication keeps that rather than relaxing it to match. Last-wins is the classic duplicate-key smuggling shape: an intermediary that logs, audits or applies policy to a frame reads the first occurrence while the server acts on the last, so the two disagree about what was requested. SymVault has exactly such a policy and audit layer, which makes this security-relevant rather than cosmetic. Rejecting is the stricter side, and the migration contract names duplicate keys as a case to decide deliberately rather than inherit. Recorded, not silent; reversing it is a coordinator decision.",

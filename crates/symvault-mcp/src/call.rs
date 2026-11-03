@@ -2373,10 +2373,20 @@ impl<'de> Visitor<'de> for CallParamsVisitor {
             name: String::new(),
             arguments: Value::Object(Map::new()),
         };
-        while let Some((key, value)) = map.next_entry::<String, Value>()? {
+        // Members are read as raw text first: an unknown member is skipped
+        // without building a `Value` (so it may nest as deeply as the frame
+        // guard allows, like `encoding/json`'s skip), and only `name` and
+        // `arguments` are parsed.
+        while let Some((key, raw)) = map.next_entry::<String, Box<serde_json::value::RawValue>>()? {
             // encoding/json's field matching is case-insensitive and folds
             // the two non-ASCII runes that share ASCII simple-fold classes.
             let key = key.replace('ſ', "s").replace('K', "k");
+            let selected =
+                key.eq_ignore_ascii_case("name") || key.eq_ignore_ascii_case("arguments");
+            if !selected {
+                continue;
+            }
+            let value: Value = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
             if key.eq_ignore_ascii_case("name") {
                 match value {
                     Value::String(name) => result.name = name,
@@ -2406,8 +2416,12 @@ impl<'de> Deserialize<'de> for CallParams {
 }
 
 pub(crate) fn parse_params(raw: Option<&str>) -> Result<(String, Value), String> {
+    // `encoding/json` decodes a lone surrogate escape to U+FFFD; serde rejects it.
     let params = raw
-        .map_or_else(|| Ok(CallParams::default()), serde_json::from_str)
+        .map_or_else(
+            || Ok(CallParams::default()),
+            |text| serde_json::from_str(&crate::go_params::replace_lone_surrogates(text)),
+        )
         .map_err(|err| err.to_string())?;
     Ok((params.name, params.arguments))
 }
@@ -2521,5 +2535,36 @@ mod params_duplicate_tests {
         ))
         .expect("duplicate arguments decode");
         assert_eq!(arguments, serde_json::json!({"b": 2}));
+    }
+
+    /// `encoding/json` decodes a lone surrogate escape to U+FFFD and skips an
+    /// unknown member however deeply it nests (up to the 10000-level frame
+    /// limit); neither may fail the `tools/call` decode. Source-read against
+    /// `handleToolsCall`, not recorded: the oracle answers "vault locked"
+    /// before it decodes params when no tool runtime is attached.
+    #[test]
+    fn lone_surrogates_decode_and_unknown_members_skip_without_recursion() {
+        let (name, arguments) = parse_params(Some(
+            r#"{"name":"a\uD800b","arguments":{"k\uDC00":"\uD800"}}"#,
+        ))
+        .expect("lone surrogates decode");
+        assert_eq!(name, "a\u{FFFD}b");
+        assert_eq!(arguments, serde_json::json!({"k\u{FFFD}": "\u{FFFD}"}));
+
+        let deep = format!("{}{}", "[".repeat(9_000), "]".repeat(9_000));
+        let (name, _) = parse_params(Some(&format!(
+            r#"{{"name":"x","zz":{deep},"ZZ":{{"y":{deep}}}}}"#
+        )))
+        .expect("an unknown member is skipped, not decoded");
+        assert_eq!(name, "x");
+    }
+
+    /// Declared difference (ADR 0034 item 15): `arguments` is parsed into a
+    /// `serde_json::Value`, whose nesting is capped at 128 levels, where Go
+    /// keeps it raw and accepts up to 10000.
+    #[test]
+    fn arguments_nested_beyond_the_value_recursion_limit_are_rejected() {
+        let deep = format!("{}{}", "[".repeat(200), "]".repeat(200));
+        assert!(parse_params(Some(&format!(r#"{{"name":"x","arguments":{deep}}}"#))).is_err());
     }
 }
