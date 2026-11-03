@@ -25,11 +25,26 @@ type caseSpec struct {
 	// recorded as their members.
 	archives []string
 	post     [][]string
+	// read lists sandbox-root-relative file paths whose text after the case is
+	// recorded (files_after), so a divergence in what a command writes is
+	// evidenced by Go's text and not only by a digest.
+	read []string
+	// declared marks a case on which the native CLI is known to differ and the
+	// divergence is ratified (ADR 0034 item): the Rust replay compares the
+	// native run with the values it declares for the case.
+	declared string
+	// crash marks a case on which the pinned oracle panics with a nil
+	// dereference (exit 2); only the panic header and the first frame of the
+	// program are recorded.
+	crash bool
 }
 
 func argv(args ...string) seedStep { return seedStep{Argv: args} }
 
 const (
+	// globalConfigFile is the sandbox-relative path of ~/.symvault/config.yaml.
+	globalConfigFile = "home/.symvault/config.yaml"
+
 	// A valid age X25519 recipient (the public example key of the age tool).
 	ageKey = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
 
@@ -83,7 +98,7 @@ func allResiduals() []residual {
 		{Path: "device approval-pair", Reason: "needs a running `symvault serve` and an interactive pairing peer", Partial: "approval-pair-offline: the 'could not find the running server's port' refusal; the live pairing is byte-compared by approval_pair_differential"},
 		{Path: "device accept", Reason: "accepting needs the response artifact of a joining device (a second live vault)", Partial: "device-accept-missing: the 'no join request found' refusal"},
 		{Path: "device join", Reason: "joining clones a git remote or consumes a pairing file produced by another device", Partial: "device-join-initialized: the 'vault already initialized' refusal; device-join-missing-file: the unreadable pairing file refusal"},
-		{Path: "remote init", Reason: "the pinned Go oracle panics (nil pointer dereference in cmd.enableAutoPush, goroutine trace with host paths) when the vault has no sync config, so there is no stable Go byte stream to match; initializing a remote also needs an SSH peer", Partial: "remote-init-usage: the usage refusal before the panicking branch"},
+		{Path: "remote init", Reason: "the pinned Go oracle panics (nil pointer dereference in cmd.enableAutoPush, goroutine trace with host paths) when the vault has no sync config, so there is no stable Go byte stream to match; initializing a remote also needs an SSH peer", Partial: "remote-init-usage: the usage refusal before the panicking branch; remote-init-no-git-section and remote-init-no-global-config: the panic header and first frame, with the native result declared (ADR 0034 item 8)"},
 	}
 }
 
@@ -248,6 +263,34 @@ func allCaseSpecs() []caseSpec {
 		add(caseSpec{id: "config-set-file-" + pre.id, path: "config set", desc: "set a key in a file with " + pre.desc, seed: "entries", modes: text, argv: flags("config", "set", "vaultDir", "/y"),
 			files: []workFile{{Name: "../home/.symvault/config.yaml", Text: pre.config}}})
 	}
+	// ADR 0034 item 3: `config set` re-coerces some plain scalars; the native CLI
+	// keeps the text the operator typed. Go's text is recorded here
+	// (files_after); the replay declares what the native CLI writes instead.
+	const item3 = "ADR 0034 item 3"
+	for _, v := range []struct{ id, key, value, desc string }{
+		{"1e3", "mcp.port", "1e3", "1e3 for an int key (Go writes the integer 1000)"},
+		{"y", "vaultDir", "y", "a bare y (Go quotes it: it is a YAML 1.1 boolean word)"},
+		{"timestamp", "vaultDir", "2026-10-31", "a plain date (Go writes the timestamp 2026-10-31T00:00:00Z)"},
+		{"merge", "vaultDir", "<<", "the merge key << (Go writes it with the !!merge tag)"},
+	} {
+		add(caseSpec{id: "config-set-recoerce-" + v.id, path: "config set", desc: "set " + v.desc, seed: "entries", modes: text, declared: item3,
+			argv: flags("config", "set", v.key, v.value), read: []string{globalConfigFile}, post: [][]string{{"config", "get", v.key}}})
+	}
+	// ADR 0034 item 5: how `config set` re-encodes the rest of the file and
+	// attributes a later typed-decode error. The key being set is not affected.
+	const item5 = "ADR 0034 item 5"
+	for _, pre := range []struct{ id, config, desc string }{
+		{"unicode-escape", "x: \"caf\\u00e9\"\n", "a \\u00e9 escape in a double-quoted scalar (Go writes the character)"},
+		{"flow-sequence-spacing", "x: [a,b]\n", "a flow sequence without spaces (Go writes `[a, b]`)"},
+		{"flow-timestamp", "mcp: {read_timeout: 2026-10-31T10:00:00Z, port: 1}\n", "a timestamp in a flow mapping (Go quotes it, so the error says !!str)"},
+		{"anchor-redefined", "a: &x abc\nsessionTimeout: *x\nb: &x 1\n", "an anchor defined twice (Go resolves the alias to the first definition, line 1)"},
+		{"anchor-comment", "a: &a # c\n  p: 1\nsessionTimeout: *a\n", "an anchor followed by a comment (Go moves the comment and reports line 1)"},
+		{"binary-time", "vault:\n  last_rotated: !!binary /w==\n", "a !!binary scalar for the time.Time key (Go prints the decoded byte)"},
+	} {
+		add(caseSpec{id: "config-set-residue-" + pre.id, path: "config set", desc: "set a key in a file with " + pre.desc, seed: "entries", modes: text, declared: item5,
+			argv: flags("config", "set", "vaultDir", "/y"), read: []string{globalConfigFile},
+			files: []workFile{{Name: "../home/.symvault/config.yaml", Text: pre.config}}})
+	}
 	// A config file that cannot be read: Go names the failed syscall and repeats
 	// the cause (text mode only; the wording does not depend on the mode flags).
 	add(caseSpec{id: "config-get-missing-file", path: "config get", desc: "get from a config file that does not exist", seed: "entries", modes: text, argv: flags("config", "get", "x", "--file", "$ROOT/work/missing.yaml")})
@@ -301,6 +344,12 @@ func allCaseSpecs() []caseSpec {
 		files: []workFile{{Name: "bin/hermes", Text: "#!/bin/sh\nexit 0\n", Mode: "755"}}})
 	add(caseSpec{id: "agent-profile-show", path: "agent profile show", desc: "show a profile", seed: "entries", argv: flags("agent", "profile", "show", "hermes")})
 	add(caseSpec{id: "agent-profile-show-missing", path: "agent profile show", desc: "show an unknown profile", seed: "entries", argv: flags("agent", "profile", "show", "nope")})
+	// ADR 0034 item 10: a duplicate agent key reached through an alias. Go loads
+	// the config (the second entry wins); the native `show` re-reads the raw YAML
+	// for the field set and refuses the duplicate.
+	add(caseSpec{id: "agent-profile-show-duplicate-alias", path: "agent profile show", desc: "show a profile whose key is defined twice through an alias", seed: "entries", modes: text, declared: "ADR 0034 item 10",
+		argv:  flags("agent", "profile", "show", "x"),
+		files: []workFile{{Name: "../home/vault/config.yaml", Text: "agents:\n  &a x:\n    canWrite: true\n  *a :\n    canWrite: false\n"}}})
 	add(caseSpec{id: "agent-profile-export", path: "agent profile export", desc: "export a profile to stdout", seed: "entries", argv: flags("agent", "profile", "export", "hermes")})
 	add(caseSpec{id: "agent-profile-export-file", path: "agent profile export", desc: "export a profile to a file", seed: "entries", argv: flags("agent", "profile", "export", "hermes", "-o", "hermes.yaml"), modes: []string{"text", "quiet"}})
 	// os.Create fails with `create output file: open <path>: <cause>`.
@@ -352,6 +401,16 @@ func allCaseSpecs() []caseSpec {
 	// --- remote --------------------------------------------------------------
 	add(caseSpec{id: "remote-status", path: "remote status", desc: "no remote configured", seed: "entries", argv: flags("remote", "status")})
 	add(caseSpec{id: "remote-init-usage", path: "remote init", desc: "remote init without a target", seed: "entries", argv: flags("remote", "init")})
+	// ADR 0034 item 8: `remote init` when the global config has no usable git
+	// section. The pinned oracle adds the remote and then dereferences a nil
+	// pointer in cmd.enableAutoPush (exit 2, goroutine trace); the native CLI
+	// enables auto_push in the config and succeeds.
+	add(caseSpec{id: "remote-init-no-git-section", path: "remote init", desc: "remote init with a global config that has no git section", seed: "entries", modes: text, declared: "ADR 0034 item 8", crash: true,
+		argv: flags("remote", "init", "user@example.test"), read: []string{globalConfigFile},
+		files: []workFile{{Name: "../home/.symvault/config.yaml", Text: "sessionTimeout: 15m\n"}}})
+	add(caseSpec{id: "remote-init-no-global-config", path: "remote init", desc: "remote init without a global config file", seed: "entries", modes: text, declared: "ADR 0034 item 8", crash: true,
+		argv: flags("remote", "init", "user@example.test"), read: []string{globalConfigFile},
+		files: []workFile{{Name: "../home/.symvault/config.yaml", Remove: true}}})
 
 	// --- template ------------------------------------------------------------
 	add(caseSpec{id: "template-generate-dry-run", path: "template generate", desc: "env template of a prefix, masked", seed: "entries", argv: flags("template", "generate", "--type", "env", "--prefix", "work/", "--dry-run")})

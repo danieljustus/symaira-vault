@@ -25,6 +25,11 @@ change's working tree and its `MANIFEST.json` sha256/bytes are updated; the
   cases (`010`, `017`, `0b11`, `0b101`, `1_000`; ADR 0034 item 4) added to the
   output-modes corpus, so the snapshot no longer equals
   `git show <commit>:scripts/rust-port/cmd/outputmodegen/cases.go`.
+- `scripts/rust-port/cmd/outputmodegen/{cases,main}.go` (again): the generator
+  records declared divergences (ADR 0034 items 3, 5, 8, 10): the new `read`,
+  `declared` and `crash` case fields, the `remove` work file, the `files_after`
+  and `declared_divergence` case fields and the `crashHeader` reduction of a Go
+  panic. Thirteen cases were added to the corpus.
 - `scripts/rust-port/cmd/outputmodegen/cases.go` (again): eighteen `get <query>`
   search-fallback scenarios (CLI-002/CLI-006: single and multiple hits, path and
   field matches, the lone `-`, no match, invalid paths, `--print` and `--length`)

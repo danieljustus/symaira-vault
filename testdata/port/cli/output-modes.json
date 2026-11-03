@@ -110,7 +110,7 @@
       "scripts/rust-port/cmd/outputmodegen/cases.go",
       "scripts/rust-port/cmd/outputmodegen/main.go"
     ],
-    "generator_digest": "50bda393d071061ed970a57cdd035a99d5197ca271f86e3639fa68a7dc883a87",
+    "generator_digest": "8d96042699dc9536e780fe5fac693597cd00f2630b6d2f0f83a175e1cf67607a",
     "gate_digest": "c2536c1ffaf681feaa8fa8824f7e302e9633b2c2711c9ecd98531283064e51f1",
     "goos": "darwin"
   },
@@ -2392,7 +2392,7 @@
     {
       "path": "remote init",
       "reason": "the pinned Go oracle panics (nil pointer dereference in cmd.enableAutoPush, goroutine trace with host paths) when the vault has no sync config, so there is no stable Go byte stream to match; initializing a remote also needs an SSH peer",
-      "partial": "remote-init-usage: the usage refusal before the panicking branch"
+      "partial": "remote-init-usage: the usage refusal before the panicking branch; remote-init-no-git-section and remote-init-no-global-config: the panic header and first frame, with the native result declared (ADR 0034 item 8)"
     }
   ],
   "cases": [
@@ -16886,6 +16886,426 @@
       ]
     },
     {
+      "id": "config-set-recoerce-1e3.text",
+      "path": "config set",
+      "scenario": "config-set-recoerce-1e3",
+      "mode": "text",
+      "desc": "set 1e3 for an int key (Go writes the integer 1000)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "1e3"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 1e3\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "555b1a319fcf2e933f4b9113d367f4f672f98fe84e36d3f4c75cdbae2298c76b",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "1000\n"
+        }
+      ],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "agents:\n  claude-code:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.claude/skills/symvault/SKILL.md\n  cli:\n    approvalMode: none\n    allowedPaths:\n      - '*'\n    canWrite: true\n    exposeValueTools: true\n    requireApproval: false\n  codex:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.codex/skills/symvault/AGENTS.md\n  default:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: false\n    exposeValueTools: true\n    autoUnseal: false\n  hermes:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.hermes/skills/symvault/SKILL.md\n  openclaw:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.openclaw/skills/symvault/SKILL.md\n  opencode:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n  authMethod: passphrase\n  legacy_mode: false\n  search_index: true\n  scrypt_work_factor: 18\n  auto_heal_zero_key: true\n  format_version: 1\ngit:\n  commit_template: Update from Symaira Vault\n  auto_push: true\n  auto_pull: true\n  auto_pull_interval: 10s\nvaultDir: $ROOT/home/vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nmcp:\n  port: 1000\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 3"
+    },
+    {
+      "id": "config-set-recoerce-y.text",
+      "path": "config set",
+      "scenario": "config-set-recoerce-y",
+      "mode": "text",
+      "desc": "set a bare y (Go quotes it: it is a YAML 1.1 boolean word)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "3a9e6c54707dcb4d79132d57208fe974606f020cebaba1676bd22d168d28f266",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "vaultDir"
+          ],
+          "exit": 0,
+          "stdout": "y\n"
+        }
+      ],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "agents:\n  claude-code:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.claude/skills/symvault/SKILL.md\n  cli:\n    approvalMode: none\n    allowedPaths:\n      - '*'\n    canWrite: true\n    exposeValueTools: true\n    requireApproval: false\n  codex:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.codex/skills/symvault/AGENTS.md\n  default:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: false\n    exposeValueTools: true\n    autoUnseal: false\n  hermes:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.hermes/skills/symvault/SKILL.md\n  openclaw:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.openclaw/skills/symvault/SKILL.md\n  opencode:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n  authMethod: passphrase\n  legacy_mode: false\n  search_index: true\n  scrypt_work_factor: 18\n  auto_heal_zero_key: true\n  format_version: 1\ngit:\n  commit_template: Update from Symaira Vault\n  auto_push: true\n  auto_pull: true\n  auto_pull_interval: 10s\nvaultDir: \"y\"\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 3"
+    },
+    {
+      "id": "config-set-recoerce-timestamp.text",
+      "path": "config set",
+      "scenario": "config-set-recoerce-timestamp",
+      "mode": "text",
+      "desc": "set a plain date (Go writes the timestamp 2026-10-31T00:00:00Z)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "2026-10-31"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = 2026-10-31\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e59eb0257829229da6019ef2c469e9f440622cb825e19a03ce9689f63548cb49",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "vaultDir"
+          ],
+          "exit": 0,
+          "stdout": "2026-10-31T00:00:00Z\n"
+        }
+      ],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "agents:\n  claude-code:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.claude/skills/symvault/SKILL.md\n  cli:\n    approvalMode: none\n    allowedPaths:\n      - '*'\n    canWrite: true\n    exposeValueTools: true\n    requireApproval: false\n  codex:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.codex/skills/symvault/AGENTS.md\n  default:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: false\n    exposeValueTools: true\n    autoUnseal: false\n  hermes:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.hermes/skills/symvault/SKILL.md\n  openclaw:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.openclaw/skills/symvault/SKILL.md\n  opencode:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n  authMethod: passphrase\n  legacy_mode: false\n  search_index: true\n  scrypt_work_factor: 18\n  auto_heal_zero_key: true\n  format_version: 1\ngit:\n  commit_template: Update from Symaira Vault\n  auto_push: true\n  auto_pull: true\n  auto_pull_interval: 10s\nvaultDir: 2026-10-31T00:00:00Z\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 3"
+    },
+    {
+      "id": "config-set-recoerce-merge.text",
+      "path": "config set",
+      "scenario": "config-set-recoerce-merge",
+      "mode": "text",
+      "desc": "set the merge key << (Go writes it with the !!merge tag)",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "<<"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = <<\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "0596f7c5f1dd2df82d5868f44b4c5dfb8b262fd265e3c1021ddd62e1906da6d6",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "vaultDir"
+          ],
+          "exit": 0,
+          "stdout": "<<\n"
+        }
+      ],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "agents:\n  claude-code:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.claude/skills/symvault/SKILL.md\n  cli:\n    approvalMode: none\n    allowedPaths:\n      - '*'\n    canWrite: true\n    exposeValueTools: true\n    requireApproval: false\n  codex:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.codex/skills/symvault/AGENTS.md\n  default:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: false\n    exposeValueTools: true\n    autoUnseal: false\n  hermes:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.hermes/skills/symvault/SKILL.md\n  openclaw:\n    approvalMode: deny\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.openclaw/skills/symvault/SKILL.md\n  opencode:\n    approvalMode: deny\n    canWrite: false\n    canRunCommands: true\n    exposeValueTools: true\n    autoUnseal: false\n    skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n  authMethod: passphrase\n  legacy_mode: false\n  search_index: true\n  scrypt_work_factor: 18\n  auto_heal_zero_key: true\n  format_version: 1\ngit:\n  commit_template: Update from Symaira Vault\n  auto_push: true\n  auto_pull: true\n  auto_pull_interval: 10s\nvaultDir: !!merge <<\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 3"
+    },
+    {
+      "id": "config-set-residue-unicode-escape.text",
+      "path": "config set",
+      "scenario": "config-set-residue-unicode-escape",
+      "mode": "text",
+      "desc": "set a key in a file with a \\u00e9 escape in a double-quoted scalar (Go writes the character)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "x: \"caf\\u00e9\"\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = /y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "704208c14f41b7029da83294fa3619b7400cba625686365dfd36bfba2380fe56",
+          "mode": 384
+        }
+      ],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "x: \"café\"\nvaultDir: /y\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 5"
+    },
+    {
+      "id": "config-set-residue-flow-sequence-spacing.text",
+      "path": "config set",
+      "scenario": "config-set-residue-flow-sequence-spacing",
+      "mode": "text",
+      "desc": "set a key in a file with a flow sequence without spaces (Go writes `[a, b]`)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "x: [a,b]\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 0,
+      "stdout": "Set vaultDir = /y\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "24b2ea40d4b04b51453d4af0524b079d5de7212dab3c83164bb1e56a22fd4076",
+          "mode": 384
+        }
+      ],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "x: [a, b]\nvaultDir: /y\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 5"
+    },
+    {
+      "id": "config-set-residue-flow-timestamp.text",
+      "path": "config set",
+      "scenario": "config-set-residue-flow-timestamp",
+      "mode": "text",
+      "desc": "set a key in a file with a timestamp in a flow mapping (Go quotes it, so the error says !!str)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "mcp: {read_timeout: 2026-10-31T10:00:00Z, port: 1}\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `2026-10...` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `2026-10...` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `2026-10...` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `2026-10...` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "a76ccdcb43ccca495c53e432372facb5eaeb9888c8656a3fc7b4c8c95dfff278",
+          "mode": 384
+        }
+      ],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "mcp: {read_timeout: '2026-10-31T10:00:00Z', port: 1}\nvaultDir: /y\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 5"
+    },
+    {
+      "id": "config-set-residue-anchor-redefined.text",
+      "path": "config set",
+      "scenario": "config-set-residue-anchor-redefined",
+      "mode": "text",
+      "desc": "set a key in a file with an anchor defined twice (Go resolves the alias to the first definition, line 1)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "a: &x abc\nsessionTimeout: *x\nb: &x 1\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `abc` into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "733dce6a704526b68df240d288873c227be84093171acbc4798d2429ddf8b860",
+          "mode": 384
+        }
+      ],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "a: &x abc\nsessionTimeout: *x\nb: &x 1\nvaultDir: /y\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 5"
+    },
+    {
+      "id": "config-set-residue-anchor-comment.text",
+      "path": "config set",
+      "scenario": "config-set-residue-anchor-comment",
+      "mode": "text",
+      "desc": "set a key in a file with an anchor followed by a comment (Go moves the comment and reports line 1)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "a: &a # c\n  p: 1\nsessionTimeout: *a\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!map into time.Duration\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "24125a0865b2c5fbdd232e619b14f875330dd90393af4eca2e33636cca86ba20",
+          "mode": 384
+        }
+      ],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "a: &a\n  p: 1 # c\nsessionTimeout: *a\nvaultDir: /y\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 5"
+    },
+    {
+      "id": "config-set-residue-binary-time.text",
+      "path": "config set",
+      "scenario": "config-set-residue-binary-time",
+      "mode": "text",
+      "desc": "set a key in a file with a !!binary scalar for the time.Time key (Go prints the decoded byte)",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "vault:\n  last_rotated: !!binary /w==\n"
+        }
+      ],
+      "argv": [
+        "config",
+        "set",
+        "vaultDir",
+        "/y"
+      ],
+      "exit": 6,
+      "stdout": "",
+      "stderr": "Error: config is invalid after update: parsing time \"\\xff\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\\xff\" as \"2006\": parsing time \"\\xff\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\\xff\" as \"2006\"\nError: config is invalid after update: parsing time \"\\xff\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\\xff\" as \"2006\": parsing time \"\\xff\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\\xff\" as \"2006\"\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "4229e91df9435a64885df5bf07e6e2b01cfea258a4cea9cf59afaf87b0fec497",
+          "mode": 384
+        }
+      ],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "vault:\n  last_rotated: !!binary /w==\nvaultDir: /y\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 5"
+    },
+    {
       "id": "config-get-missing-file.text",
       "path": "config get",
       "scenario": "config-get-missing-file",
@@ -18508,6 +18928,31 @@
       "stdout": "",
       "stderr": "Error: agent \"nope\" not found in config\nError: agent \"nope\" not found in config\n",
       "tree": []
+    },
+    {
+      "id": "agent-profile-show-duplicate-alias.text",
+      "path": "agent profile show",
+      "scenario": "agent-profile-show-duplicate-alias",
+      "mode": "text",
+      "desc": "show a profile whose key is defined twice through an alias",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/vault/config.yaml",
+          "text": "agents:\n  &a x:\n    canWrite: true\n  *a :\n    canWrite: false\n"
+        }
+      ],
+      "argv": [
+        "agent",
+        "profile",
+        "show",
+        "x"
+      ],
+      "exit": 0,
+      "stdout": "canWrite: false\nexposeValueTools: true\n",
+      "stderr": "",
+      "tree": [],
+      "declared_divergence": "ADR 0034 item 10"
     },
     {
       "id": "agent-profile-export.text",
@@ -21354,6 +21799,67 @@
       "stdout": "",
       "stderr": "Error: accepts 1 arg(s), received 0\nError: accepts 1 arg(s), received 0\n",
       "tree": []
+    },
+    {
+      "id": "remote-init-no-git-section.text",
+      "path": "remote init",
+      "scenario": "remote-init-no-git-section",
+      "mode": "text",
+      "desc": "remote init with a global config that has no git section",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "text": "sessionTimeout: 15m\n"
+        }
+      ],
+      "argv": [
+        "remote",
+        "init",
+        "user@example.test"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "panic: runtime error: invalid memory address or nil pointer dereference\n[signal SIGSEGV: segmentation violation code=0x2 addr=0x30 pc=<PC>]\n<goroutine trace elided; first frame of the module: github.com/danieljustus/symaira-vault/cmd.enableAutoPush>\n",
+      "tree": [],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": true,
+          "text": "sessionTimeout: 15m\n"
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 8"
+    },
+    {
+      "id": "remote-init-no-global-config.text",
+      "path": "remote init",
+      "scenario": "remote-init-no-global-config",
+      "mode": "text",
+      "desc": "remote init without a global config file",
+      "seed": "entries",
+      "files": [
+        {
+          "name": "../home/.symvault/config.yaml",
+          "remove": true
+        }
+      ],
+      "argv": [
+        "remote",
+        "init",
+        "user@example.test"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "panic: runtime error: invalid memory address or nil pointer dereference\n[signal SIGSEGV: segmentation violation code=0x2 addr=0x30 pc=<PC>]\n<goroutine trace elided; first frame of the module: github.com/danieljustus/symaira-vault/cmd.enableAutoPush>\n",
+      "tree": [],
+      "files_after": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "exists": false
+        }
+      ],
+      "declared_divergence": "ADR 0034 item 8"
     },
     {
       "id": "template-generate-dry-run.text",

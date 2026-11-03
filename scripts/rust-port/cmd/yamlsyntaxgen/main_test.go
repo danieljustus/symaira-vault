@@ -46,7 +46,7 @@ func TestCorpusIsWellFormed(t *testing.T) {
 			t.Fatalf("open divergence %q records no command", entry.name)
 		}
 		for _, command := range entry.commands {
-			if _, ok := lookupSpec(command); !ok && command != "doctor" && command != "agent_list" {
+			if _, ok := lookupSpec(command); !ok && command != "doctor" && command != "agent_list" && !isHomeCommand(command) {
 				t.Fatalf("open divergence %q records unknown command %q", entry.name, command)
 			}
 		}
@@ -105,4 +105,9 @@ func TestSandboxNormalizesRootsAndRejectsNonUTF8(t *testing.T) {
 	if _, err := box.normalize([]byte{0xff}); err == nil {
 		t.Fatal("non-UTF-8 oracle output accepted")
 	}
+}
+
+func isHomeCommand(name string) bool {
+	_, ok := lookupHomeSpec(name)
+	return ok
 }

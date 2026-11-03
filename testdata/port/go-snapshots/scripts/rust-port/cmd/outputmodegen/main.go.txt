@@ -188,6 +188,18 @@ type workFile struct {
 	Dir  bool   `json:"dir,omitempty"`
 	// Link makes the entry a symbolic link to this target ($ROOT expands).
 	Link string `json:"link,omitempty"`
+	// Remove deletes a file the seed placed (Name is relative to the work
+	// directory, like every entry).
+	Remove bool `json:"remove,omitempty"`
+}
+
+// fileText is the observed text of one sandbox file after a case (rule 1
+// applied), or its absence. A case lists the paths in caseSpec.read; the replay
+// compares them, and a declared divergence states the native text instead.
+type fileText struct {
+	Path   string `json:"path"`
+	Exists bool   `json:"exists"`
+	Text   string `json:"text,omitempty"`
 }
 
 type step struct {
@@ -353,6 +365,13 @@ type caseResult struct {
 	StderrB64 string      `json:"stderr_b64,omitempty"`
 	Tree      []treeEntry `json:"tree"`
 	Post      []step      `json:"post,omitempty"`
+	// FilesAfter is the text of the paths the case lists in `read`.
+	FilesAfter []fileText `json:"files_after,omitempty"`
+	// Declared names the ratified divergence (ADR 0034 item) the native CLI is
+	// known to show on this case. The Rust replay compares the native run with
+	// the values it declares for the case instead of with this recording, and
+	// fails the day the native run matches the recording.
+	Declared string `json:"declared_divergence,omitempty"`
 }
 
 // residual records a path (or one of its modes) the matrix cannot pin
@@ -1109,6 +1128,12 @@ func (s *sandbox) materializeFiles(files []workFile) error {
 			}
 			continue
 		}
+		if file.Remove {
+			if err := os.Remove(target); err != nil {
+				return err
+			}
+			continue
+		}
 		if file.Link != "" {
 			if err := os.Symlink(strings.ReplaceAll(file.Link, rootMarker, s.root), target); err != nil {
 				return err
@@ -1257,14 +1282,28 @@ func runCase(goBinary string, seeds map[string]seedResult, spec caseSpec, mode s
 	if !utf8.ValidString(result.Stderr) {
 		result.StderrB64 = base64.StdEncoding.EncodeToString([]byte(result.Stderr))
 	}
+	if spec.crash {
+		// A declared Go crash (ADR 0034 item 8): the goroutine trace carries the
+		// build host's paths and program counters, so only the panic header
+		// and the first frame of the program are recorded.
+		stderr, err := crashHeader(result.Stderr)
+		if err != nil {
+			return caseResult{}, fmt.Errorf("case %s: %w", result.ID, err)
+		}
+		if result.Exit != 2 {
+			return caseResult{}, fmt.Errorf("case %s: declared crash exited %d, want 2", result.ID, result.Exit)
+		}
+		result.Stderr = stderr
+	}
 	for _, text := range []string{result.Stdout, result.Stderr} {
 		if strings.Contains(text, "level=WARN") || strings.Contains(text, "level=ERROR") || wallClockLine(text) {
 			return caseResult{}, fmt.Errorf("case %s: oracle emitted a wall-clock log line: %q", result.ID, text)
 		}
-		if strings.Contains(text, "goroutine ") {
+		if !spec.crash && strings.Contains(text, "goroutine ") {
 			return caseResult{}, fmt.Errorf("case %s: oracle crashed: %q", result.ID, text)
 		}
 	}
+	result.Declared = spec.declared
 	after, err := box.snapshot()
 	if err != nil {
 		return caseResult{}, err
@@ -1273,6 +1312,16 @@ func runCase(goBinary string, seeds map[string]seedResult, spec caseSpec, mode s
 		vol.token = pairTokenFromTree(after)
 	}
 	result.Tree = diffTrees(before, after, vol)
+	for _, rel := range spec.read {
+		node, ok := after[rel]
+		file := fileText{Path: rel}
+		if ok && node.hasData {
+			file.Exists, file.Text = true, vol.apply(node.content)
+		} else if ok {
+			return caseResult{}, fmt.Errorf("case %s: read path %s has no text", result.ID, rel)
+		}
+		result.FilesAfter = append(result.FilesAfter, file)
+	}
 	for _, post := range spec.post {
 		out, err := box.run(post, nil, "")
 		if err != nil {
@@ -1281,6 +1330,40 @@ func runCase(goBinary string, seeds map[string]seedResult, spec caseSpec, mode s
 		result.Post = append(result.Post, step{Argv: post, Exit: out.exit, Stdout: vol.apply(box.normalize(out.stdout))})
 	}
 	return result, nil
+}
+
+// crashHeader reduces a Go panic report to its stable part: the panic line, the
+// signal line with the program counter masked, and the first frame inside this
+// module. The goroutine trace itself is replaced by a one-line marker.
+func crashHeader(stderr string) (string, error) {
+	const header = "panic: runtime error: invalid memory address or nil pointer dereference\n"
+	if !strings.HasPrefix(stderr, header) {
+		return "", fmt.Errorf("stderr is not a nil dereference panic: %q", stderr)
+	}
+	head, trace, ok := strings.Cut(stderr, "\ngoroutine ")
+	if !ok {
+		return "", fmt.Errorf("panic without goroutine trace: %q", stderr)
+	}
+	lines := strings.Split(strings.TrimRight(head, "\n"), "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "[signal SIGSEGV") {
+			if at := strings.Index(line, " pc=0x"); at >= 0 {
+				lines[i] = line[:at] + " pc=<PC>]"
+			}
+		}
+	}
+	const module = "github.com/danieljustus/symaira-vault/"
+	frame := ""
+	for _, line := range strings.Split(trace, "\n") {
+		if strings.HasPrefix(line, module) {
+			frame = strings.TrimSuffix(line, "()")
+			break
+		}
+	}
+	if frame == "" {
+		return "", fmt.Errorf("panic trace has no frame of the module: %q", trace)
+	}
+	return strings.Join(lines, "\n") + "\n<goroutine trace elided; first frame of the module: " + frame + ">\n", nil
 }
 
 // wallClockLine detects the timestamped lines of Go's log package and slog.

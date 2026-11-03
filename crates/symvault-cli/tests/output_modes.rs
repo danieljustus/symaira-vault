@@ -62,6 +62,15 @@
 //!     that embeds the install clock) and a line `managed_installed_at:
 //!     "<RFC 3339 UTC>"` its stamp by `<NOW>`; both are install-time values.
 //!
+//! Declared divergences (ADR 0034). A case carrying `declared_divergence` is one
+//! on which the native CLI is ratified to differ from the Go oracle: the
+//! fixture holds Go's exit status, output, tree and the text of the files it
+//! lists in `files_after`, and the `DECLARED` table below holds what the native
+//! CLI must do instead, as an edit of Go's recorded text or as the full text.
+//! The replay fails when the native run differs from the declaration, when a
+//! declared value equals Go's (the divergence closed: remove the declaration)
+//! and when a case carries a label without a declaration or the reverse.
+//!
 //! Every tree entry also records the permission bits of files and directories
 //! (`mode`, compared as is); a file the case made unreadable (mode 000) has no
 //! content to hash and is recorded by kind and mode only. The binary runs under
@@ -80,7 +89,7 @@ use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
 
 const PASSPHRASE: &str = "correct horse battery staple";
-const EXPECTED_CASES: usize = 639;
+const EXPECTED_CASES: usize = 652;
 const EXPECTED_PATHS: usize = 47;
 const EXPECTED_SEEDS: usize = 6;
 /// The normalization rules, in the order of the numbered list above.
@@ -163,6 +172,18 @@ struct WorkFile {
     dir: bool,
     #[serde(default)]
     link: String,
+    /// Deletes a file the seed placed (`name` is relative to the work directory).
+    #[serde(default)]
+    remove: bool,
+}
+
+/// The text of one sandbox file after a case, or its absence.
+#[derive(Clone, Debug, Deserialize)]
+struct FileText {
+    path: String,
+    exists: bool,
+    #[serde(default)]
+    text: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -197,7 +218,7 @@ struct ArchiveMember {
     sha256: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 struct TreeEntry {
     path: String,
     change: String,
@@ -246,6 +267,10 @@ struct Case {
     tree: Vec<TreeEntry>,
     #[serde(default)]
     post: Vec<Step>,
+    #[serde(default)]
+    files_after: Vec<FileText>,
+    #[serde(default)]
+    declared_divergence: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -802,6 +827,10 @@ impl Sandbox {
                 std::fs::create_dir_all(&target).expect("work dir");
                 continue;
             }
+            if file.remove {
+                std::fs::remove_file(&target).expect("work remove");
+                continue;
+            }
             if !file.link.is_empty() {
                 #[cfg(unix)]
                 std::os::unix::fs::symlink(file.link.replace("$ROOT", &self.root_text()), &target)
@@ -1175,6 +1204,543 @@ fn compare(label: &str, want: &[u8], got: &[u8], problems: &mut Vec<String>) {
     }
 }
 
+// --- declared divergences (ADR 0034) -----------------------------------------------
+
+/// One exact replacement applied to Go's recorded text; `count` is the number of
+/// occurrences it must have there (so a drifting recording is noticed).
+struct Edit {
+    from: &'static str,
+    to: &'static str,
+    count: usize,
+}
+
+/// What the native CLI produces for one recorded value of Go.
+enum Text {
+    /// Equal to Go's recording (not a divergence).
+    Same,
+    /// Exactly this text.
+    Full(&'static str),
+    /// Go's recording with these replacements applied in order.
+    Edits(&'static [Edit]),
+    /// A declared full text with these replacements applied in order.
+    Of(&'static str, &'static [Edit]),
+}
+
+impl Text {
+    fn expect(&self, go: &str) -> Result<String, String> {
+        match self {
+            Self::Same => Ok(go.to_owned()),
+            Self::Full(text) => Ok((*text).to_owned()),
+            Self::Edits(edits) => Self::apply(go, edits),
+            Self::Of(base, edits) => Self::apply(base, edits),
+        }
+    }
+
+    fn apply(text: &str, edits: &[Edit]) -> Result<String, String> {
+        let mut out = text.to_owned();
+        for edit in edits {
+            let found = out.matches(edit.from).count();
+            if found != edit.count {
+                return Err(format!(
+                    "edit {:?}: found {found} times in the text, declared {}",
+                    edit.from, edit.count
+                ));
+            }
+            out = out.replace(edit.from, edit.to);
+        }
+        Ok(out)
+    }
+
+    fn is_declared(&self) -> bool {
+        !matches!(self, Self::Same)
+    }
+}
+
+/// A file the native CLI leaves different from Go's recording. `change` and
+/// `mode` describe its tree entry when Go's tree has none.
+struct DeclaredFile {
+    path: &'static str,
+    change: &'static str,
+    mode: u32,
+    text: Text,
+}
+
+struct Declared {
+    id: &'static str,
+    item: &'static str,
+    exit: Option<i32>,
+    stdout: Text,
+    stderr: Text,
+    files: &'static [DeclaredFile],
+    /// Follow-up commands (`post[index]`) whose stdout differs.
+    post: &'static [(usize, Text)],
+}
+
+const CONFIG: &str = "home/.symvault/config.yaml";
+const ITEM3: &str = "ADR 0034 item 3";
+const ITEM5: &str = "ADR 0034 item 5";
+const ITEM8: &str = "ADR 0034 item 8";
+const ITEM10: &str = "ADR 0034 item 10";
+
+/// Ratified native behaviour, one entry per case that carries a
+/// `declared_divergence` in the fixture (ADR 0034 items 3, 5, 8 and 10). The
+/// Go side of every entry is in the fixture, produced by `outputmodegen`.
+const DECLARED: &[Declared] = &[
+    // Item 3: `config set` keeps the scalar text the operator typed.
+    Declared {
+        id: "config-set-recoerce-1e3.text",
+        item: ITEM3,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Same,
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "changed",
+            mode: 0o600,
+            text: Text::Edits(&[Edit {
+                from: "  port: 1000\n",
+                to: "  port: 1000.0\n",
+                count: 1,
+            }]),
+        }],
+        post: &[(0, Text::Full("1000.0\n"))],
+    },
+    Declared {
+        id: "config-set-recoerce-y.text",
+        item: ITEM3,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Same,
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "changed",
+            mode: 0o600,
+            text: Text::Edits(&[Edit {
+                from: "vaultDir: \"y\"\n",
+                to: "vaultDir: y\n",
+                count: 1,
+            }]),
+        }],
+        post: &[],
+    },
+    Declared {
+        id: "config-set-recoerce-timestamp.text",
+        item: ITEM3,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Same,
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "changed",
+            mode: 0o600,
+            text: Text::Edits(&[Edit {
+                from: "vaultDir: 2026-10-31T00:00:00Z\n",
+                to: "vaultDir: 2026-10-31\n",
+                count: 1,
+            }]),
+        }],
+        post: &[(0, Text::Full("2026-10-31\n"))],
+    },
+    Declared {
+        id: "config-set-recoerce-merge.text",
+        item: ITEM3,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Same,
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "changed",
+            mode: 0o600,
+            text: Text::Edits(&[Edit {
+                from: "vaultDir: !!merge <<\n",
+                to: "vaultDir: \"<<\"\n",
+                count: 1,
+            }]),
+        }],
+        post: &[],
+    },
+    // Item 5: re-encode and typed-decode residue.
+    Declared {
+        id: "config-set-residue-unicode-escape.text",
+        item: ITEM5,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Same,
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "changed",
+            mode: 0o600,
+            text: Text::Edits(&[Edit {
+                from: "x: \"café\"\n",
+                to: "x: \"caf\\u00e9\"\n",
+                count: 1,
+            }]),
+        }],
+        post: &[],
+    },
+    Declared {
+        id: "config-set-residue-flow-sequence-spacing.text",
+        item: ITEM5,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Same,
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "changed",
+            mode: 0o600,
+            text: Text::Edits(&[Edit {
+                from: "x: [a, b]\n",
+                to: "x: [a,b]\n",
+                count: 1,
+            }]),
+        }],
+        post: &[],
+    },
+    Declared {
+        id: "config-set-residue-flow-timestamp.text",
+        item: ITEM5,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Edits(&[Edit {
+            from: "!!str `2026-10...`",
+            to: "!!timestamp `2026-10...`",
+            count: 4,
+        }]),
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "changed",
+            mode: 0o600,
+            text: Text::Edits(&[Edit {
+                from: "{read_timeout: '2026-10-31T10:00:00Z', port: 1}",
+                to: "{read_timeout: 2026-10-31T10:00:00Z, port: 1}",
+                count: 1,
+            }]),
+        }],
+        post: &[],
+    },
+    Declared {
+        id: "config-set-residue-anchor-redefined.text",
+        item: ITEM5,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Edits(&[Edit {
+            from: "line 1: cannot unmarshal !!str `abc` into",
+            to: "line 3: cannot unmarshal !!int `1` into",
+            count: 4,
+        }]),
+        files: &[],
+        post: &[],
+    },
+    Declared {
+        id: "config-set-residue-anchor-comment.text",
+        item: ITEM5,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Edits(&[Edit {
+            from: "line 1: cannot unmarshal !!map",
+            to: "line 2: cannot unmarshal !!map",
+            count: 4,
+        }]),
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "changed",
+            mode: 0o600,
+            text: Text::Edits(&[Edit {
+                from: "a: &a\n  p: 1 # c\n",
+                to: "a: &a # c\n  p: 1\n",
+                count: 1,
+            }]),
+        }],
+        post: &[],
+    },
+    Declared {
+        id: "config-set-residue-binary-time.text",
+        item: ITEM5,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Edits(&[Edit {
+            from: "\\xff",
+            to: "\\xef\\xbf\\xbd",
+            count: 8,
+        }]),
+        files: &[],
+        post: &[],
+    },
+    // Item 10: `agent profile show` re-reads the raw YAML and refuses a
+    // duplicate key that Go loads.
+    Declared {
+        id: "agent-profile-show-duplicate-alias.text",
+        item: ITEM10,
+        exit: Some(1),
+        stdout: Text::Full(""),
+        stderr: Text::Full(
+            "Error: load config: agents: duplicate entry with key \"x\" at line 2 column 3\nError: load config: agents: duplicate entry with key \"x\" at line 2 column 3\n",
+        ),
+        files: &[],
+        post: &[],
+    },
+    // Item 8: `remote init` enables auto_push in the config and succeeds where
+    // Go panics.
+    Declared {
+        id: "remote-init-no-git-section.text",
+        item: ITEM8,
+        exit: Some(0),
+        stdout: Text::Full("Remote \"origin\" added successfully.\n"),
+        stderr: Text::Full(REMOTE_INIT_HINTS),
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "changed",
+            mode: 0o600,
+            text: Text::Full(NATIVE_CONFIG_WITH_AUTO_PUSH),
+        }],
+        post: &[],
+    },
+    Declared {
+        id: "remote-init-no-global-config.text",
+        item: ITEM8,
+        exit: Some(0),
+        stdout: Text::Full("Remote \"origin\" added successfully.\n"),
+        stderr: Text::Full(REMOTE_INIT_HINTS),
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "added",
+            mode: 0o600,
+            text: Text::Of(
+                NATIVE_CONFIG_WITH_AUTO_PUSH,
+                &[Edit {
+                    from: "useTouchID: false\n",
+                    to: "",
+                    count: 1,
+                }],
+            ),
+        }],
+        post: &[],
+    },
+];
+
+/// The config the native `remote init` saves for the sandbox of the
+/// `remote-init-no-git-section` case (the file's own keys, the default agents
+/// and git section with `auto_push: true`); with no global config at all the
+/// default config is saved without the explicit `useTouchID` line.
+const NATIVE_CONFIG_WITH_AUTO_PUSH: &str = concat!(
+    "agents:\n",
+    "    claude-code:\n",
+    "        approvalMode: deny\n",
+    "        canWrite: true\n",
+    "        canRunCommands: true\n",
+    "        exposeValueTools: true\n",
+    "        autoUnseal: false\n",
+    "        skillPath: ~/.claude/skills/symvault/SKILL.md\n",
+    "    codex:\n",
+    "        approvalMode: deny\n",
+    "        canWrite: false\n",
+    "        canRunCommands: true\n",
+    "        exposeValueTools: true\n",
+    "        autoUnseal: false\n",
+    "        skillPath: ~/.codex/skills/symvault/AGENTS.md\n",
+    "    default:\n",
+    "        approvalMode: deny\n",
+    "        canWrite: false\n",
+    "        canRunCommands: false\n",
+    "        exposeValueTools: true\n",
+    "        autoUnseal: false\n",
+    "    hermes:\n",
+    "        approvalMode: deny\n",
+    "        canWrite: true\n",
+    "        canRunCommands: true\n",
+    "        exposeValueTools: true\n",
+    "        autoUnseal: false\n",
+    "        skillPath: ~/.hermes/skills/symvault/SKILL.md\n",
+    "    openclaw:\n",
+    "        approvalMode: deny\n",
+    "        canWrite: true\n",
+    "        canRunCommands: true\n",
+    "        exposeValueTools: true\n",
+    "        autoUnseal: false\n",
+    "        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n",
+    "    opencode:\n",
+    "        approvalMode: deny\n",
+    "        canWrite: false\n",
+    "        canRunCommands: true\n",
+    "        exposeValueTools: true\n",
+    "        autoUnseal: false\n",
+    "        skillPath: ~/.opencode/skills/symvault/SKILL.md\n",
+    "git:\n",
+    "    commit_template: Update from Symaira Vault\n",
+    "    auto_push: true\n",
+    "    auto_pull: true\n",
+    "    auto_pull_interval: 10s\n",
+    "vaultDir: $ROOT/home/vault\n",
+    "defaultAgent: default\n",
+    "sessionTimeout: 15m0s\n",
+    "sessionMaxLifetime: 8h0m0s\n",
+    "authMethod: passphrase\n",
+    "useTouchID: false\n",
+);
+
+const REMOTE_INIT_HINTS: &str = "SSH target: user@example.test\nRemote URL: ssh://user@example.test/~symvault-remote.git\nBare repo path: ~/symvault-remote.git\nCreate the bare repo on the remote with:\n  ssh example.test 'git init --bare ~/symvault-remote.git'\nThen push with: symvault git push\n";
+
+/// The values a live run produced, as the declaration check consumes them.
+struct Live {
+    exit: i32,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    tree: Vec<TreeEntry>,
+    files: BTreeMap<String, Option<String>>,
+    post: Vec<(i32, Vec<u8>)>,
+}
+
+/// What a live run must produce for `declared` (the Go recording with the
+/// declared differences applied).
+fn declared_expectation(case: &Case, declared: &Declared) -> Result<Live, String> {
+    let mut files = BTreeMap::new();
+    let mut tree = case.tree.clone();
+    for file in &case.files_after {
+        let go = file.exists.then_some(file.text.as_str());
+        let want = match declared.files.iter().find(|d| d.path == file.path) {
+            None => go.map(str::to_owned),
+            Some(decl) => {
+                let text = decl.text.expect(go.unwrap_or(""))?;
+                let entry = TreeEntry {
+                    path: file.path.clone(),
+                    change: decl.change.to_owned(),
+                    kind: "file".to_owned(),
+                    sha256: sha_hex(text.as_bytes()),
+                    mode: decl.mode,
+                    members: Vec::new(),
+                    audit: Vec::new(),
+                };
+                tree.retain(|existing| existing.path != file.path);
+                tree.push(entry);
+                Some(text)
+            }
+        };
+        files.insert(file.path.clone(), want);
+    }
+    for decl in declared.files {
+        if !case.files_after.iter().any(|file| file.path == decl.path) {
+            return Err(format!(
+                "{}: declared file {} is not read",
+                case.id, decl.path
+            ));
+        }
+    }
+    tree.sort_by(|left, right| left.path.cmp(&right.path));
+    let mut post = Vec::new();
+    for (index, step) in case.post.iter().enumerate() {
+        let text = match declared.post.iter().find(|(at, _)| *at == index) {
+            Some((_, text)) => text.expect(&step.stdout)?,
+            None => step.stdout.clone(),
+        };
+        post.push((step.exit, text.into_bytes()));
+    }
+    for (at, _) in declared.post {
+        if *at >= case.post.len() {
+            return Err(format!("{}: declared post[{at}] does not exist", case.id));
+        }
+    }
+    Ok(Live {
+        exit: declared.exit.unwrap_or(case.exit),
+        stdout: declared.stdout.expect(&case.stdout)?.into_bytes(),
+        stderr: declared.stderr.expect(&case.stderr)?.into_bytes(),
+        tree,
+        files,
+        post,
+    })
+}
+
+/// Compares a live run with the declaration of a case and rejects a
+/// declaration that is not a divergence from Go.
+fn declared_problems(case: &Case, declared: &Declared, live: &Live) -> Vec<String> {
+    let mut problems = Vec::new();
+    if case.declared_divergence != declared.item {
+        problems.push(format!(
+            "label {:?} in the fixture, {:?} in DECLARED",
+            case.declared_divergence, declared.item
+        ));
+    }
+    if !case.stdout_b64.is_empty() || !case.stderr_b64.is_empty() {
+        problems.push("declared cases carry UTF-8 output only".to_owned());
+    }
+    let want = match declared_expectation(case, declared) {
+        Ok(want) => want,
+        Err(error) => {
+            problems.push(error);
+            return problems;
+        }
+    };
+    let mut differs = declared.exit.is_some_and(|exit| exit != case.exit)
+        || declared.stdout.is_declared() && want.stdout != case.stdout.as_bytes()
+        || declared.stderr.is_declared() && want.stderr != case.stderr.as_bytes();
+    if declared.exit == Some(case.exit) {
+        problems.push("declared exit equals Go's".to_owned());
+    }
+    if declared.stdout.is_declared() && want.stdout == case.stdout.as_bytes() {
+        problems.push("declared stdout equals Go's".to_owned());
+    }
+    if declared.stderr.is_declared() && want.stderr == case.stderr.as_bytes() {
+        problems.push("declared stderr equals Go's".to_owned());
+    }
+    for decl in declared.files {
+        let go = case
+            .files_after
+            .iter()
+            .find(|file| file.path == decl.path)
+            .and_then(|file| file.exists.then_some(file.text.clone()));
+        if want.files.get(decl.path).cloned().flatten() == go {
+            problems.push(format!("declared file {} equals Go's", decl.path));
+        } else {
+            differs = true;
+        }
+    }
+    for (at, text) in declared.post {
+        if want.post[*at].1 == case.post[*at].stdout.as_bytes() {
+            problems.push(format!("declared post[{at}] equals Go's"));
+        } else if text.is_declared() {
+            differs = true;
+        }
+    }
+    if !differs {
+        problems.push("no declared difference from Go".to_owned());
+    }
+    if live.exit != want.exit {
+        problems.push(format!("exit: want {} got {}", want.exit, live.exit));
+    }
+    compare("stdout", &want.stdout, &live.stdout, &mut problems);
+    compare("stderr", &want.stderr, &live.stderr, &mut problems);
+    if live.tree != want.tree {
+        problems.push(format!(
+            "tree\n    want: {:?}\n    got:  {:?}",
+            want.tree, live.tree
+        ));
+    }
+    if live.files != want.files {
+        problems.push(format!(
+            "files\n    want: {:?}\n    got:  {:?}",
+            want.files, live.files
+        ));
+    }
+    if live.post.len() != want.post.len() {
+        problems.push(format!(
+            "post: want {} steps, got {}",
+            want.post.len(),
+            live.post.len()
+        ));
+    }
+    for (index, (want, got)) in want.post.iter().zip(&live.post).enumerate() {
+        if want.0 != got.0 {
+            problems.push(format!("post[{index}] exit: want {} got {}", want.0, got.0));
+        }
+        compare(
+            &format!("post[{index}] stdout"),
+            &want.1,
+            &got.1,
+            &mut problems,
+        );
+    }
+    problems
+}
+
 fn run_case(binary: &Path, seeds: &BTreeMap<&str, &Seed>, case: &Case) -> Vec<String> {
     let mut problems = Vec::new();
     let sandbox = Sandbox::new(binary);
@@ -1194,26 +1760,62 @@ fn run_case(binary: &Path, seeds: &BTreeMap<&str, &Seed>, case: &Case) -> Vec<St
         }
     };
     let stderr = volatile.apply(&output.stderr);
-    if output.exit != case.exit {
-        problems.push(format!("exit: want {} got {}", case.exit, output.exit));
+    // A declared divergence compares the native run with its declaration below.
+    if case.declared_divergence.is_empty() {
+        if output.exit != case.exit {
+            problems.push(format!("exit: want {} got {}", case.exit, output.exit));
+        }
+        compare(
+            "stdout",
+            &expected_bytes(&case.stdout, &case.stdout_b64),
+            &stdout,
+            &mut problems,
+        );
+        compare(
+            "stderr",
+            &expected_bytes(&case.stderr, &case.stderr_b64),
+            &stderr,
+            &mut problems,
+        );
     }
-    compare(
-        "stdout",
-        &expected_bytes(&case.stdout, &case.stdout_b64),
-        &stdout,
-        &mut problems,
-    );
-    compare(
-        "stderr",
-        &expected_bytes(&case.stderr, &case.stderr_b64),
-        &stderr,
-        &mut problems,
-    );
     let after = sandbox.snapshot(&case.archives);
     if volatile.has("pair-token") && volatile.token.is_none() {
         volatile.token = pair_token_from_tree(&after);
     }
     let tree = diff_trees(&before, &after, &volatile);
+    if !case.declared_divergence.is_empty() {
+        let live = Live {
+            exit: output.exit,
+            stdout,
+            stderr,
+            tree,
+            files: case
+                .files_after
+                .iter()
+                .map(|file| {
+                    let text = after
+                        .get(&file.path)
+                        .and_then(|node| node.content.as_ref())
+                        .map(|content| {
+                            String::from_utf8(volatile.apply(content)).expect("utf8 file text")
+                        });
+                    (file.path.clone(), text)
+                })
+                .collect(),
+            post: case
+                .post
+                .iter()
+                .map(|post| {
+                    let observed = sandbox.run(&post.argv, &BTreeMap::new(), "");
+                    (observed.exit, volatile.apply(&observed.stdout))
+                })
+                .collect(),
+        };
+        return match DECLARED.iter().find(|d| d.id == case.id) {
+            Some(declared) => declared_problems(case, declared, &live),
+            None => vec![format!("{}: no declaration in DECLARED", case.id)],
+        };
+    }
     if tree != case.tree {
         problems.push(format!(
             "tree\n    want: {:?}\n    got:  {:?}",
@@ -1547,6 +2149,8 @@ fn blank_case() -> Case {
         stderr_b64: String::new(),
         tree: Vec::new(),
         post: Vec::new(),
+        files_after: Vec::new(),
+        declared_divergence: String::new(),
     }
 }
 
@@ -2032,4 +2636,191 @@ fn d1_artifact(path: &std::path::Path) -> bool {
     };
     (text.ends_with("/.local") && only(path, "state") && only(&path.join("state"), "symvault"))
         || (text.ends_with("/.local/state") && only(path, "symvault"))
+}
+
+// --- declared divergences: coverage and negative controls --------------------------
+
+/// The cases that carry a `declared_divergence` (ADR 0034 items 3, 5, 8, 10).
+const DECLARED_CASES: usize = 13;
+
+fn go_live(case: &Case) -> Live {
+    Live {
+        exit: case.exit,
+        stdout: case.stdout.clone().into_bytes(),
+        stderr: case.stderr.clone().into_bytes(),
+        tree: case.tree.clone(),
+        files: case
+            .files_after
+            .iter()
+            .map(|file| (file.path.clone(), file.exists.then(|| file.text.clone())))
+            .collect(),
+        post: case
+            .post
+            .iter()
+            .map(|step| (step.exit, step.stdout.clone().into_bytes()))
+            .collect(),
+    }
+}
+
+/// Every labelled case has a declaration and every declaration a labelled case;
+/// the labels name only the four ADR 0034 items that need a pin.
+#[test]
+fn declared_divergences_cover_every_labelled_case() {
+    let fixture = load_fixture();
+    let labelled: BTreeSet<&str> = fixture
+        .cases
+        .iter()
+        .filter(|case| !case.declared_divergence.is_empty())
+        .map(|case| case.id.as_str())
+        .collect();
+    let declared: BTreeSet<&str> = DECLARED.iter().map(|d| d.id).collect();
+    assert_eq!(labelled, declared, "labelled cases and DECLARED agree");
+    assert_eq!(declared.len(), DECLARED.len(), "one declaration per case");
+    assert_eq!(declared.len(), DECLARED_CASES);
+    let items: BTreeSet<&str> = DECLARED.iter().map(|d| d.item).collect();
+    assert_eq!(
+        items,
+        BTreeSet::from([ITEM3, ITEM5, ITEM8, ITEM10]),
+        "items pinned here"
+    );
+    for case in &fixture.cases {
+        if case.declared_divergence.is_empty() {
+            assert!(
+                case.files_after.is_empty(),
+                "{}: files_after belongs to declared cases",
+                case.id
+            );
+        }
+    }
+}
+
+/// Negative control per pin: the declaration accepts exactly the declared run
+/// and rejects Go's behaviour (the divergence closed) and a one-field mutation of
+/// every observed value (exit, stdout, stderr, each file, the tree, each post).
+#[test]
+fn declared_divergences_reject_go_behaviour_and_mutations() {
+    let fixture = load_fixture();
+    for declared in DECLARED {
+        let case = fixture
+            .cases
+            .iter()
+            .find(|case| case.id == declared.id)
+            .unwrap_or_else(|| panic!("{}: not in the fixture", declared.id));
+        let good = declared_expectation(case, declared).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            declared_problems(case, declared, &good),
+            Vec::<String>::new(),
+            "{}: the declared run is accepted",
+            declared.id
+        );
+        let rejected = declared_problems(case, declared, &go_live(case));
+        assert!(
+            !rejected.is_empty(),
+            "{}: Go's own behaviour must be rejected as the closed divergence",
+            declared.id
+        );
+
+        let mut mutations: Vec<(&str, Live)> = Vec::new();
+        let rebuild = || declared_expectation(case, declared).expect("expectation");
+        let mut m = rebuild();
+        m.exit += 1;
+        mutations.push(("exit", m));
+        let mut m = rebuild();
+        m.stdout.extend_from_slice(b"x");
+        mutations.push(("stdout", m));
+        let mut m = rebuild();
+        m.stderr.extend_from_slice(b"x");
+        mutations.push(("stderr", m));
+        let mut m = rebuild();
+        m.tree.push(TreeEntry {
+            path: "home/extra".to_owned(),
+            change: "added".to_owned(),
+            kind: "file".to_owned(),
+            sha256: String::new(),
+            mode: 0o600,
+            members: Vec::new(),
+            audit: Vec::new(),
+        });
+        mutations.push(("tree", m));
+        for path in good.files.keys() {
+            let mut m = rebuild();
+            let slot = m.files.get_mut(path).expect("file slot");
+            *slot = Some(slot.take().unwrap_or_default() + "x");
+            mutations.push(("file", m));
+        }
+        for index in 0..good.post.len() {
+            let mut m = rebuild();
+            m.post[index].1.extend_from_slice(b"x");
+            mutations.push(("post", m));
+        }
+        for (what, live) in mutations {
+            assert!(
+                !declared_problems(case, declared, &live).is_empty(),
+                "{}: a mutated {what} must be detected",
+                declared.id
+            );
+        }
+        // The tree of a declared file carries the digest of the declared text.
+        for decl in declared.files {
+            let want = good.files[decl.path].clone().expect("declared file text");
+            let entry = good
+                .tree
+                .iter()
+                .find(|entry| entry.path == decl.path)
+                .expect("declared file in the tree");
+            assert_eq!(entry.sha256, sha_hex(want.as_bytes()), "{}", declared.id);
+        }
+    }
+}
+
+/// A declaration that does not differ from Go, or whose edit no longer matches
+/// Go's recording, is refused: the pin can neither outlive its cause nor drift.
+#[test]
+fn declared_divergence_must_differ_from_go_and_match_the_recording() {
+    let fixture = load_fixture();
+    let case = fixture
+        .cases
+        .iter()
+        .find(|case| case.id == "config-set-recoerce-y.text")
+        .expect("item 3 case");
+    let same = Declared {
+        id: "config-set-recoerce-y.text",
+        item: ITEM3,
+        exit: Some(case.exit),
+        stdout: Text::Full(Box::leak(case.stdout.clone().into_boxed_str())),
+        stderr: Text::Same,
+        files: &[],
+        post: &[],
+    };
+    let live = go_live(case);
+    let problems = declared_problems(case, &same, &live);
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.contains("equals Go's") || p.contains("no declared difference")),
+        "{problems:?}"
+    );
+    let stale = Declared {
+        id: "config-set-recoerce-y.text",
+        item: ITEM3,
+        exit: None,
+        stdout: Text::Same,
+        stderr: Text::Same,
+        files: &[DeclaredFile {
+            path: CONFIG,
+            change: "changed",
+            mode: 0o600,
+            text: Text::Edits(&[Edit {
+                from: "vaultDir: \"never recorded\"\n",
+                to: "vaultDir: y\n",
+                count: 1,
+            }]),
+        }],
+        post: &[],
+    };
+    let problems = declared_problems(case, &stale, &live);
+    assert!(
+        problems.iter().any(|p| p.contains("found 0 times")),
+        "{problems:?}"
+    );
 }
