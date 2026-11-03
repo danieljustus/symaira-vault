@@ -148,6 +148,48 @@ prompted; closed by CLI-006, `delete` is no longer open), and
 clap still rejecting `--flag false`-style extra positionals that cobra's
 `legacyArgs` accepts (listed above).
 
+### CLI-003/CLI-005: typed-flag and required-flag diagnostics (P2)
+
+pflag parses every typed flag while it parses the flags, so a bad value is a usage
+error before the argument validator, the output-format gate, the required-flag check
+and any vault precondition. The cobra emulation (`cobra_usage.rs`) now does that for
+**every** typed flag of `command-tree.json` instead of `generate --length` and three
+durations: `INT_FLAGS` (`add --length`, `agent audit --limit`, `audit --tail`,
+`file add --max-size`, `generate --length`, `intake --batch-limit|--max-files`,
+`mcp|serve --port`, `startup-profile --count|--top`; `ParseInt(s, 0, 64)` wording,
+`invalid syntax` / `value out of range`), `DURATION_FLAGS` (also `intake watch
+--debounce|--interval`, `unlock --ttl`; `time.ParseDuration` wording) and the new
+`STRING_SLICE_FLAGS` (`agent token new|rotate --tools`, `broker --passthrough`,
+`doctor --only|--exclude`, `run --broker-passthrough`): pflag reads a `stringSlice`
+value as one `encoding/csv` record, so `go_csv_error` ports `Reader.readRecord`
+(bare `"`, unterminated quote, multi-line `record on line N; parse error on line M`,
+blank lines = `EOF`, `\r\n` folding). `stringArray` flags (`run --env|--env-file|
+--passthrough`) cannot fail. The labels carry the shorthand like Go
+(`-n, --tail`, `-n, --count`, `-t, --timeout`). `REQUIRED_FLAGS` gained
+`profile add` (`--vault`; `--vault=` is set, so Go's own `--vault is required` comes
+from the body, recorded as the `profile_add_empty_vault` argv shape). The six clap
+`i64` flags that lacked it (`add --length`, `audit --tail`, `startup-profile`
+`--count|--top`, `mcp|serve --port`, `agent audit --limit`, `intake --max-files|
+--batch-limit`) now parse with `parse_go_int` and accept a leading `-`, so a value
+the emulation lets through (`0x10`, `-5`) is not rejected by clap afterwards.
+
+Guard: `typed_flag_tables_cover_every_typed_flag_of_the_command_tree` fails when the
+tree has an int/int64/duration/stringSlice flag in no table (or in the wrong one) or
+when `REQUIRED_FLAGS` differs from the tree's `MarkFlagRequired` flags.
+Evidence: 54 Go-recorded `typed_*` / `required_flag_*` usage cases plus one argv
+shape in `testdata/port/cli/error-taxonomy.json` (159 usage cases, 24 argv shapes;
+`errtaxgen` regenerated at the unchanged oracle `0cc78062`, only `generator_digest`
+and the appended cases differ). Negative control: dropping `unlock --ttl`,
+`intake --max-files`, `doctor --only` and `profile add`'s required `vault` fails 14
+corpus cases plus both unit guards.
+
+Residual (CLI-003 stays open): `file add --max-size` is a `u64` in the clap tree
+(Go `int64`), so a negative or non-decimal value that Go accepts is still rejected
+by clap after the emulation; `stringSlice` values are split on `,` by clap rather
+than read as a CSV record (a quoted comma splits differently); duration flags are
+`String`s that the commands re-parse, so a value Go accepts and the command rejects
+(or the reverse) is a command-body question, not a flag-diagnostic one.
+
 ### Review correction: NoArgs versus legacyArgs and bare dash
 
 The regenerated corpus has 75 usage cases and 236 rejected arity probes across

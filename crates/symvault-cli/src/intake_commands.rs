@@ -29,9 +29,11 @@ pub struct IntakeOptions {
     #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
         default_missing_value = "true", default_value = "false", value_parser = parse_bool)]
     dry_run: bool,
-    #[arg(long, default_value_t = intake::MAX_BATCH_SIZE as i64, allow_hyphen_values = true)]
+    #[arg(long, default_value_t = intake::MAX_BATCH_SIZE as i64, allow_hyphen_values = true,
+        value_parser = crate::cobra_usage::parse_go_int)]
     batch_limit: i64,
-    #[arg(long, default_value_t = intake::MAX_FILES as i64, allow_hyphen_values = true)]
+    #[arg(long, default_value_t = intake::MAX_FILES as i64, allow_hyphen_values = true,
+        value_parser = crate::cobra_usage::parse_go_int)]
     max_files: i64,
     #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
         default_missing_value = "true", default_value = "false", value_parser = parse_bool)]

@@ -266,7 +266,8 @@ enum Command {
         stdin_totp_secret: bool,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "generate")]
         generate: bool,
-        #[arg(long, default_value_t = 20)]
+        #[arg(long, default_value_t = 20, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         length: i64,
         #[arg(long)]
         username: Option<String>,
@@ -454,7 +455,8 @@ enum Command {
     Audit {
         #[command(subcommand)]
         command: Option<AuditCommand>,
-        #[arg(short = 'n', long, default_value_t = 20)]
+        #[arg(short = 'n', long, default_value_t = 20, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         tail: i64,
         #[arg(short = 'j', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "audit_json")]
         audit_json: bool,
@@ -486,9 +488,11 @@ enum Command {
     StartupProfile {
         // allow_hyphen_values mirrors pflag, which accepts `--count -5`
         // (clamped to one iteration by the command itself).
-        #[arg(short = 'n', long, default_value_t = 10, allow_hyphen_values = true)]
+        #[arg(short = 'n', long, default_value_t = 10, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         count: i64,
-        #[arg(long, default_value_t = 5, allow_hyphen_values = true)]
+        #[arg(long, default_value_t = 5, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         top: i64,
         // OsString, not PathBuf: clap's PathBuf parser rejects an empty value,
         // but Go treats `--trace ""` as "no trace" and runs the benchmark.
@@ -733,7 +737,8 @@ struct McpFlags {
     stdio: bool,
     #[arg(long, default_value = "127.0.0.1")]
     bind: String,
-    #[arg(long, default_value_t = 8080, allow_hyphen_values = true)]
+    #[arg(long, default_value_t = 8080, allow_hyphen_values = true,
+        value_parser = cobra_usage::parse_go_int)]
     port: i64,
     #[arg(long, default_value = "")]
     tls_cert: String,
@@ -829,7 +834,8 @@ enum AgentCommand {
     },
     Audit {
         name: String,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, default_value_t = 50, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         limit: i64,
         #[arg(long, default_value = "")]
         since: String,

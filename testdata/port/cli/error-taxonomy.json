@@ -118,7 +118,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "c6197b086c1c8432cb62b3706aefb3af85e8572a7a2133e3aa6cbd75b7dff244"
+    "generator_digest": "92035e4304156801cb4a3638d86f5342bffb6a03b47ee17b25649d2f99d979c1"
   },
   "usage": [
     {
@@ -882,6 +882,791 @@
         "exit_code": 1,
         "stdout": "",
         "stderr": "Error: invalid argument \"99999999999999999999x\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"99999999999999999999x\": value out of range\nError: invalid argument \"99999999999999999999x\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"99999999999999999999x\": value out of range\n"
+      }
+    },
+    {
+      "name": "typed_int_add_length",
+      "description": "add --length is an int flag: pflag rejects the value before the vault is opened",
+      "observation": {
+        "args": [
+          "add",
+          "x",
+          "--length",
+          "abc"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"abc\" for \"--length\" flag: strconv.ParseInt: parsing \"abc\": invalid syntax\nError: invalid argument \"abc\" for \"--length\" flag: strconv.ParseInt: parsing \"abc\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_agent_audit_limit",
+      "description": "agent audit --limit is an int flag",
+      "observation": {
+        "args": [
+          "agent",
+          "audit",
+          "--limit",
+          "abc"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"abc\" for \"--limit\" flag: strconv.ParseInt: parsing \"abc\": invalid syntax\nError: invalid argument \"abc\" for \"--limit\" flag: strconv.ParseInt: parsing \"abc\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_audit_tail",
+      "description": "audit --tail is an int flag; the diagnostic names the shorthand too",
+      "observation": {
+        "args": [
+          "audit",
+          "--tail",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"-n, --tail\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"-n, --tail\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_audit_tail_shorthand",
+      "description": "audit -n attached value",
+      "observation": {
+        "args": [
+          "audit",
+          "-nx"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"-n, --tail\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"-n, --tail\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_audit_tail_shorthand_separate",
+      "description": "audit -n with a separate value",
+      "observation": {
+        "args": [
+          "audit",
+          "-n",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"-n, --tail\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"-n, --tail\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_file_add_max_size",
+      "description": "file add --max-size is an int64 flag",
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "--max-size",
+          "x",
+          "f"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--max-size\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"--max-size\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_file_add_max_size_range",
+      "description": "an int64 flag reports a value past int64 as out of range",
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "--max-size",
+          "99999999999999999999",
+          "f"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"99999999999999999999\" for \"--max-size\" flag: strconv.ParseInt: parsing \"99999999999999999999\": value out of range\nError: invalid argument \"99999999999999999999\" for \"--max-size\" flag: strconv.ParseInt: parsing \"99999999999999999999\": value out of range\n"
+      }
+    },
+    {
+      "name": "typed_int_intake_max_files",
+      "description": "intake --max-files is an int flag",
+      "observation": {
+        "args": [
+          "intake",
+          "--max-files",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--max-files\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"--max-files\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_intake_max_files_equals",
+      "description": "intake --max-files=<value>",
+      "observation": {
+        "args": [
+          "intake",
+          "--max-files=0x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"0x\" for \"--max-files\" flag: strconv.ParseInt: parsing \"0x\": invalid syntax\nError: invalid argument \"0x\" for \"--max-files\" flag: strconv.ParseInt: parsing \"0x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_intake_batch_limit",
+      "description": "intake --batch-limit is an int64 flag",
+      "observation": {
+        "args": [
+          "intake",
+          "--batch-limit",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--batch-limit\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"--batch-limit\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_intake_batch_limit_range",
+      "description": "intake --batch-limit past int64",
+      "observation": {
+        "args": [
+          "intake",
+          "--batch-limit=-9223372036854775809"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"-9223372036854775809\" for \"--batch-limit\" flag: strconv.ParseInt: parsing \"-9223372036854775809\": value out of range\nError: invalid argument \"-9223372036854775809\" for \"--batch-limit\" flag: strconv.ParseInt: parsing \"-9223372036854775809\": value out of range\n"
+      }
+    },
+    {
+      "name": "typed_int_mcp_port",
+      "description": "mcp --port is an int flag",
+      "observation": {
+        "args": [
+          "mcp",
+          "--port",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--port\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"--port\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_mcp_port_equals",
+      "description": "mcp --port=<value>",
+      "observation": {
+        "args": [
+          "mcp",
+          "--port=1.5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"1.5\" for \"--port\" flag: strconv.ParseInt: parsing \"1.5\": invalid syntax\nError: invalid argument \"1.5\" for \"--port\" flag: strconv.ParseInt: parsing \"1.5\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_serve_port",
+      "description": "serve --port is an int flag (deprecated alias of mcp)",
+      "observation": {
+        "args": [
+          "serve",
+          "--port",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--port\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"--port\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_startup_profile_count",
+      "description": "startup-profile --count is an int flag",
+      "observation": {
+        "args": [
+          "startup-profile",
+          "--count",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"-n, --count\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"-n, --count\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_startup_profile_count_shorthand",
+      "description": "startup-profile -n is the shorthand of --count",
+      "observation": {
+        "args": [
+          "startup-profile",
+          "-n",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"-n, --count\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"-n, --count\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_startup_profile_top",
+      "description": "startup-profile --top is an int flag",
+      "observation": {
+        "args": [
+          "startup-profile",
+          "--top",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--top\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"--top\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_hex_accepted_gate_decides",
+      "description": "a hex value is a valid int for every int flag: the output gate decides next",
+      "observation": {
+        "args": [
+          "startup-profile",
+          "--top",
+          "0x10",
+          "--output",
+          "xml"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"xml\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"xml\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "typed_int_first_error_wins",
+      "description": "pflag stops at the first failing flag in argument order",
+      "observation": {
+        "args": [
+          "startup-profile",
+          "--count",
+          "x",
+          "--top",
+          "y"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"-n, --count\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"-n, --count\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_error_before_unknown_flag",
+      "description": "an invalid value is reported before a later unknown flag",
+      "observation": {
+        "args": [
+          "startup-profile",
+          "--top",
+          "x",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--top\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"--top\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_unknown_flag_before_error",
+      "description": "an unknown flag is reported before a later invalid value",
+      "observation": {
+        "args": [
+          "startup-profile",
+          "--bogus",
+          "--top",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "typed_int_error_before_gate",
+      "description": "the flag value is parsed before the output-format gate",
+      "observation": {
+        "args": [
+          "startup-profile",
+          "--top",
+          "x",
+          "--output",
+          "xml"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--top\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"--top\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_int_error_before_vault",
+      "description": "the flag value is parsed before the vault is opened",
+      "observation": {
+        "args": [
+          "audit",
+          "--tail",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"-n, --tail\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\nError: invalid argument \"x\" for \"-n, --tail\" flag: strconv.ParseInt: parsing \"x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl",
+      "description": "unlock --ttl is a duration flag",
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--ttl\" flag: time: invalid duration \"x\"\nError: invalid argument \"x\" for \"--ttl\" flag: time: invalid duration \"x\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_missing_unit",
+      "description": "a bare number has no unit",
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "15"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"15\" for \"--ttl\" flag: time: missing unit in duration \"15\"\nError: invalid argument \"15\" for \"--ttl\" flag: time: missing unit in duration \"15\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_unknown_unit",
+      "description": "an unknown unit is named in the error",
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl=5x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"5x\" for \"--ttl\" flag: time: unknown unit \"x\" in duration \"5x\"\nError: invalid argument \"5x\" for \"--ttl\" flag: time: unknown unit \"x\" in duration \"5x\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_empty",
+      "description": "an empty duration is invalid",
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl="
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\" for \"--ttl\" flag: time: invalid duration \"\"\nError: invalid argument \"\" for \"--ttl\" flag: time: invalid duration \"\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_intake_watch_debounce",
+      "description": "intake watch --debounce is a duration flag",
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "--debounce",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--debounce\" flag: time: invalid duration \"x\"\nError: invalid argument \"x\" for \"--debounce\" flag: time: invalid duration \"x\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_intake_watch_interval",
+      "description": "intake watch --interval is a duration flag",
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "--interval",
+          "10"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"10\" for \"--interval\" flag: time: missing unit in duration \"10\"\nError: invalid argument \"10\" for \"--interval\" flag: time: missing unit in duration \"10\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_intake_watch_interval_range",
+      "description": "a duration past int64 nanoseconds is invalid",
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "--interval",
+          "9223372036854775808ns"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"9223372036854775808ns\" for \"--interval\" flag: time: invalid duration \"9223372036854775808ns\"\nError: invalid argument \"9223372036854775808ns\" for \"--interval\" flag: time: invalid duration \"9223372036854775808ns\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_file_use_timeout_shorthand",
+      "description": "file use -t is the shorthand of --timeout",
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "-t",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"-t, --timeout\" flag: time: invalid duration \"x\"\nError: invalid argument \"x\" for \"-t, --timeout\" flag: time: invalid duration \"x\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_valid_gate_decides",
+      "description": "compound durations are valid: the output gate decides next",
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "1h30m",
+          "--output",
+          "xml"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"xml\" is not supported by 'symvault unlock' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"xml\" is not supported by 'symvault unlock' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "typed_duration_error_before_gate",
+      "description": "the duration is parsed before the output-format gate",
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "x",
+          "--output",
+          "xml"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"x\" for \"--ttl\" flag: time: invalid duration \"x\"\nError: invalid argument \"x\" for \"--ttl\" flag: time: invalid duration \"x\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_error_before_vault",
+      "description": "the duration is parsed before the vault is opened",
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "--debounce",
+          "1x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"1x\" for \"--debounce\" flag: time: unknown unit \"x\" in duration \"1x\"\nError: invalid argument \"1x\" for \"--debounce\" flag: time: unknown unit \"x\" in duration \"1x\"\n"
+      }
+    },
+    {
+      "name": "typed_slice_agent_token_new_tools",
+      "description": "agent token new --tools is a stringSlice flag: a stray quote is a CSV error",
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "\"a"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\\\"a\" for \"--tools\" flag: parse error on line 1, column 3: extraneous or missing \" in quoted-field\nError: invalid argument \"\\\"a\" for \"--tools\" flag: parse error on line 1, column 3: extraneous or missing \" in quoted-field\n"
+      }
+    },
+    {
+      "name": "typed_slice_agent_token_rotate_tools",
+      "description": "agent token rotate --tools is a stringSlice flag",
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "rotate",
+          "bot",
+          "--tools=a\"b"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"a\\\"b\" for \"--tools\" flag: parse error on line 1, column 2: bare \" in non-quoted-field\nError: invalid argument \"a\\\"b\" for \"--tools\" flag: parse error on line 1, column 2: bare \" in non-quoted-field\n"
+      }
+    },
+    {
+      "name": "typed_slice_broker_passthrough",
+      "description": "broker --passthrough is a stringSlice flag",
+      "observation": {
+        "args": [
+          "broker",
+          "--passthrough",
+          "a,b\""
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"a,b\\\"\" for \"--passthrough\" flag: parse error on line 1, column 4: bare \" in non-quoted-field\nError: invalid argument \"a,b\\\"\" for \"--passthrough\" flag: parse error on line 1, column 4: bare \" in non-quoted-field\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only",
+      "description": "doctor --only is a stringSlice flag",
+      "observation": {
+        "args": [
+          "doctor",
+          "--only",
+          "\"a\"b"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\\\"a\\\"b\" for \"--only\" flag: parse error on line 1, column 3: extraneous or missing \" in quoted-field\nError: invalid argument \"\\\"a\\\"b\" for \"--only\" flag: parse error on line 1, column 3: extraneous or missing \" in quoted-field\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_exclude",
+      "description": "doctor --exclude is a stringSlice flag",
+      "observation": {
+        "args": [
+          "doctor",
+          "--exclude",
+          "a,\"b\"c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"a,\\\"b\\\"c\" for \"--exclude\" flag: parse error on line 1, column 5: extraneous or missing \" in quoted-field\nError: invalid argument \"a,\\\"b\\\"c\" for \"--exclude\" flag: parse error on line 1, column 5: extraneous or missing \" in quoted-field\n"
+      }
+    },
+    {
+      "name": "typed_slice_run_broker_passthrough",
+      "description": "run --broker-passthrough is a stringSlice flag",
+      "observation": {
+        "args": [
+          "run",
+          "--broker-passthrough",
+          "\"a",
+          "--",
+          "true"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\\\"a\" for \"--broker-passthrough\" flag: parse error on line 1, column 3: extraneous or missing \" in quoted-field\nError: invalid argument \"\\\"a\" for \"--broker-passthrough\" flag: parse error on line 1, column 3: extraneous or missing \" in quoted-field\n"
+      }
+    },
+    {
+      "name": "typed_slice_blank_lines_are_eof",
+      "description": "a value of blank lines has no record: encoding/csv reports EOF",
+      "observation": {
+        "args": [
+          "doctor",
+          "--only",
+          "\n"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\\n\" for \"--only\" flag: EOF\nError: invalid argument \"\\n\" for \"--only\" flag: EOF\n"
+      }
+    },
+    {
+      "name": "typed_slice_multiline_quote",
+      "description": "a quoted field cut off on a later line reports the record and the error line",
+      "observation": {
+        "args": [
+          "doctor",
+          "--only",
+          "\"a\nb"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\\\"a\\nb\" for \"--only\" flag: record on line 1; parse error on line 2, column 2: extraneous or missing \" in quoted-field\nError: invalid argument \"\\\"a\\nb\" for \"--only\" flag: record on line 1; parse error on line 2, column 2: extraneous or missing \" in quoted-field\n"
+      }
+    },
+    {
+      "name": "typed_slice_multiline_valid",
+      "description": "a quoted field may span lines: no flag error",
+      "observation": {
+        "args": [
+          "doctor",
+          "--only",
+          "\"a\nb\"",
+          "--output",
+          "xml"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"xml\" is not supported by 'symvault doctor' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"xml\" is not supported by 'symvault doctor' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "typed_slice_valid_quoted_comma",
+      "description": "a quoted comma is valid: the output gate decides next",
+      "observation": {
+        "args": [
+          "doctor",
+          "--only",
+          "\"a,b\"",
+          "--output",
+          "xml"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"xml\" is not supported by 'symvault doctor' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"xml\" is not supported by 'symvault doctor' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "typed_slice_crlf",
+      "description": "CRLF is folded to LF before the column is counted",
+      "observation": {
+        "args": [
+          "doctor",
+          "--only",
+          "\"a\r\nb"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\\\"a\\r\\nb\" for \"--only\" flag: record on line 1; parse error on line 2, column 2: extraneous or missing \" in quoted-field\nError: invalid argument \"\\\"a\\r\\nb\" for \"--only\" flag: record on line 1; parse error on line 2, column 2: extraneous or missing \" in quoted-field\n"
+      }
+    },
+    {
+      "name": "typed_slice_lone_quote",
+      "description": "a lone opening quote",
+      "observation": {
+        "args": [
+          "doctor",
+          "--only",
+          "\""
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\\\"\" for \"--only\" flag: parse error on line 1, column 2: extraneous or missing \" in quoted-field\nError: invalid argument \"\\\"\" for \"--only\" flag: parse error on line 1, column 2: extraneous or missing \" in quoted-field\n"
+      }
+    },
+    {
+      "name": "typed_slice_error_before_gate",
+      "description": "the slice is parsed before the output-format gate",
+      "observation": {
+        "args": [
+          "doctor",
+          "--only",
+          "a\"",
+          "--output",
+          "xml"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"a\\\"\" for \"--only\" flag: parse error on line 1, column 2: bare \" in non-quoted-field\nError: invalid argument \"a\\\"\" for \"--only\" flag: parse error on line 1, column 2: bare \" in non-quoted-field\n"
+      }
+    },
+    {
+      "name": "typed_slice_array_flags_take_any_value",
+      "description": "stringArray flags (run --env) are not parsed: a quote is a plain value and the arity check decides",
+      "observation": {
+        "args": [
+          "run",
+          "--env",
+          "\"a"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: requires at least 1 arg(s), only received 0\nError: requires at least 1 arg(s), only received 0\n"
+      }
+    },
+    {
+      "name": "required_flag_profile_add",
+      "description": "profile add marks --vault required: cobra reports it after the argument check",
+      "observation": {
+        "args": [
+          "profile",
+          "add",
+          "work"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: required flag(s) \"vault\" not set\nError: required flag(s) \"vault\" not set\n"
+      }
+    },
+    {
+      "name": "required_flag_profile_add_gate_first",
+      "description": "the output gate runs before the required-flag check",
+      "observation": {
+        "args": [
+          "profile",
+          "add",
+          "work",
+          "--output",
+          "xml"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"xml\" is not supported by 'symvault profile add' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"xml\" is not supported by 'symvault profile add' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "required_flag_profile_add_arity_first",
+      "description": "the argument validator runs before the required-flag check",
+      "observation": {
+        "args": [
+          "profile",
+          "add"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: accepts 1 arg(s), received 0\nError: accepts 1 arg(s), received 0\n"
+      }
+    },
+    {
+      "name": "required_flag_dynamic_generate_one_of_two",
+      "description": "dynamic generate lists only the unset required flags",
+      "observation": {
+        "args": [
+          "dynamic",
+          "generate",
+          "--engine",
+          "e"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: required flag(s) \"role\" not set\nError: required flag(s) \"role\" not set\n"
+      }
+    },
+    {
+      "name": "required_flag_template_generate",
+      "description": "template generate marks --type required",
+      "observation": {
+        "args": [
+          "template",
+          "generate"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: required flag(s) \"type\" not set\nError: required flag(s) \"type\" not set\n"
+      }
+    },
+    {
+      "name": "required_flag_export",
+      "description": "export marks --format required",
+      "observation": {
+        "args": [
+          "export"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: required flag(s) \"format\" not set\nError: required flag(s) \"format\" not set\n"
       }
     },
     {
@@ -11102,6 +11887,21 @@
         "exit_code": 0,
         "stdout": "Manage paired devices that can access this vault.\n\nUse 'symvault device pair' to generate a pairing token for a new device,\nand 'symvault device join' on the new device to join the vault.\n\nUsage:\n  symvault device [command]\n\nExamples:\n  symvault device pair\n  symvault device join ssh://user@host/path/to/vault.git <token>\n  symvault device accept <token>\n\nAvailable Commands:\n  accept          Accept a join request and re-encrypt entries for the new device\n  add             Add this device to an existing multi-device vault\n  approval-list   List devices enrolled as approval devices\n  approval-pair   Pair a phone as an approval device for agent credential requests\n  approval-revoke Revoke an approval device's ability to approve/deny requests\n  join            Join an existing vault as a new device\n  list            List all devices\n  pair            Generate a pairing token for a new device\n  revoke          Revoke a device and re-encrypt all entries\n\nFlags:\n  -h, --help   help for device\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault device [command] --help\" for more information about a command.\n",
         "stderr": ""
+      }
+    },
+    {
+      "name": "profile_add_empty_vault",
+      "description": "profile add --vault= is set, so cobra does not call it missing: the command body rejects the empty path",
+      "observation": {
+        "args": [
+          "profile",
+          "add",
+          "work",
+          "--vault="
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: --vault is required\nError: --vault is required\n"
       }
     }
   ],

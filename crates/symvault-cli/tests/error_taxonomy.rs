@@ -170,8 +170,8 @@ struct Fixture {
     unlock_states: Vec<ScenarioCase>,
 }
 
-const USAGE_CASES: usize = 105;
-const ARGV_SHAPES: usize = 23;
+const USAGE_CASES: usize = 159;
+const ARGV_SHAPES: usize = 24;
 const ARITY_ROWS: usize = 116;
 const REJECTED_ARITY_PROBES: usize = 236;
 const GATE_REFUSALS: usize = 223;
