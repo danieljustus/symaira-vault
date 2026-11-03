@@ -23,6 +23,16 @@ The module is also a small CLI for the Makefile targets that only observed a
   replay-checked   CONTRACT --file F...                         the files still have the recorded bytes
   capture-verdict  CONTRACT --artifact F... [--env K=V] -- cmd  Go verifies a Rust-written artifact
   replay-verdict   CONTRACT --artifact F...                     sha256 of the artifact matches the attestation
+
+Reverse checks (Go verifies what Rust wrote) cannot be replayed without Go; they are attested once:
+
+  attest NAME --artifact LABEL=PATH... [--env K=V] [--note T] -- cmd
+        run the Go-side verdict `cmd` (must exit 0) and write
+        docs/rust-port/evidence/go-removal-attestations/NAME.<goos>.json: sha256 of every Rust artifact,
+        the Go verdict (command, exit code, sha256 of its output), the oracle commit and the Rust commit
+  verify-attestation NAME
+        replay: the attestation exists for this host, is well-formed and records an accepting Go verdict
+        (missing = failure). The artifact digests are provenance of the attested build, not a pin on future builds.
 """
 import argparse
 import base64
@@ -31,10 +41,12 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+ATTEST_DIR = ROOT / "docs" / "rust-port" / "evidence" / "go-removal-attestations"
 OBS_DIR = Path(__file__).resolve().parent / "fixtures" / "go-observations"
 SCHEMA = 1
 HOW_TO_CAPTURE = "run `make go-observations-capture-other` on a host with the Go oracle"
@@ -316,6 +328,47 @@ def _oracle(env):
     return tree_oracle_commit(), go_version(env)
 
 
+def attestation_path(name, goos=None):
+    return ATTEST_DIR / f"{name}.{goos or host_goos()}.json"
+
+
+def write_attestation(name, artifacts, command, env_pairs, note):
+    """Run the Go verdict `command` once and persist the attestation (deterministic keys, no timestamps)."""
+    result, env = _run(command, env_pairs)
+    rust_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+    digests = {}
+    for item in artifacts:
+        label, _, file = item.partition("=")
+        digests[label] = sha256_file(Path(file) if Path(file).is_absolute() else ROOT / file)
+    document = {"schema": SCHEMA, "name": name, "direction": note, "oracle_commit": tree_oracle_commit(),
+                "go_version": go_version(env), "goos": host_goos(), "goarch": host_arch(), "rust_commit": rust_commit,
+                "rust_artifacts_sha256": digests,
+                "go_verdict": {"command": [x for x in command], "exit_code": result.returncode,
+                               "output_sha256": hashlib.sha256((result.stdout + result.stderr).encode()).hexdigest(),
+                               "accepted": result.returncode == 0}}
+    target = attestation_path(name)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(canonical(document).encode("utf-8"))
+    return target
+
+
+def check_attestation(name):
+    source = attestation_path(name)
+    if not source.is_file():
+        raise MissingObservation(f"missing Go removal attestation {rel(source)}: run its attest target with the Go oracle present")
+    document = json.loads(source.read_bytes())
+    verdict = document.get("go_verdict", {})
+    ok = (document.get("schema") == SCHEMA and document.get("name") == name and document.get("goos") == host_goos()
+          and verdict.get("accepted") is True and verdict.get("exit_code") == 0
+          and re.fullmatch(r"[0-9a-f]{40}", str(document.get("oracle_commit", "")))
+          and re.fullmatch(r"[0-9a-f]{40}", str(document.get("rust_commit", "")))
+          and document.get("rust_artifacts_sha256")
+          and all(re.fullmatch(r"[0-9a-f]{64}", v) for v in document["rust_artifacts_sha256"].values()))
+    if not ok:
+        raise MissingObservation(f"{rel(source)}: not an accepting, well-formed attestation of {name}")
+    return document
+
+
 def _fail(message):
     raise SystemExit(f"go_observations_common: FAIL: {message}")
 
@@ -334,6 +387,13 @@ def main(argv=None):
         p.add_argument("contract")
         p.add_argument("--output", required=True)
         p.add_argument("--append", action="store_true", help="append to OUTPUT instead of replacing it")
+    p = sub.add_parser("attest")
+    p.add_argument("name")
+    p.add_argument("--env", action="append", default=[])
+    p.add_argument("--artifact", action="append", default=[])
+    p.add_argument("--note", default="")
+    p = sub.add_parser("verify-attestation")
+    p.add_argument("name")
     for name in ("replay-checked", "replay-verdict"):
         p = sub.add_parser(name)
         p.add_argument("contract")
@@ -347,6 +407,15 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     try:
+        if args.command == "attest":
+            assert command and args.artifact, "attest needs --artifact LABEL=PATH and a command after --"
+            print(f"attested {rel(write_attestation(args.name, args.artifact, command, args.env, args.note))}")
+            return 0
+        if args.command == "verify-attestation":
+            document = check_attestation(args.name)
+            print(f"attestation ok: {args.name} (Go {document['go_version']} accepted Rust build "
+                  f"{document['rust_commit'][:8]} at oracle {document['oracle_commit'][:8]})")
+            return 0
         if args.command.startswith("capture-"):
             assert command, "no command after --"
             result, env = _run(command, args.env)

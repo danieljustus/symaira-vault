@@ -52,6 +52,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import go_observations_common as observations
+
 ROOT = Path(__file__).resolve().parents[2]
 SEED_PASS = "correct horse battery staple"
 INIT_PASS = "initial passphrase value"
@@ -101,6 +104,97 @@ def diff_trees(before, after):
     return [k for k in keys if before.get(k) != after.get(k)]
 
 
+def file_snapshot(root):
+    """rel -> (mode, bytes) for regular files, rel -> None for directories (symlinks are skipped)."""
+    result = {}
+    for path in sorted(Path(root).rglob("*")):
+        rel = str(path.relative_to(root))
+        if path.is_symlink():
+            continue
+        result[rel] = None if path.is_dir() else (stat.S_IMODE(path.lstat().st_mode), path.read_bytes())
+    return result
+
+
+def snapshot_delta(before, after):
+    return {"files": {rel: {"mode": value[0], "b64": base64.b64encode(value[1]).decode()}
+                      for rel, value in after.items() if value is not None and before.get(rel) != value},
+            "dirs": sorted(rel for rel, value in after.items() if value is None and rel not in before),
+            "removed": sorted(rel for rel in before if rel not in after)}
+
+
+def apply_delta(root, delta):
+    root = Path(root)
+    for rel in delta["dirs"]:
+        (root / rel).mkdir(parents=True, exist_ok=True)
+    for rel, item in delta["files"].items():
+        target = root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(base64.b64decode(item["b64"]))
+        os.chmod(target, item["mode"])
+    for rel in delta["removed"]:
+        target = root / rel
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink(missing_ok=True)
+
+
+class GoOracle:
+    """The Go side of the contract.
+
+    capture (`GoOracle.live(binary)`): runs the real Go binary and records every call. A call made
+    before Rust touched the sandbox is a *seed* call: its on-disk effect (the Go-created vault) is
+    recorded and replayed byte for byte. A call made after Rust wrote to the sandbox is a *reverse*
+    check ("Go still reads what Rust wrote"): its verdict is recorded, and in replay it cannot be
+    re-executed without Go, so it is an attestation, counted and named in the output.
+    replay (`GoOracle.replaying(calls)`): serves seed calls from the recording, answers reverse
+    calls with the recorded verdict; an unrecorded or changed call is a failure, never a skip.
+    """
+
+    def __init__(self, binary, calls):
+        self.binary, self.calls, self.cursor, self.count = binary, calls, {}, {"seed": 0, "reverse": 0}
+
+    @classmethod
+    def live(cls, binary, previous=()):
+        """`previous`: the committed recording. Seed calls it already holds are not run again (the Go-created
+        vault has random keys; minting it once keeps captures byte-identical); reverse calls always run."""
+        oracle = cls(Path(binary), [])
+        oracle.previous = {c["key"]: c for c in previous if c["role"] == "seed"}
+        return oracle
+
+    @classmethod
+    def replaying(cls, calls):
+        return cls(None, calls)
+
+    def invoke(self, sandbox, args, passphrase, vault, extra, stdin):
+        role = "reverse" if sandbox.rust_ran else "seed"
+        index = self.cursor[sandbox.base.name] = self.cursor.get(sandbox.base.name, -1) + 1
+        key = f"{sandbox.base.name}#{index}"
+        self.count[role] += 1
+        reused = getattr(self, "previous", {}).get(key) if role == "seed" else None
+        if reused is not None and reused["args"] == list(args):
+            apply_delta(sandbox.base, reused["delta"])
+            self.calls.append(reused)
+            return subprocess.CompletedProcess([str(self.binary), *args], reused["returncode"], reused["stdout"], reused["stderr"])
+        if self.binary is not None:
+            before = file_snapshot(sandbox.base)
+            done = subprocess.run([str(self.binary), *args], env=sandbox.env(passphrase, vault, extra),
+                                  stdin=subprocess.DEVNULL if stdin is None else None, input=stdin,
+                                  capture_output=True, text=True, timeout=300, check=False)
+            call = {"key": key, "role": role, "args": list(args), "returncode": done.returncode,
+                    "stdout": done.stdout, "stderr": done.stderr}
+            if role == "seed":
+                call["delta"] = snapshot_delta(before, file_snapshot(sandbox.base))
+            self.calls.append(call)
+            return done
+        recorded = next((c for c in self.calls if c["key"] == key), None)
+        if recorded is None or recorded["args"] != list(args) or recorded["role"] != role:
+            raise Failure(f"no recorded Go observation for call {key} {args} ({role})")
+        if role == "seed":
+            apply_delta(sandbox.base, recorded["delta"])
+        return subprocess.CompletedProcess([str(self.binary), *args], recorded["returncode"], recorded["stdout"], recorded["stderr"])
+
+
 class Sandbox:
     """Disposable HOME/XDG roots plus a vault directory."""
 
@@ -109,6 +203,7 @@ class Sandbox:
         self.home = self.base / "home"
         self.vault = self.base / "vault"
         self.state = self.home / ".local" / "state"
+        self.rust_ran = False
         for sub in ("config", "data", "cache"):
             (self.home / sub).mkdir(parents=True, exist_ok=True)
         self.vault.mkdir(parents=True, exist_ok=True)
@@ -131,6 +226,9 @@ class Sandbox:
         return env
 
     def run(self, binary, args, passphrase=SEED_PASS, vault=None, extra=None, stdin=None):
+        if isinstance(binary, GoOracle):
+            return binary.invoke(self, args, passphrase, vault, extra, stdin)
+        self.rust_ran = True
         return subprocess.run(
             [str(binary), *args],
             env=self.env(passphrase, vault, extra),
@@ -605,15 +703,31 @@ def negative_stale_partials(base, rust):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rust", required=True)
-    parser.add_argument("--go", required=True)
     parser.add_argument("--probe", required=True)
+    parser.add_argument("--go", help="capture only: the Go oracle binary; its calls are recorded under fixtures/go-observations")
+    parser.add_argument("--capture-go", action="store_true", help="run the contract against --go and record the Go side")
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args()
-    for binary in (args.rust, args.go, args.probe):
-        if not Path(binary).is_file():
+    if args.capture_go != bool(args.go):
+        print("--capture-go and --go go together; replay needs neither", file=sys.stderr)
+        return 2
+    for binary in (args.rust, args.probe, args.go):
+        if binary and not Path(binary).is_file():
             print(f"missing binary: {binary}", file=sys.stderr)
             return 2
-    rust, go, probe = (Path(p).resolve() for p in (args.rust, args.go, args.probe))
+    rust, probe = (Path(p).resolve() for p in (args.rust, args.probe))
+    if args.capture_go:
+        try:
+            previous = observations.load("data-safety-contract", oracle_commit=observations.tree_oracle_commit())["observations"]["calls"]
+        except observations.MissingObservation:
+            previous = []
+        go = GoOracle.live(Path(args.go).resolve(), previous)
+    else:
+        try:
+            go = GoOracle.replaying(observations.load("data-safety-contract", oracle_commit=observations.tree_oracle_commit())["observations"]["calls"])
+        except observations.MissingObservation as error:
+            print(f"FAIL: {error}", file=sys.stderr)
+            return 1
     base = Path(tempfile.mkdtemp(prefix="data-safety-"))
     try:
         run_seed(base, rust, go, "ffi-seed", materialize_ffi_seed, SEED_PASS, "personal/email", [])
@@ -632,6 +746,14 @@ def main():
         return 1
     if not args.keep:
         shutil.rmtree(base, ignore_errors=True)
+    if args.capture_go:
+        target = observations.save("data-safety-contract", {"calls": go.calls, "counts": go.count},
+                                   oracle_commit=observations.tree_oracle_commit(), version=observations.go_version(),
+                                   args=["data_safety_contract.py", "--capture-go"])
+        print(f"captured {observations.rel(target)}: {go.count['seed']} seed calls, {go.count['reverse']} reverse verdicts")
+    else:
+        print(f"{go.count['reverse']} Go reverse verdicts (Go reads what Rust wrote) are the recorded attestation, "
+              f"{go.count['seed']} Go-created seed calls replayed byte for byte")
     print(f"mutator sweep: {', '.join(swept)}")
     print(f"data-safety contract: PASS ({cases} checks, 3 seed vaults, {len(swept)} mutators, 5 negative-control groups)")
     return 0
