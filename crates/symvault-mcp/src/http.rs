@@ -3690,15 +3690,23 @@ mod tests {
             lookup_in_bytes(one(r#","revoked":true,"revoked":null"#)),
             Some(false)
         );
-        // A repeated allowed_tools array overlays the previous slice in Go; a
-        // null element there is rejected instead of being modelled.
+        // A repeated allowed_tools array overlays the previous slice in Go (a
+        // null element keeps the earlier one), so Go adopts these documents and
+        // a revocation in them applies (ADR 0034 item 19).
         assert_eq!(
             lookup_in_bytes(one(r#","allowed_tools":["a"],"allowed_tools":[null]"#)),
-            None
+            Some(true)
         );
         assert_eq!(
             lookup_in_bytes(one(r#","allowed_tools":[],"allowed_tools":[null]"#)),
             Some(true)
+        );
+        assert_eq!(
+            lookup_in_bytes(one(
+                r#","allowed_tools":["a"],"allowed_tools":[null],"revoked":true"#
+            )),
+            Some(false),
+            "a revocation inside an overlaid document must apply"
         );
     }
 

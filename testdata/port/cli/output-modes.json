@@ -110,7 +110,7 @@
       "scripts/rust-port/cmd/outputmodegen/cases.go",
       "scripts/rust-port/cmd/outputmodegen/main.go"
     ],
-    "generator_digest": "00e51f5cc057725e98b157f08d05af3499d01193f1e0ec2a828c70fa63a1730d",
+    "generator_digest": "0ed53655543fc388ba48c04b97015b2079f717334765107151c480b63603ee54",
     "gate_digest": "c2536c1ffaf681feaa8fa8824f7e302e9633b2c2711c9ecd98531283064e51f1",
     "goos": "darwin"
   },
@@ -13058,6 +13058,961 @@
           ],
           "exit": 0,
           "stdout": "yes\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-octal.text",
+      "path": "config set",
+      "scenario": "config-set-int-octal",
+      "mode": "text",
+      "desc": "set a leading-zero octal (stored as 8) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "010"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 010\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d7bae995b585e32ea6ff81177f7d3e7b81aedd03fd926f16b42e937e5671f0af",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "8\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-octal.json",
+      "path": "config set",
+      "scenario": "config-set-int-octal",
+      "mode": "json",
+      "desc": "set a leading-zero octal (stored as 8) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "010",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 010\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d7bae995b585e32ea6ff81177f7d3e7b81aedd03fd926f16b42e937e5671f0af",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "8\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-octal.yaml",
+      "path": "config set",
+      "scenario": "config-set-int-octal",
+      "mode": "yaml",
+      "desc": "set a leading-zero octal (stored as 8) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "010",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 010\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d7bae995b585e32ea6ff81177f7d3e7b81aedd03fd926f16b42e937e5671f0af",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "8\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-octal.output-json",
+      "path": "config set",
+      "scenario": "config-set-int-octal",
+      "mode": "output-json",
+      "desc": "set a leading-zero octal (stored as 8) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "010",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 010\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d7bae995b585e32ea6ff81177f7d3e7b81aedd03fd926f16b42e937e5671f0af",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "8\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-octal.quiet",
+      "path": "config set",
+      "scenario": "config-set-int-octal",
+      "mode": "quiet",
+      "desc": "set a leading-zero octal (stored as 8) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "010",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "d7bae995b585e32ea6ff81177f7d3e7b81aedd03fd926f16b42e937e5671f0af",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "8\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-octal-17.text",
+      "path": "config set",
+      "scenario": "config-set-int-octal-17",
+      "mode": "text",
+      "desc": "set a second leading-zero octal (stored as 15) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "017"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 017\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9ccd7814405a9351918e9625b0d59319a90d2ee3532662873198e4a3973a55e9",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "15\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-octal-17.json",
+      "path": "config set",
+      "scenario": "config-set-int-octal-17",
+      "mode": "json",
+      "desc": "set a second leading-zero octal (stored as 15) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "017",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 017\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9ccd7814405a9351918e9625b0d59319a90d2ee3532662873198e4a3973a55e9",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "15\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-octal-17.yaml",
+      "path": "config set",
+      "scenario": "config-set-int-octal-17",
+      "mode": "yaml",
+      "desc": "set a second leading-zero octal (stored as 15) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "017",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 017\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9ccd7814405a9351918e9625b0d59319a90d2ee3532662873198e4a3973a55e9",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "15\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-octal-17.output-json",
+      "path": "config set",
+      "scenario": "config-set-int-octal-17",
+      "mode": "output-json",
+      "desc": "set a second leading-zero octal (stored as 15) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "017",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 017\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9ccd7814405a9351918e9625b0d59319a90d2ee3532662873198e4a3973a55e9",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "15\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-octal-17.quiet",
+      "path": "config set",
+      "scenario": "config-set-int-octal-17",
+      "mode": "quiet",
+      "desc": "set a second leading-zero octal (stored as 15) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "017",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9ccd7814405a9351918e9625b0d59319a90d2ee3532662873198e4a3973a55e9",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "15\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-binary.text",
+      "path": "config set",
+      "scenario": "config-set-int-binary",
+      "mode": "text",
+      "desc": "set a 0b binary (stored as 3) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "0b11"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 0b11\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9cf26ae39e391a93603902302b27f208d3bdf3b0c14971fe22df78866b86fdef",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "3\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-binary.json",
+      "path": "config set",
+      "scenario": "config-set-int-binary",
+      "mode": "json",
+      "desc": "set a 0b binary (stored as 3) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "0b11",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 0b11\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9cf26ae39e391a93603902302b27f208d3bdf3b0c14971fe22df78866b86fdef",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "3\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-binary.yaml",
+      "path": "config set",
+      "scenario": "config-set-int-binary",
+      "mode": "yaml",
+      "desc": "set a 0b binary (stored as 3) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "0b11",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 0b11\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9cf26ae39e391a93603902302b27f208d3bdf3b0c14971fe22df78866b86fdef",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "3\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-binary.output-json",
+      "path": "config set",
+      "scenario": "config-set-int-binary",
+      "mode": "output-json",
+      "desc": "set a 0b binary (stored as 3) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "0b11",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 0b11\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9cf26ae39e391a93603902302b27f208d3bdf3b0c14971fe22df78866b86fdef",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "3\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-binary.quiet",
+      "path": "config set",
+      "scenario": "config-set-int-binary",
+      "mode": "quiet",
+      "desc": "set a 0b binary (stored as 3) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "0b11",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "9cf26ae39e391a93603902302b27f208d3bdf3b0c14971fe22df78866b86fdef",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "3\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-binary-5.text",
+      "path": "config set",
+      "scenario": "config-set-int-binary-5",
+      "mode": "text",
+      "desc": "set a longer 0b binary (stored as 5) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "0b101"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 0b101\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e64ac73cc93bf00073c1bf6525d63227a05429f6c6767493c6f745415d852af0",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "5\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-binary-5.json",
+      "path": "config set",
+      "scenario": "config-set-int-binary-5",
+      "mode": "json",
+      "desc": "set a longer 0b binary (stored as 5) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "0b101",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 0b101\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e64ac73cc93bf00073c1bf6525d63227a05429f6c6767493c6f745415d852af0",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "5\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-binary-5.yaml",
+      "path": "config set",
+      "scenario": "config-set-int-binary-5",
+      "mode": "yaml",
+      "desc": "set a longer 0b binary (stored as 5) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "0b101",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 0b101\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e64ac73cc93bf00073c1bf6525d63227a05429f6c6767493c6f745415d852af0",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "5\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-binary-5.output-json",
+      "path": "config set",
+      "scenario": "config-set-int-binary-5",
+      "mode": "output-json",
+      "desc": "set a longer 0b binary (stored as 5) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "0b101",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 0b101\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e64ac73cc93bf00073c1bf6525d63227a05429f6c6767493c6f745415d852af0",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "5\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-binary-5.quiet",
+      "path": "config set",
+      "scenario": "config-set-int-binary-5",
+      "mode": "quiet",
+      "desc": "set a longer 0b binary (stored as 5) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "0b101",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "e64ac73cc93bf00073c1bf6525d63227a05429f6c6767493c6f745415d852af0",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "5\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-underscore.text",
+      "path": "config set",
+      "scenario": "config-set-int-underscore",
+      "mode": "text",
+      "desc": "set underscore digit separators (stored as 1000) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "1_000"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 1_000\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "555b1a319fcf2e933f4b9113d367f4f672f98fe84e36d3f4c75cdbae2298c76b",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "1000\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-underscore.json",
+      "path": "config set",
+      "scenario": "config-set-int-underscore",
+      "mode": "json",
+      "desc": "set underscore digit separators (stored as 1000) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "1_000",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 1_000\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "555b1a319fcf2e933f4b9113d367f4f672f98fe84e36d3f4c75cdbae2298c76b",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "1000\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-underscore.yaml",
+      "path": "config set",
+      "scenario": "config-set-int-underscore",
+      "mode": "yaml",
+      "desc": "set underscore digit separators (stored as 1000) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "1_000",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 1_000\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "555b1a319fcf2e933f4b9113d367f4f672f98fe84e36d3f4c75cdbae2298c76b",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "1000\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-underscore.output-json",
+      "path": "config set",
+      "scenario": "config-set-int-underscore",
+      "mode": "output-json",
+      "desc": "set underscore digit separators (stored as 1000) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "1_000",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "Set mcp.port = 1_000\n",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "555b1a319fcf2e933f4b9113d367f4f672f98fe84e36d3f4c75cdbae2298c76b",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "1000\n"
+        }
+      ]
+    },
+    {
+      "id": "config-set-int-underscore.quiet",
+      "path": "config set",
+      "scenario": "config-set-int-underscore",
+      "mode": "quiet",
+      "desc": "set underscore digit separators (stored as 1000) for an int key",
+      "seed": "entries",
+      "argv": [
+        "config",
+        "set",
+        "mcp.port",
+        "1_000",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/.symvault/config.yaml",
+          "change": "changed",
+          "kind": "file",
+          "sha256": "555b1a319fcf2e933f4b9113d367f4f672f98fe84e36d3f4c75cdbae2298c76b",
+          "mode": 384
+        }
+      ],
+      "post": [
+        {
+          "argv": [
+            "config",
+            "get",
+            "mcp.port"
+          ],
+          "exit": 0,
+          "stdout": "1000\n"
         }
       ]
     },

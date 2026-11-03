@@ -46,9 +46,10 @@ at `broker-ignored-sighup`.
 
 Negative controls: the pre-fix Rust binary (`--expect-mismatch`) is rejected at
 `broker-sighup`; `test_signal_process_contract.py` mutates each compared field.
-One divergence is asserted rather than hidden: `run --timeout` keeps the child
-in its own process group for tree-kill (#1199), so a group-wide Ctrl-C does not
-reach it (`KNOWN_DIVERGENCES`; the check fails if Rust starts matching).
+`run --timeout` keeps the child in its own process group for tree-kill (#1199)
+and forwards a fatal signal to that group before the parent dies, so a
+group-wide Ctrl-C ends the child as in Go (the former `KNOWN_DIVERGENCES`
+exemption is removed; see `cli-gap-inventory.md` "CLI-007").
 
 Residuals added by review: the per-instance broker CA directory is created in
 `prepare()` before the signal handler (which needs its path) can be installed, so

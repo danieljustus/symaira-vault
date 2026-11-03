@@ -274,6 +274,11 @@ def duplicate_documents(body):
         'dup-expires-typeerr-then-null': (one(',"expires_at":"tomorrow","expires_at":null'), *bad),
         'dup-expires-valid-then-null': (one(',"expires_at":"2000-01-01T00:00:00Z","EXPIRES_AT":null'), *ok),
         'dup-allowed-tools-typeerr-then-valid': (one(',"allowed_tools":[5],"allowed_tools":["*"]'), *bad),
+        # A repeated allowed_tools array is decoded onto the previous slice, so a null element keeps the earlier one
+        # and Go adopts the document (ADR 0034 item 19): a revocation inside it must apply.
+        'dup-allowed-tools-null-overlay': (one(',"allowed_tools":["a"],"allowed_tools":[null]'), *ok),
+        'dup-allowed-tools-null-after-empty': (one(',"allowed_tools":[],"allowed_tools":[null]'), *ok),
+        'dup-allowed-tools-null-overlay-revoked': (one(',"allowed_tools":["a"],"allowed_tools":[null],"revoked":true'), *('listening', 401)),
         'dup-hash-typeerr-then-valid': (doc('{"tok-never":{"hash":5,%s}}' % json.dumps(never)[1:]), *bad),
         'dup-version-typeerr-then-int': (doc('{"tok-never":%s}' % never_entry, '"version":"a","version":2,'), *bad),
         'dup-version-int-then-typeerr': (doc('{"tok-never":%s}' % never_entry, '"version":2,"version":"a",'), *bad),
@@ -532,6 +537,9 @@ def observe_duplicate_reload(binary, base, seed_vault, port, raws, body):
         accepted('root-null', docs['root-null'][0], 401)
         accepted('control-again', docs['dup-control'][0], 200)
         accepted('lone-surrogate-revoked', docs['surrogate-lone-revoked'][0], 401)
+        # a document with a null element in a repeated allowed_tools array is adopted by Go: it un-revokes, then revokes
+        accepted('allowed-tools-null-overlay', docs['dup-allowed-tools-null-overlay'][0], 200)
+        accepted('allowed-tools-null-overlay-revoked', docs['dup-allowed-tools-null-overlay-revoked'][0], 401)
     finally:
         process.close()
     return codes
@@ -539,7 +547,7 @@ def observe_duplicate_reload(binary, base, seed_vault, port, raws, body):
 
 def check_duplicate_reload(go, rust):
     assert go == rust, ('duplicate-key reload sequence differs', go, rust)
-    assert len(go) == 19, len(go)
+    assert len(go) == 21, len(go)
 
 
 def check_dynamic(go, rust):

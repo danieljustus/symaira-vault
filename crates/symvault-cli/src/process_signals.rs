@@ -36,6 +36,14 @@
 //! behind. SIGKILL cannot be intercepted and still leaves it, as documented
 //! in the broker contract.
 //!
+//! A bounded `run --timeout` child lives in its own process group so a timeout
+//! can kill the whole tree (#1199), which means a terminal Ctrl-C (SIGINT to
+//! the foreground group) reaches only this process. Go's child shares the
+//! caller's group and receives the signal too, so before the process dies
+//! from a signal `run_commands::child_group::forward` delivers the same signal to the
+//! registered child group: the child never outlives the parent holding the
+//! injected secrets (ADR 0034 item 12, CLI-007).
+//!
 //! Windows keeps `ctrlc` (Ctrl-C and Ctrl-Break in a console) unchanged;
 //! its native evidence lives in `egress_contract.py` and
 //! `intake_watch_contract.py`.
@@ -106,6 +114,9 @@ mod unix {
                         stop();
                         continue;
                     }
+                    // Go's child shares the caller's group and gets the same
+                    // signal; a bounded run's child has its own group.
+                    crate::run_commands::child_group::forward(signal);
                     if let Some(directory) = &cleanup_dir {
                         // A missing directory means the owner already cleaned
                         // up; neither case may keep the process alive.

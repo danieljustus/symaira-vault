@@ -14,3 +14,14 @@ test asserts against (`internal/approval/local.go`,
   hash these snapshots instead of the working tree.
 - Do not edit by hand. Pinned files that are not Go sources (shell/Python
   scripts) are still read from their normal repo paths.
+
+## Refreshed after the source commit
+
+A snapshot whose Go source is edited by a later change is refreshed from that
+change's working tree and its `MANIFEST.json` sha256/bytes are updated; the
+`commit` field keeps naming the original freeze for every other file.
+
+- `scripts/rust-port/cmd/outputmodegen/cases.go`: five `config set` integer
+  cases (`010`, `017`, `0b11`, `0b101`, `1_000`; ADR 0034 item 4) added to the
+  output-modes corpus, so the snapshot no longer equals
+  `git show <commit>:scripts/rust-port/cmd/outputmodegen/cases.go`.

@@ -80,7 +80,7 @@ use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
 
 const PASSPHRASE: &str = "correct horse battery staple";
-const EXPECTED_CASES: usize = 524;
+const EXPECTED_CASES: usize = 549;
 const EXPECTED_PATHS: usize = 47;
 const EXPECTED_SEEDS: usize = 6;
 /// The normalization rules, in the order of the numbered list above.

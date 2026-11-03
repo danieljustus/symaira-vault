@@ -297,12 +297,6 @@ def foreground_case(binary, base, template, command, sig, ignored=False):
     return record
 
 
-# A bounded run (--timeout) keeps the child in its own process group so a
-# timeout can kill the tree (#1199); a terminal Ctrl-C therefore does not reach
-# that child, unlike Go. Recorded and asserted so the exemption cannot go stale.
-KNOWN_DIVERGENCES = {"run-timeout-group-sigint": "Rust bounded run isolates the child in its own process group"}
-
-
 def run_case(binary, base, template, command, sig, group, extra=(), label="", ignored=False):
     """run / run --broker with a long-lived child; signal the parent or its whole group.
 
@@ -381,10 +375,6 @@ def compare(go, rust):
         name = left["case"]
         keys = ["ending", "stdout", "stderr", "listener_closed", "orphaned_child_alive",
                 "ignored", "survived", "listener_open_after_ignored_signal"]
-        if name in KNOWN_DIVERGENCES:
-            assert (left["orphaned_child_alive"], right["orphaned_child_alive"]) == (False, True), \
-                (name, "known divergence changed; remove the exemption", left["orphaned_child_alive"], right["orphaned_child_alive"])
-            keys.remove("orphaned_child_alive")
         for key in keys:
             assert left.get(key) == right.get(key), (name, key, left.get(key), right.get(key))
         go_state, rust_state = list(left["state"]), list(right["state"])
@@ -411,7 +401,7 @@ def check_oracle_expectations(go):
             assert record["state"].count(f"vault/{CA_NAME}") == 1, ("Go keeps its persistent CA file", record["case"])
         if record["command"] in ("run", "run-broker"):
             assert record["orphaned_child_alive"] is True, ("Go leaves the child running", record["case"])
-        if record["command"].endswith("-group") and record["case"] not in KNOWN_DIVERGENCES:
+        if record["command"].endswith("-group"):
             assert record["ending"] == ["signal", getattr(signal, record["signal"])]
             assert record["orphaned_child_alive"] is False
 

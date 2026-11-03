@@ -422,6 +422,17 @@ fn canonical_scalar_node(scalar: &yaml_edit::Scalar) -> Result<yaml_edit::YamlNo
     {
         value.pop();
     }
+    // yaml.v3 resolves a plain scalar like `010`, `017`, `0b11` or `1_000` to
+    // an int and writes its decimal value (8, 15, 3, 1000). `yaml_edit` reads
+    // `010` as decimal 10 and `0b11` as a string, which it then quotes. Only
+    // the int family follows the Go resolver (ADR 0034 item 4); `1e3`, `y`,
+    // timestamps and `<<` stay as the maintainer's items 3 and 5 decide.
+    if parsed.style() == yaml_edit::ScalarStyle::Plain
+        && let symvault_gojson::resolve::Resolved::Int(number) =
+            symvault_gojson::resolve::resolve(&value)
+    {
+        return scalar_node_from_value(yaml_edit::ScalarValue::from(number));
+    }
     if parsed.scalar_type() == yaml_edit::ScalarType::String {
         if value.trim_matches('\n').is_empty() {
             return scalar_node_from_value(yaml_edit::ScalarValue::double_quoted(""));

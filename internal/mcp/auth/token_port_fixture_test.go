@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -16,12 +18,28 @@ import (
 const tokenPortFixturePath = "testdata/port/auth/token-lookup.json"
 
 type tokenPortFixture struct {
-	SchemaVersion int               `json:"schema_version"`
-	Oracle        tokenPortOracle   `json:"oracle"`
-	Now           string            `json:"now"`
-	Registry      TokenRegistryFile `json:"registry"`
-	Lookups       []tokenPortLookup `json:"lookups"`
-	Scopes        []tokenPortScope  `json:"scopes"`
+	SchemaVersion int                 `json:"schema_version"`
+	Oracle        tokenPortOracle     `json:"oracle"`
+	Now           string              `json:"now"`
+	Registry      TokenRegistryFile   `json:"registry"`
+	Lookups       []tokenPortLookup   `json:"lookups"`
+	Scopes        []tokenPortScope    `json:"scopes"`
+	Documents     []tokenPortDocument `json:"documents"`
+}
+
+// tokenPortDocument records what json.Unmarshal into TokenRegistryFile (the
+// call unmarshalEntries makes) produced for a raw registry document: the
+// repeated-allowed_tools overlay cases of ADR 0034 item 19.
+type tokenPortDocument struct {
+	Name     string                           `json:"name"`
+	Document string                           `json:"document"`
+	Error    bool                             `json:"error"`
+	Tokens   map[string]tokenPortDecodedEntry `json:"tokens,omitempty"`
+}
+
+type tokenPortDecodedEntry struct {
+	AllowedTools []string `json:"allowed_tools"`
+	Revoked      bool     `json:"revoked"`
 }
 
 type tokenPortOracle struct {
@@ -125,6 +143,7 @@ func TestTokenPortFixture(t *testing.T) {
 			GeneratorHash: generatorHash,
 		},
 		Now: now.Format(time.RFC3339), Registry: registry, Lookups: lookups, Scopes: scopes,
+		Documents: tokenPortDocuments(),
 	}
 	data, err := json.MarshalIndent(fixture, "", "  ")
 	if err != nil {
@@ -181,4 +200,89 @@ func tokenPortGeneratorHash(t *testing.T) string {
 	}
 	digest := sha256.Sum256(data)
 	return fmt.Sprintf("%x", digest[:])
+}
+
+// tokenPortDocuments builds registry documents whose repeated allowed_tools
+// members overlay each other, and records Go's decode result for each. The
+// generated block uses a fixed LCG, never math/rand, so the fixture does not
+// depend on a Go release.
+func tokenPortDocuments() []tokenPortDocument {
+	str := func(values ...string) string {
+		out := make([]string, len(values))
+		for i, value := range values {
+			out[i] = strconv.Quote(value)
+		}
+		return "[" + strings.Join(out, ",") + "]"
+	}
+	tools := func(array string) string { return `"allowed_tools":` + array }
+	cases := []struct{ name, members string }{
+		{"null-element-keeps-earlier", tools(str("a")) + "," + tools("[null]")},
+		{"null-element-after-empty", tools("[]") + "," + tools("[null]")},
+		{"null-element-alone", tools("[null]")},
+		{"null-and-string-elements", tools(`[null,"x",null]`)},
+		{"shorter-then-nulls-reexpose", tools(str("a", "b", "c")) + "," + tools(str("x")) + "," + tools("[null,null,null]")},
+		{"nulls-longer-than-backing", tools(str("a", "b")) + "," + tools(str("x")) + "," + tools("[null,null,null,null]")},
+		{"nil-drops-backing", tools(str("a", "b")) + "," + tools("null") + "," + tools("[null,null]")},
+		{"empty-drops-backing", tools(str("a", "b")) + "," + tools("[]") + "," + tools("[null,null]")},
+		{"case-folded-name", tools(str("a")) + `,"ALLOWED_TOOLS":[null]`},
+		{"revoked-after-overlay", tools(str("a")) + "," + tools("[null]") + `,"revoked":true`},
+		{"revoked-then-overlay", `"revoked":true,` + tools(str("a")) + "," + tools("[null]")},
+		{"overlay-then-nil", tools(str("a")) + "," + tools("[null]") + "," + tools("null")},
+	}
+	// Overlay sequences across capacity boundaries (1, 2, 4, 8, ... and the
+	// 1.25x growth past 256): n strings, one short array, then 2n nulls.
+	for _, n := range []int{1, 2, 3, 4, 5, 8, 9, 16, 17, 33, 257, 600} {
+		long := make([]string, n)
+		for i := range long {
+			long[i] = fmt.Sprintf("t%d", i)
+		}
+		nulls := strings.TrimSuffix(strings.Repeat("null,", 2*n), ",")
+		cases = append(cases, struct{ name, members string }{
+			fmt.Sprintf("capacity-%d", n),
+			tools(str(long...)) + "," + tools(str("x")) + "," + tools("["+nulls+"]"),
+		})
+	}
+	state := uint32(20261103)
+	next := func(bound uint32) uint32 {
+		state = state*1664525 + 1013904223
+		return (state >> 8) % bound
+	}
+	for k := 0; k < 48; k++ {
+		var members []string
+		for m, count := 0, 1+int(next(4)); m < count; m++ {
+			switch next(8) {
+			case 0:
+				members = append(members, tools("null"))
+			case 1:
+				members = append(members, tools("[]"))
+			default:
+				items := make([]string, int(next(9))+1)
+				for i := range items {
+					if next(5) < 2 {
+						items[i] = "null"
+					} else {
+						items[i] = strconv.Quote(fmt.Sprintf("s%d_%d_%d", k, m, i))
+					}
+				}
+				members = append(members, tools("["+strings.Join(items, ",")+"]"))
+			}
+		}
+		cases = append(cases, struct{ name, members string }{fmt.Sprintf("generated-%02d", k), strings.Join(members, ",")})
+	}
+	documents := make([]tokenPortDocument, 0, len(cases))
+	for _, c := range cases {
+		text := `{"version":2,"tokens":{"t":{"id":"t","hash":"h",` + c.members + `}}}`
+		var file TokenRegistryFile
+		record := tokenPortDocument{Name: c.name, Document: text}
+		if err := json.Unmarshal([]byte(text), &file); err != nil {
+			record.Error = true
+		} else {
+			record.Tokens = map[string]tokenPortDecodedEntry{}
+			for id, entry := range file.Tokens {
+				record.Tokens[id] = tokenPortDecodedEntry{AllowedTools: entry.AllowedTools, Revoked: entry.Revoked}
+			}
+		}
+		documents = append(documents, record)
+	}
+	return documents
 }

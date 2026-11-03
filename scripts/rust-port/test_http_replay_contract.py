@@ -245,6 +245,13 @@ class TokenContract(unittest.TestCase):
         tokens.check_startup(scenario, go, copy.deepcopy(go))
         with self.assertRaisesRegex(AssertionError, 'startup state'):
             tokens.check_startup(scenario, go, old_rust)
+        # ADR 0034 item 19: Go adopts a null element in a repeated allowed_tools array; a Rust that refuses the
+        # document (the old behaviour) leaves a revocation in it unapplied and is rejected here.
+        overlay = scenarios['dup-allowed-tools-null-overlay-revoked']
+        assert overlay[3:] == ('listening', 401), overlay
+        adopted = dict(go, state='listening', exit=None, responses=[dict(responses=[dict(code=401)])])
+        with self.assertRaisesRegex(AssertionError, 'startup state'):
+            tokens.check_startup(overlay, adopted, copy.deepcopy(go))
         # the documents are real JSON-with-duplicates and invalid UTF-8 only where declared
         for name, (data, _, _) in documents.items():
             if name.startswith('utf8-invalid'):

@@ -161,6 +161,18 @@ func allCaseSpecs() []caseSpec {
 		add(caseSpec{id: "config-set-" + bad.id, path: "config set", desc: "set " + bad.desc, seed: "entries", argv: flags("config", "set", bad.key, bad.value)})
 	}
 	add(caseSpec{id: "config-set-yes-bool", path: "config set", desc: "set a YAML 1.1 boolean word (accepted for a bool key)", seed: "entries", argv: flags("config", "set", "git.auto_push", "yes"), post: [][]string{{"config", "get", "git.auto_push"}}})
+	// yaml.v3 resolves these plain scalars to ints and writes the decimal value
+	// (ADR 0034 item 4): a leading-zero octal, a 0b binary and underscore
+	// separators. The post `config get` shows the stored number.
+	for _, v := range []struct{ id, value, desc string }{
+		{"octal", "010", "a leading-zero octal (stored as 8)"},
+		{"octal-17", "017", "a second leading-zero octal (stored as 15)"},
+		{"binary", "0b11", "a 0b binary (stored as 3)"},
+		{"binary-5", "0b101", "a longer 0b binary (stored as 5)"},
+		{"underscore", "1_000", "underscore digit separators (stored as 1000)"},
+	} {
+		add(caseSpec{id: "config-set-int-" + v.id, path: "config set", desc: "set " + v.desc + " for an int key", seed: "entries", argv: flags("config", "set", "mcp.port", v.value), post: [][]string{{"config", "get", "mcp.port"}}})
+	}
 	// The reload after `config set` decodes the whole file, so the value being set
 	// is irrelevant: the file already on disk carries the offending node. yaml.v3
 	// follows aliases (the error names the anchor's line), merge keys and

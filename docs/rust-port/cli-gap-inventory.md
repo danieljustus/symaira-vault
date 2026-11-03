@@ -243,7 +243,8 @@ Still open (probed, not fixed; see the CFG-003 and CLI-005 rows of the contract 
 | --- | --- | --- |
 | nesting depth | up to 10000 levels | refused beyond 256 (`yaml_edit`); 100k `[` take about 100 s to refuse |
 | `profiles:\n  x: null` | nil pointer panic, exit 2 | parse error, exit 6 |
-| `config set x 1e3` / `0b11` / `010` / `y` / `2026-10-31` | writes `1000` / `3` / `8` / `"y"` / `2026-10-31T00:00:00Z` | `1000.0` / `"0b11"` / `10` / `y` / `2026-10-31` |
+| `config set x 1e3` / `y` / `2026-10-31` | writes `1000` / `"y"` / `2026-10-31T00:00:00Z` | `1000.0` / `y` / `2026-10-31` (ADR 0034 item 3, maintainer decision pending) |
+| `config set x 010` / `017` / `0b11` / `0b101` / `1_000` (ADR 0034 item 4) | writes `8` / `15` / `3` / `5` / `1000` | **fixed**: same. A plain scalar that `symvault_gojson::resolve` resolves to `!!int` is written as its decimal value (also inside flow sequences and mappings; a quoted `"010"` stays a string). Before: `10` / `17` / `"0b11"` (an int key then failed the reload) / `"0b101"` / `1_000`. Pinned by 25 Go-recorded `config-set-int-*` cases in `output-modes.json` (oracle `bf7f687b`, `post` `config get` shows the stored number) |
 | `config set x '<<'` | writes `!!merge <<` | writes `"<<"` |
 | re-encode of the rest of the file | CRLF becomes LF; flow sequences get `, ` spacing (`[x,x]` becomes `[x, x]`); timestamp scalars in flow mappings are quoted (so a later error says `!!str`, not `!!timestamp`); anchor comments move behind the collection (changing reported lines); explicit keys, `\u00e9` escapes, verbatim and `!` tags, `!!int &a 12` order, tagged block sequence indent are normalised | kept as written |
 | root that is not a mapping | `root node is a scalar, not a mapping` (or `a sequence`) | `document has no root to descend into` |
@@ -987,6 +988,28 @@ checks. Pinned by the Go-recorded `testdata/port/mcp/policy-build-context.json`
 (`make policy-context-differential`) and `policy_context_authorize.rs`.
 Unknown actions are denied (Go proceeds), the existing fail-closed difference.
 
+## CLI-007: `run --timeout` Ctrl-C reaches the child (ADR 0034 item 12)
+
+A bounded `run` (`--timeout`, also `run --broker --timeout`) keeps the child in
+its own process group so a timeout can kill the tree (#1199). Go's child shares
+the caller's group, so a terminal Ctrl-C reached it; Rust's parent died and the
+child kept running with the injected secrets and no parent left to enforce the
+timeout. Fixed: `run_commands::child_group` holds the child's group
+(registered before the spawn, cleared on every exit path) and the signal thread
+forwards SIGINT/SIGTERM/SIGHUP/SIGQUIT to it before the parent dies exactly as
+before (death by that signal; exit 2 for SIGQUIT). The `KNOWN_DIVERGENCES`
+exemption of `signal_process_contract.py` is gone, so `run-timeout-group-sigint`
+is compared Go against Rust like the other 32 cases.
+
+Residuals (probed, not fixed):
+
+| Class | Go | Rust |
+| --- | --- | --- |
+| signal sent to the `run --timeout` **parent only** (`kill -TERM <pid>`) | child keeps running | child group receives the same signal (a process cannot tell a tty group delivery from a direct one) |
+| child that ignores or handles the forwarded signal | survives, like in Go | survives, like in Go; the parent still dies at once |
+| MCP `execute_with_secret` child (own group, #1242) | receives a terminal Ctrl-C | not forwarded: the MCP server has its own shutdown path (`mcp_shutdown`) |
+| secret file cleanup when the parent dies from the signal | not applicable | `file use` temporary files are not zeroed on death by signal (unchanged) |
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate
@@ -1307,17 +1330,25 @@ root `tokens` merge), per-byte invalid-UTF-8 replacement, lone `\u` surrogates
 (U+FFFD), nesting up to 10000, root `null` (empty registry) and RFC3339
 timestamps on the raw bytes (953 recorded Go 1.26.6 outcomes).
 
-Reload caveat that applies to every row below: when Rust rejects a document the
+Reload caveat that applies to any divergence declared here: when Rust rejects a document the
 live registry keeps its **last good state**, while Go (which accepts the same
 document) adopts it. A Rust-stricter rejection is therefore a real behavioural
 difference on reload (for example an un-applied revocation or an un-applied new
 token), not only a startup refusal.
 
-| Divergence | Go | Rust | Direction | Status |
-| --- | --- | --- | --- | --- |
-| Repeated `allowed_tools` array containing a `null` element (`"allowed_tools":["a"],"allowed_tools":[null]`) | decodes the second array onto the first slice, so a `null` element keeps or re-exposes the earlier element | document rejected | stricter | declared; Go's slice overlay is not modelled |
+No divergence is declared. A repeated `allowed_tools` array (including one with
+`null` elements) is decoded the way Go's `array()` does it: element `i` is
+decoded onto the slice the earlier occurrence left, `null` keeps it (a new
+position is `""`), the backing array survives truncation so a later longer
+`null` array re-exposes old elements, and `[]` / `null` drop the backing array
+(`GoStringSlice`). Pinned by 72 Go-recorded `documents` in
+`testdata/port/auth/token-lookup.json` (`TestTokenPortFixture`, replayed by
+`go_registry::tests::repeated_allowed_tools_overlay_matches_go_recorded_documents`,
+incl. 12 capacity-boundary sequences up to 600 elements and 48 seeded random
+ones) and by live Go/Rust cases `dup-allowed-tools-null-*` plus two reload steps
+in `http_token_contract.py`.
 
-No other divergence is declared: lone surrogates, depth (10000), root `null` and
+Lone surrogates, depth (10000), root `null` and
 timestamp leftovers (one-digit hour, `,` fraction, `+24:00`, `+00:60`, years
 `0000`-`9999`, fraction digits beyond nine) are matched, not documented away.
 Residual risk: the matched timestamp grammar is a port of `time.Parse`
