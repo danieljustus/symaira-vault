@@ -131,6 +131,21 @@ pub(crate) fn unlock_vault_with_runtime(
     unlock_vault_with_mode(vault, runtime, true)
 }
 
+/// Go's `resolveConfig` as the first step of an open: a configuration that does not load or
+/// validate is refused as `configuration is invalid: <cause>` (`ExitConfigError`, see
+/// [`crate::CONFIG_INVALID_PREFIX`]); a missing `config.yaml` is the default configuration.
+pub(crate) fn resolve_configuration(vault: &Path, interactive: bool) -> Result<(), String> {
+    let config_path = vault.join("config.yaml");
+    if matches!(
+        fs::metadata(&config_path),
+        Err(ref error) if error.kind() == std::io::ErrorKind::NotFound
+    ) {
+        return Ok(());
+    }
+    crate::config::fix::resolve(&config_path, interactive)
+        .map_err(|error| format!("{}{error}", crate::CONFIG_INVALID_PREFIX))
+}
+
 fn unlock_vault_with_mode(
     vault: &Path,
     runtime: &crate::RuntimeSession,
@@ -140,8 +155,11 @@ fn unlock_vault_with_mode(
         .to_str()
         .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
     let config_path = vault.join("config.yaml");
-    // Go resolves the configuration first; a missing file is the default one
+    // Go resolves the configuration first (`resolveConfig`): a file that does not load or
+    // validate (a negative `clipboard.auto_clear_duration`, a syntax error) fails the open
+    // as `ExitConfigError`, before the passphrase policy; a missing file is the default one
     // (and `OpenWithPassphrase` reports it later, once the identity is read).
+    resolve_configuration(vault, interactive)?;
     let (config, config_bytes, config_present) = match Config::load(&config_path) {
         Ok(config) => {
             let bytes = safeio::read(&config_path)

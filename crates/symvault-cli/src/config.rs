@@ -1,5 +1,5 @@
 #[path = "config_fix.rs"]
-mod fix;
+pub(crate) mod fix;
 
 use std::{
     env, fs,

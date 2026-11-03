@@ -1345,7 +1345,7 @@ enum DynamicCommand {
 
 #[derive(Debug, Args)]
 struct VersionArgs {
-    #[arg(value_name = "ARG", num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true)]
+    #[arg(value_name = "ARG", num_args = 0..)]
     _extra: Vec<OsString>,
 }
 
@@ -1406,7 +1406,7 @@ fn run_cli() -> ExitCode {
         return code;
     }
 
-    let cli = match Cli::try_parse_from(args) {
+    let cli = match Cli::try_parse_from(cobra_usage::clap_arguments(args, Cli::command())) {
         Ok(cli) => cli,
         Err(error) => {
             let code = if error.use_stderr() { 1 } else { 0 };
@@ -1748,6 +1748,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1850,6 +1851,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
                 && !error.starts_with(READ_PASSPHRASE_PREFIX)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
@@ -1879,6 +1881,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1909,6 +1912,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1944,6 +1948,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -1979,6 +1984,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2007,6 +2013,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2027,6 +2034,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2063,6 +2071,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2080,6 +2089,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2111,6 +2121,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2134,6 +2145,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2165,6 +2177,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2193,6 +2206,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2212,6 +2226,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2246,6 +2261,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2292,6 +2308,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2329,6 +2346,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2357,6 +2375,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2392,6 +2411,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2647,6 +2667,7 @@ fn run_cli() -> ExitCode {
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
+                && !is_config_invalid(error)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -2808,6 +2829,10 @@ fn run_cli() -> ExitCode {
                 // A failed passphrase read is an ExitLocked error in Go.
                 Err(error) if error.starts_with(READ_PASSPHRASE_PREFIX) => {
                     report_failed_passphrase_read(&error, false).unwrap_or(ExitCode::from(4))
+                }
+                // A configuration that does not load or validate is `ExitConfigError`.
+                Err(error) if error.starts_with(CONFIG_INVALID_PREFIX) => {
+                    report_failed_passphrase_read(&error, false).unwrap_or(ExitCode::from(6))
                 }
                 Err(error) if doubled_errors => {
                     print_error_like_go(&error);
@@ -3133,6 +3158,7 @@ fn run_profile(command: &ProfileCommand, vault: Option<&Path>, quiet: bool) -> E
     // Go reports profile command errors through both Cobra and main.
     if let Err(error) = &result
         && !is_not_initialized(error)
+        && !is_config_invalid(error)
     {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
@@ -3211,6 +3237,7 @@ fn run_audit_export(
     })();
     if let Err(error) = &result
         && !is_not_initialized(error)
+        && !is_config_invalid(error)
     {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
@@ -3283,6 +3310,7 @@ fn run_audit_rotate_key(explicit_vault: Option<&Path>, profile: Option<&str>) ->
     })();
     if let Err(error) = &result
         && !is_not_initialized(error)
+        && !is_config_invalid(error)
     {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
@@ -4203,9 +4231,30 @@ pub(crate) fn write_not_initialized(error: &str) {
 const READ_PASSPHRASE_PREFIX: &str = "read passphrase: ";
 
 pub(crate) fn report_failed_passphrase_read(error: &str, unlock_command: bool) -> Option<ExitCode> {
+    if error.starts_with(CONFIG_INVALID_PREFIX) {
+        return Some(report_config_invalid(error));
+    }
     error
         .starts_with(READ_PASSPHRASE_PREFIX)
         .then(|| report_exit_locked(error, unlock_command))
+}
+
+/// Go's `unlockVault` wraps a configuration that does not load or validate in an
+/// `ExitConfigError` (`configuration is invalid: <cause>`): cobra and `ExecuteRoot` each
+/// print it, then the doctor hint follows and the exit status is 6.
+pub(crate) const CONFIG_INVALID_PREFIX: &str = "configuration is invalid: ";
+
+pub(crate) fn is_config_invalid(error: &(impl std::fmt::Display + ?Sized)) -> bool {
+    error.to_string().starts_with(CONFIG_INVALID_PREFIX)
+}
+
+fn report_config_invalid(error: &str) -> ExitCode {
+    print_error_like_go(error);
+    let _ = writeln!(
+        io::stderr(),
+        "Run 'symvault doctor' to diagnose and fix configuration issues."
+    );
+    ExitCode::from(6)
 }
 
 /// An `ExitLocked` error: `Error:` twice, the locked hint, exit status 4.
@@ -5447,6 +5496,7 @@ fn run_import_review(
     })();
     if let Err(error) = &result
         && !is_not_initialized(error)
+        && !is_config_invalid(error)
         && !error.starts_with(READ_PASSPHRASE_PREFIX)
     {
         let _ = writeln!(io::stderr(), "Error: {error}");
@@ -5564,6 +5614,8 @@ fn run_unlock(
             }
             return Ok::<(), String>(());
         }
+        // `UnlockVaultForSession` resolves the configuration first, like every open.
+        device::resolve_configuration(&vault, true)?;
         let config = Config::load(vault.join("config.yaml"))
             .map_err(|error| format!("load config: {error}"))?;
         let config_bytes =

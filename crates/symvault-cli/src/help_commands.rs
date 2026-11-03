@@ -22,6 +22,11 @@ pub fn write<W: Write>(_root: clap::Command, path: &[String], output: &mut W) ->
     let mut selected = artifact::root();
     let mut matched = false;
     for part in path {
+        // cobra's topic walk skips a lone `-` like any flag-looking token (`help - list` is
+        // the help of `list`, `help -` the root help); an unknown topic still names it.
+        if part == "-" {
+            continue;
+        }
         let Some(next) = artifact::child(selected, part) else {
             if !matched {
                 return write_unknown_topic(path, &mut io::stderr().lock());

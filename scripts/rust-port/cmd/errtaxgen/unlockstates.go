@@ -29,11 +29,27 @@ const (
 	stateEnvDisabled        = "env_disabled"
 	envDisabledConfigSuffix = "security:\n    disable_env_passphrase: true\n"
 
+	// The config-invalid states append a section to the settled vault's config.yaml
+	// that Go refuses when it resolves the configuration (PLATFORM-001), before the
+	// passphrase policy and before the vault is opened. A negative
+	// clipboard.auto_clear_duration is a validation error (Config.Validate); an
+	// unterminated flow sequence is a load error. The environment passphrase is
+	// available in both, so only the configuration decides.
+	stateConfigClipboardInvalid  = "config_clipboard_invalid"
+	stateConfigSyntaxInvalid     = "config_syntax_invalid"
+	clipboardInvalidConfigSuffix = "clipboard:\n    auto_clear_duration: -5\n"
+	syntaxInvalidConfigSuffix    = "clipboard: [\n"
+
 	vaultConfigFile   = "config.yaml"
 	vaultIdentityFile = "identity.age"
 )
 
-var unlockStates = []string{stateLocked, stateIdentityOnly, stateConfigOnly, stateIdentityOnlyLocked, stateConfigOnlyLocked, stateConfigOnlyEnvDisabled, stateEnvDisabled}
+var unlockStates = []string{stateLocked, stateIdentityOnly, stateConfigOnly, stateIdentityOnlyLocked, stateConfigOnlyLocked, stateConfigOnlyEnvDisabled, stateEnvDisabled, stateConfigClipboardInvalid, stateConfigSyntaxInvalid}
+
+// isConfigInvalidState reports the states whose config.yaml Go refuses.
+func isConfigInvalidState(state string) bool {
+	return state == stateConfigClipboardInvalid || state == stateConfigSyntaxInvalid
+}
 
 // specForState maps a scenario state to the sandbox it starts from.
 func specForState(state string, seed []seedFile) (runSpec, error) {
@@ -56,6 +72,10 @@ func specForState(state string, seed []seedFile) (runSpec, error) {
 		return runSpec{initialized: true, seed: seed, configSuffix: envDisabledConfigSuffix}, nil
 	case stateConfigOnlyEnvDisabled:
 		return runSpec{initialized: true, seed: seed, omit: []string{vaultIdentityFile}, configSuffix: envDisabledConfigSuffix}, nil
+	case stateConfigClipboardInvalid:
+		return runSpec{initialized: true, seed: seed, configSuffix: clipboardInvalidConfigSuffix}, nil
+	case stateConfigSyntaxInvalid:
+		return runSpec{initialized: true, seed: seed, configSuffix: syntaxInvalidConfigSuffix}, nil
 	}
 	return runSpec{}, fmt.Errorf("unknown scenario state %q", state)
 }
@@ -102,6 +122,11 @@ type unlockCommand struct {
 	name    string
 	args    []string
 	partial bool
+	// configOnly marks a command that runs in the config-invalid states only:
+	// `get` unlocks without prompting once stdin is not a terminal
+	// (WithVaultForScripting), so the configuration is resolved non-interactively
+	// and a refusal is not offered a repair.
+	configOnly bool
 }
 
 // unlockCommands are the commands that unlock the vault through the prompting
@@ -115,33 +140,38 @@ type unlockCommand struct {
 // prompting path in Go (get is non-interactive, set asks for the username first)
 // and differ for reasons of their own.
 var unlockCommands = []unlockCommand{
-	{"device_pair", []string{"device", "pair"}, true},
-	{"device_pair_x", []string{"device", "pair", "x"}, true},
-	{"list", []string{"list"}, true},
-	{"find", []string{"find", "x"}, false},
-	{"add", []string{"add", "x"}, false},
-	{"delete", []string{"delete", "x"}, false},
-	{"edit", []string{"edit", "x"}, false},
-	{"verify", []string{"verify"}, true},
-	{"unlock", []string{"unlock"}, true},
-	{"migrate_pseudonymize", []string{"migrate", "pseudonymize"}, true},
-	{"migrate_pseudonymize_yes", []string{"migrate", "pseudonymize", "--yes"}, true},
-	{"recipients_add", []string{"recipients", "add", "x"}, false},
-	{"recipients_remove", []string{"recipients", "remove", "x"}, false},
-	{"run", []string{"run", "--", "x"}, false},
-	{"file_use", []string{"file", "use", seedFileEntry, "x"}, false},
-	{"import_review_list", []string{"import", "review", "list"}, false},
-	{"import_review_promote", []string{"import", "review", "promote", "x"}, false},
-	{"intake_x", []string{"intake", "x"}, false},
+	{"device_pair", []string{"device", "pair"}, true, false},
+	{"device_pair_x", []string{"device", "pair", "x"}, true, false},
+	{"list", []string{"list"}, true, false},
+	{"find", []string{"find", "x"}, false, false},
+	{"add", []string{"add", "x"}, false, false},
+	{"delete", []string{"delete", "x"}, false, false},
+	{"edit", []string{"edit", "x"}, false, false},
+	{"verify", []string{"verify"}, true, false},
+	{"unlock", []string{"unlock"}, true, false},
+	{"migrate_pseudonymize", []string{"migrate", "pseudonymize"}, true, false},
+	{"migrate_pseudonymize_yes", []string{"migrate", "pseudonymize", "--yes"}, true, false},
+	{"recipients_add", []string{"recipients", "add", "x"}, false, false},
+	{"recipients_remove", []string{"recipients", "remove", "x"}, false, false},
+	{"run", []string{"run", "--", "x"}, false, false},
+	{"file_use", []string{"file", "use", seedFileEntry, "x"}, false, false},
+	{"import_review_list", []string{"import", "review", "list"}, false, false},
+	{"import_review_promote", []string{"import", "review", "promote", "x"}, false, false},
+	{"intake_x", []string{"intake", "x"}, false, false},
+	{"get", []string{"get", seedFileEntry}, false, true},
 }
 
 // unlockStateInputs runs unlockCommands in every unlock state: all of them in
-// the locked vault, the partial ones in the four partial shapes.
+// the locked vault, the partial ones in the partial shapes, and the partial and
+// config-only ones in the config-invalid states.
 func unlockStateInputs() []scenarioInput {
 	var out []scenarioInput
 	for _, state := range unlockStates {
 		for _, cmd := range unlockCommands {
-			if state != stateLocked && !cmd.partial {
+			if cmd.configOnly && !isConfigInvalidState(state) {
+				continue
+			}
+			if state != stateLocked && !cmd.partial && !cmd.configOnly {
 				continue
 			}
 			out = append(out, scenarioInput{

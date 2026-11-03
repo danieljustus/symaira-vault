@@ -31,6 +31,9 @@ func TestSpecForStateShapesEachUnlockState(t *testing.T) {
 		stateConfigOnlyLocked:      {seeded: true, tz: true, omit: vaultIdentityFile},
 		stateConfigOnlyEnvDisabled: {seeded: true, passphraseEnv: true, omit: vaultIdentityFile, suffix: true},
 		stateEnvDisabled:           {seeded: true, passphraseEnv: true, suffix: true},
+
+		stateConfigClipboardInvalid: {seeded: true, passphraseEnv: true, suffix: true},
+		stateConfigSyntaxInvalid:    {seeded: true, passphraseEnv: true, suffix: true},
 	}
 	for state, w := range cases {
 		spec, err := specForState(state, seed)
@@ -111,19 +114,58 @@ func TestUnlockStateInputsCoverEveryStateOnce(t *testing.T) {
 			t.Errorf("%s: %v", in.name, err)
 		}
 	}
-	partial := 0
+	partial, configOnly := 0, 0
 	for _, cmd := range unlockCommands {
 		if cmd.partial {
 			partial++
 		}
+		if cmd.configOnly {
+			configOnly++
+		}
 	}
 	for _, state := range unlockStates {
 		want := partial
-		if state == stateLocked {
-			want = len(unlockCommands)
+		switch {
+		case state == stateLocked:
+			want = len(unlockCommands) - configOnly
+		case isConfigInvalidState(state):
+			want = partial + configOnly
 		}
 		if perState[state] != want {
 			t.Errorf("%s: %d scenarios, want %d", state, perState[state], want)
+		}
+	}
+}
+
+// The config-invalid states append a section Go refuses: a negative
+// clipboard.auto_clear_duration fails Config.Validate, an unterminated flow
+// sequence fails the load. Both start from the complete settled vault.
+func TestConfigInvalidStatesAppendTheirSectionToTheSeededConfig(t *testing.T) {
+	for state, suffix := range map[string]string{
+		stateConfigClipboardInvalid: clipboardInvalidConfigSuffix,
+		stateConfigSyntaxInvalid:    syntaxInvalidConfigSuffix,
+	} {
+		if !isConfigInvalidState(state) {
+			t.Errorf("%s is not a config-invalid state", state)
+		}
+		spec, err := specForState(state, testSeed())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if spec.configSuffix != suffix || len(spec.omit) != 0 || !spec.initialized {
+			t.Errorf("%s: spec = %+v", state, spec)
+		}
+	}
+	if !strings.Contains(clipboardInvalidConfigSuffix, "auto_clear_duration: -") {
+		t.Errorf("clipboard suffix = %q", clipboardInvalidConfigSuffix)
+	}
+	if isConfigInvalidState(stateEnvDisabled) || isConfigInvalidState(stateLocked) {
+		t.Fatal("only the config-invalid states are config-invalid")
+	}
+	// get runs only where the configuration is refused.
+	for _, in := range unlockStateInputs() {
+		if strings.HasSuffix(in.name, "_get") && !isConfigInvalidState(in.state) {
+			t.Errorf("%s: get runs outside the config-invalid states", in.name)
 		}
 	}
 }

@@ -767,16 +767,19 @@ fn strip_flags(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<String
     positional
 }
 
-/// cobra's `argsMinusFirstX`: drop the first occurrence of the command word.
-fn args_minus_first(tokens: &[String], word: &str, flags: Flags<'_>, lenient: bool) -> Vec<String> {
-    let mut kept = Vec::new();
-    let mut removed = false;
+/// cobra's `argsMinusFirstX`: the index of the first occurrence of the command word
+/// that is not the value of a flag and comes before `--`.
+fn first_word_index(
+    tokens: &[String],
+    word: &str,
+    flags: Flags<'_>,
+    lenient: bool,
+) -> Option<usize> {
     let mut index = 0;
     while index < tokens.len() {
         let token = &tokens[index];
         if token == "--" {
-            kept.extend(tokens[index..].iter().cloned());
-            break;
+            return None;
         }
         let mut skip_value = false;
         if let Some(name) = token.strip_prefix("--") {
@@ -793,21 +796,15 @@ fn args_minus_first(tokens: &[String], word: &str, flags: Flags<'_>, lenient: bo
             };
         }
         if skip_value {
-            kept.push(token.clone());
-            if let Some(next) = tokens.get(index + 1) {
-                kept.push(next.clone());
-            }
             index += 2;
             continue;
         }
-        if !removed && token == word {
-            removed = true;
-        } else {
-            kept.push(token.clone());
+        if token == word {
+            return Some(index);
         }
         index += 1;
     }
-    kept
+    None
 }
 
 /// A resolved command: the clap definition when the native tree has it, and its
@@ -1417,6 +1414,87 @@ pub fn evaluate_with_required(args: &[String], root: Command) -> Verdict {
     evaluate_stages(args, root, true)
 }
 
+/// How cobra's command resolution ended.
+enum Stop {
+    /// A command was resolved, or none (the root).
+    Resolved,
+    /// The first positional is `help`: the native help command walks the topic.
+    Help,
+    /// The first positional is no command of the root.
+    Unknown(String),
+}
+
+struct Resolution<'a> {
+    current: Node<'a>,
+    /// The tokens left once the command words are removed.
+    tokens: Vec<String>,
+    /// Index in the original arguments of the last command word (`help` included).
+    last_word: Option<usize>,
+    stop: Stop,
+}
+
+/// cobra's `Find`: strip the flags, take the first positional as the next command word
+/// and repeat on what is left. A lone `-` starts with a dash, so it is skipped here
+/// and stays in `tokens` for the flag parser, which counts it as a positional.
+fn resolve<'a>(args: &[String], root: &'a Command) -> Resolution<'a> {
+    let mut current = Node {
+        command: None,
+        path: Vec::new(),
+    };
+    let mut tokens = args.to_vec();
+    let mut origin: Vec<usize> = (0..args.len()).collect();
+    let mut last_word = None;
+    loop {
+        let flags = Flags {
+            command: current.command.unwrap_or(root),
+            root,
+        };
+        let lenient = current.command.is_none() && !current.path.is_empty();
+        let positional = strip_flags(&tokens, flags, lenient);
+        let Some(first) = positional.first() else {
+            break;
+        };
+        let lookup = Node {
+            command: current.command.or(current.path.is_empty().then_some(root)),
+            path: current.path.clone(),
+        };
+        let index = first_word_index(&tokens, first, flags, lenient);
+        match find_next(&lookup, first) {
+            Some(next) => {
+                if let Some(index) = index {
+                    tokens.remove(index);
+                    last_word = Some(origin.remove(index));
+                }
+                current = next;
+            }
+            None => {
+                let stop = if current.path.is_empty() {
+                    if first == "help" {
+                        last_word = index.map(|index| origin[index]);
+                        Stop::Help
+                    } else {
+                        Stop::Unknown(first.clone())
+                    }
+                } else {
+                    Stop::Resolved
+                };
+                return Resolution {
+                    current,
+                    tokens,
+                    last_word,
+                    stop,
+                };
+            }
+        }
+    }
+    Resolution {
+        current,
+        tokens,
+        last_word,
+        stop: Stop::Resolved,
+    }
+}
+
 fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdict {
     if args
         .iter()
@@ -1426,40 +1504,16 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
         return Verdict::Proceed;
     }
     root.build();
-    let mut current = Node {
-        command: None,
-        path: Vec::new(),
-    };
-    let mut tokens = args.to_vec();
-    loop {
-        let flags = Flags {
-            command: current.command.unwrap_or(&root),
-            root: &root,
-        };
-        let lenient = current.command.is_none() && !current.path.is_empty();
-        let positional = strip_flags(&tokens, flags, lenient);
-        let Some(first) = positional.first() else {
-            break;
-        };
-        let lookup = Node {
-            command: current.command.or(current.path.is_empty().then_some(&root)),
-            path: current.path.clone(),
-        };
-        match find_next(&lookup, first) {
-            Some(next) => {
-                tokens = args_minus_first(&tokens, first, flags, lenient);
-                current = next;
-            }
-            None => {
-                if current.path.is_empty() {
-                    if first == "help" {
-                        return Verdict::Proceed;
-                    }
-                    return unknown_command(first);
-                }
-                break;
-            }
-        }
+    let Resolution {
+        current,
+        tokens,
+        stop,
+        ..
+    } = resolve(args, &root);
+    match stop {
+        Stop::Resolved => {}
+        Stop::Help => return Verdict::Proceed,
+        Stop::Unknown(word) => return unknown_command(&word),
     }
     let path_text = current.path.join(" ");
     let flags = Flags {
@@ -1472,7 +1526,10 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
         Err(message) => return fail_at(&path_text, &message, 1),
     };
     if current.path.is_empty() {
-        return Verdict::Proceed;
+        // The root is not runnable: whatever is left (a lone `-`, everything after `--`,
+        // only persistent flags) is a positional cobra's legacy check never sees, and
+        // the root prints its help before the output-format gate runs.
+        return Verdict::GroupHelp(String::new());
     }
     if GROUPS.contains(&path_text.as_str()) {
         return Verdict::GroupHelp(path_text);
@@ -1497,6 +1554,89 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
         return fail(&message, 1);
     }
     Verdict::Proceed
+}
+
+/// The positions of the lone `-` tokens that are positionals of the command (not a flag's
+/// value) and precede its last word.
+fn bare_dashes_before(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<usize> {
+    let mut found = Vec::new();
+    let mut index = 0;
+    while index < tokens.len() {
+        let token = &tokens[index];
+        if token == "--" {
+            break;
+        }
+        let takes_value = if let Some(name) = token.strip_prefix("--") {
+            !token.contains('=')
+                && match flags.long(name) {
+                    Some(arg) => eats_next(arg),
+                    None => !lenient,
+                }
+        } else if token.starts_with('-') && token.len() == 2 && !token.contains('=') {
+            match token.chars().nth(1).and_then(|c| flags.short(c)) {
+                Some(arg) => eats_next(arg),
+                None => !lenient,
+            }
+        } else {
+            false
+        };
+        if takes_value {
+            index += 2;
+            continue;
+        }
+        if token == "-" {
+            found.push(index);
+        }
+        index += 1;
+    }
+    found
+}
+
+/// The arguments clap should parse. cobra skips a lone `-` while it resolves the command
+/// and hands it to the resolved command as a positional (`- list`, `share - list`), but
+/// clap reads it as the first positional of the parent and never reaches the subcommand.
+/// Every lone `-` that precedes the last command word moves right behind that word, which
+/// is the position cobra gives it relative to the arguments that follow.
+pub fn clap_arguments(args: Vec<std::ffi::OsString>, mut root: Command) -> Vec<std::ffi::OsString> {
+    let Some(strings) = args
+        .iter()
+        .skip(1)
+        .map(|arg| arg.to_str().map(str::to_owned))
+        .collect::<Option<Vec<String>>>()
+    else {
+        return args;
+    };
+    if !strings.iter().any(|token| token == "-") {
+        return args;
+    }
+    root.build();
+    let resolution = resolve(&strings, &root);
+    if matches!(resolution.stop, Stop::Unknown(_)) {
+        return args;
+    }
+    let Some(word) = resolution.last_word else {
+        return args;
+    };
+    let flags = Flags {
+        command: resolution.current.command.unwrap_or(&root),
+        root: &root,
+    };
+    let lenient = resolution.current.command.is_none() && !resolution.current.path.is_empty();
+    let dashes = bare_dashes_before(&strings[..word], flags, lenient);
+    if dashes.is_empty() {
+        return args;
+    }
+    let mut rewritten = Vec::with_capacity(args.len());
+    rewritten.push(args[0].clone());
+    for (index, token) in args.iter().skip(1).enumerate() {
+        if !dashes.contains(&index) {
+            rewritten.push(token.clone());
+        }
+        if index == word {
+            rewritten.extend(dashes.iter().map(|_| std::ffi::OsString::from("-")));
+        }
+    }
+    rewritten
 }
 
 /// Runs the emulation on the process arguments and prints Go's diagnostic.
@@ -2673,6 +2813,96 @@ mod tests {
             vec!["share", "list", "x"],
         ] {
             assert_eq!(verdict(&args), Verdict::Proceed);
+        }
+    }
+
+    /// The arguments clap parses for `args` (without the program name).
+    fn clap_args(args: &[&str]) -> Vec<String> {
+        let mut all = vec![std::ffi::OsString::from("symvault")];
+        all.extend(args.iter().map(std::ffi::OsString::from));
+        clap_arguments(all, root())
+            .into_iter()
+            .skip(1)
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn root_without_a_command_prints_its_help_like_cobra() {
+        let verdict = |args: &[&str]| {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            evaluate_with_required(&args, root())
+        };
+        let root_help = Verdict::GroupHelp(String::new());
+        // No command: a lone dash, `--` and everything after it, persistent flags only.
+        for args in [
+            vec![],
+            vec!["-"],
+            vec!["--"],
+            vec!["-", "--"],
+            vec!["--", "-"],
+            vec!["-", "-"],
+            vec!["--json"],
+            vec!["--output", "xml"],
+            vec!["--json", "-"],
+            vec!["--", "list"],
+            vec!["--", "get", "x"],
+            vec!["--", "help"],
+            vec!["--", "--json"],
+            vec!["--", "--version"],
+            vec!["--vault", "somewhere"],
+        ] {
+            assert_eq!(verdict(&args), root_help, "{args:?}");
+        }
+        // `help` is a command of the native help handler, not an empty root.
+        assert_eq!(verdict(&["help"]), Verdict::Proceed);
+        assert_eq!(verdict(&["-", "help"]), Verdict::Proceed);
+        // A word before `--` is still resolved (and reported) as before.
+        assert!(matches!(
+            verdict(&["-", "unknownthing"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+    }
+
+    #[test]
+    fn a_lone_dash_moves_behind_the_last_command_word_for_clap() {
+        // cobra skips the dash while it resolves the command and counts it as a positional of
+        // the command; clap would read it as the parent's first positional.
+        assert_eq!(clap_args(&["-", "list"]), ["list", "-"]);
+        assert_eq!(clap_args(&["share", "-", "list"]), ["share", "list", "-"]);
+        assert_eq!(clap_args(&["-", "share", "list"]), ["share", "list", "-"]);
+        assert_eq!(clap_args(&["-", "-", "list"]), ["list", "-", "-"]);
+        assert_eq!(
+            clap_args(&["-", "share", "-", "list"]),
+            ["share", "list", "-", "-"]
+        );
+        // Flags keep their place; only the positional dash moves.
+        assert_eq!(clap_args(&["-", "--json", "list"]), ["--json", "list", "-"]);
+        assert_eq!(
+            clap_args(&["--vault", "-", "list"]),
+            ["--vault", "-", "list"],
+            "a flag's value is not a positional"
+        );
+        assert_eq!(clap_args(&["--vault=-", "list"]), ["--vault=-", "list"]);
+        // The dash goes right behind the word, ahead of what cobra passes after it.
+        assert_eq!(clap_args(&["-", "list", "foo"]), ["list", "-", "foo"]);
+        assert_eq!(
+            clap_args(&["-", "version", "--json"]),
+            ["version", "-", "--json"]
+        );
+        // `help` walks its topic itself.
+        assert_eq!(clap_args(&["-", "help", "list"]), ["help", "-", "list"]);
+        // Nothing to move: unchanged, including a dash behind the word or after `--`.
+        for args in [
+            vec!["list", "-"],
+            vec!["list"],
+            vec!["-"],
+            vec!["help", "-", "list"],
+            vec!["-", "unknownthing"],
+            vec!["--", "-"],
+            vec!["run", "--", "-"],
+        ] {
+            assert_eq!(clap_args(&args), args, "{args:?}");
         }
     }
 

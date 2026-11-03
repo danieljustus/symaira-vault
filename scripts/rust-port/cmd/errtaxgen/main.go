@@ -169,6 +169,10 @@ type fixture struct {
 	// then uses (see typedFlagInputs): int64 `file add --max-size`, `stringSlice`
 	// CSV records and re-read `time.Duration` flags.
 	TypedFlags []scenarioCase `json:"typed_flags"`
+	// BareDash are the lone `-` and `--` shapes (see bareDashInputs): the dash
+	// that command resolution skips and pflag counts, the root help that `--`
+	// and a bare root print, and the help topic walk.
+	BareDash []scenarioCase `json:"bare_dash"`
 }
 
 type treeFile struct {
@@ -853,13 +857,14 @@ func main() {
 		RunFileUseArgv:            extras.runFileUse,
 		UnlockStates:              extras.unlockStates,
 		TypedFlags:                extras.typedFlags,
+		BareDash:                  extras.bareDash,
 	}
 	content, err := marshalJSON(fresh)
 	if err != nil {
 		fatal("marshal fixture: %v", err)
 	}
-	summary := fmt.Sprintf("%d usage cases, %d arity rows, %d gate rows, %d not-initialized cases, %d argv shapes, %d nil-Args commands, %d extra-positional scenarios, %d run/file-use argv scenarios, %d unlock-state scenarios, %d typed-flag scenarios",
-		len(usage), len(arity), len(gate), len(notInitialized), len(shapes), len(extras.nilArgs), len(extras.extraPositionals), len(extras.runFileUse), len(extras.unlockStates), len(extras.typedFlags))
+	summary := fmt.Sprintf("%d usage cases, %d arity rows, %d gate rows, %d not-initialized cases, %d argv shapes, %d nil-Args commands, %d extra-positional scenarios, %d run/file-use argv scenarios, %d unlock-state scenarios, %d typed-flag scenarios, %d bare-dash scenarios",
+		len(usage), len(arity), len(gate), len(notInitialized), len(shapes), len(extras.nilArgs), len(extras.extraPositionals), len(extras.runFileUse), len(extras.unlockStates), len(extras.typedFlags), len(extras.bareDash))
 	if *check {
 		existing, err := os.ReadFile(*output) // #nosec G304 -- repository fixture path
 		if err != nil {

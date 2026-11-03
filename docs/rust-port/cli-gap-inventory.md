@@ -281,10 +281,11 @@ Measured examples (not exhaustive): `lock`, `verify`, `unlock`, `generate`,
 `share list`, `policy list`, `agent list`, `agent whoami`, `approval list`,
 `audit`, `audit rotate-key`, `auth rotate-passphrase`, `auth status`,
 `device approval-pair`, `doctor`, `migrate kdf`, `migrate pseudonymize`,
-`migrate session`, `migrate v4` and `recipients list`. Clap likewise still
-rejects the accepting bare-dash shapes `- list`, `share - list` and
-`-- get x`. These CLI-005/006 acceptance gaps remain open; accepting arity
-probes test only the emulator.
+`migrate session`, `migrate v4` and `recipients list`. The accepting
+bare-dash shapes `- list`, `share - list` and `-- get x` are closed (CLI-005,
+local/cli005-plat001: `cobra_usage::clap_arguments`, the root help and the help
+topic walk; 83 Go-recorded `bare_dash` scenarios). The other CLI-005/006
+acceptance gaps remain open; accepting arity probes test only the emulator.
 Other command-body diagnostics remain per-command, except that
 `finish_vault_result` and the code-3 callers of `finish_session_result` render
 a message starting with `vault not initialized` with doubled error lines and
@@ -428,7 +429,7 @@ The scrypt path (`migrate_kdf`, `prepare_config_update`) has no Go counterpart t
 (`vault.MigrateKDF` works on the already loaded one and ignores the save error), so its `load config` /
 `validate rendered config` texts are left as they were.
 
-Evidence: `testdata/port/cli/config-yaml-syntax.json` (now 183 cases, 33 open divergences, 737
+Evidence: `testdata/port/cli/config-yaml-syntax.json` (now 183 cases, 33 open divergences at that time (29 now), 737
 comparisons; the 128 earlier cases and 30 of the 31 earlier open divergences are byte-identical, the
 31st, `custom_tag_on_value`, matches Go now and became a regular case) gained 47 `load_*` cases recorded
 from the pinned Go binary (`yamlsyntaxgen`, oracle `0cc78062`): every coercion class above with its
