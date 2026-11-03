@@ -194,16 +194,22 @@ pub fn run(
         } else {
             None
         };
-        if generated.is_none()
-            && let Err(error) = mcp_tls_cert::ensure_tls_cert(root)
-        {
-            // Go caches the vault certificate for device pairing even when it
-            // serves cleartext or a configured certificate; failure only
-            // disables pairing.
-            eprintln!(
-                "could not compute TLS certificate fingerprint; device pairing is disabled: {error}"
-            );
-        }
+        // Go caches the vault certificate for device pairing even when it
+        // serves cleartext or a configured certificate, and hands its SHA-256
+        // fingerprint (computed once, here) to every minted pairing code;
+        // failure only disables pairing (an empty fingerprint refuses mints).
+        let vault_certificate = match generated.as_ref() {
+            Some((cert, _)) => Ok(cert.clone()),
+            None => mcp_tls_cert::ensure_tls_cert(root).map(|(cert, _)| cert),
+        };
+        let pairing_fingerprint = vault_certificate
+            .and_then(|cert| mcp_tls_cert::certificate_fingerprint(&cert))
+            .unwrap_or_else(|error| {
+                eprintln!(
+                    "could not compute TLS certificate fingerprint; device pairing is disabled: {error}"
+                );
+                String::new()
+            });
         let (tls_cert, tls_key) = match generated.as_ref() {
             Some((cert, key)) => (
                 cert.to_str()
@@ -370,7 +376,11 @@ pub fn run(
             verify_passphrase,
             tls,
             symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret)
-                .with_device_sessions(device_sessions),
+                .with_device_sessions(device_sessions)
+                .with_device_enrollment(
+                    Arc::new(symvault_mcp::enroll::PairingCodes::new()),
+                    pairing_fingerprint,
+                ),
             http_options,
             drain,
         );

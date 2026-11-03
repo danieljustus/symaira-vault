@@ -7,6 +7,7 @@ use std::{
 };
 
 use rcgen::{CertificateParams, DnType, ExtendedKeyUsagePurpose, KeyPair, KeyUsagePurpose};
+use sha2::{Digest, Sha256};
 use time::{Duration, OffsetDateTime};
 use x509_parser::{parse_x509_certificate, pem::parse_x509_pem};
 use zeroize::Zeroizing;
@@ -42,6 +43,22 @@ pub(crate) fn ensure_tls_cert(vault: &Path) -> Result<(PathBuf, PathBuf), String
     }
     generate_tls_cert(&cert, &key, now)?;
     Ok((cert, key))
+}
+
+/// Go's `CertFingerprint`: the lower-case hex SHA-256 of the DER of the first
+/// PEM block of `cert`, which must parse as an X.509 certificate. A device
+/// pairing pins exactly this value, so a certificate that cannot be read is an
+/// error and never an empty fingerprint.
+pub(crate) fn certificate_fingerprint(cert: &Path) -> Result<String, String> {
+    let data = symvault_sync::safeio::read_bounded(cert, 1024 * 1024)
+        .map_err(|error| format!("read TLS certificate: {error}"))?
+        .ok_or_else(|| "read TLS certificate: file not found".to_owned())?;
+    let (_, pem) = parse_x509_pem(&data).map_err(|_| "decode TLS certificate PEM".to_owned())?;
+    parse_x509_certificate(&pem.contents).map_err(|_| "parse TLS certificate".to_owned())?;
+    Ok(Sha256::digest(&pem.contents)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 fn generate_tls_cert(cert: &Path, key: &Path, now: OffsetDateTime) -> Result<(), String> {
@@ -102,6 +119,29 @@ mod tests {
         let expiring = fs::read(&cert).unwrap();
         ensure_tls_cert(vault.path()).unwrap();
         assert_ne!(fs::read(&cert).unwrap(), expiring);
+    }
+
+    #[test]
+    fn fingerprint_is_the_sha256_of_the_certificate_der() {
+        let vault = tempfile::tempdir().unwrap();
+        let (cert, _) = ensure_tls_cert(vault.path()).unwrap();
+        let (_, pem) = parse_x509_pem(&fs::read(&cert).unwrap()).unwrap();
+        let expected = Sha256::digest(&pem.contents)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let fingerprint = certificate_fingerprint(&cert).unwrap();
+        assert_eq!(fingerprint, expected);
+        assert_eq!(fingerprint.len(), 64);
+        assert!(
+            fingerprint
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        );
+        // Unreadable material is an error, never an empty fingerprint.
+        fs::write(vault.path().join("garbage.crt"), b"not a certificate").unwrap();
+        assert!(certificate_fingerprint(&vault.path().join("garbage.crt")).is_err());
+        assert!(certificate_fingerprint(&vault.path().join("missing.crt")).is_err());
     }
 
     #[cfg(unix)]

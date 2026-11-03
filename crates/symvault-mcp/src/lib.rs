@@ -22,6 +22,7 @@ mod audit_identity;
 pub mod authguard;
 pub mod broker;
 mod call;
+pub mod enroll;
 pub mod http;
 mod oauth;
 pub mod payment;

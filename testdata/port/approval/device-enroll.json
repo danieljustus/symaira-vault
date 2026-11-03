@@ -1,0 +1,4965 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "bfa4e2440bd8338f177bb739f469794948efa519",
+    "commit_sha": "bfa4e2440bd8338f177bb739f469794948efa519",
+    "source_files": [
+      "cmd/mcp/serve_deps.go",
+      "internal/approval/enroll.go",
+      "internal/approval/http.go",
+      "internal/approval/queue.go",
+      "internal/mcp/auth/token.go",
+      "internal/mcp/serverbootstrap/http.go",
+      "internal/mcp/util.go",
+      "internal/pairing/devicesession.go",
+      "internal/pairing/token.go"
+    ],
+    "source_digest": "95217929c171eb36b7886bd8e5891061ee6c92da64b88398a4cbf79b4131c89c",
+    "generator_files": [
+      "scripts/rust-port/cmd/deviceenrollgen/main.go"
+    ],
+    "generator_digest": "b9f26a928a7fa8c7afee0fc3bb7599e23fa14c22be5ec03cd425b627e41b7bfe"
+  },
+  "mounting": [
+    "cmd/mcp/serve_deps.go: approvalHandler := approval.NewHTTPHandler(ApprovalQueue, sessionStore)",
+    "cmd/mcp/serve_deps.go: enrollCodeHandler := approval.NewEnrollCodeHTTPHandler(EnrollCodes, fingerprint, mcputil.IsLoopbackHost, enrollSecret)",
+    "cmd/mcp/serve_deps.go: enrollHandler := approval.NewEnrollHTTPHandler(EnrollCodes, sessionStore)",
+    "cmd/mcp/serve_deps.go: serverbootstrap.WithDeviceEnrollAPI(enrollHandler)",
+    "cmd/mcp/serve_deps.go: serverbootstrap.WithDeviceEnrollCodeAPI(enrollCodeHandler)",
+    "internal/mcp/serverbootstrap/http.go: mux.Handle(approval.PathApprovals, approvalChain)",
+    "internal/mcp/serverbootstrap/http.go: mux.Handle(approval.PathApprovalAction, approvalChain)",
+    "internal/mcp/serverbootstrap/http.go: mux.Handle(approval.PathDeviceEnroll, enrollChain)",
+    "internal/mcp/serverbootstrap/http.go: mux.Handle(approval.PathDeviceEnrollCode, enrollCodeChain)"
+  ],
+  "constants": {
+    "secret": "device-enroll-fixture-secret-0001",
+    "fingerprint": "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e",
+    "code_ttl_seconds": 300,
+    "session_ttl_seconds": 7776000,
+    "proof_window_seconds": 30,
+    "max_failed_attempts": 5,
+    "failed_cooldown_seconds": 30
+  },
+  "canonical": {
+    "codes": "minted pairing codes are replaced by C0DE<28-digit index> (1-based by first appearance in a case); Go draws 20 random bytes, base32-hex, 32 characters of [0-9A-V]",
+    "created_at": "2026-01-02T03:04:05.123456789Z",
+    "decided_at": "2026-01-02T03:04:07.25Z (the undecided zero time 0001-01-01T00:00:00Z is kept)",
+    "device_ids": "device ids are replaced by dev-<16-digit hex index>; Go draws 8 random bytes (dev- plus 16 lower-case hex digits)",
+    "expires_at": "2026-01-02T03:09:05.123456789Z (asserted to be within 3 s of now plus the code lifetime, or plus the session lifetime for an enrolment)",
+    "queue_ids": "request ids are replaced by apr-a<11-digit index>",
+    "tokens": "device bearer tokens are replaced by T0KE<28-digit index>; same shape as codes"
+  },
+  "scope": {
+    "cooldown_end": "the end of the 30 s failure cooldown is not recorded (it would need a 30 s sleep); the Rust TokenStore pins it with an injected clock (symvault-sync pairing tests)",
+    "mounting": "the Go server mounts the four handlers on a ServeMux; the generator rebuilds that mux and pins the mounting source lines (mounting)",
+    "non_loopback": "cases flagged non_loopback_peer use a loopback predicate that refuses every peer, because a non-loopback TCP peer cannot be produced portably; the replay answers them through the handler function with a documentation-range peer address",
+    "not_recorded": "HEAD requests, TLS/mTLS (owned by HTTP-001..004 fixtures), peers other than loopback over a real socket and request bodies that are not UTF-8",
+    "rate_limit": "serverbootstrap wraps both enrolment routes in auth.RateLimiterMiddleware (default 60 requests/minute/IP); this recording drives the handlers on a bare mux, so no throttling is recorded here and the replay disables the Rust limiter (rate_limit 0); throttling of the enrolment routes is recorded by http002ratelimitgen",
+    "sessions_after": "store_after is read back from the persisted device-sessions.json through a fresh store: names, public keys and revocation; the raw bearer token is asserted absent from the file",
+    "timing": "code lifetime cases use a 300 ms lifetime and a 700 ms pause; proof windows use +-20 s (accepted) and +-35 s (refused) so the second boundary cannot flip a result",
+    "transport": "raw HTTP/1.1 over a loopback TCP listener serving the Go http.ServeMux; only Content-Type, X-Content-Type-Options and Location response headers are contract, Date/Content-Length/Connection are HTTP-library artefacts"
+  },
+  "counts": {
+    "cases": 27,
+    "requests": 265
+  },
+  "cases": [
+    {
+      "id": "mint_ok",
+      "description": "a proven loopback POST mints a fresh code; the body carries code, expires_at and the certificate fingerprint in key order",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            },
+            "body": "{\"ignored\":true}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000004\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "mint_wrong_method_is_mux_404_before_everything",
+      "description": "any method but POST is the handler's NotFound, before the loopback and proof checks",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "PUT",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "DELETE",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "PATCH",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/devices/enroll-code"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "OPTIONS",
+            "path": "/api/v1/devices/enroll-code"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "mint_non_loopback_peer_forbidden",
+      "description": "a peer the loopback predicate refuses is 403 before the proof is looked at; wrong methods are still 404",
+      "non_loopback_peer": true,
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 403,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"device pairing codes can only be minted from localhost\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code"
+          },
+          "response": {
+            "status": 403,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"device pairing codes can only be minted from localhost\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{badproof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 403,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"device pairing codes can only be minted from localhost\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "mint_proof_required",
+      "description": "401 for every missing, empty or wrong proof; header names are case-insensitive; the first of repeated headers is used",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": ""
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{badproof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:-5}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "x-enroll-proof": "{proof:0}",
+              "x-enroll-timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            },
+            "extra_header_lines": [
+              "X-Enroll-Proof: 0000000000000000000000000000000000000000000000000000000000000000"
+            ]
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "0000000000000000000000000000000000000000000000000000000000000000",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            },
+            "extra_header_lines": [
+              "X-Enroll-Proof: {proof:0}"
+            ]
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}"
+            },
+            "extra_header_lines": [
+              "X-Enroll-Timestamp: {ts:utc:0}",
+              "X-Enroll-Timestamp: not-a-time"
+            ]
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "mint_proof_window",
+      "description": "the proof is accepted within thirty seconds either side of the server clock and refused beyond",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:-20}",
+              "X-Enroll-Timestamp": "{ts:utc:-20}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:20}",
+              "X-Enroll-Timestamp": "{ts:utc:20}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:-35}",
+              "X-Enroll-Timestamp": "{ts:utc:-35}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:35}",
+              "X-Enroll-Timestamp": "{ts:utc:35}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:-3600}",
+              "X-Enroll-Timestamp": "{ts:utc:-3600}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:86400}",
+              "X-Enroll-Timestamp": "{ts:utc:86400}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:epoch:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:far:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "mint_timestamp_forms",
+      "description": "which spellings of the timestamp header Go's time.Parse(RFC3339) accepts; the proof is always over the UTC second",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:plus2:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:minus0530:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:plus00:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000004\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:frac:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000005\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:frac9:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000006\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:comma:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000007\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:lower_t:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:lower_z:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:space_sep:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:no_colon:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:lead_space:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000008\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:trail_space:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000009\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:frac12:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000010\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:frac_dot:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:no_zone:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:feb30:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:hour24:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:leap60:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:plus2400:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000011\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:minus2400:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000012\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:plus2500:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:plus0060:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000013\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:plus0061:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:plus0160:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000014\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:single_digit:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "mint_proof_hex_forms",
+      "description": "the proof is compared as lower-case hex text",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0:upper}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0:short}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0:long}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0:nonhex}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0:padded}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "mint_tls_unavailable",
+      "description": "without a certificate fingerprint a proven request is 503; the proof is checked first",
+      "no_fingerprint": true,
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 503,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"TLS is not configured; device pairing requires TLS\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{badproof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "mint_ignores_body_query_and_content_type",
+      "description": "the request body, query string and content type play no part",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code?x=1&y=2",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            },
+            "body": "{not json"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "Content-Type": "text/plain",
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            },
+            "body": "plain body"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            },
+            "body": "a=b"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000004\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "mint_route_matching",
+      "description": "the mux matches the exact path only; unclean paths are redirected, escaped hyphens decode",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code/",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code2",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/API/V1/DEVICES/ENROLL-CODE",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll%2Dcode",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "//api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 307,
+            "headers": {
+              "Location": "/api/v1/devices/enroll-code"
+            },
+            "body": ""
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/./enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 307,
+            "headers": {
+              "Location": "/api/v1/devices/enroll-code"
+            },
+            "body": ""
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code/..",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 307,
+            "headers": {
+              "Location": "/api/v1/devices"
+            },
+            "body": ""
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "redeem_ok",
+      "description": "a minted code is exchanged for a device id and a bearer token the approval API accepts; the session is persisted by hash",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"Alice's <phone> & co\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "headers": {
+              "Authorization": "Bearer {token:1}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[]}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "Alice's <phone> & co",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_single_use",
+      "description": "a code redeems once; a second code is independent",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"first\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"again\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"second\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000002\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"second again\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "first",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000002",
+          "name": "second",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_unknown_codes",
+      "description": "401 for a code that was never minted, or is not exactly a minted code",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1:lower}\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1:cut}\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1:plus}\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"survivor\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2:dashed}\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\\u0000\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"second survivor\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000002\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "survivor",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000002",
+          "name": "second survivor",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_code_whitespace_trimmed",
+      "description": "strings.TrimSpace on the code: ASCII and Unicode spaces are trimmed, a zero-width space is not",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000004\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000005\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000006\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000007\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"  {code:1}  \"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"\\t\\n{code:2}\\t\\n\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000002\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"\\u00a0{code:3}\\u00a0\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000003\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"\\u3000{code:4}\\u3000\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000004\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000004\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"\\u0085{code:5}\\u0085\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000005\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000005\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"\\u2028{code:6}\\u2028\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000006\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000006\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"\\u200b{code:7}\\u200b\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000002",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000003",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000004",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000005",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000006",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_missing_code_is_400",
+      "description": "an absent, empty, blank or null code is 400 and consumes nothing",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"\"}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"   \"}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"\\t\\n \"}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":null}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"device_name\":\"x\"}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "null"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "  null \n"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"after the 400s\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "after the 400s",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_malformed_bodies",
+      "description": "400 malformed request body for anything the JSON decoder rejects, including a wrongly typed field, which consumes nothing",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "not json"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "[]"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "\"str\""
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "5"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "true"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "[{\"code\":\"x\"}]"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":5}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":[\"a\"]}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":true}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":{\"a\":1}}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":5}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":{\"a\":1}}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":[\"x\"]}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"x\",}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{'code':'x'}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "﻿{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "   \n\t "
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\""
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"bad\\q\"}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"malformed request body\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"after the 400s\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "after the 400s",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_json_leniency",
+      "description": "encoding/json semantics: unknown keys ignored, keys match case-insensitively, the last duplicate wins, only the first value is read, null leaves a field alone",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000004\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000005\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000006\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000007\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000008\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000009\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000010\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"a\",\"extra\":{\"deep\":[1,2,{\"x\":null}]},\"other\":1e999}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"CODE\":\"{code:2}\",\"Device_Name\":\"b\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000002\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"Code\":\"{code:3}\",\"DEVICE_NAME\":\"c\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000003\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"bad\",\"code\":\"{code:4}\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000004\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000004\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:5}\",\"code\":\"bad\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:5}\"} trailing garbage"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000005\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000005\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:6}\",\"device_name\":\"d\"}{\"code\":\"{code:7}\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000006\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000006\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"\\u0063ode\":\"{code:7}\",\"device_name\":\"e\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000007\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000007\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:8}\",\"device_name\":null}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000008\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000008\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"bad\",\"code\":null,\"CODE\":\"{code:9}\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000009\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000009\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "\n\t {\n \"code\" : \"{code:10}\" ,\n \"device_name\" : \"f\"\n}\n"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-000000000000000a\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000010\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "a",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000002",
+          "name": "b",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000003",
+          "name": "c",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000004",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000005",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000006",
+          "name": "d",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000007",
+          "name": "e",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000008",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000009",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-000000000000000a",
+          "name": "f",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_device_names",
+      "description": "the device name is stored verbatim (empty names omitted from the file); public_key stays empty",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000004\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000005\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000006\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000007\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000008\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000002\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:3}\",\"device_name\":\"Phone é世界 📱\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000003\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:4}\",\"device_name\":\"<script>alert(1)</script> & \\\"quotes\\\" \\\\ back\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000004\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000004\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:5}\",\"device_name\":\"nul\\u0000char\\u0007bell\\ttab\\nnewline\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000005\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000005\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:6}\",\"device_name\":\"line\\u2028sep\\u2029para\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000006\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000006\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:7}\",\"device_name\":\"{pad:4096}\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000007\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000007\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:8}\",\"device_name\":\"{pad:900000}\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000008\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000008\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000002",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000003",
+          "name": "Phone é世界 📱",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000004",
+          "name": "<script>alert(1)</script> & \"quotes\" \\ back",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000005",
+          "name": "nul\u0000char\u0007bell\ttab\nnewline",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000006",
+          "name": "line\u2028sep\u2029para",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000007",
+          "name": "{pad:4096}",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000008",
+          "name": "{pad:900000}",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_wrong_method_is_404",
+      "description": "any method but POST is the handler's NotFound and consumes nothing",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/devices/enroll"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "PUT",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "DELETE",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "PATCH",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"post works\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "post works",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_route_matching",
+      "description": "the mux matches the exact path only; the query string is ignored",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll/",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enrol",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enrollx",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/API/V1/DEVICES/ENROLL",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "//api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 307,
+            "headers": {
+              "Location": "/api/v1/devices/enroll"
+            },
+            "body": ""
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/%65nroll",
+            "body": "{\"code\":\"{code:1}\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll?x=1",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"query\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000002\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000002",
+          "name": "query",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_expired_code",
+      "description": "a code past its lifetime is refused (and removed); a fresh code still works",
+      "code_ttl_ms": 300,
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "sleep",
+          "sleep_ms": 700
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"late\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"in time\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "in time",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_failed_attempts_trigger_cooldown",
+      "description": "five failures in a row put the store into a global cooldown in which even a valid code is refused (and kept); minting stays possible",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"valid but cooling down\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"new code, still cooling down\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "redeem_success_resets_the_failure_count",
+      "description": "a successful redemption clears the failure counter; four failures are tolerated every time",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"first\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"second\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000002\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:3}\",\"device_name\":\"cooling down\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "first",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000002",
+          "name": "second",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_expired_codes_count_as_failures",
+      "description": "an expired code is a failed attempt; five of them start the cooldown",
+      "code_ttl_ms": 300,
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000003\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000004\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000005\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "sleep",
+          "sleep_ms": 700
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"x\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"x\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:3}\",\"device_name\":\"x\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:4}\",\"device_name\":\"x\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:5}\",\"device_name\":\"x\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000006\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:6}\",\"device_name\":\"fresh but cooling down\"}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"invalid or expired pairing code\"}\n"
+          }
+        }
+      ],
+      "store_after": []
+    },
+    {
+      "id": "enrolled_device_decides_approvals",
+      "description": "the enrolled bearer authorises the device approval API; decided_by is the new device id",
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        },
+        {
+          "key": "b",
+          "agent_name": "agent-b",
+          "path": "notes/b.md",
+          "write": false,
+          "reason": "deny me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "headers": {
+              "Authorization": "Bearer {code:1}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"phone\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"tablet\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000002\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "headers": {
+              "Authorization": "Bearer {token:1}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-b\",\"path\":\"notes/b.md\",\"write\":false,\"reason\":\"deny me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000002\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "headers": {
+              "Authorization": "Bearer {token:1}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000001\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-0000000000000001\"}}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:b}/deny",
+            "headers": {
+              "Authorization": "Bearer {token:2}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000002\",\"status\":\"denied\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-0000000000000002\"}}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "headers": {
+              "Authorization": "Bearer {token:2}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[]}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "phone",
+          "public_key": "",
+          "revoked": false
+        },
+        {
+          "device_id": "dev-0000000000000002",
+          "name": "tablet",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "enrolled_devices_are_independent_and_revocable",
+      "description": "every redemption yields a distinct device id and token; revoking one device (a second store instance) leaves the other working",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"phone\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:2}\",\"device_name\":\"tablet\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000002\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000002\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "headers": {
+              "Authorization": "Bearer {token:1}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[]}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "headers": {
+              "Authorization": "Bearer {token:2}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[]}\n"
+          }
+        },
+        {
+          "action": "revoke_external",
+          "device": "{device:1}"
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "headers": {
+              "Authorization": "Bearer {token:1}"
+            }
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "headers": {
+              "Authorization": "Bearer {token:2}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[]}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "phone",
+          "public_key": "",
+          "revoked": true
+        },
+        {
+          "device_id": "dev-0000000000000002",
+          "name": "tablet",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    },
+    {
+      "id": "redeem_body_over_one_mib",
+      "description": "Go reads only the first JSON value and sets no body limit: a body above one MiB is served",
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:utc:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{\"code\":\"{code:1}\",\"device_name\":\"big\",\"pad\":\"{pad:1200000}\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"device_id\":\"dev-0000000000000001\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"token\":\"T0KE0000000000000000000000000001\"}\n"
+          }
+        }
+      ],
+      "store_after": [
+        {
+          "device_id": "dev-0000000000000001",
+          "name": "big",
+          "public_key": "",
+          "revoked": false
+        }
+      ]
+    }
+  ]
+}
