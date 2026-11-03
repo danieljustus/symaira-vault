@@ -106,13 +106,19 @@ int32_t symvault_set_backup_dir(const uint8_t *dir, size_t dir_len, SvBuf *err);
  * it). For a bounded scope use push/pop below, which restore the displaced value. */
 int32_t symvault_set_thread_backup_dir(const uint8_t *dir, size_t dir_len, SvBuf *err);
 /* Opens a nestable calling-thread scope: installs dir (empty = no override) and
- * saves the displaced value; *token identifies the scope (never 0). Pop it on
- * every exit path, on the same thread. */
+ * saves the displaced value. *token is a process-unique serial (never 0, never
+ * reused), valid only on this thread while the scope is open. Pop it on every
+ * exit path, on the same thread. */
 int32_t symvault_push_thread_backup_dir(const uint8_t *dir, size_t dir_len, uint64_t *token,
                                         SvBuf *err);
 /* Closes the innermost scope and restores exactly what it displaced; a token that is
- * not the innermost open scope is refused (status 1) and changes nothing. */
+ * not the serial of this thread's innermost open scope (closed already, out of order,
+ * or issued on another thread) is refused (status 1) and changes nothing. */
 int32_t symvault_pop_thread_backup_dir(uint64_t token, SvBuf *err);
+/* Recovery after a refused pop: restores the value saved by the scope with that serial
+ * and closes every scope leaked inside it. A token that names no open scope of this
+ * thread is refused (status 1) and changes nothing. */
+int32_t symvault_unwind_thread_backup_dir(uint64_t token, SvBuf *err);
 
 /* OpenVaultWithPassphrase(vaultDir, passphrase) (string, error) */
 int32_t symvault_open_vault_with_passphrase(const uint8_t *vault_dir, size_t vault_dir_len,

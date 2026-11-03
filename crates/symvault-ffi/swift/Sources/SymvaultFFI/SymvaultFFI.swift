@@ -86,11 +86,30 @@ public enum SymvaultFFI {
     public static func withBackupDirectory<T>(_ dir: String, _ body: () throws -> T) throws -> T {
         guard !dir.isEmpty else { throw SymvaultFFIError.badArguments("backup directory is empty") }
         let token = try pushThreadBackupDir(dir)
-        defer { try? popThreadBackupDir(token) }
+        defer { closeBackupScope(token) }
         return try body()
     }
 
-    private static func pushThreadBackupDir(_ dir: String) throws -> UInt64 {
+    /// Pops scope `token`. A refused pop would leave the scoped directory
+    /// installed on this thread, so fall back to unwinding to the value that scope
+    /// saved. Every refusal is reported through `failure` (a debug assertion by
+    /// default).
+    static func closeBackupScope(
+        _ token: UInt64, failure: (String) -> Void = { assertionFailure($0) }
+    ) {
+        do {
+            try popThreadBackupDir(token)
+        } catch {
+            failure("backup directory scope pop refused: \(error)")
+            do {
+                try unwindThreadBackupDir(token)
+            } catch {
+                failure("backup directory scope unwind refused: \(error)")
+            }
+        }
+    }
+
+    static func pushThreadBackupDir(_ dir: String) throws -> UInt64 {
         var token: UInt64 = 0
         _ = try call([.text(dir)]) { a, _, err in
             symvault_push_thread_backup_dir(a[0].0, a[0].1, &token, err)
@@ -101,6 +120,14 @@ public enum SymvaultFFI {
     private static func popThreadBackupDir(_ token: UInt64) throws {
         _ = try call { _, err in
             symvault_pop_thread_backup_dir(token, err)
+        }
+    }
+
+    /// Restores the value saved by scope `token` and closes scopes leaked inside
+    /// it. Recovery after a refused pop.
+    private static func unwindThreadBackupDir(_ token: UInt64) throws {
+        _ = try call { _, err in
+            symvault_unwind_thread_backup_dir(token, err)
         }
     }
 

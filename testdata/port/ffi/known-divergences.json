@@ -230,11 +230,19 @@
       "approval": "decision D1 (maintainer, docs/rust-port/contract-matrix.md DIST-005); mobile bridge application recorded in ADR 0031 (divergence D-BACKUP)",
       "reason": "symvault_set_backup_dir is a Rust-only addition to the C ABI (additive; ABI revision stays 1). An empty path clears the host's choice and restores $XDG_STATE_HOME/symvault/backups, then $HOME/.local/state/symvault/backups; a relative path is refused and keeps the previous choice.",
       "go_behavior": "no such function",
-      "rust_behavior": "symvault_set_backup_dir(dir): absolute dir honoured and taking precedence over the environment; empty restores the environment default; relative dir returns status 1 `backup directory must be an absolute path`",
+      "rust_behavior": "symvault_set_backup_dir(dir): absolute dir honoured and taking precedence over the environment; empty restores the environment default; relative dir returns status 1 `backup directory must be an absolute path`; symvault_push_thread_backup_dir / symvault_pop_thread_backup_dir / symvault_unwind_thread_backup_dir (also additive) scope a calling-thread override: push returns a process-unique, never-reused token bound to the pushing thread, pop restores exactly the displaced value and refuses (status 1, no change) any token that is not that thread's innermost open scope, unwind restores the named scope and drops leaked inner ones",
       "pinned_by": [
         "crates/symvault-ffi/tests/backup_dir.rs::an_unset_directory_falls_back_to_xdg_state_home_then_home",
         "crates/symvault-ffi/tests/backup_dir.rs::a_relative_directory_is_refused_and_keeps_the_previous_choice",
-        "crates/symvault-ffi/tests/abi.rs::the_host_chooses_the_backup_directory"
+        "crates/symvault-ffi/tests/abi.rs::the_host_chooses_the_backup_directory",
+        "crates/symvault-ffi/tests/abi.rs::a_pushed_scope_restores_an_override_set_through_the_c_api",
+        "crates/symvault-ffi/tests/abi.rs::a_closed_scopes_token_is_refused_when_a_later_scope_has_the_same_depth",
+        "crates/symvault-ffi/tests/abi.rs::a_token_from_another_thread_is_refused_at_equal_depth",
+        "crates/symvault-ffi/tests/abi.rs::unwind_restores_the_named_scope_and_drops_leaked_inner_scopes",
+        "crates/symvault-sync/src/data_safety.rs::a_stale_token_is_refused_even_when_the_depth_matches_again",
+        "crates/symvault-sync/src/data_safety.rs::a_token_from_another_thread_is_refused_even_at_equal_depth",
+        "crates/symvault-sync/src/data_safety.rs::unwind_closes_the_named_scope_and_everything_inside_it",
+        "crates/symvault-ffi/swift/Tests/SymvaultFFITests/BackupScopeTests.swift::testARefusedPopStillRestoresThroughTheUnwind"
       ]
     },
     {

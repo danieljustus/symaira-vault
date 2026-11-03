@@ -315,10 +315,12 @@ fn the_d1_divergence_entries_are_pinned_by_existing_tests() {
             };
             assert!(source.contains(&declaration), "{pin}: no such test");
             if file.ends_with(".rs") {
-                assert!(
-                    source.contains(&format!("#[test]\n{declaration}")),
-                    "{pin}: not a test"
-                );
+                // The attribute sits on the line before the declaration; unit
+                // tests inside `mod tests` are indented.
+                let attributed = source.lines().zip(source.lines().skip(1)).any(|(a, b)| {
+                    a.trim() == "#[test]" && b.trim_start().starts_with(&declaration)
+                });
+                assert!(attributed, "{pin}: not a test");
             } else {
                 assert!(name.starts_with("test"), "{pin}: not a Swift test");
             }
@@ -366,6 +368,14 @@ fn validate_pins(entries: &[serde_json::Value]) -> Result<(), String> {
                 "crates/symvault-ffi/tests/backup_dir.rs::an_unset_directory_falls_back_to_xdg_state_home_then_home",
                 "crates/symvault-ffi/tests/backup_dir.rs::a_relative_directory_is_refused_and_keeps_the_previous_choice",
                 "crates/symvault-ffi/tests/abi.rs::the_host_chooses_the_backup_directory",
+                "crates/symvault-ffi/tests/abi.rs::a_pushed_scope_restores_an_override_set_through_the_c_api",
+                "crates/symvault-ffi/tests/abi.rs::a_closed_scopes_token_is_refused_when_a_later_scope_has_the_same_depth",
+                "crates/symvault-ffi/tests/abi.rs::a_token_from_another_thread_is_refused_at_equal_depth",
+                "crates/symvault-ffi/tests/abi.rs::unwind_restores_the_named_scope_and_drops_leaked_inner_scopes",
+                "crates/symvault-sync/src/data_safety.rs::a_stale_token_is_refused_even_when_the_depth_matches_again",
+                "crates/symvault-sync/src/data_safety.rs::a_token_from_another_thread_is_refused_even_at_equal_depth",
+                "crates/symvault-sync/src/data_safety.rs::unwind_closes_the_named_scope_and_everything_inside_it",
+                "crates/symvault-ffi/swift/Tests/SymvaultFFITests/BackupScopeTests.swift::testARefusedPopStillRestoresThroughTheUnwind",
             ][..],
         ),
         (

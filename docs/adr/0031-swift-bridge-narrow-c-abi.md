@@ -166,7 +166,18 @@ Use the narrow C ABI.
      system may purge), sets `isExcludedFromBackup`, reads the flag back and
      only then calls `SymvaultFFI.setBackupDir`, before every call that opens or
      writes the vault; if any step fails the call fails and the vault is not
-     touched. These are side effects, not error texts, so they are recorded under
+     touched. The thread-scoped form (`withBackupDirectory`) uses three more
+     additive exports, `symvault_push_thread_backup_dir`,
+     `symvault_pop_thread_backup_dir` and `symvault_unwind_thread_backup_dir`
+     (and `symvault_set_thread_backup_dir` to replace a thread's value
+     outright). A push returns a process-unique, never-reused scope token bound
+     to the pushing thread; a pop restores exactly the displaced value and
+     refuses, changing nothing, any token that is not that thread's innermost
+     open scope (already closed, out of order, or from another thread: a bare
+     stack depth would have accepted those whenever depths coincided). If a pop
+     is refused the Swift scope unwinds to the value that scope saved (dropping
+     leaked inner scopes, like the Rust guard) and asserts in debug builds,
+     rather than leaving the scoped directory installed. These are side effects, not error texts, so they are recorded under
      `side_effects` in `known-divergences.json` (four `data-safety-backup`
      entries, each naming the tests that pin it; `tests/backup_dir.rs` fails on
      a missing pin or an unrecorded test). Verified on macOS (`swift test`

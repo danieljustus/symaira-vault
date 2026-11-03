@@ -50,6 +50,7 @@ static int32_t (*const set_backup_dir)(const uint8_t *, size_t, SvBuf *) = symva
 static int32_t (*const push_thread_dir)(const uint8_t *, size_t, uint64_t *, SvBuf *) =
     symvault_push_thread_backup_dir;
 static int32_t (*const pop_thread_dir)(uint64_t, SvBuf *) = symvault_pop_thread_backup_dir;
+static int32_t (*const unwind_thread_dir)(uint64_t, SvBuf *) = symvault_unwind_thread_backup_dir;
 static int32_t (*const verify_manifest)(const uint8_t *, size_t, const uint8_t *, size_t, int32_t *,
                                         SvBuf *) = symvault_verify_manifest_integrity;
 
@@ -103,15 +104,17 @@ int main(int argc, char **argv) {
     CHECK(set_backup_dir(NULL, 0, &err) == SYMVAULT_OK && err.len == 0);
     symvault_buf_free(err);
 
-    /* Thread-scoped backup directory: push/pop nest, a stale or unknown token is
-     * refused, a null token pointer and a relative path never open a scope. */
+    /* Thread-scoped backup directory: push/pop nest; a token is a process-unique
+     * serial, so a closed scope's token is refused even when a later scope sits at
+     * the same depth; unwind restores the named scope and drops leaked inner ones;
+     * a null token pointer and a relative path never open a scope. */
     {
-        uint64_t outer = 0, inner = 0;
+        uint64_t outer = 0, inner = 0, again = 0, leaked = 0;
         err = empty();
         CHECK(push_thread_dir(S("/tmp/outer"), &outer, &err) == SYMVAULT_OK && outer != 0 && err.len == 0);
         symvault_buf_free(err);
         err = empty();
-        CHECK(push_thread_dir(S("/tmp/inner"), &inner, &err) == SYMVAULT_OK && inner == outer + 1);
+        CHECK(push_thread_dir(S("/tmp/inner"), &inner, &err) == SYMVAULT_OK && inner != 0 && inner != outer);
         symvault_buf_free(err);
         err = empty();
         CHECK(pop_thread_dir(outer, &err) == SYMVAULT_ERR && err.len > 0);
@@ -124,6 +127,32 @@ int main(int argc, char **argv) {
         symvault_buf_free(err);
         err = empty();
         CHECK(pop_thread_dir(outer, &err) == SYMVAULT_ERR && err.len > 0);
+        symvault_buf_free(err);
+        /* Push/pop/push/pop(stale): depth 1 again, but the old token is dead. */
+        err = empty();
+        CHECK(push_thread_dir(S("/tmp/again"), &again, &err) == SYMVAULT_OK && again != 0 && again != outer && again != inner);
+        symvault_buf_free(err);
+        err = empty();
+        CHECK(pop_thread_dir(outer, &err) == SYMVAULT_ERR && err.len > 0);
+        symvault_buf_free(err);
+        err = empty();
+        CHECK(unwind_thread_dir(outer, &err) == SYMVAULT_ERR && err.len > 0);
+        symvault_buf_free(err);
+        /* Unwind closes the named scope and the leaked scope inside it. */
+        err = empty();
+        CHECK(push_thread_dir(S("/tmp/leaked"), &leaked, &err) == SYMVAULT_OK);
+        symvault_buf_free(err);
+        err = empty();
+        CHECK(pop_thread_dir(again, &err) == SYMVAULT_ERR && err.len > 0);
+        symvault_buf_free(err);
+        err = empty();
+        CHECK(unwind_thread_dir(again, &err) == SYMVAULT_OK && err.len == 0);
+        symvault_buf_free(err);
+        err = empty();
+        CHECK(pop_thread_dir(leaked, &err) == SYMVAULT_ERR && err.len > 0);
+        symvault_buf_free(err);
+        err = empty();
+        CHECK(unwind_thread_dir(again, &err) == SYMVAULT_ERR && err.len > 0);
         symvault_buf_free(err);
         err = empty();
         CHECK(push_thread_dir(S("rel"), &outer, &err) == SYMVAULT_ERR && outer == 0);

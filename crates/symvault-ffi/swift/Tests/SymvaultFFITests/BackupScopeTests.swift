@@ -103,4 +103,24 @@ final class BackupScopeTests: XCTestCase {
         XCTAssertEqual(archives(fallback.appendingPathComponent("symvault/backups")), 1,
                        "no override is left behind: the process default applies")
     }
+
+    func testARefusedPopStillRestoresThroughTheUnwind() throws {
+        let cSet = dir("c-set"), scoped = dir("scoped")
+        try SymvaultFFI.setThreadBackupDir(cSet.path)
+        let token = try SymvaultFFI.pushThreadBackupDir(scoped.path)
+        // A leaked inner scope makes the outer pop refuse.
+        _ = try SymvaultFFI.pushThreadBackupDir(dir("leaked").path)
+        var reports: [String] = []
+        SymvaultFFI.closeBackupScope(token) { reports.append($0) }
+        XCTAssertEqual(reports.count, 1, "the refused pop is reported: \(reports)")
+        // The unwind put the C-set value back and dropped the leaked scope.
+        try writeUnmarked("after")
+        XCTAssertEqual(archives(cSet), 1)
+        XCTAssertEqual(archives(scoped), 0)
+        XCTAssertEqual(archives(dir("leaked")), 0)
+        // The scope is closed now: neither pop nor unwind accepts the token.
+        var again: [String] = []
+        SymvaultFFI.closeBackupScope(token) { again.append($0) }
+        XCTAssertEqual(again.count, 2)
+    }
 }

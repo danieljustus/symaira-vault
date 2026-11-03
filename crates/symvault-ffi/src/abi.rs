@@ -356,7 +356,8 @@ pub unsafe extern "C" fn symvault_set_backup_dir(
 
 /// Sets a calling-thread override for synchronous vault operations. Empty clears it.
 /// This replaces the thread's value outright (no restore); bounded scopes use
-/// [`symvault_push_thread_backup_dir`] / [`symvault_pop_thread_backup_dir`].
+/// [`symvault_push_thread_backup_dir`] / [`symvault_pop_thread_backup_dir`] /
+/// [`symvault_unwind_thread_backup_dir`].
 ///
 /// # Safety
 /// Pointer/length pair must be valid; `err` null or writable.
@@ -382,9 +383,10 @@ pub unsafe extern "C" fn symvault_set_thread_backup_dir(
 
 /// Opens a calling-thread backup-directory scope: installs `dir` (empty = no
 /// override inside the scope) and saves the displaced value, whoever set it
-/// (C, Swift or Rust). Writes the scope token to `*token`; hand it to
-/// [`symvault_pop_thread_backup_dir`] on every exit path. Scopes nest. Additive:
-/// the ABI revision stays 1.
+/// (C, Swift or Rust). Writes the scope token to `*token`: a process-unique
+/// serial (never 0, never reused) that is valid only on this thread while the
+/// scope is open. Hand it to [`symvault_pop_thread_backup_dir`] on every exit
+/// path. Scopes nest. Additive: the ABI revision stays 1.
 ///
 /// # Safety
 /// Pointer/length pair must be valid; `token` must be writable; `err` null or writable.
@@ -420,8 +422,9 @@ pub unsafe extern "C" fn symvault_push_thread_backup_dir(
 
 /// Closes the innermost calling-thread backup-directory scope opened by
 /// [`symvault_push_thread_backup_dir`], restoring exactly the value it
-/// displaced. A token that is not the innermost open scope of this thread is
-/// refused (status 1) and changes nothing.
+/// displaced. A token that is not the serial of this thread's innermost open
+/// scope (closed already, out of order, or issued on another thread) is refused
+/// (status 1) and changes nothing.
 ///
 /// # Safety
 /// `err` null or writable.
@@ -431,6 +434,24 @@ pub unsafe extern "C" fn symvault_pop_thread_backup_dir(token: u64, err: *mut Sv
     unsafe {
         run(std::ptr::null_mut(), err, std::ptr::null_mut(), || {
             Ok(symvault_sync::data_safety::pop_thread_backup_dir(token).map(|()| Payload::Nothing))
+        })
+    }
+}
+
+/// Recovery for a refused [`symvault_pop_thread_backup_dir`]: restores the value
+/// saved by the scope with serial `token` and closes every scope opened inside
+/// it that was leaked, like the Rust scope guard. A token that names no open
+/// scope of this thread is refused (status 1) and changes nothing.
+///
+/// # Safety
+/// `err` null or writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_unwind_thread_backup_dir(token: u64, err: *mut SvBuf) -> i32 {
+    // SAFETY: forwarded contract.
+    unsafe {
+        run(std::ptr::null_mut(), err, std::ptr::null_mut(), || {
+            Ok(symvault_sync::data_safety::unwind_thread_backup_dir(token)
+                .map(|()| Payload::Nothing))
         })
     }
 }

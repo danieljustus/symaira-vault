@@ -34,7 +34,10 @@ use std::{
     fs,
     io::Read,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{
+        Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use sha2::{Digest, Sha256};
@@ -66,9 +69,15 @@ impl PreMutationGuard for BackupGuard {
 
 thread_local! {
     static THREAD_BACKUP_DIR: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
-    /// Values displaced by [`push_thread_backup_dir`], innermost last.
-    static THREAD_BACKUP_SAVED: std::cell::RefCell<Vec<Option<PathBuf>>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// Open scopes of this thread, innermost last: the scope's serial and the
+    /// value its push displaced.
+    static THREAD_BACKUP_SAVED: std::cell::RefCell<Vec<(u64, Option<PathBuf>)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
+
+/// Source of scope serials, shared by every thread of the process. A serial is
+/// issued once and never reused, so a token that was already closed, or that
+/// belongs to another thread, can never match a scope that is open now.
+static NEXT_SCOPE_SERIAL: AtomicU64 = AtomicU64::new(1);
 
 /// Replaces the calling thread's override (`None` clears it) without any
 /// restore bookkeeping. Prefer [`scoped_thread_backup_dir`] or
@@ -85,32 +94,35 @@ pub fn thread_backup_dir() -> Option<PathBuf> {
 }
 
 /// Opens a scope: installs `dir` as the calling thread's override and saves
-/// the displaced value. Returns the scope token (its 1-based depth, never 0)
-/// to hand to [`pop_thread_backup_dir`]. Scopes nest.
+/// the displaced value. Returns the scope token to hand to
+/// [`pop_thread_backup_dir`] or [`unwind_thread_backup_dir`]: a process-unique
+/// serial (never 0, never reused), valid only on this thread while the scope
+/// is open. Scopes nest.
 pub fn push_thread_backup_dir(dir: Option<PathBuf>) -> u64 {
+    let serial = NEXT_SCOPE_SERIAL.fetch_add(1, Ordering::Relaxed);
     let previous = THREAD_BACKUP_DIR.with(|slot| slot.replace(dir));
-    THREAD_BACKUP_SAVED.with(|saved| {
-        let mut saved = saved.borrow_mut();
-        saved.push(previous);
-        saved.len() as u64
-    })
+    THREAD_BACKUP_SAVED.with(|saved| saved.borrow_mut().push((serial, previous)));
+    serial
 }
 
 /// Closes the innermost scope, restoring exactly the value it displaced.
 ///
 /// # Errors
-/// `token` is not the innermost open scope of this thread (popped twice, out
-/// of order, or from another thread); nothing is changed.
+/// `token` is not the serial of this thread's innermost open scope (already
+/// closed, out of order, or issued to another thread); nothing is changed.
 pub fn pop_thread_backup_dir(token: u64) -> Result<(), String> {
     THREAD_BACKUP_SAVED.with(|saved| {
         let mut saved = saved.borrow_mut();
-        if token == 0 || saved.len() as u64 != token {
-            return Err(format!(
-                "backup directory scope token {token} is not the innermost open scope ({} open)",
-                saved.len()
-            ));
+        match saved.last() {
+            Some((serial, _)) if *serial == token => {}
+            _ => {
+                return Err(format!(
+                    "backup directory scope token {token} is not the innermost open scope of this thread ({} open)",
+                    saved.len()
+                ));
+            }
         }
-        let previous = saved.pop().expect("checked non-empty");
+        let (_, previous) = saved.pop().expect("checked non-empty");
         THREAD_BACKUP_DIR.with(|slot| *slot.borrow_mut() = previous);
         Ok(())
     })
@@ -121,21 +133,28 @@ fn backup_dir_override_depth() -> usize {
     THREAD_BACKUP_SAVED.with(|saved| saved.borrow().len())
 }
 
-/// Restores the value saved by scope `token` and discards any deeper scopes
-/// that were left open. No-op when that scope is already closed.
-fn unwind_thread_backup_dir(token: u64) {
+/// Restores the value saved by the scope with serial `token` and discards any
+/// deeper scopes that were left open (what a scope guard does on drop). Use it
+/// when [`pop_thread_backup_dir`] was refused and the scope must not stay
+/// installed.
+///
+/// # Errors
+/// No open scope of this thread has that serial (already closed, or issued to
+/// another thread); nothing is changed.
+pub fn unwind_thread_backup_dir(token: u64) -> Result<(), String> {
     THREAD_BACKUP_SAVED.with(|saved| {
         let mut saved = saved.borrow_mut();
-        let Ok(depth) = usize::try_from(token) else {
-            return;
+        let Some(position) = saved.iter().position(|(serial, _)| *serial == token) else {
+            return Err(format!(
+                "backup directory scope token {token} is not an open scope of this thread ({} open)",
+                saved.len()
+            ));
         };
-        if depth == 0 || depth > saved.len() {
-            return;
-        }
-        saved.truncate(depth);
-        let previous = saved.pop().expect("checked non-empty");
+        saved.truncate(position + 1);
+        let (_, previous) = saved.pop().expect("checked non-empty");
         THREAD_BACKUP_DIR.with(|slot| *slot.borrow_mut() = previous);
-    });
+        Ok(())
+    })
 }
 
 /// A thread-scoped backup-directory override that puts back the previous
@@ -159,7 +178,8 @@ pub fn scoped_thread_backup_dir(dir: Option<PathBuf>) -> ThreadBackupDirGuard {
 
 impl Drop for ThreadBackupDirGuard {
     fn drop(&mut self) {
-        unwind_thread_backup_dir(self.token);
+        // An already-closed scope has nothing left to restore.
+        let _ = unwind_thread_backup_dir(self.token);
     }
 }
 
@@ -712,9 +732,10 @@ mod tests {
         set_thread_backup_dir(dir("base"));
         let first = push_thread_backup_dir(dir("one"));
         let second = push_thread_backup_dir(dir("two"));
-        assert_eq!((first, second), (1, 2));
+        assert_ne!(first, second);
+        assert!(first != 0 && second != 0);
         // Out of order, zero and unknown tokens change nothing.
-        for bad in [first, 0, 99] {
+        for bad in [first, 0, u64::MAX] {
             assert!(pop_thread_backup_dir(bad).is_err(), "token {bad}");
             assert_eq!(thread_backup_dir(), dir("two"));
         }
@@ -725,6 +746,83 @@ mod tests {
         // A second pop of the same token is refused.
         assert!(pop_thread_backup_dir(first).is_err());
         assert_eq!(thread_backup_dir(), dir("base"));
+        set_thread_backup_dir(None);
+    }
+
+    #[test]
+    fn a_stale_token_is_refused_even_when_the_depth_matches_again() {
+        set_thread_backup_dir(dir("base"));
+        let a = push_thread_backup_dir(dir("a"));
+        pop_thread_backup_dir(a).expect("a");
+        let b = push_thread_backup_dir(dir("b"));
+        assert_ne!(a, b, "serials are never reused");
+        // Both scopes sat at depth 1; the stale token must not close b.
+        assert!(pop_thread_backup_dir(a).is_err());
+        assert!(unwind_thread_backup_dir(a).is_err());
+        assert_eq!(thread_backup_dir(), dir("b"));
+        assert_eq!(backup_dir_override_depth(), 1);
+        pop_thread_backup_dir(b).expect("b");
+        assert_eq!(thread_backup_dir(), dir("base"));
+        set_thread_backup_dir(None);
+    }
+
+    #[test]
+    fn a_token_from_another_thread_is_refused_even_at_equal_depth() {
+        let _mine = scoped_thread_backup_dir(dir("mine"));
+        let (to_other, from_main) = std::sync::mpsc::channel::<u64>();
+        let (to_main, from_other) = std::sync::mpsc::channel::<u64>();
+        let other = std::thread::spawn(move || {
+            let theirs = push_thread_backup_dir(dir("theirs"));
+            to_main.send(theirs).expect("send");
+            let foreign = from_main.recv().expect("recv");
+            // Both threads have exactly one open scope.
+            assert_eq!(backup_dir_override_depth(), 1);
+            let popped = pop_thread_backup_dir(foreign);
+            let unwound = unwind_thread_backup_dir(foreign);
+            let after = (thread_backup_dir(), backup_dir_override_depth());
+            pop_thread_backup_dir(theirs).expect("own token");
+            (popped, unwound, after)
+        });
+        let theirs = from_other.recv().expect("recv");
+        assert_eq!(backup_dir_override_depth(), 1);
+        // The other thread's token is refused here too.
+        assert!(pop_thread_backup_dir(theirs).is_err());
+        assert!(unwind_thread_backup_dir(theirs).is_err());
+        assert_eq!(thread_backup_dir(), dir("mine"));
+        let mine = THREAD_BACKUP_SAVED.with(|saved| saved.borrow()[0].0);
+        to_other.send(mine).expect("send");
+        let (popped, unwound, after) = other.join().expect("thread");
+        assert!(popped.is_err() && unwound.is_err());
+        assert_eq!(after, (dir("theirs"), 1), "foreign pop changed nothing");
+        assert_eq!(thread_backup_dir(), dir("mine"));
+        assert_eq!(backup_dir_override_depth(), 1);
+    }
+
+    #[test]
+    fn unwind_closes_the_named_scope_and_everything_inside_it() {
+        set_thread_backup_dir(dir("base"));
+        let outer = push_thread_backup_dir(dir("outer"));
+        let _inner = push_thread_backup_dir(dir("inner"));
+        let _innermost = push_thread_backup_dir(dir("innermost"));
+        unwind_thread_backup_dir(outer).expect("open scope");
+        assert_eq!(thread_backup_dir(), dir("base"));
+        assert_eq!(backup_dir_override_depth(), 0);
+        assert!(unwind_thread_backup_dir(outer).is_err(), "now closed");
+        set_thread_backup_dir(None);
+    }
+
+    #[test]
+    fn a_stale_guard_does_not_unwind_a_scope_at_the_same_depth() {
+        set_thread_backup_dir(dir("base"));
+        let guard = scoped_thread_backup_dir(dir("guarded"));
+        let stale = guard.token;
+        // Close the guard's scope behind its back, then open another at depth 1.
+        pop_thread_backup_dir(stale).expect("manual pop");
+        let live = push_thread_backup_dir(dir("live"));
+        drop(guard);
+        assert_eq!(thread_backup_dir(), dir("live"), "the stale guard is inert");
+        assert_eq!(backup_dir_override_depth(), 1);
+        pop_thread_backup_dir(live).expect("live");
         set_thread_backup_dir(None);
     }
 
@@ -743,11 +841,19 @@ mod tests {
     #[test]
     fn the_override_is_private_to_its_thread() {
         let _guard = scoped_thread_backup_dir(dir("mine"));
-        let other = std::thread::spawn(|| (thread_backup_dir(), pop_thread_backup_dir(1)))
-            .join()
-            .expect("thread");
+        let token = THREAD_BACKUP_SAVED.with(|saved| saved.borrow()[0].0);
+        let other = std::thread::spawn(move || {
+            (
+                thread_backup_dir(),
+                pop_thread_backup_dir(token),
+                unwind_thread_backup_dir(token),
+            )
+        })
+        .join()
+        .expect("thread");
         assert_eq!(other.0, None);
         assert!(other.1.is_err(), "a token is not valid on another thread");
+        assert!(other.2.is_err());
         assert_eq!(thread_backup_dir(), dir("mine"));
     }
 
