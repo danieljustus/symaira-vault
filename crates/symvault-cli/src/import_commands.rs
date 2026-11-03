@@ -446,7 +446,14 @@ fn check_error(root: &Path, path: &[u8], error: &StoreError) -> ApplyError {
         // Go stats the entry file inside the vault's entries root first, so a
         // name the file system refuses is reported by that stat.
         StoreError::Read { path: file, source } if is_name_too_long(source) => {
-            let relative = file.strip_prefix(root).unwrap_or(file);
+            // The store reports the canonical path; the root may be reached
+            // through a symlinked ancestor (macOS `/var` -> `/private/var`).
+            let canonical = root.canonicalize().ok();
+            let relative = file
+                .strip_prefix(root)
+                .ok()
+                .or_else(|| canonical.as_deref().and_then(|c| file.strip_prefix(c).ok()))
+                .unwrap_or(file);
             let relative = relative.to_string_lossy().replace('\\', "/");
             format!("statat {relative}: file name too long").into_bytes()
         }
