@@ -833,26 +833,12 @@ tool-registry-hash-fixtures-check:
 tool-registry-hash-differential: tool-registry-hash-fixtures-check
 	$(CARGO) test -p symvault-mcp --test tool_registry_hash_contract --locked
 
-# HTTP-001 / HTTP-002 process contracts. Each builds the Rust CLI and replays the
-# real Go oracle (built from the pinned commit) against it, so they need a Go
-# toolchain and a real clock (the token contract waits several seconds for the
-# registry poller); they are NOT part of port-contract. Set HTTP_CONTRACT_ARGS=
-# --allow-dirty-for-development for an uncommitted candidate.
+# HTTP-001 / HTTP-002 / TOOLHASH-001 process contracts (mcp-http-replay-contract,
+# mcp-http-token-contract, toolhash-process-contract): recipes in the area
+# section below, where they are members of LOCAL_AREA_PROCESS_TARGETS. They
+# are not part of port-contract. Set HTTP_CONTRACT_ARGS=--allow-dirty-for-development
+# for an uncommitted candidate (the receipt check then rightly fails).
 HTTP_CONTRACT_ARGS ?=
-.PHONY: mcp-http-replay-contract mcp-http-token-contract
-mcp-http-replay-contract:
-	python3 -B scripts/rust-port/test_http_replay_contract.py
-	$(CARGO) build -p symvault-cli --bin symvault --locked
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/http_replay_contract.py \
-		--rust "$(RUST_BINARY)" \
-		--receipt "$(CARGO_TARGET_DIR)/http-replay-contract.json" $(HTTP_CONTRACT_ARGS)
-
-mcp-http-token-contract: timestamp-fixtures-check
-	python3 -B scripts/rust-port/test_http_replay_contract.py
-	$(CARGO) build -p symvault-cli --bin symvault --locked
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/http_token_contract.py \
-		--rust "$(RUST_BINARY)" \
-		--receipt "$(CARGO_TARGET_DIR)/http-token-contract.json" $(HTTP_CONTRACT_ARGS)
 
 # Go-recorded RFC3339 acceptance + table display (scripts/rust-port/go_timestamp_fixtures.py).
 # -check re-records in memory and never writes; -generate is the only writer.
@@ -1025,8 +1011,11 @@ LOCAL_AREA_DIFFERENTIAL_TARGETS := mcp-init-differential mcp-stdio-differential 
 # workflow's contract step plus the test_*_contract.py / *_mutation.py negative
 # controls and the named cargo/go tests the workflow ran next to it, then
 # gate_area_check.py with the workflow's own counts and names (profiles).
-# Windows steps are out of scope. mcp-http-replay-contract and
-# mcp-http-token-contract belong to no workflow step and stay explicit. Hosted CI ran the HTTP contracts
+# Windows steps are out of scope. mcp-http-replay-contract,
+# mcp-http-token-contract and toolhash-process-contract belong to no workflow
+# step; they are local-only process contracts (HTTP-001, HTTP-002,
+# TOOLHASH-001) against a real Go oracle and join the list so that their rows
+# can carry a receipt of the full gate. Hosted CI ran the HTTP contracts
 # on ubuntu (rust-http-*.yml) and macOS (rust-http-macos.yml); every other
 # contract ran on both, so both lanes run all of them. Lane-only targets:
 #   linux: tui-contract (the contract needs Xvfb/xclip; on macOS it drives the
@@ -1040,7 +1029,8 @@ LOCAL_AREA_PROCESS_TARGETS := area-check-selftest worktree-prune-check http-fram
 	intake-cli-contract serve-cli-contract kdf-resource-policy-contract \
 	read-resource-policy-contract mcp-http-shutdown-contract \
 	signal-process-contract store-live-contract store-observations-contract \
-	sync-observations-contract pairing-oracle-contract tui-named-tests
+	sync-observations-contract pairing-oracle-contract tui-named-tests \
+	mcp-http-replay-contract mcp-http-token-contract toolhash-process-contract
 LOCAL_AREA_LANE ?= $(if $(filter Darwin,$(shell uname -s)),macos,linux)
 LOCAL_AREA_LANE_TARGETS_macos := tui-harness-check
 LOCAL_AREA_LANE_TARGETS_linux := tui-contract
@@ -1203,6 +1193,48 @@ http-process-contract:
 	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/http_process_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-process.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-process.json" --profile http-process
+
+# HTTP-001 (no workflow step): SSE negotiation, replay, JSON-RPC envelope, route
+# and request-framing corpus against the Go oracle (276 cases, ADR 0032 declared
+# differences). The oracle is built from the pinned commit by the driver.
+mcp-http-replay-contract:
+	@mkdir -p "$(AREA_EVIDENCE)"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_replay_contract.py
+	$(AREA_BUILD_CLI)
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/http_replay_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-replay.json" $(HTTP_CONTRACT_ARGS)
+	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-replay.json" --profile http-replay
+
+# HTTP-002 (no workflow step): bearer-token state, clock and storage matrix; it
+# waits several seconds on the registry poller (real clock). The prerequisite
+# re-records the Go timestamp fixtures in memory (never writes).
+mcp-http-token-contract: timestamp-fixtures-check
+	@mkdir -p "$(AREA_EVIDENCE)"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_replay_contract.py
+	$(AREA_BUILD_CLI)
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/http_token_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-token.json" $(HTTP_CONTRACT_ARGS)
+	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-token.json" --profile http-token
+
+# TOOLHASH-001 (no workflow step): Go CLI and Go seed built from this checkout
+# (the driver takes prebuilt binaries); both CLIs stamp the Go-recorded registry
+# hash, the actual Go and Rust servers answer 14 HTTP outcomes identically and
+# write identical audit rows. Negative control: with the Rust audit ids dropped
+# the comparison must fail on the audit rows, not on anything else.
+toolhash-process-contract:
+	@mkdir -p "$(AREA_EVIDENCE)"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_toolhash_process_contract.py
+	$(AREA_BUILD_CLI)
+	$(AREA_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-cli" .
+	$(AREA_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-seed" ./scripts/rust-port/cmd/toolhashseed
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/toolhash_process_contract.py \
+		--go-cli "$(AREA_BIN)/toolhash-go-cli" --go-seed "$(AREA_BIN)/toolhash-go-seed" --rust "$(AREA_CLI)" \
+		--receipt "$(AREA_EVIDENCE)/native-toolhash.json"
+	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-toolhash.json" --profile toolhash
+	! $(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/toolhash_process_contract.py \
+		--go-cli "$(AREA_BIN)/toolhash-go-cli" --go-seed "$(AREA_BIN)/toolhash-go-seed" --rust "$(AREA_CLI)" \
+		--drop-audit-ids > "$(AREA_EVIDENCE)/native-toolhash-drop-ids.txt" 2>&1
+	grep -q "Go/Rust audit rows differ" "$(AREA_EVIDENCE)/native-toolhash-drop-ids.txt"
 
 # The cargo runs next to the HTTP, MCP-process and API-transport contracts of
 # rust-http-*.yml, rust-mcp-http-process.yml, rust-mcp-process.yml and

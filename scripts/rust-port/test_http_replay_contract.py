@@ -265,6 +265,18 @@ class TokenContract(unittest.TestCase):
         with self.assertRaises(AssertionError):
             tokens.check_duplicate_reload(steps, [('baseline', 200), ('revoked-typeerr-then-false', 200)])
 
+    def test_token_files_survive_documents_deeper_than_the_python_json_limit(self):
+        import pathlib
+        import tempfile
+        with tempfile.TemporaryDirectory() as raw:
+            vault = pathlib.Path(raw)
+            (vault / 'mcp-tokens.json').write_text('{"version":2,"tokens":{},"zz":' + '[' * 9998 + ']' * 9998 + '}')
+            observed = tokens.token_files(vault)['mcp-tokens.json']
+            # CPython 3.14 parses this depth, 3.13 does not: both are recorded, never a crash.
+            self.assertTrue(isinstance(observed, dict) or observed.startswith('too-deep:'), observed)
+            (vault / 'mcp-tokens.json').write_text('{not json')
+            self.assertEqual(tokens.token_files(vault)['mcp-tokens.json'], 'unparseable')
+
     def test_dynamic_policy(self):
         good = dict(live_before_expiry=200, live_expiry_epoch=100.0, live_detected_epoch=101.0, added_latency=2.1, revoke_latency=2.2, recovered_latency=2.0)
         tokens.check_dynamic(dict(good, after_corruption=200), dict(good, after_corruption=200))

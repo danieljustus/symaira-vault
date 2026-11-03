@@ -124,6 +124,9 @@ parallel (`.NOTPARALLEL`).
 | `pairing-oracle-contract` | rust-pairing | `area_pairing_oracle.sh`: stateful CLI differential against Go v0.22.1, import quarantine against `3232e31f`, auth root-trust, startup profile (each asserts the cargo test ran and did not print the "skipping Go differential" notice), the `caserun`/`devicelistdriver`/`diff` Go tests, HTTP-001 keyring isolation, toolchain identity. `pairing-differential`, `config-profile-differential`, `device-list-differential` are separate targets of the differential list |
 | `http-oauth-contract` | rust-http-oauth | oracle-runner build and `test_oracle_build.py`, `http_oauth_contract.py` |
 | `http-process-contract` | rust-mcp-http-process | `test_http_process_contract.py`, `http_process_contract.py` |
+| `mcp-http-replay-contract` | (local; HTTP-001, no workflow step) | `test_http_replay_contract.py`, `http_replay_contract.py` (24 s on the MacBook) against the Go oracle at the pinned commit; profile `http-replay`: 276 cases per implementation (case list and order imported from the driver), 194 identical, 71 declared (ADR 0032; labels equal `DECLARED`), 8 health-clock (semantic), 2 final-identical (Go-only interim `100 Continue`), `route-head-health`, and the driver's own `compare` re-run over the receipt |
+| `mcp-http-token-contract` | (local; HTTP-002, no workflow step) | `timestamp-fixtures-check`, `test_http_replay_contract.py`, `http_token_contract.py` (real clock; 243 s on the MacBook at load 15); profile `http-token`: 180 token-state cases, 70 startup/storage scenarios, 1 dynamic clock scenario, 21 duplicate-key reload steps, 2 stale-revocation scenarios per implementation, each re-checked with the driver's own `check_*` functions |
+| `toolhash-process-contract` | (local; TOOLHASH-001, no workflow step) | `test_toolhash_process_contract.py`, Go CLI and `toolhashseed` built from this checkout, `toolhash_process_contract.py`; profile `toolhash`: Go-recorded registry hash stamped by both CLIs (`new`, `rotate`), 14 byte-identical HTTP outcomes with the hand-written drift/scope/policy expectations, 8 identical audit rows (ids masked); negative control `--drop-audit-ids` must fail on the audit rows |
 | `mcp-process-contract` | rust-mcp-process | `test_mcp_oracle.py`, `test_mcp_process_contract.py`, `make mcp-ordered-fixtures-check`, `mcp_process_contract.py --reference mcp-anomaly-ordered-v1` |
 | `api-transport-contract` | rust-api-transport | `test_api_transport_contract.py`, `api_transport_contract.py` (probe example) |
 | `broker-connect-contract` | rust-broker-connect | `connect_contract.py` (probe example) |
@@ -205,7 +208,7 @@ Running them:
   the lane) and `area_complete`, true only for an unnarrowed run that executed
   exactly that list, exited 0 and ran on a clean tree (`ALLOW_DIRTY=1` runs
   have `dirty: true` and are never complete); a run whose executed list differs
-  fails. `test_local_area_list.py` pins each lane's 48 targets (so a target
+  fails. `test_local_area_list.py` pins each lane's 51 targets (so a target
   removed from the Makefile fails `area-check-selftest`), and
   `area_http_write_mutation.sh` / `area_pairing_oracle.sh` remove their scratch
   worktrees through `worktree_remove.sh` (refuses symlinks and paths outside the
@@ -243,13 +246,13 @@ Running them:
 | `native_closeout.py keyring`, `daemon`, `clipboard` | **void locally**: they need a disposable runner (real keychain/Secret Service, launchd, pasteboard) and assert `GITHUB_ACTIONS=true`; closing CI |
 | `rust-tui` macOS half of `tui_contract.py` | closing CI (real pasteboard), see "TUI on macOS" |
 | `rust-tui` whole `cargo test -p symvault-cli -p symvault-platform --all-targets` | `rust-test`; the named browser cases run in `tui-named-tests` |
-| `make mcp-http-replay-contract`, `mcp-http-token-contract`, `clipboard-linux-differential`, `tool-registry-hash-differential` (new on `local/rust-port`) | not steps of any workflow. `clipboard-linux-differential` and `tool-registry-hash-differential` are `port-contract` members (Linux lane); the two HTTP-replay/token contracts are explicit manual runs by design (they need a real clock and several seconds of waiting) and stay out of the area list |
+| `clipboard-linux-differential`, `tool-registry-hash-differential` (new on `local/rust-port`) | not steps of any workflow; both are `port-contract` members (Linux lane). `mcp-http-replay-contract`, `mcp-http-token-contract` and `toolhash-process-contract` are not workflow steps either, but are area targets (rows above): they need a real clock, several seconds of waiting and a Go oracle, which the area targets provide |
 | `rust-audit.yml`, `codeql.yml`, `deferred-deps-check.yml`, `macos-*.yml`, `release.yml`, `ci.yml` | not area workflows |
 
 ### Measured run times
 
 Wall-clock seconds per target of the final full `macos-area` and `linux-area`
-runs at `20291611` (48 targets each, exit 0, receipts `partial: false`,
+runs at `20291611` (48 targets each at that time, exit 0, receipts `partial: false`,
 `area_complete: true`), measured on the MacBook (arm64) with a 1-minute load
 average of about 5 to 27 (other worktrees ran cargo and docker in parallel;
 `area-load:` lines in the log show the load at each target's start).

@@ -179,6 +179,11 @@ def token_files(vault):
                 for e in (document.get('tokens') or {}).values() if e))
         except (ValueError, AttributeError, TypeError):
             result[path.name] = 'unparseable'
+        except RecursionError:
+            # Go accepts nesting up to 10000 (duplicate_documents 'depth-9997-unknown'); CPython 3.13's json
+            # C scanner refuses that depth.  The exact bytes stand in for the structure, so a file either
+            # side rewrote still differs.
+            result[path.name] = 'too-deep:' + hashlib.sha256(path.read_bytes()).hexdigest()
     return result
 
 

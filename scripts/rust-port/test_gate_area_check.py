@@ -10,6 +10,7 @@ state only, never native process observations.
 import argparse
 import contextlib
 import copy
+import hashlib
 import io
 import json
 import sys
@@ -19,6 +20,9 @@ from pathlib import Path
 from unittest import mock
 
 import gate_area_check as g
+import http_token_contract as token_driver
+import test_http_replay_contract as replay_cases
+import toolhash_process_contract as toolhash_driver
 from http_process_contract import EARLY_INVALID_ADMISSION_CASES
 
 HEAD = "0123456789abcdef0123456789abcdef01234567"
@@ -245,6 +249,105 @@ def good_http_drain():
     return base(expect_mismatch=False, mismatch="", drain_seconds=5.0, **per_impl(make))
 
 
+def driver_sha(name):
+    return hashlib.sha256((Path(__file__).resolve().parent / name).read_bytes()).hexdigest()
+
+
+def good_http_replay():
+    # The self-consistent Go/Rust corpus of test_http_replay_contract.py (every
+    # declared, interim-only, health-clock and identical class present).
+    go, rust = replay_cases.synthetic()
+    identical, declared, semantic, interim_only = replay_cases.replay.compare(go, rust, replay_cases.PORT)
+    assert (len(identical), len(declared), len(semantic), len(interim_only)) == (194, 71, 8, 2)
+    return base(port=replay_cases.PORT, driver_sha256=driver_sha("http_replay_contract.py"), oracle_commit=token_driver.ORACLE,
+                go={"rows": go, "processes": procs()}, rust={"rows": rust, "processes": procs()},
+                declared_differences=[{"case": d["case"], "decision": d["decision"]} for d in declared],
+                identical_cases=194, semantic_cases=8, interim_only_cases=[{"case": d["case"]} for d in interim_only])
+
+
+def call_record(code):
+    return {"case": "call", "raw_base64": "", "reset": None, "elapsed_seconds": 0.0,
+            "responses": [{"status_line": OK_LINE, "code": code, "interim": False, "headers": [],
+                           "headers_without_date": [], "body_base64": "", "truncated": False}]}
+
+
+def startup_record(scenario):
+    name, _, graceful, state, first = scenario
+    listening = state == "listening"
+    codes = [first if first is not None else 200] + [200] * 4
+    if name in ("legacy-only", "legacy-only-sigint"):
+        codes = [401, 401, 200, 200, 403]
+    after = {}
+    if name.startswith("legacy-only") or name.startswith("registry-missing"):
+        after = {"mcp-tokens.json": {"version": 2, "entries": [["legacy (auto-migrated, unscoped)", "legacy"]]}}
+    return {"state": state, "exit": None if listening else 1, "disposal": ("graceful" if graceful else "killed") if listening else "exited",
+            "before": {}, "after": after, "stderr_has_legacy_warning": False, "stderr_utf8": "",
+            "responses": [call_record(code) for code in codes] if listening else []}
+
+
+def good_http_token():
+    raws, body = token_driver.token_registry()
+    rows = replay_cases.TokenContract("test_matrix_passes_and_mutations_fail").rows()
+    process = {"disposal": "killed", "exit": -9, "stdout": "", "stderr": ""}
+    startup = []
+    for scenario in token_driver.startup_scenarios(raws, body):
+        record = startup_record(scenario)
+        startup.append({"case": scenario[0], "go": record, "rust": copy.deepcopy(record)})
+    dynamic = {"live_before_expiry": 200, "live_expiry_epoch": 100.0, "live_detected_epoch": 101.0, "added_latency": 2.1,
+               "revoke_latency": 2.2, "recovered_latency": 2.0, "after_corruption": 200}
+    steps = [[f"step-{i}", 200 if i % 2 else 401] for i in range(21)]
+    stale = [{"mode": mode, "revoked_token_status": 401, "other_token_status": 200} for mode in ("corrupt", "delete")]
+    return base(port=4242, driver_sha256=driver_sha("http_token_contract.py"), oracle_commit=token_driver.ORACLE, token_cases=180, startup=startup,
+                go={"rows": rows, "process": dict(process)}, rust={"rows": copy.deepcopy(rows), "process": dict(process)},
+                dynamic={"go": dict(dynamic), "rust": dict(dynamic)}, duplicate_reload={"go": steps, "rust": copy.deepcopy(steps)},
+                stale_revocation={"go": stale, "rust": copy.deepcopy(stale)})
+
+
+def frame(result=None, error=None):
+    out = {"jsonrpc": "2.0", "id": 2}
+    out.update({"result": result} if error is None else {"error": error})
+    return OK_LINE, json.dumps(out)
+
+
+def tool_result(text="ok", is_error=False):
+    return {"isError": is_error, "content": [{"type": "text", "text": text}]}
+
+
+def good_toolhash():
+    recorded = json.loads(toolhash_driver.FIXTURE.read_bytes())["registry"]["hash"]
+    drift = tool_result(toolhash_driver.DRIFT_TEXT, True)
+    http = []
+    for scenario, _, _, who in toolhash_driver.SCENARIOS:
+        for token in who:
+            if token == "go_stale":
+                outcome = frame(drift)
+            elif scenario == "out-of-scope-tool":
+                outcome = frame(tool_result("tool not permitted for this token", True))
+            elif (scenario, token) == ("policy-denied-path", "go_current"):
+                outcome = frame(error={"code": -32602, "message": "denied by entry policy"})
+            else:
+                outcome = frame(tool_result())
+            http.append({"scenario": scenario, "token": token, "go": list(outcome), "rust": list(outcome)})
+    actions = ["tool_call", "tool_call", "tool_denied", "tool_denied", "tool_registry_drift", "tool_registry_drift",
+               "tool_registry_drift", "tool_call"]
+    audit = [[["action", action], ["sess_id", "<sess>"], ["req_id", "<req>"], ["token_id", "tok-1"]] for action in actions]
+    return base(driver_sha256=driver_sha("toolhash_process_contract.py"), recorded_go_hash=recorded,
+                issue={impl: {"new": recorded, "rotate": recorded} for impl in ("go", "rust")}, http=http,
+                audit={"go": audit, "rust": copy.deepcopy(audit)})
+
+
+
+def _replay_row(receipt, case, side="rust"):
+    return next(x for x in receipt[side]["rows"] if x["case"] == case)
+
+
+def _toolhash_outcome(receipt, scenario, token, result):
+    """Both servers return the same (wrong) outcome: only the hand-written expectation can catch it."""
+    for h in receipt["http"]:
+        if (h["scenario"], h["token"]) == (scenario, token):
+            h["go"] = h["rust"] = list(frame(result))
+
+
 GOOD = {
     "http-framing": good_framing, "http-head": good_head, "http-origin": good_origin,
     "http-read-deadlines": good_deadlines, "http-timeouts": good_timeouts, "http-tls": good_tls,
@@ -252,6 +355,7 @@ GOOD = {
     "mcp-process": good_mcp_process, "api-transport": good_api, "cli-artifacts": good_cli_artifacts,
     "intake": good_intake, "serve": good_serve, "egress": good_egress, "connect": good_connect,
     "signal": good_signal, "http-drain": good_http_drain,
+    "http-replay": good_http_replay, "http-token": good_http_token, "toolhash": good_toolhash,
 }
 
 # Keys a profile does not read (the workflow did not assert them either).
@@ -417,6 +521,51 @@ class ReceiptProfiles(unittest.TestCase):
             ("http-drain", lambda r: r["rust"][3].update(runtime_records=[".runtime-port"])),
             ("http-drain", lambda r: r["rust"][3].update(stdout="x")),
             ("http-drain", lambda r: r["go"].reverse()),
+            ("http-replay", lambda r: r["declared_differences"].pop()),
+            ("http-replay", lambda r: r["rust"]["rows"].pop()),
+            ("http-replay", lambda r: r["go"]["rows"].reverse()),
+            ("http-replay", lambda r: r.update(identical_cases=193)),
+            ("http-replay", lambda r: r.update(semantic_cases=7)),
+            ("http-replay", lambda r: r["interim_only_cases"].pop()),
+            ("http-replay", lambda r: r.update(driver_sha256="0" * 64)),
+            ("http-replay", lambda r: r.update(oracle_commit="0" * 40)),
+            ("http-replay", lambda r: r.update(port="4242")),
+            ("http-replay", lambda r: r["go"]["processes"].pop()),
+            ("http-replay", lambda r: r["rust"]["processes"][0].update(output_capture_complete=False)),
+            ("http-replay", lambda r: r["rust"]["rows"][5].update(reset="timeout")),
+            ("http-replay", lambda r: r["declared_differences"][0].update(decision="other")),
+            ("http-replay", lambda r: _replay_row(r, "method-GET")["responses"][0].update(code=500, status_line="HTTP/1.1 500 X")),
+            ("http-replay", lambda r: _replay_row(r, "line-empty").update(responses=copy.deepcopy(_replay_row(r, "line-empty", "go")["responses"]))),
+            ("http-token", lambda r: r["startup"].pop()),
+            ("http-token", lambda r: r["startup"].reverse()),
+            ("http-token", lambda r: r.update(token_cases=179)),
+            ("http-token", lambda r: r.update(driver_sha256="1" * 64)),
+            ("http-token", lambda r: r.update(oracle_commit="1" * 40)),
+            ("http-token", lambda r: r["go"]["rows"].pop()),
+            ("http-token", lambda r: r["rust"]["rows"][5]["responses"][0].update(code=500, status_line="HTTP/1.1 500 X")),
+            ("http-token", lambda r: r["rust"]["process"].update(disposal="graceful")),
+            ("http-token", lambda r: r["startup"][0]["rust"].update(state="exited")),
+            ("http-token", lambda r: r["startup"][2]["rust"].update(after={"mcp-tokens.json": "unparseable"})),
+            ("http-token", lambda r: r["dynamic"]["rust"].update(after_corruption=401)),
+            ("http-token", lambda r: r["dynamic"]["go"].update(revoke_latency=9.0)),
+            ("http-token", lambda r: r["duplicate_reload"]["rust"].pop()),
+            ("http-token", lambda r: r["duplicate_reload"]["rust"][3].__setitem__(1, 999)),
+            ("http-token", lambda r: [x.pop() for x in (r["duplicate_reload"]["go"], r["duplicate_reload"]["rust"])]),
+            ("http-token", lambda r: r["stale_revocation"]["rust"][0].update(revoked_token_status=200)),
+            ("http-token", lambda r: r["stale_revocation"]["go"].reverse()),
+            ("toolhash", lambda r: r["http"].pop()),
+            ("toolhash", lambda r: r["http"][3]["rust"].__setitem__(1, "{}")),
+            ("toolhash", lambda r: r["audit"]["rust"].pop()),
+            ("toolhash", lambda r: r["audit"]["go"].pop()),
+            ("toolhash", lambda r: [row.pop(1) for row in r["audit"]["rust"]]),
+            ("toolhash", lambda r: r["issue"]["rust"].update(new="")),
+            ("toolhash", lambda r: r.update(recorded_go_hash="0" * 64)),
+            ("toolhash", lambda r: r.update(driver_sha256="2" * 64)),
+            ("toolhash", lambda r: _toolhash_outcome(r, "search", "go_stale", tool_result())),
+            ("toolhash", lambda r: _toolhash_outcome(r, "policy-denied-path", "go_stale", tool_result("denied", True))),
+            ("toolhash", lambda r: _toolhash_outcome(r, "search", "rust_cli_issued", tool_result("refused", True))),
+            ("toolhash", lambda r: _toolhash_outcome(r, "out-of-scope-tool", toolhash_driver.STALE_SCOPED, tool_result(toolhash_driver.DRIFT_TEXT, True))),
+            ("toolhash", lambda r: [row.__setitem__(0, ["action", "tool_call"]) for row in r["audit"]["go"] + r["audit"]["rust"]]),
         ]
         for profile, mutate in mutations:
             with self.subTest(profile=profile, mutation=mutate.__code__.co_firstlineno):
