@@ -201,7 +201,8 @@ Still open (probed, not fixed; see the CFG-003 and CLI-005 rows of the contract 
 | --- | --- | --- |
 | nesting depth | up to 10000 levels | refused beyond 256 (`yaml_edit`); 100k `[` take about 100 s to refuse |
 | `profiles:\n  x: null` | nil pointer panic, exit 2 | parse error, exit 6 |
-| `config set x 1e3` / `0b11` / `010` / `y` / `2026-10-31` | writes `1000` / `3` / `8` / `"y"` / `2026-10-31T00:00:00Z` | `1000.0` / `"0b11"` / `10` / `y` / `2026-10-31` |
+| `config set x 1e3` / `y` / `2026-10-31` | writes `1000` / `"y"` / `2026-10-31T00:00:00Z` | `1000.0` / `y` / `2026-10-31` (ADR 0034 item 3, maintainer decision pending) |
+| `config set x 010` / `017` / `0b11` / `0b101` / `1_000` (ADR 0034 item 4) | writes `8` / `15` / `3` / `5` / `1000` | **fixed**: same. A plain scalar that `symvault_gojson::resolve` resolves to `!!int` is written as its decimal value (also inside flow sequences and mappings; a quoted `"010"` stays a string). Before: `10` / `17` / `"0b11"` (an int key then failed the reload) / `"0b101"` / `1_000`. Pinned by 25 Go-recorded `config-set-int-*` cases in `output-modes.json` (oracle `bf7f687b`, `post` `config get` shows the stored number) |
 | `config set x '<<'` | writes `!!merge <<` | writes `"<<"` |
 | re-encode of the rest of the file | CRLF becomes LF; flow sequences get `, ` spacing (`[x,x]` becomes `[x, x]`); timestamp scalars in flow mappings are quoted (so a later error says `!!str`, not `!!timestamp`); anchor comments move behind the collection (changing reported lines); explicit keys, `\u00e9` escapes, verbatim and `!` tags, `!!int &a 12` order, tagged block sequence indent are normalised | kept as written |
 | root that is not a mapping | `root node is a scalar, not a mapping` (or `a sequence`) | `document has no root to descend into` |
