@@ -3352,12 +3352,19 @@ impl StoreReadOnlyRuntime {
         };
         let alerts = self.anomaly.check(event);
         if let Some(alert) = alerts.first() {
+            // Durable effects first: the log sink may block or fail, and it
+            // must not be able to delay or suppress the audit row or the
+            // approval-cache invalidation.
             self.record_anomaly(alert);
+        }
+        // Go order: every detector-hook line, then the dispatch line.
+        self.anomaly.log_alerts(&alerts);
+        if let Some(alert) = alerts.first() {
+            self.anomaly.warn_dispatched(alert);
         }
     }
 
     fn record_anomaly(&self, alert: &AnomalyAlert) {
-        self.anomaly.warn_dispatched(alert);
         {
             // Go logs with `context.Background()`: the row carries the session
             // id only, never the request or token id of the triggering call.

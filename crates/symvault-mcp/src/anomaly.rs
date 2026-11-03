@@ -387,7 +387,14 @@ fn local_offset_at(_moment: OffsetDateTime) -> UtcOffset {
 pub type WarnSink = Arc<dyn Fn(&str) + Send + Sync>;
 
 pub(crate) fn stderr_sink() -> WarnSink {
-    Arc::new(|line| eprintln!("{line}"))
+    Arc::new(|line| write_warning_line(&mut std::io::stderr().lock(), line))
+}
+
+/// Writes one warning line and ignores every I/O error. `eprintln!` panics
+/// when stderr is closed or broken (EPIPE), and the release profile aborts on
+/// panic: a diagnostics channel must never take the MCP server down.
+pub(crate) fn write_warning_line(writer: &mut impl std::io::Write, line: &str) {
+    let _ = writeln!(writer, "{line}");
 }
 
 /// Detector, clock and warning sink of one MCP session.
@@ -427,23 +434,31 @@ impl AnomalyMonitor {
         self.clock.now()
     }
 
-    pub(crate) fn window_len(&self) -> usize {
+    /// A poisoned lock only means another thread panicked mid-update; the
+    /// event window is still a valid list, so detection keeps working instead
+    /// of silently dropping every later alert.
+    fn detector(&self) -> std::sync::MutexGuard<'_, AnomalyDetector> {
         self.detector
             .lock()
-            .map(|detector| detector.window_len())
-            .unwrap_or(0)
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// Records `event` and returns the alerts. Go's `WithAlertHook` in
-    /// `server.go` logs every alert (type, severity, agent, description);
-    /// that line is emitted here.
+    pub(crate) fn window_len(&self) -> usize {
+        self.detector().window_len()
+    }
+
+    /// Records `event` and returns the alerts. Nothing is written here: the
+    /// caller persists the audit row and invalidates the approval cache first
+    /// and only then calls [`Self::log_alerts`], so a stalled or broken log
+    /// sink can never delay or suppress them.
     pub(crate) fn check(&self, event: ToolCallEvent) -> Vec<AnomalyAlert> {
-        let Ok(mut detector) = self.detector.lock() else {
-            return Vec::new();
-        };
-        let alerts = detector.check(event);
-        drop(detector);
-        for alert in &alerts {
+        self.detector().check(event)
+    }
+
+    /// Go's `WithAlertHook` in `server.go` logs every alert (type, severity,
+    /// agent, description); those lines are emitted here.
+    pub(crate) fn log_alerts(&self, alerts: &[AnomalyAlert]) {
+        for alert in alerts {
             self.warn(&[
                 ("type", alert.alert_type.as_str()),
                 ("severity", alert.severity.as_str()),
@@ -451,7 +466,6 @@ impl AnomalyMonitor {
                 ("description", &alert.description),
             ]);
         }
-        alerts
     }
 
     /// The `slog.Default().Warn("anomaly detected", ...)` of
@@ -754,5 +768,90 @@ mod tests {
             "2026/10/09 16:50:40 WARN anomaly detected type=tool_chain path=\"\" agent=\"a b\" \
              description=\"x=y \\\"q\\\" back\\\\slash\""
         );
+    }
+
+    struct BrokenPipe;
+
+    impl std::io::Write for BrokenPipe {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::ErrorKind::BrokenPipe.into())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::ErrorKind::BrokenPipe.into())
+        }
+    }
+
+    #[test]
+    fn a_broken_stderr_is_ignored_instead_of_panicking() {
+        // eprintln! would panic here (and abort in release).
+        write_warning_line(&mut BrokenPipe, "2026/11/03 03:00:00 WARN anomaly detected");
+    }
+
+    #[test]
+    fn a_healthy_writer_gets_the_line_and_a_newline_negative_control() {
+        let mut out = Vec::new();
+        write_warning_line(&mut out, "line one");
+        assert_eq!(out, b"line one\n");
+    }
+
+    #[test]
+    fn a_poisoned_detector_lock_still_detects_and_counts() {
+        let monitor = AnomalyMonitor::new().with_sink(Arc::new(|_| {}));
+        let _ = std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let _guard = monitor.detector.lock().unwrap();
+                    panic!("poison the detector lock");
+                })
+                .join()
+        });
+        assert!(
+            monitor.detector.is_poisoned(),
+            "precondition: lock poisoned"
+        );
+
+        let alerts = monitor.check(event(
+            noon().replace_hour(3).unwrap(),
+            "a",
+            "get_entry",
+            "p",
+        ));
+        assert!(
+            alerts.iter().any(|a| a.alert_type == AlertType::OffHours),
+            "a poisoned lock must not drop alerts: {alerts:?}"
+        );
+        assert_eq!(monitor.window_len(), 1);
+    }
+
+    #[test]
+    fn a_healthy_lock_detects_the_same_event_negative_control() {
+        let monitor = AnomalyMonitor::new().with_sink(Arc::new(|_| {}));
+        assert!(!monitor.detector.is_poisoned());
+        let alerts = monitor.check(event(
+            noon().replace_hour(3).unwrap(),
+            "a",
+            "get_entry",
+            "p",
+        ));
+        assert_eq!(alerts.len(), 1);
+    }
+
+    #[test]
+    fn check_writes_nothing_until_log_alerts_is_called() {
+        let lines = Arc::new(Mutex::new(Vec::new()));
+        let sink_lines = lines.clone();
+        let monitor = AnomalyMonitor::new().with_sink(Arc::new(move |line| {
+            sink_lines.lock().unwrap().push(line.to_owned());
+        }));
+        let alerts = monitor.check(event(
+            noon().replace_hour(3).unwrap(),
+            "a",
+            "get_entry",
+            "p",
+        ));
+        assert!(lines.lock().unwrap().is_empty());
+        monitor.log_alerts(&alerts);
+        assert_eq!(lines.lock().unwrap().len(), 1);
     }
 }

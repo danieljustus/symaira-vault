@@ -103,6 +103,11 @@ const DAY: Options = Options {
 };
 
 fn session(options: Options) -> Session {
+    session_with_sink(options, None)
+}
+
+/// `sink` replaces the default recording log sink when given.
+fn session_with_sink(options: Options, sink: Option<symvault_mcp::anomaly::WarnSink>) -> Session {
     let root = tempfile::tempdir().expect("synthetic vault");
     fs::write(
         root.path().join("config.yaml"),
@@ -183,8 +188,10 @@ fn session(options: Options) -> Session {
         .with_clipboard(Arc::new(FakeClipboard))
         .with_approval_seam(approval.clone())
         .with_anomaly_clock(clock.clone())
-        .with_anomaly_log(Arc::new(move |line| {
-            sink_log.lock().unwrap().push(line.to_owned());
+        .with_anomaly_log(sink.unwrap_or_else(|| {
+            Arc::new(move |line| {
+                sink_log.lock().unwrap().push(line.to_owned());
+            })
         })),
     );
     let handler =
@@ -488,4 +495,54 @@ fn tool_result_errors_are_observed_like_go() {
     let rows = s.anomaly_rows();
     assert_eq!(rows.len(), 1, "{:?}", s.rows());
     assert_go_anomaly_row(&rows[0], "off_hours", "missing/entry");
+}
+
+/// A log sink that fails (panics) on its first line must not be able to undo
+/// or pre-empt the durable effects: the audit row is appended and the approval
+/// cache cleared before any warning line is written.
+#[test]
+fn a_failing_log_sink_cannot_suppress_the_audit_row_or_the_cache_invalidation() {
+    let mut s = session_with_sink(DAY, Some(Arc::new(|_| panic!("sink failed"))));
+    let copy = || json!({"path": "github"});
+    s.call("copy_to_clipboard", copy());
+    assert_eq!(s.prompts(), 1);
+
+    let canary = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        s.call("get_entry", json!({"path": "honey/pot"}))
+    }));
+    assert!(
+        canary.is_err(),
+        "the sink must have been reached and failed"
+    );
+
+    let rows = s.anomaly_rows();
+    assert_eq!(rows.len(), 1, "audit row written before the sink ran");
+    assert_go_anomaly_row(&rows[0], "canary_access", "honey/pot");
+    assert!(s.chain_valid(|text| text));
+
+    s.call("copy_to_clipboard", copy());
+    assert_eq!(s.prompts(), 2, "cache was invalidated before the sink ran");
+}
+
+/// The sink only ever observes state that already includes the audit row.
+#[test]
+fn the_sink_runs_after_the_audit_row_is_persisted() {
+    let audit_path = Arc::new(Mutex::new(None::<std::path::PathBuf>));
+    let seen = Arc::new(Mutex::new(Vec::<usize>::new()));
+    let (path_for_sink, seen_for_sink) = (audit_path.clone(), seen.clone());
+    let mut s = session_with_sink(
+        Options { hour: 3, ..DAY },
+        Some(Arc::new(move |_| {
+            let path = path_for_sink.lock().unwrap().clone().expect("audit path");
+            let anomalies = fs::read_to_string(path)
+                .unwrap()
+                .lines()
+                .filter(|line| line.contains("\"anomaly_off_hours\""))
+                .count();
+            seen_for_sink.lock().unwrap().push(anomalies);
+        })),
+    );
+    *audit_path.lock().unwrap() = Some(s.audit.lock().unwrap().path().to_path_buf());
+    s.call("get_entry", json!({"path": "github"}));
+    assert_eq!(*seen.lock().unwrap(), vec![1, 1], "both lines saw the row");
 }

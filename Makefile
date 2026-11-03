@@ -1187,7 +1187,10 @@ AREA_KDF_MIGRATION_TESTS := 10
 # 386 after merging local/tls-write-deadline (+1 TLS write-deadline regression).
 # 408 on local/anomaly (+22: 9 detector unit tests in anomaly.rs, 3
 # anomaly_replay and 10 anomaly_dispatch tests; measured: 408 passed, 0 failed).
-AREA_MCP_TEST_COUNT := 408
+# 415 after the security review (+7: 5 anomaly.rs unit tests for the stderr
+# write and the poisoned detector lock, 2 anomaly_dispatch sink-ordering tests;
+# measured: 415 passed, 0 failed).
+AREA_MCP_TEST_COUNT := 415
 
 .PHONY: area-oracle-runner
 area-oracle-runner:
