@@ -1,0 +1,3305 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "differential_doctor_auth_method_touchid_availability": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "82ef7fda94f63af73dd5edcd24fb6f8d696b7e2d34ead64336868a88356c5276",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--json",
+              "--no-network",
+              "--only",
+              "auth.method"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"auth.method\",\n      \"name\": \"Auth method\",\n      \"status\": \"ok\",\n      \"message\": \"auth method: passphrase\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-ba87cf46).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-ba87cf46\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-ba87cf46\": {\n      \"id\": \"tok-20261103-ba87cf46\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"292268a28eb93e24091b34b64d3c53e7666d9371daace81154f74ced5bffb7ca\",\n      \"prefix\": \"548e\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:14.962679Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_corrupted_identity_age": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "c16cf0868548f2e6a76f0e37a286792604bf122abea00094fffad80a4dadf81b",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "vault.identity.encrypted",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"vault.identity.encrypted\",\n      \"name\": \"Identity encrypted\",\n      \"status\": \"fail\",\n      \"message\": \"identity.age does not appear to be age-encrypted\",\n      \"hint\": \"the file may be corrupted; re-initialize with `symvault init`\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 0,\n    \"fail\": 1,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-47a1d46a).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-47a1d46a\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-47a1d46a\": {\n      \"id\": \"tok-20261103-47a1d46a\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"ec073d1ba672c456daa3038282e14e07d867308d523dde6a52c2cbca249bd121\",\n      \"prefix\": \"04b7\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:14.953633Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_exclude_filter": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9afd1810552484af5abe4e8db03278f319edbf3e28544faac6af66b951a222c5",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "init",
+              "--auth",
+              "passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age14shs06znz5svzargeudp2tgzmn07l7kaav9qtrq8y67273mpxs9q79ah07\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDlSUkJEMnRsM0o2Mi82TzRlTVZtbWcgdD0zLG09NjU1MzYscD00CmRESnJ3cUU0R2N6czhUTXN3SlN1QjZvbzAvRjVOMktyTVd4Y0tVNDY4TkNqNXVrUkxsVTJIUGZlQ1hJCi0tLSBEemtFc2tsMXNvM01lT1dpQTlxOGZmb1o2WGJaMm9wZDNiVFJ2aGZqQXNFCle7hT7/hCJFeXw4opSZJfiIhY8kCwH849UDZ9XDAJ0Egm7HU5SttF+mNcWyK9HPOLB0q+oM+1S2a2T4rDhIugBRiWr681cAxR1PQkaHLub/OxY9MtgbpSzE/Bh6bDks7NaJz1XWOY5btjg="
+              }
+            }
+          ]
+        },
+        {
+          "key": "d8ec2544baf45b585acb9a19a193a0d78e5a79c87cec34b61985df68374193ee",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--exclude",
+              "vault.*,git.*",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"auth.method\",\n      \"name\": \"Auth method\",\n      \"status\": \"ok\",\n      \"message\": \"auth method: passphrase\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.cache\",\n      \"name\": \"Session cache\",\n      \"status\": \"warn\",\n      \"message\": \"session cache uses in-memory backend (not persistent)\",\n      \"hint\": \"install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"recipients.count\",\n      \"name\": \"Recipients\",\n      \"status\": \"warn\",\n      \"message\": \"0 recipient (self only) — if identity is lost, vault is unrecoverable\",\n      \"hint\": \"add a backup recipient: `symvault recipients add \\u003cage1...\\u003e`\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"recipients.recovery\",\n      \"name\": \"Recipient decrypt test\",\n      \"status\": \"ok\",\n      \"message\": \"no external recipients to test\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"mcp.tokens\",\n      \"name\": \"MCP tokens\",\n      \"status\": \"ok\",\n      \"message\": \"1 active token(s), all within rotation policy\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.log\",\n      \"name\": \"Audit log\",\n      \"status\": \"ok\",\n      \"message\": \"no audit logs (MCP not used yet)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.keyring.orphans\",\n      \"name\": \"Orphaned audit HMAC keys in OS keychain\",\n      \"status\": \"ok\",\n      \"message\": \"keychain enumeration skipped in test/CI environment\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"crypto.scrypt.benchmark\",\n      \"name\": \"Scrypt KDF performance\",\n      \"status\": \"ok\",\n      \"message\": \"using argon2id KDF — scrypt work factor does not apply\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"crypto.kdf.modern\",\n      \"name\": \"KDF modernity\",\n      \"status\": \"warn\",\n      \"message\": \"identity.age is argon2id but config.FormatVersion \\u003c 2 — config is out of sync with the on-disk file\",\n      \"hint\": \"restore the correct identity.age, or run `symvault migrate kdf` to reconcile the file with the config\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"auth.passphrase.rotation\",\n      \"name\": \"Passphrase rotation\",\n      \"status\": \"warn\",\n      \"message\": \"passphrase never rotated — rotation is recommended for security hygiene\",\n      \"hint\": \"run `symvault auth rotate-passphrase` to rotate\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.autotype.backend\",\n      \"name\": \"Auto-type backend\",\n      \"status\": \"ok\",\n      \"message\": \"osascript available\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.clipboard.backend\",\n      \"name\": \"Clipboard backend\",\n      \"status\": \"ok\",\n      \"message\": \"pbcopy available\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"daemon.status\",\n      \"name\": \"Daemon status\",\n      \"status\": \"ok\",\n      \"message\": \"daemon not installed\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"mcp.approval.tls\",\n      \"name\": \"Approval-device TLS certificate\",\n      \"status\": \"ok\",\n      \"message\": \"no TLS certificate generated yet (server not started); 0 approval device(s) active, 0 expired, 0 revoked\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"mcp.dynamic.engines\",\n      \"name\": \"Dynamic secret engines\",\n      \"status\": \"ok\",\n      \"message\": \"no dynamic providers configured\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"mcp.agents\",\n      \"name\": \"MCP agents configured\",\n      \"status\": \"ok\",\n      \"message\": \"claude-code, codex, opencode, hermes, openclaw configured\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.secureui\",\n      \"name\": \"Secure input UI\",\n      \"status\": \"ok\",\n      \"message\": \"osascript available (GUI dialogs)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.precommit\",\n      \"name\": \"Pre-commit hooks\",\n      \"status\": \"ok\",\n      \"message\": \"no .pre-commit-config.yaml (not a dev environment)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.keyring\",\n      \"name\": \"Session keyring roundtrip\",\n      \"status\": \"warn\",\n      \"message\": \"OS keyring persistence not verified in test/CI environment (in-memory backend active)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"password.strength\",\n      \"name\": \"Weak password detection\",\n      \"status\": \"ok\",\n      \"message\": \"all entries meet password strength requirements\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"password.reuse\",\n      \"name\": \"Password reuse detection\",\n      \"status\": \"ok\",\n      \"message\": \"no reused passwords detected\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"security.env_passphrase\",\n      \"name\": \"Environment passphrase\",\n      \"status\": \"ok\",\n      \"message\": \"not set\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 17,\n    \"warn\": 5,\n    \"fail\": 0,\n    \"total\": 22\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-8d91fad1).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-8d91fad1\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-8d91fad1\": {\n      \"id\": \"tok-20261103-8d91fad1\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"5a20d8e79f6a916964b569f48b85b2229cdd28e03231d43faf3b3ec979495310\",\n      \"prefix\": \"55b4\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:15.069626Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_filter_config_matches_nothing": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "010a8fc06b440126e3f3665523954833a816ae1682777824d33bc6c964c8f586",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "config.*",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-2a365d24).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-2a365d24\nSymaira Vault Doctor — Vault: <ROOT:0>/root\n\n\nScore: 0/0 OK\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-2a365d24\": {\n      \"id\": \"tok-20261103-2a365d24\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"c3f21af82af1b5bdad7c1b5d07d83f15c055834c20a975eae7f14842c7a019e1\",\n      \"prefix\": \"4fe3\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:14.956704Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "8f3e76161150c4f8ce54b9dbabba5dcac3d8e353c45c0663efb2170b813d4c3b",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "config.*",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 0\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_doctor_fix_dry_run_and_apply": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "8c63847285fced61079a30aaa45458ac3702644b21d0041bc2f7032e34a708e6",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "git.repo",
+              "--fix",
+              "--fix-dry-run",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-91cac35c).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-91cac35c\nWould fix git.repo: no git repository in vault directory\nSymaira Vault Doctor — Vault: <ROOT:0>/root\n\n ⚠  Git repository                           no git repository in vault directory (fixable — run with --fix)\n    → run `symvault git init` to enable version history and sync\n\nScore: 0/1 OK · 1 warning(s)\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-91cac35c\": {\n      \"id\": \"tok-20261103-91cac35c\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"a32b2f8e19a9795c7138406e94ad670c05043a16f077b3c40c1bf1f8b8410a1d\",\n      \"prefix\": \"ed21\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:16.050042Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_initialized_vault_parity": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9afd1810552484af5abe4e8db03278f319edbf3e28544faac6af66b951a222c5",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "init",
+              "--auth",
+              "passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1rd277x7aey92uvppv2t5hlmlugn8c3p978f7pcjx5gfueycl9ccqrwnvef\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIC9OSTNJenVHenYyK1U1aHJaa3NweGcgdD0zLG09NjU1MzYscD00CjR5UWcySEVwZUUxa2xmUE1ENEN4L08xcGtQRmw0MURaRFZaZ1NaeUEwd0s4aE14aGpIeVFZTnFZcnZBCi0tLSBmVEdxdHVxb0s0aURVYnRPWkQ5MTlwZ0RuazFJa016aFVjMGVmYkJWbkM4ChIGWZf8SGN0d6cn71GaEVqN8JGCa1049WrvwATY9+LhyJwSjLbI8XAdGALed4UrwzSkfrAQ4yQy/9e3fyeh79RIQgJKAwBm1BvgCURf5ehlCGaw0OHG2YcYftL0yQ3Mb9ozmwMHne/GPIo="
+              }
+            }
+          ]
+        },
+        {
+          "key": "8887f70bb1e8d9d0063aa8102850d8cb46556f2c0ce74d18c583e00111a4d89b",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "vault.initialized,vault.config.*,vault.identity.encrypted,vault.permissions,git.*,vault.size,vault.stale_temp_files,vault.conflict_files,auth.passphrase.rotation",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.identity.encrypted\",\n      \"name\": \"Identity encrypted\",\n      \"status\": \"ok\",\n      \"message\": \"identity.age is age-encrypted\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.permissions\",\n      \"name\": \"File permissions\",\n      \"status\": \"ok\",\n      \"message\": \"entries/=0700, identity.age=0600\",\n      \"fixable\": true\n    },\n    {\n      \"id\": \"git.repo\",\n      \"name\": \"Git repository\",\n      \"status\": \"ok\",\n      \"message\": \".git directory present\",\n      \"fixable\": true\n    },\n    {\n      \"id\": \"git.remote\",\n      \"name\": \"Git remote\",\n      \"status\": \"warn\",\n      \"message\": \"no remote 'origin' — vault is local-only\",\n      \"hint\": \"run `symvault git remote add origin \\u003curl\\u003e` to enable sync\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"git.gitignore.protects\",\n      \"name\": \".gitignore protects sensitive files\",\n      \"status\": \"ok\",\n      \"message\": \"identity.age, mcp-token, mcp-tokens.json are gitignored\",\n      \"fixable\": true\n    },\n    {\n      \"id\": \"vault.size\",\n      \"name\": \"Vault size\",\n      \"status\": \"ok\",\n      \"message\": \"0 entries, 0.00 MB\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.stale_temp_files\",\n      \"name\": \"Stale atomic-write temp files\",\n      \"status\": \"ok\",\n      \"message\": \"no stale atomic-write temp files\",\n      \"fixable\": true\n    },\n    {\n      \"id\": \"vault.conflict_files\",\n      \"name\": \"Orphaned git-sync conflict files\",\n      \"status\": \"ok\",\n      \"message\": \"no git-sync conflict files\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"auth.passphrase.rotation\",\n      \"name\": \"Passphrase rotation\",\n      \"status\": \"warn\",\n      \"message\": \"passphrase never rotated — rotation is recommended for security hygiene\",\n      \"hint\": \"run `symvault auth rotate-passphrase` to rotate\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 10,\n    \"warn\": 2,\n    \"fail\": 0,\n    \"total\": 12\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-f1aff832).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-f1aff832\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-f1aff832\": {\n      \"id\": \"tok-20261103-f1aff832\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"67bc6d10fd022f198fa1e2180fc2d13d84aa1911c758eeeb35f92ffa7e4612c5\",\n      \"prefix\": \"b2d8\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:16.610372Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_mcp_approval_tls_initializes_private_device_sessions": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9ac76c87c98cbb1f9be7ec791007752e089f641dc6a1b55cdd02d4b213716c57",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.approval.tls",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-doctor-fixture",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.approval.tls\",\n      \"name\": \"Approval-device TLS certificate\",\n      \"status\": \"ok\",\n      \"message\": \"no TLS certificate generated yet (server not started); 0 approval device(s) active, 0 expired, 0 revoked\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-6ee36c21).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-6ee36c21\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-6ee36c21\": {\n      \"id\": \"tok-20261103-6ee36c21\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"1612eaef79172ae179d03ea0c100525557dc5ae7999202fb20d64a7768ba4e8b\",\n      \"prefix\": \"e5f4\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:16.532642Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_expiry": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9ac76c87c98cbb1f9be7ec791007752e089f641dc6a1b55cdd02d4b213716c57",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.approval.tls",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-doctor-fixture",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.approval.tls\",\n      \"name\": \"Approval-device TLS certificate\",\n      \"status\": \"ok\",\n      \"message\": \"no TLS certificate generated yet (server not started); 0 approval device(s) active, 2 expired, 0 revoked\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-0b9068f0).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-0b9068f0\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"704e39e74b054d676115c9091387773422c41642bd292eab3ac4aeab976baf70\": {\n    \"prefix\": \"SYNT\",\n    \"device_id\": \"legacy-device\",\n    \"public_key\": \"synthetic-public-key\",\n    \"created_at\": \"2026-01-02T03:04:05Z\",\n    \"expires_at\": \"0001-01-01T00:00:00Z\",\n    \"revoked\": false\n  },\n  \"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\": {\n    \"prefix\": \"SYN2\",\n    \"device_id\": \"zero-expiry-device\",\n    \"public_key\": \"synthetic-public-key-2\",\n    \"created_at\": \"2026-01-02T03:04:05Z\",\n    \"expires_at\": \"0001-01-01T00:00:00Z\",\n    \"revoked\": false\n  }\n}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-0b9068f0\": {\n      \"id\": \"tok-20261103-0b9068f0\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"f4a0256f84c896e5a4ff78ec4d359250430b9705247ecae93dd7a8b1f7c1475f\",\n      \"prefix\": \"5fbf\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:16.899166Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_write_access": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9ac76c87c98cbb1f9be7ec791007752e089f641dc6a1b55cdd02d4b213716c57",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.approval.tls",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-doctor-fixture",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.approval.tls\",\n      \"name\": \"Approval-device TLS certificate\",\n      \"status\": \"ok\",\n      \"message\": \"no TLS certificate generated yet (server not started); 0 approval device(s) active, 0 expired, 0 revoked\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-210dee19).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-210dee19\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-210dee19\": {\n      \"id\": \"tok-20261103-210dee19\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"aeb13dcb459326775b72194c699334ba71d984ee956c508d41a3306ef2c51971\",\n      \"prefix\": \"3317\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:17.527927Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9ac76c87c98cbb1f9be7ec791007752e089f641dc6a1b55cdd02d4b213716c57",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.approval.tls",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-doctor-fixture",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.approval.tls\",\n      \"name\": \"Approval-device TLS certificate\",\n      \"status\": \"ok\",\n      \"message\": \"no TLS certificate generated yet (server not started); approval devices: cannot load (load device session store: parse device sessions: parsing time \\\"not-a-time\\\" as \\\"2006-01-02T15:04:05Z07:00\\\": cannot parse \\\"not-a-time\\\" as \\\"2006\\\")\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-b024f124).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-b024f124\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-b024f124\": {\n      \"id\": \"tok-20261103-b024f124\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"4419825f980a8a43e60ec1489f74c899b875cbd603df421dc84eae0243efc910\",\n      \"prefix\": \"5c8b\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:17.66033Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_mcp_config_checks": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "d5f9544dbdfa93c566e7afaf2ff264964fefcb3c128970f1814a72f38fae8218",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--json",
+              "--no-network",
+              "--only",
+              "mcp.dynamic.engines,mcp.agents"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.dynamic.engines\",\n      \"name\": \"Dynamic secret engines\",\n      \"status\": \"warn\",\n      \"message\": \"cannot load config: open <ROOT:0>/root/config.yaml: no such file or directory\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"mcp.agents\",\n      \"name\": \"MCP agents configured\",\n      \"status\": \"warn\",\n      \"message\": \"cannot load config: open <ROOT:0>/root/config.yaml: no such file or directory\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 2,\n    \"fail\": 0,\n    \"total\": 2\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-74d82c2c).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-74d82c2c\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-74d82c2c\": {\n      \"id\": \"tok-20261103-74d82c2c\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"b1bada1c5555122ccf5023193643cb14b2aa7ce721be0c968acd4c74674729c4\",\n      \"prefix\": \"0cc2\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:18.928434Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "9afd1810552484af5abe4e8db03278f319edbf3e28544faac6af66b951a222c5",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "init",
+              "--auth",
+              "passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1mdx60zp4u9d5khwfp24jfdc9pdsxcavd32s0xj6yyvpdfquxt3hqh0azw6\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEhrTllVbnlSaktqMkRQbEpDbi80bGcgdD0zLG09NjU1MzYscD00CjVOQmJoM3laSkF1b2w1U0VhWnp4cThSNjU4Z2wwNnNjVjZZVmFuK0UzNUltdGF0N0FBajhMM2ZOUUlzCi0tLSA1ZDNsL1dzdHFmQjlqVW0rMHd0L0pMcnVIVUN0anFYYiszTTJOL1FvbU1FChqjGDHfjxiX6hJWJ+/AcJWVOfObQyKzECP62HFaMlqMokvlUY1SGAanKNZs6Y1t/RosktUV/6e0sv/oXm37jfG8R3DqDHHPo4aUoOP21KfoDlE4Q4HFNl5UYyIRcfJObFAsNJEyXrlxiNY="
+              }
+            }
+          ]
+        },
+        {
+          "key": "d5f9544dbdfa93c566e7afaf2ff264964fefcb3c128970f1814a72f38fae8218",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--json",
+              "--no-network",
+              "--only",
+              "mcp.dynamic.engines,mcp.agents"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.dynamic.engines\",\n      \"name\": \"Dynamic secret engines\",\n      \"status\": \"ok\",\n      \"message\": \"no dynamic providers configured\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"mcp.agents\",\n      \"name\": \"MCP agents configured\",\n      \"status\": \"ok\",\n      \"message\": \"claude-code, codex, opencode, hermes, openclaw configured\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 2,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 2\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_doctor_mcp_server_reachability_local_http_cases": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "913e2d4a17593c55c566e11cb171302762effc5e4d69ebad44a3f982a4cca937",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.server.reachable",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "NO_PROXY": "127.0.0.1,localhost",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data",
+              "no_proxy": "127.0.0.1,localhost"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.server.reachable\",\n      \"name\": \"MCP server reachable\",\n      \"status\": \"ok\",\n      \"message\": \"server reachable at http://127.0.0.1:<PORT:0>/health, no token file\",\n      \"hint\": \"generate an MCP token with `symvault agent token new \\u003cname\\u003e`\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-3d641a40).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-3d641a40\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-3d641a40\": {\n      \"id\": \"tok-20261103-3d641a40\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"9b2ce869969638361ba98d5bb0c6929530eb492ba97bc999f30ba08e0b70a78a\",\n      \"prefix\": \"ca60\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:18.988381Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "0b419ce089e75f26f049326ea57a6113661f8dced5d198d237443f780740c394",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:2>/root",
+              "doctor",
+              "--only",
+              "mcp.server.reachable",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:3>/root",
+              "NO_COLOR": "1",
+              "NO_PROXY": "127.0.0.1,localhost",
+              "SYMVAULT_VAULT": "<ROOT:2>/root",
+              "USERPROFILE": "<ROOT:3>/root",
+              "XDG_CACHE_HOME": "<ROOT:3>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:3>/root/config",
+              "XDG_DATA_HOME": "<ROOT:3>/root/data",
+              "no_proxy": "127.0.0.1,localhost"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:2>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.server.reachable\",\n      \"name\": \"MCP server reachable\",\n      \"status\": \"ok\",\n      \"message\": \"server reachable at http://127.0.0.1:<PORT:1>/health, no token file\",\n      \"hint\": \"generate an MCP token with `symvault agent token new \\u003cname\\u003e`\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-874a4189).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-874a4189\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 2,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 2,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 2,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-874a4189\": {\n      \"id\": \"tok-20261103-874a4189\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"b90f2f749f751d562e290cafc333d11f3cbfd4108fc5a17a4db3b99348a5c9f3\",\n      \"prefix\": \"synt\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:20.745564Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            },
+            {
+              "root": 2,
+              "path": "root/mcp-token",
+              "op": "remove",
+              "mode": null,
+              "content": null
+            }
+          ]
+        },
+        {
+          "key": "7ea195d63bf71b5291c5c2f6b0581c73be2e157e207077b80dbf1a7a1da4cfc1",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:4>/root",
+              "doctor",
+              "--only",
+              "mcp.server.reachable",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:5>/root",
+              "NO_COLOR": "1",
+              "NO_PROXY": "127.0.0.1,localhost",
+              "SYMVAULT_VAULT": "<ROOT:4>/root",
+              "USERPROFILE": "<ROOT:5>/root",
+              "XDG_CACHE_HOME": "<ROOT:5>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:5>/root/config",
+              "XDG_DATA_HOME": "<ROOT:5>/root/data",
+              "no_proxy": "127.0.0.1,localhost"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:4>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.server.reachable\",\n      \"name\": \"MCP server reachable\",\n      \"status\": \"warn\",\n      \"message\": \"MCP server returned HTTP 503\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 1,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-0248bf88).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-0248bf88\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 4,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 4,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 4,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-0248bf88\": {\n      \"id\": \"tok-20261103-0248bf88\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"561a722f00b87f5e327d97a98b480a26feb13338a0cba05e553f48503b6042c8\",\n      \"prefix\": \"ed34\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:22.030775Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "73e499c383de1407369474b6693831877dd69f566fd2d709572e39bf370b8f5d",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:6>/root",
+              "doctor",
+              "--only",
+              "mcp.server.reachable",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:7>/root",
+              "NO_COLOR": "1",
+              "NO_PROXY": "127.0.0.1,localhost",
+              "SYMVAULT_VAULT": "<ROOT:6>/root",
+              "USERPROFILE": "<ROOT:7>/root",
+              "XDG_CACHE_HOME": "<ROOT:7>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:7>/root/config",
+              "XDG_DATA_HOME": "<ROOT:7>/root/data",
+              "no_proxy": "127.0.0.1,localhost"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:6>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.server.reachable\",\n      \"name\": \"MCP server reachable\",\n      \"status\": \"warn\",\n      \"message\": \"MCP server not reachable at http://127.0.0.1:<PORT:3>/health\",\n      \"hint\": \"start the server with `symvault mcp --port <PORT:3>`\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 1,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-211b40da).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-211b40da\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 6,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 6,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 6,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-211b40da\": {\n      \"id\": \"tok-20261103-211b40da\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"c674f7266daff032adc47bbe14ef107e0d3ddcaa2ce7c2bddcbbd3f9f3416305\",\n      \"prefix\": \"c1f1\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:23.273795Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_mcp_tokens_empty_environment_value_creates_registry": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "75f1e6f658e398874e1ed7588b71088bc906b923d2f6d3dcd6728143e9551acf",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.tokens",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_MCP_TOKEN": "",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.tokens\",\n      \"name\": \"MCP tokens\",\n      \"status\": \"ok\",\n      \"message\": \"1 active token(s), all within rotation policy\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-d1793e18).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-d1793e18\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-d1793e18\": {\n      \"id\": \"tok-20261103-d1793e18\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"47d88b8032d0606be17988af2308f05a0b453c9849f20658d6521adb0627e472\",\n      \"prefix\": \"169a\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:19.135522Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "7c8579db4ee947b0dce15c9db686684e93b97d057d0eed1c8429e2c44205c714",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:3>/root",
+              "doctor",
+              "--only",
+              "mcp.tokens",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:4>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_MCP_TOKEN": "synthetic-environment-token",
+              "SYMVAULT_VAULT": "<ROOT:3>/root",
+              "USERPROFILE": "<ROOT:4>/root",
+              "XDG_CACHE_HOME": "<ROOT:4>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:4>/root/config",
+              "XDG_DATA_HOME": "<ROOT:4>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:3>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.tokens\",\n      \"name\": \"MCP tokens\",\n      \"status\": \"ok\",\n      \"message\": \"no MCP tokens configured\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 3,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 3,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_mcp_tokens_existing_registry_is_read_only": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "27c499e579ffaad64683649ca0bea3cb7adb19f8e1ca126cc5be8f50cb8c3c8d",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.tokens",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.tokens\",\n      \"name\": \"MCP tokens\",\n      \"status\": \"ok\",\n      \"message\": \"1 active token(s), all within rotation policy\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "4fcb635b6ddd9ca7868634ecc0a2bd198a7b53e434b88466eaf7246df45449cc",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.tokens",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_MCP_TOKEN": "synthetic-environment-token",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.tokens\",\n      \"name\": \"MCP tokens\",\n      \"status\": \"ok\",\n      \"message\": \"1 active token(s), all within rotation policy\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "Warning: SYMVAULT_MCP_TOKEN is set but file token exists at <ROOT:0>/root/mcp-token; using file token\nWARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-576d33b3).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-576d33b3\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-576d33b3\": {\n      \"id\": \"tok-20261103-576d33b3\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"a8ae6e6ee929abea3afcfc5258c8ccd6f85273e0d4626d26c7279f3250f77c8e\",\n      \"prefix\": \"0123\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:20.802844Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-token",
+              "op": "remove",
+              "mode": null,
+              "content": null
+            }
+          ]
+        },
+        {
+          "key": "a3ba5f65e1fcc5f365a896e8f634b67939715b4108d99bcbfa21bd49b66fcfa5",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:3>/root",
+              "doctor",
+              "--only",
+              "mcp.tokens",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:4>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:3>/root",
+              "USERPROFILE": "<ROOT:4>/root",
+              "XDG_CACHE_HOME": "<ROOT:4>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:4>/root/config",
+              "XDG_DATA_HOME": "<ROOT:4>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:3>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.tokens\",\n      \"name\": \"MCP tokens\",\n      \"status\": \"ok\",\n      \"message\": \"1 active token(s), all within rotation policy\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-210d04a7).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-210d04a7\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 3,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 3,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 3,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-210d04a7\": {\n      \"id\": \"tok-20261103-210d04a7\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"40b263cac9638cb125fcc3c337018a9e8a2800717b10d486de41debf29ae0614\",\n      \"prefix\": \"d1ad\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:22.106506Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "27c499e579ffaad64683649ca0bea3cb7adb19f8e1ca126cc5be8f50cb8c3c8d",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.tokens",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.tokens\",\n      \"name\": \"MCP tokens\",\n      \"status\": \"warn\",\n      \"message\": \"cannot load MCP token registry: parse token registry: invalid character 'b' looking for beginning of object key string\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 1,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "27c499e579ffaad64683649ca0bea3cb7adb19f8e1ca126cc5be8f50cb8c3c8d",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.tokens",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.tokens\",\n      \"name\": \"MCP tokens\",\n      \"status\": \"ok\",\n      \"message\": \"1 active token(s), all within rotation policy\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-b6ed8e61).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-b6ed8e61\nfailed to remove legacy token file <ROOT:0>/root/mcp-token after migration: open <ROOT:0>/root/mcp-token: too many levels of symbolic links\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-b6ed8e61\": {\n      \"id\": \"tok-20261103-b6ed8e61\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"4365739d92e47ae90d98000d4d8c0938e628e5ed5d4996ba6cb82e909bccd40c\",\n      \"prefix\": \"synt\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:22.006282Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_missing_vault_json": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "e1b626765638ce8aa51cf4b1c352585583541d213a273aa18c8aad86aab5577a",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/nonexistent_vault",
+              "doctor",
+              "--only",
+              "vault.initialized",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/nonexistent_vault",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root/nonexistent_vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"fail\",\n      \"message\": \"vault not initialized at <ROOT:0>/root/nonexistent_vault\",\n      \"hint\": \"run `symvault init` or `symvault setup`\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 0,\n    \"fail\": 1,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/nonexistent_vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/nonexistent_vault/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/nonexistent_vault/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_missing_vault_text_and_strict": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "e6e13c69b6b1ef4e5fe1ba35d9e7f706c82be61c24d30f25ed81f9819d256121",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/nonexistent_vault",
+              "doctor",
+              "--only",
+              "vault.initialized",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/nonexistent_vault",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Symaira Vault Doctor — Vault: <ROOT:0>/root/nonexistent_vault\n\n ✗  Vault initialized                        vault not initialized at <ROOT:0>/root/nonexistent_vault\n    → run `symvault init` or `symvault setup`\n\nScore: 0/1 OK · 1 failed\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/nonexistent_vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/nonexistent_vault/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/nonexistent_vault/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "key": "c775c2c78bf4bf15aa3a41aa99d473abba93a598e30f029a9342e52e434b119e",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/nonexistent_vault",
+              "doctor",
+              "--only",
+              "vault.initialized",
+              "--no-network",
+              "--strict"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/nonexistent_vault",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Symaira Vault Doctor — Vault: <ROOT:0>/root/nonexistent_vault\n\n ✗  Vault initialized                        vault not initialized at <ROOT:0>/root/nonexistent_vault\n    → run `symvault init` or `symvault setup`\n\nScore: 0/1 OK · 1 failed\nError: 1 check(s) failed\nError: 1 check(s) failed\n"
+            },
+            "exit_code": 8,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_doctor_multi_document_config_errors_match_go": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "ea9742a0b65c3a6b297ae991a4de8eb31bfceef0e3d69017312373117453503e",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"fail\",\n      \"message\": \"config.yaml parse error: config contains more than one YAML document; split it into separate files or remove everything after the first document separator\",\n      \"hint\": \"inspect <ROOT:0>/root/config.yaml for YAML syntax errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"fail\",\n      \"message\": \"failed to load config: config contains more than one YAML document; split it into separate files or remove everything after the first document separator\",\n      \"hint\": \"inspect <ROOT:0>/root/config.yaml for syntax errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"auth.passphrase.rotation\",\n      \"name\": \"Passphrase rotation\",\n      \"status\": \"warn\",\n      \"message\": \"cannot load config: config contains more than one YAML document; split it into separate files or remove everything after the first document separator\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"mcp.dynamic.engines\",\n      \"name\": \"Dynamic secret engines\",\n      \"status\": \"warn\",\n      \"message\": \"cannot load config: config contains more than one YAML document; split it into separate files or remove everything after the first document separator\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"mcp.agents\",\n      \"name\": \"MCP agents configured\",\n      \"status\": \"warn\",\n      \"message\": \"cannot load config: config contains more than one YAML document; split it into separate files or remove everything after the first document separator\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 3,\n    \"fail\": 2,\n    \"total\": 5\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-e84b9bf5).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-e84b9bf5\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-e84b9bf5\": {\n      \"id\": \"tok-20261103-e84b9bf5\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"6e168a1f76ccbadee5d1076e52c003e8d583f9281f1ff821b838ad4d2e38c9f2\",\n      \"prefix\": \"ee15\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:23.44585Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_new_checks_corrupt_config": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "d01aadc3fbf4ef3c00f19ff97bfb927d854b77136625ad2808e3ceb292ba2671",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "password.*",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"password.strength\",\n      \"name\": \"Weak password detection\",\n      \"status\": \"warn\",\n      \"message\": \"no active session — run `symvault unlock` first\",\n      \"hint\": \"run `symvault unlock` to decrypt entries for password strength analysis\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"password.reuse\",\n      \"name\": \"Password reuse detection\",\n      \"status\": \"warn\",\n      \"message\": \"no active session — run `symvault unlock` first\",\n      \"hint\": \"run `symvault unlock` to decrypt entries for password reuse analysis\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 2,\n    \"fail\": 0,\n    \"total\": 2\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-f7933bec).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-f7933bec\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-f7933bec\": {\n      \"id\": \"tok-20261103-f7933bec\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"8c851a954c5bc0a64367e3b7af19a81b85be71d09dff2c3033075beae870ca68\",\n      \"prefix\": \"c5d4\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:23.837851Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_new_checks_exclude_filter": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9afd1810552484af5abe4e8db03278f319edbf3e28544faac6af66b951a222c5",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "init",
+              "--auth",
+              "passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1jjeyvulwsf5ssnc204skwq99hacy4zhhzhglqfysu569mc5m0ahs7a5ajp\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFlmVWJreVZLNndyZmEyZWVFUjI0VWcgdD0zLG09NjU1MzYscD00Cjg5QVVYd1dXbTd0YWFGYSt4dmVERTBBcXNQamRTNkN6RGFLUEdpTGVJT3dsd20vS1o2eDBPenlRZ01RCi0tLSBadUxxeU0rK1V6eG13Z0FabytBanlLLzFXdGd3LzdiaXJxM3VsRlJmQVVjCgAYHOGynnRm+CjOx1UXtA+o5YGgC1YpbjiO40mQITP87L+FFl5iRC4Am3sG77dbcPq4+pCHyFAV8FYB3FMQQIBHNAjBVCl/Qe/FsfNoFAeW08ih6Me/3n410Ai9CUvPN6UwAplLjMmTxlE="
+              }
+            }
+          ]
+        },
+        {
+          "key": "980afbe4c502d8091607fdeafac070046a5a6bfda3032b40068f0d9d578da59e",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--exclude",
+              "recipients.*,mcp.*,crypto.*,password.*",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.identity.encrypted\",\n      \"name\": \"Identity encrypted\",\n      \"status\": \"ok\",\n      \"message\": \"identity.age is age-encrypted\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.permissions\",\n      \"name\": \"File permissions\",\n      \"status\": \"ok\",\n      \"message\": \"entries/=0700, identity.age=0600\",\n      \"fixable\": true\n    },\n    {\n      \"id\": \"auth.method\",\n      \"name\": \"Auth method\",\n      \"status\": \"ok\",\n      \"message\": \"auth method: passphrase\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.cache\",\n      \"name\": \"Session cache\",\n      \"status\": \"warn\",\n      \"message\": \"session cache uses in-memory backend (not persistent)\",\n      \"hint\": \"install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"git.repo\",\n      \"name\": \"Git repository\",\n      \"status\": \"ok\",\n      \"message\": \".git directory present\",\n      \"fixable\": true\n    },\n    {\n      \"id\": \"git.remote\",\n      \"name\": \"Git remote\",\n      \"status\": \"warn\",\n      \"message\": \"no remote 'origin' — vault is local-only\",\n      \"hint\": \"run `symvault git remote add origin \\u003curl\\u003e` to enable sync\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"git.gitignore.protects\",\n      \"name\": \".gitignore protects sensitive files\",\n      \"status\": \"ok\",\n      \"message\": \"identity.age, mcp-token, mcp-tokens.json are gitignored\",\n      \"fixable\": true\n    },\n    {\n      \"id\": \"audit.log\",\n      \"name\": \"Audit log\",\n      \"status\": \"ok\",\n      \"message\": \"no audit logs (MCP not used yet)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.keyring.orphans\",\n      \"name\": \"Orphaned audit HMAC keys in OS keychain\",\n      \"status\": \"ok\",\n      \"message\": \"keychain enumeration skipped in test/CI environment\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.size\",\n      \"name\": \"Vault size\",\n      \"status\": \"ok\",\n      \"message\": \"0 entries, 0.00 MB\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.stale_temp_files\",\n      \"name\": \"Stale atomic-write temp files\",\n      \"status\": \"ok\",\n      \"message\": \"no stale atomic-write temp files\",\n      \"fixable\": true\n    },\n    {\n      \"id\": \"vault.conflict_files\",\n      \"name\": \"Orphaned git-sync conflict files\",\n      \"status\": \"ok\",\n      \"message\": \"no git-sync conflict files\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.search_index.persistence\",\n      \"name\": \"Search index persistence\",\n      \"status\": \"ok\",\n      \"message\": \"no search index persistence failures recorded this session\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.manifest.intact\",\n      \"name\": \"Entry manifest integrity\",\n      \"status\": \"warn\",\n      \"message\": \"no manifest.age — entry integrity not tracked\",\n      \"hint\": \"run `symvault verify --rebuild` to create a manifest from on-disk entries\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"auth.passphrase.rotation\",\n      \"name\": \"Passphrase rotation\",\n      \"status\": \"warn\",\n      \"message\": \"passphrase never rotated — rotation is recommended for security hygiene\",\n      \"hint\": \"run `symvault auth rotate-passphrase` to rotate\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.autotype.backend\",\n      \"name\": \"Auto-type backend\",\n      \"status\": \"ok\",\n      \"message\": \"osascript available\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.clipboard.backend\",\n      \"name\": \"Clipboard backend\",\n      \"status\": \"ok\",\n      \"message\": \"pbcopy available\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"daemon.status\",\n      \"name\": \"Daemon status\",\n      \"status\": \"ok\",\n      \"message\": \"daemon not installed\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.secureui\",\n      \"name\": \"Secure input UI\",\n      \"status\": \"ok\",\n      \"message\": \"osascript available (GUI dialogs)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.precommit\",\n      \"name\": \"Pre-commit hooks\",\n      \"status\": \"ok\",\n      \"message\": \"no .pre-commit-config.yaml (not a dev environment)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.keyring\",\n      \"name\": \"Session keyring roundtrip\",\n      \"status\": \"warn\",\n      \"message\": \"OS keyring persistence not verified in test/CI environment (in-memory backend active)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"security.env_passphrase\",\n      \"name\": \"Environment passphrase\",\n      \"status\": \"ok\",\n      \"message\": \"not set\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 20,\n    \"warn\": 5,\n    \"fail\": 0,\n    \"total\": 25\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-131b2536).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-131b2536\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-131b2536\": {\n      \"id\": \"tok-20261103-131b2536\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"8c6e9347f4f97117a65b502dba2d8d63005442f03b88c6f6c1dd0c57fdb5d05b\",\n      \"prefix\": \"b4ab\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:24.934736Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_new_checks_initialized_vault_parity": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9afd1810552484af5abe4e8db03278f319edbf3e28544faac6af66b951a222c5",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "init",
+              "--auth",
+              "passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1kx3f0er2l39mmcg65wapdf29tjeu8j2mqyrhsk7qdaga9fm57dxq59gymx\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGlHSmdIQUVtem9Ua0ZCNVlMME1OK1EgdD0zLG09NjU1MzYscD00Ci9rVG5RQkVpSldIMlJvYVJ1ZHJiY1F2SVNVb2g1V2x1bC9ONTIzemRicnh1L0FDZWJxODA3d05NR2MwCi0tLSBXRm9ING5tb3lKQVZKUS90dytsa05EdjVkTnhpaGlMWEU1U1BKQjNlTGxvCpxNh34HwNEG/sqIMDF/RI2wtVccYKGWJD6hrDAMyWxFqEZZk5TaDtqNzwpfdfvh56X+f4mPiJZDvvD9IRRBwsmxnlpKuFs/fF7rcKVG/vYhIO1SMP96A449Grwly9va1C3D/1S+6wl8G5k="
+              }
+            }
+          ]
+        },
+        {
+          "key": "f1efd7205388a0a9c4c3859d59aa6f3f0fc8e514c8e5f14df7affeeade033922",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "recipients.*,audit.log,crypto.kdf.modern,mcp.approval.tls,password.*",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"recipients.count\",\n      \"name\": \"Recipients\",\n      \"status\": \"warn\",\n      \"message\": \"0 recipient (self only) — if identity is lost, vault is unrecoverable\",\n      \"hint\": \"add a backup recipient: `symvault recipients add \\u003cage1...\\u003e`\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"recipients.recovery\",\n      \"name\": \"Recipient decrypt test\",\n      \"status\": \"ok\",\n      \"message\": \"no external recipients to test\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.log\",\n      \"name\": \"Audit log\",\n      \"status\": \"ok\",\n      \"message\": \"no audit logs (MCP not used yet)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"crypto.kdf.modern\",\n      \"name\": \"KDF modernity\",\n      \"status\": \"warn\",\n      \"message\": \"identity.age is argon2id but config.FormatVersion \\u003c 2 — config is out of sync with the on-disk file\",\n      \"hint\": \"restore the correct identity.age, or run `symvault migrate kdf` to reconcile the file with the config\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"mcp.approval.tls\",\n      \"name\": \"Approval-device TLS certificate\",\n      \"status\": \"ok\",\n      \"message\": \"no TLS certificate generated yet (server not started); 0 approval device(s) active, 0 expired, 0 revoked\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"password.strength\",\n      \"name\": \"Weak password detection\",\n      \"status\": \"ok\",\n      \"message\": \"all entries meet password strength requirements\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"password.reuse\",\n      \"name\": \"Password reuse detection\",\n      \"status\": \"ok\",\n      \"message\": \"no reused passwords detected\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 5,\n    \"warn\": 2,\n    \"fail\": 0,\n    \"total\": 7\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-ef0859df).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-ef0859df\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-ef0859df\": {\n      \"id\": \"tok-20261103-ef0859df\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"cfc91a5dc416b5db9f80a23281bcfc15f817363e092858f52dcaa021babe5d0e\",\n      \"prefix\": \"79be\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:24.94783Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_new_checks_missing_vault": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "7c47f0592365f14c8b81868f4f4a6aa070970c9cceff5d3a5eeb54ce0c5b0a54",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/nonexistent_vault",
+              "doctor",
+              "--only",
+              "recipients.*,audit.log,crypto.kdf.modern,mcp.approval.tls,password.*",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/nonexistent_vault",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root/nonexistent_vault\",\n  \"results\": [\n    {\n      \"id\": \"recipients.count\",\n      \"name\": \"Recipients\",\n      \"status\": \"warn\",\n      \"message\": \"0 recipient (self only) — if identity is lost, vault is unrecoverable\",\n      \"hint\": \"add a backup recipient: `symvault recipients add \\u003cage1...\\u003e`\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"recipients.recovery\",\n      \"name\": \"Recipient decrypt test\",\n      \"status\": \"ok\",\n      \"message\": \"no external recipients to test\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.log\",\n      \"name\": \"Audit log\",\n      \"status\": \"ok\",\n      \"message\": \"no audit logs (MCP not used yet)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"crypto.kdf.modern\",\n      \"name\": \"KDF modernity\",\n      \"status\": \"warn\",\n      \"message\": \"cannot read identity.age\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"mcp.approval.tls\",\n      \"name\": \"Approval-device TLS certificate\",\n      \"status\": \"ok\",\n      \"message\": \"no TLS certificate generated yet (server not started); 0 approval device(s) active, 0 expired, 0 revoked\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"password.strength\",\n      \"name\": \"Weak password detection\",\n      \"status\": \"ok\",\n      \"message\": \"all entries meet password strength requirements\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"password.reuse\",\n      \"name\": \"Password reuse detection\",\n      \"status\": \"ok\",\n      \"message\": \"no reused passwords detected\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 5,\n    \"warn\": 2,\n    \"fail\": 0,\n    \"total\": 7\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/nonexistent_vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/nonexistent_vault/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/nonexistent_vault/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_new_checks_no_network_filter": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "4a46509dffea708d9d076708a4ece12d3362e3623ca03e9080c98963d9c7e68a",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "update.available,mcp.server.reachable,recipients.count",
+              "--no-network",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"recipients.count\",\n      \"name\": \"Recipients\",\n      \"status\": \"warn\",\n      \"message\": \"0 recipient (self only) — if identity is lost, vault is unrecoverable\",\n      \"hint\": \"add a backup recipient: `symvault recipients add \\u003cage1...\\u003e`\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 1,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-b158e120).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-b158e120\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-b158e120\": {\n      \"id\": \"tok-20261103-b158e120\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"b593f9eb6a6a1cf89a7203db77dc77c919b20a0eac5d6c7e429e50d22000822d\",\n      \"prefix\": \"a7fe\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:25.194487Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_new_checks_quick_filter": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "251cde0199c1e34f3a879c1a58931d36e4380a7de59c6b23a90a2e8028cf517d",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "crypto.scrypt.benchmark,password.strength,password.reuse,crypto.kdf.modern,recipients.count",
+              "--quick",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"recipients.count\",\n      \"name\": \"Recipients\",\n      \"status\": \"warn\",\n      \"message\": \"0 recipient (self only) — if identity is lost, vault is unrecoverable\",\n      \"hint\": \"add a backup recipient: `symvault recipients add \\u003cage1...\\u003e`\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"crypto.kdf.modern\",\n      \"name\": \"KDF modernity\",\n      \"status\": \"warn\",\n      \"message\": \"cannot read identity.age\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 2,\n    \"fail\": 0,\n    \"total\": 2\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-99e715cc).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-99e715cc\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-99e715cc\": {\n      \"id\": \"tok-20261103-99e715cc\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"cc4d080817183f62c260f39588e00ff792c3b4f1aa4664f262af29715338e0c6\",\n      \"prefix\": \"258f\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:25.290336Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_output_json_rejected": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "8348319cc821c2566df81a3db13f16be6b370746a0095d5880f868f2e629f035",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"json\" is not supported by 'symvault doctor' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault doctor' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_doctor_recipients_recovery_invalid": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "ad682673e48a5ac606848bc730f31249ae886a0cd76d0747896eec357322d93f",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "recipients.recovery",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"recipients.recovery\",\n      \"name\": \"Recipient decrypt test\",\n      \"status\": \"fail\",\n      \"message\": \"invalid recipient: invalid-age-key (invalid key format: recipient must start with 'age1')\",\n      \"hint\": \"run `symvault recipients list`\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 0,\n    \"fail\": 1,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-20ccd0e7).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-20ccd0e7\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-20ccd0e7\": {\n      \"id\": \"tok-20261103-20ccd0e7\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"9bbe7f529086d9ed244027039e2114e38950efa68c45f5550a832cadf471aa80\",\n      \"prefix\": \"98d9\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:25.462477Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "differential_doctor_scrypt_benchmark_shape": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "0e6aa82cf905d4b277ed9e74fa89e306139d34be6b2d590a7a23c327152ab56c",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "crypto.scrypt.benchmark",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"crypto.scrypt.benchmark\",\n      \"name\": \"Scrypt KDF performance\",\n      \"status\": \"ok\",\n      \"message\": \"using argon2id KDF — scrypt work factor does not apply\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-6f9b3c19).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-6f9b3c19\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-6f9b3c19\": {\n      \"id\": \"tok-20261103-6f9b3c19\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"97575626f45deded589541503a9f95c40046b6e2dfbfde778175efac253748ae\",\n      \"prefix\": \"ef51\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:26.32302Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "0e6aa82cf905d4b277ed9e74fa89e306139d34be6b2d590a7a23c327152ab56c",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "crypto.scrypt.benchmark",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"crypto.scrypt.benchmark\",\n      \"name\": \"Scrypt KDF performance\",\n      \"status\": \"warn\",\n      \"message\": \"default work factor 18 is below this machine's recommended 19 (252ms to reach the 250ms target)\",\n      \"hint\": \"set vault.scrypt_work_factor: 19 in config.yaml, then run `symvault migrate kdf` — changing the config value alone does not re-encrypt the existing identity.age\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 1,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "differential_doctor_session_tooling_checks": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "3457605e1c44b44926ef697aba34e2283f61d2a79f22b75692ecc2332e520a07",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/missing_vault",
+              "doctor",
+              "--json",
+              "--no-network",
+              "--only",
+              "auth.method,session.cache,audit.keyring.orphans,vault.manifest.intact,tooling.autotype.backend,tooling.clipboard.backend,daemon.status,tooling.secureui,tooling.precommit,session.keyring,security.env_passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/missing_vault",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root/missing_vault\",\n  \"results\": [\n    {\n      \"id\": \"auth.method\",\n      \"name\": \"Auth method\",\n      \"status\": \"warn\",\n      \"message\": \"cannot load config to determine auth method\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.cache\",\n      \"name\": \"Session cache\",\n      \"status\": \"warn\",\n      \"message\": \"session cache uses in-memory backend (not persistent)\",\n      \"hint\": \"install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.keyring.orphans\",\n      \"name\": \"Orphaned audit HMAC keys in OS keychain\",\n      \"status\": \"ok\",\n      \"message\": \"keychain enumeration skipped in test/CI environment\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.manifest.intact\",\n      \"name\": \"Entry manifest integrity\",\n      \"status\": \"warn\",\n      \"message\": \"no manifest.age — entry integrity not tracked\",\n      \"hint\": \"run `symvault verify --rebuild` to create a manifest from on-disk entries\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.autotype.backend\",\n      \"name\": \"Auto-type backend\",\n      \"status\": \"ok\",\n      \"message\": \"osascript available\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.clipboard.backend\",\n      \"name\": \"Clipboard backend\",\n      \"status\": \"ok\",\n      \"message\": \"pbcopy available\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"daemon.status\",\n      \"name\": \"Daemon status\",\n      \"status\": \"ok\",\n      \"message\": \"daemon not installed\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.secureui\",\n      \"name\": \"Secure input UI\",\n      \"status\": \"ok\",\n      \"message\": \"osascript available (GUI dialogs)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.precommit\",\n      \"name\": \"Pre-commit hooks\",\n      \"status\": \"ok\",\n      \"message\": \"no .pre-commit-config.yaml (not a dev environment)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.keyring\",\n      \"name\": \"Session keyring roundtrip\",\n      \"status\": \"warn\",\n      \"message\": \"OS keyring persistence not verified in test/CI environment (in-memory backend active)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"security.env_passphrase\",\n      \"name\": \"Environment passphrase\",\n      \"status\": \"ok\",\n      \"message\": \"not set\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 7,\n    \"warn\": 4,\n    \"fail\": 0,\n    \"total\": 11\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/missing_vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/missing_vault/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/missing_vault/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "key": "326c609827dbe658dddb5760d7823d924c012050339f0c7d0d0c5042fe6225a7",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root/corrupt_vault",
+              "doctor",
+              "--json",
+              "--no-network",
+              "--only",
+              "auth.method,session.cache,audit.keyring.orphans,vault.manifest.intact,tooling.autotype.backend,tooling.clipboard.backend,daemon.status,tooling.secureui,tooling.precommit,session.keyring,security.env_passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/corrupt_vault",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root/corrupt_vault\",\n  \"results\": [\n    {\n      \"id\": \"auth.method\",\n      \"name\": \"Auth method\",\n      \"status\": \"warn\",\n      \"message\": \"cannot load config to determine auth method\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.cache\",\n      \"name\": \"Session cache\",\n      \"status\": \"warn\",\n      \"message\": \"session cache uses in-memory backend (not persistent)\",\n      \"hint\": \"install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.keyring.orphans\",\n      \"name\": \"Orphaned audit HMAC keys in OS keychain\",\n      \"status\": \"ok\",\n      \"message\": \"keychain enumeration skipped in test/CI environment\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.manifest.intact\",\n      \"name\": \"Entry manifest integrity\",\n      \"status\": \"warn\",\n      \"message\": \"no manifest.age — entry integrity not tracked\",\n      \"hint\": \"run `symvault verify --rebuild` to create a manifest from on-disk entries\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.autotype.backend\",\n      \"name\": \"Auto-type backend\",\n      \"status\": \"ok\",\n      \"message\": \"osascript available\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.clipboard.backend\",\n      \"name\": \"Clipboard backend\",\n      \"status\": \"ok\",\n      \"message\": \"pbcopy available\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"daemon.status\",\n      \"name\": \"Daemon status\",\n      \"status\": \"ok\",\n      \"message\": \"daemon not installed\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.secureui\",\n      \"name\": \"Secure input UI\",\n      \"status\": \"ok\",\n      \"message\": \"osascript available (GUI dialogs)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"tooling.precommit\",\n      \"name\": \"Pre-commit hooks\",\n      \"status\": \"ok\",\n      \"message\": \"no .pre-commit-config.yaml (not a dev environment)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.keyring\",\n      \"name\": \"Session keyring roundtrip\",\n      \"status\": \"warn\",\n      \"message\": \"OS keyring persistence not verified in test/CI environment (in-memory backend active)\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"security.env_passphrase\",\n      \"name\": \"Environment passphrase\",\n      \"status\": \"warn\",\n      \"message\": \"cannot load config to determine env-passphrase guard status\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 6,\n    \"warn\": 5,\n    \"fail\": 0,\n    \"total\": 11\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-4f7f2e17).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-4f7f2e17\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/corrupt_vault/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/corrupt_vault/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/corrupt_vault/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-4f7f2e17\": {\n      \"id\": \"tok-20261103-4f7f2e17\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"92a68fca944c58d5e25f6eb69b87ccf633c6f5924638beea352229fd9efc208f\",\n      \"prefix\": \"d707\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:27.433236Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "doctor_mcp_approval_tls_refuses_symlinked_store_parent": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9ac76c87c98cbb1f9be7ec791007752e089f641dc6a1b55cdd02d4b213716c57",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--only",
+              "mcp.approval.tls",
+              "--json",
+              "--no-network"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-doctor-fixture",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"mcp.approval.tls\",\n      \"name\": \"Approval-device TLS certificate\",\n      \"status\": \"ok\",\n      \"message\": \"no TLS certificate generated yet (server not started); 1 approval device(s) active, 0 expired, 0 revoked\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-f3582897).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-f3582897\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-f3582897\": {\n      \"id\": \"tok-20261103-f3582897\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"c14ef76417f07cdd8f8a02144557b8a719c9f0eef3121f5942253c24f3a1a23f\",\n      \"prefix\": \"d7ce\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T22:32:26.492422Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

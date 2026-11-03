@@ -158,6 +158,8 @@ struct State {
     roots: Vec<PathBuf>,
     /// Canonical spelling of each root (equals the raw one when identical).
     real_roots: Vec<PathBuf>,
+    /// Local TCP ports (decimal text) in order of first appearance.
+    ports: Vec<String>,
     recorded: Vec<Entry>,
     consumed: Vec<bool>,
     captured: Vec<Entry>,
@@ -260,6 +262,7 @@ impl GoOracle {
             go_path,
             roots: Vec::new(),
             real_roots: Vec::new(),
+            ports: Vec::new(),
             recorded,
             consumed,
             captured: Vec::new(),
@@ -294,6 +297,12 @@ impl GoOracle {
     pub fn track(&self, path: &Path) {
         let text = path.to_string_lossy().into_owned();
         self.state.borrow_mut().scan(text.as_bytes());
+    }
+
+    /// Register a loopback port the Go process may print although no request
+    /// mentions it (the port lives in a fixture file).
+    pub fn track_port(&self, port: u16) {
+        self.state.borrow_mut().register_port(&port.to_string());
     }
 
     /// `false` skips applying the recorded file-system effects of the Go
@@ -686,13 +695,53 @@ fn replace_bytes(haystack: &[u8], needle: &[u8], with: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Replace `needle` only where it is a whole decimal number.
+fn replace_number(haystack: &[u8], needle: &[u8], with: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(haystack.len());
+    let mut i = 0;
+    while i < haystack.len() {
+        let whole = haystack[i..].starts_with(needle)
+            && (i == 0 || !haystack[i - 1].is_ascii_digit())
+            && haystack
+                .get(i + needle.len())
+                .is_none_or(|b| !b.is_ascii_digit());
+        if whole {
+            out.extend_from_slice(with);
+            i += needle.len();
+        } else {
+            out.push(haystack[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
 fn is_component_char(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
 }
 
 impl State {
-    /// Register every temp root mentioned in `text`.
+    /// Register every temp root and loopback port mentioned in `text`.
     fn scan(&mut self, text: &[u8]) {
+        for needle in [&b"127.0.0.1:"[..], b"localhost:", b"[::1]:"] {
+            let mut i = 0;
+            while i + needle.len() <= text.len() {
+                if text[i..].starts_with(needle) {
+                    let start = i + needle.len();
+                    let digits = text[start..]
+                        .iter()
+                        .take_while(|b| b.is_ascii_digit())
+                        .count();
+                    if digits >= 4 {
+                        let port = String::from_utf8_lossy(&text[start..start + digits]).into_owned();
+                        self.register_port(&port);
+                    }
+                    i = start;
+                } else {
+                    i += 1;
+                }
+            }
+        }
         for base in temp_bases() {
             let needle = format!("{base}/");
             let needle = needle.as_bytes();
@@ -714,6 +763,12 @@ impl State {
                     i += 1;
                 }
             }
+        }
+    }
+
+    fn register_port(&mut self, port: &str) {
+        if !self.ports.iter().any(|known| known == port) {
+            self.ports.push(port.to_owned());
         }
     }
 
@@ -766,6 +821,9 @@ impl State {
         for (from, to) in self.mapping() {
             out = replace_bytes(&out, &from, &to);
         }
+        for (index, port) in self.ports.iter().enumerate() {
+            out = replace_number(&out, port.as_bytes(), format!("<PORT:{index}>").as_bytes());
+        }
         out
     }
 
@@ -781,6 +839,13 @@ impl State {
         for (from, to) in pairs {
             out = replace_bytes(&out, &from, &to);
         }
+        for (index, port) in self.ports.iter().enumerate() {
+            out = replace_bytes(&out, format!("<PORT:{index}>").as_bytes(), port.as_bytes());
+        }
+        assert!(
+            !contains(&out, b"<PORT:"),
+            "go_oracle: recorded output refers to a port that this run never used"
+        );
         assert!(
             !contains(&out, b"<ROOT:"),
             "go_oracle: recorded output refers to a temp root that this run never used: {:?}",
@@ -1172,13 +1237,13 @@ pub fn output_with_input(command: &mut Command, stdin: Option<&[u8]>) -> std::io
                 ops.extend(delta(&st, *index, before, &snapshot_after(root, before)));
             }
             for stream in [&result.stdout, &result.stderr] {
-                let before = st.roots.len();
+                let before = (st.roots.len(), st.ports.len());
                 st.scan(stream);
                 assert_eq!(
-                    st.roots.len(),
+                    (st.roots.len(), st.ports.len()),
                     before,
                     "go_oracle: the oracle printed a temp directory no request mentions; \
-                     call GoOracle::track on it"
+                     call GoOracle::track / track_port on it"
                 );
             }
             let (exit_code, signal) = status_parts(&result.status);
