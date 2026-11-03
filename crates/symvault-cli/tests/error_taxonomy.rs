@@ -199,7 +199,7 @@ const BARE_DASH_INITIALIZED: usize = 11;
 /// without the environment passphrase (`locked`, EOF at the prompt) and in the
 /// vault shapes that miss `config.yaml` or `identity.age`.
 const UNLOCK_STATES: [(&str, usize); 9] = [
-    ("locked", 18),
+    ("locked", 34),
     ("identity_only", 7),
     ("config_only", 7),
     ("identity_only_locked", 7),
@@ -1884,6 +1884,77 @@ fn config_invalid_states_record_the_refusal() {
         case("unlock_locked_list").observation.exit_code,
         list.exit_code
     );
+}
+
+/// The commands that open the vault through `cli.WithVault`/`WithVaultRaw`/`UnlockVault`
+/// and were not covered by the first unlock-state corpus (CLI-005 sweep): a passphrase prompt
+/// that reads EOF is an `ExitLocked` error, exit 4 and the locked hint, before any command
+/// output. `import <file>` (plain and `--dry-run`) parses the valid CSV source first, so
+/// `--dry-run` has already printed its two report lines when the vault is refused.
+#[test]
+fn locked_vault_sweep_records_exit_4_and_the_locked_hint() {
+    let fixture = fixture();
+    let hint = "Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml)";
+    let swept = [
+        "import_csv",
+        "import_csv_dry_run",
+        "broker",
+        "git_log",
+        "export_csv_yes",
+        "generate_store",
+        "template_generate",
+        "ui",
+        "set_value",
+        "file_get",
+        "file_add",
+        "device_revoke",
+        "mcp_serve_http",
+    ];
+    for name in swept {
+        let case = fixture
+            .unlock_states
+            .iter()
+            .find(|case| case.name == format!("unlock_locked_{name}"))
+            .unwrap_or_else(|| panic!("unlock_locked_{name} is not recorded"));
+        let observation = &case.observation;
+        assert_eq!(observation.exit_code, 4, "{}", case.name);
+        assert!(
+            observation.stderr.contains(hint),
+            "{}: {}",
+            case.name,
+            observation.stderr
+        );
+        assert_eq!(
+            observation
+                .stderr
+                .matches("Error: read passphrase: read Passphrase: EOF\n")
+                .count(),
+            2,
+            "{}: cobra and the root executor print the error once each",
+            case.name
+        );
+        if name == "import_csv_dry_run" {
+            assert!(
+                observation.stdout.starts_with("Import format: csv\n"),
+                "{}",
+                observation.stdout
+            );
+        } else {
+            assert_eq!(observation.stdout, "", "{}", case.name);
+        }
+    }
+    // The CSV source file travels with the scenario, in both lock shapes.
+    for name in [
+        "unlock_locked_import_csv",
+        "unlock_locked_import_csv_dry_run",
+    ] {
+        let case = fixture
+            .unlock_states
+            .iter()
+            .find(|case| case.name == name)
+            .expect("case");
+        assert!(case.files.contains_key("source.csv"), "{name}");
+    }
 }
 
 /// Negative control: a replay that stops refusing the configuration is reported.

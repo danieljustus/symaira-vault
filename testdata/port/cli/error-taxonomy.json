@@ -118,7 +118,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "ef7bd7eb815a0f45809ca0cc96aa50a457b2e67dba26db1622476ecaf3abf9db"
+    "generator_digest": "d5f17690bf93bd4774f4d1efe0dc7d787545ecb34a4d70fa759196d754a7aa0b"
   },
   "usage": [
     {
@@ -19811,6 +19811,262 @@
         "args": [
           "intake",
           "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_get",
+      "description": "[get seed/cert] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "get",
+          "seed/cert"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Error: vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1\nError: vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_dynamic_generate",
+      "description": "[dynamic generate --engine x --role x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "dynamic",
+          "generate",
+          "--engine",
+          "x",
+          "--role",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_mcp_serve_stdio",
+      "description": "[mcp serve --stdio --agent a] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "mcp",
+          "serve",
+          "--stdio",
+          "--agent",
+          "a"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Error: vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1\nError: vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_import_csv",
+      "description": "[import source.csv] in the locked vault shape",
+      "state": "locked",
+      "files": {
+        "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+      },
+      "observation": {
+        "args": [
+          "import",
+          "source.csv"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_import_csv_dry_run",
+      "description": "[import source.csv --dry-run] in the locked vault shape",
+      "state": "locked",
+      "files": {
+        "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+      },
+      "observation": {
+        "args": [
+          "import",
+          "source.csv",
+          "--dry-run"
+        ],
+        "exit_code": 4,
+        "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\n",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_export_csv_yes",
+      "description": "[export --format csv --yes] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "export",
+          "--format",
+          "csv",
+          "--yes"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_broker",
+      "description": "[broker] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "broker"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_generate_store",
+      "description": "[generate --store x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "generate",
+          "--store",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_git_log",
+      "description": "[git log] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "git",
+          "log"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_template_generate",
+      "description": "[template generate --type env] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "template",
+          "generate",
+          "--type",
+          "env"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_ui",
+      "description": "[ui] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "ui"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_set_value",
+      "description": "[set x --value v --force] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "set",
+          "x",
+          "--value",
+          "v",
+          "--force"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_file_get",
+      "description": "[file get seed/cert --out o] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "file",
+          "get",
+          "seed/cert",
+          "--out",
+          "o"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_file_add",
+      "description": "[file add x --field f --from source.csv] in the locked vault shape",
+      "state": "locked",
+      "files": {
+        "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "x",
+          "--field",
+          "f",
+          "--from",
+          "source.csv"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_device_revoke",
+      "description": "[device revoke x] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "device",
+          "revoke",
+          "x"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "unlock_locked_mcp_serve_http",
+      "description": "[mcp serve] in the locked vault shape",
+      "state": "locked",
+      "observation": {
+        "args": [
+          "mcp",
+          "serve"
         ],
         "exit_code": 4,
         "stdout": "",
