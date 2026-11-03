@@ -1009,8 +1009,10 @@ and BROKER-002 stay `in_progress`). Oracle is the Go tree at `ae6f8340`.
   `--drop-audit-ids` is the negative control (fails); a code-level control
   (blank `token_id` in `append_audit`) also fails it.
 - Residuals: (1) Go's anomaly detector writes `anomaly_*` rows (`off_hours`,
-  time-of-day dependent; `sess_id` only); Rust has no anomaly detector, the
-  comparison skips those rows after asserting they carry no `req_id`/`token_id`;
+  time-of-day dependent; `sess_id` only); Rust now runs the same detector
+  (PLATFORM-002, ADR 0034 item 29: `anomaly_dispatch.rs`,
+  `mcp_anomaly_process.rs`), the comparison still skips those rows after
+  asserting they carry no `req_id`/`token_id`;
   (2) Go's `share_grant` / `share_expired` rows (`logAuditShare`: share id,
   from/to agent, share action plus the three ids) belong to the share-access
   scope override, which the Rust `scope_allows` does not implement, so there is

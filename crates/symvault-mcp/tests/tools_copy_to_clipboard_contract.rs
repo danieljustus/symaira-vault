@@ -197,7 +197,9 @@ fn copy_to_clipboard_replays_source_bound_go_dispatcher() {
         .expect("construct synthetic runtime")
         .with_clipboard(clipboard.clone())
         .with_clipboard_auto_clear_duration(Duration::from_secs(case.auto_clear_duration))
-        .with_approval_seam(approval.clone());
+        .with_approval_seam(approval.clone())
+        // The recording ran by day; a night run must not raise off-hours alerts.
+        .with_anomaly_clock(Arc::new(symvault_mcp::anomaly::FixedAnomalyClock::midday()));
         let mut handler = ProtocolHandler::with_tool_call_runtime(
             &fixture.server_name,
             &fixture.server_version,

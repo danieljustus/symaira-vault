@@ -240,6 +240,13 @@ pub trait ReadOnlyStore: Send + Sync {
     fn list(&self) -> Result<Vec<ReadOnlyEntry>, String>;
     fn get(&self, path: &str) -> Result<Option<ReadOnlyEntry>, String>;
 
+    /// Whether the stored entry at `path` is flagged as a canary/honeytoken.
+    /// Feeds the anomaly detector's canary rule; stores without the flag, and
+    /// unreadable or missing entries, report `false`.
+    fn is_canary(&self, _path: &str) -> bool {
+        false
+    }
+
     /// Resolve a reference only if its current interpretation still selects
     /// the path previously scope-checked by the caller.
     fn resolve_secret_ref_at_path(

@@ -214,6 +214,12 @@ class DiagnosticEvidenceControls(unittest.TestCase):
             with self.subTest(line=line):
                 self.check(line)
 
+    def test_rust_emits_the_same_off_hours_diagnostics_as_go(self):
+        # PLATFORM-002: the Rust detector writes Go's line; this used to be rejected.
+        for line in [self.PLAIN, self.CONTEXTUAL]:
+            with self.subTest(line=line):
+                self.check(line, 'rust')
+
     def test_rejected_diagnostics(self):
         rejected = [
             (self.CONTEXTUAL.replace('severity=low', 'severity=high'), 'go'),
@@ -222,7 +228,10 @@ class DiagnosticEvidenceControls(unittest.TestCase):
             (self.CONTEXTUAL.replace('public/fixture', 'private/other'), 'go'),
             (self.CONTEXTUAL.replace('0000000000000001', 'invalid'), 'go'),
             (self.PLAIN + '\naudit log write failed err="audit logger is closed"', 'go'),
-            (self.CONTEXTUAL, 'rust'),
+            (self.CONTEXTUAL.replace('type=off_hours', 'type=tool_chain'), 'rust'),
+            (self.CONTEXTUAL.replace('severity=low', 'severity=high'), 'rust'),
+            (self.PLAIN + '\naudit log write failed err="audit logger is closed"', 'rust'),
+            (self.CONTEXTUAL, 'java'),
         ]
         for line, implementation in rejected:
             with self.subTest(line=line, implementation=implementation):

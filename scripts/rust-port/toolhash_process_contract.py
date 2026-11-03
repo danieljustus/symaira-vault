@@ -165,9 +165,11 @@ def mask_audit(rows, drop_ids=False):
     sessions = set()
     for row in rows:
         if row.get('action', '').startswith('anomaly_'):
-            # Go's anomaly detector (off-hours, time-of-day dependent) logs
-            # with context.Background(): sess_id only, no req_id/token_id. The
-            # Rust port has no anomaly detector (open, MCP-003 residual).
+            # Both servers run the anomaly detector (off-hours, time-of-day
+            # dependent, so the rows are skipped from the field-for-field
+            # comparison). Each logs with context.Background(): sess_id only,
+            # no req_id/token_id. Rust ported it for PLATFORM-002 / ADR 0034
+            # item 29; anomaly_dispatch.rs and mcp_anomaly_process.rs pin the rows.
             assert 'req_id' not in row and 'token_id' not in row, row
             continue
         out = []

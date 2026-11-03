@@ -8,6 +8,7 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 use symvault_core::session::MemoryKeyring;
 use symvault_crypto::generate_identity;
+use symvault_mcp::store_adapter::StoreReadOnlyRuntime;
 use symvault_mcp::{ProtocolHandler, ReadOnlyRuntimeConfig, read_only_tool_names, run_stream};
 use symvault_store::{Store, audit::RotationConfig};
 use tempfile::TempDir;
@@ -62,17 +63,13 @@ fn handler(
         vault_unlocked: true,
         ..ReadOnlyRuntimeConfig::default()
     };
-    ProtocolHandler::with_store_read_only_runtime_and_audit(
-        "symvault",
-        "0.0.0-fixture",
-        root.path(),
-        identity,
-        config,
-        None,
-        None,
-        Some(audit),
-    )
-    .expect("construct runtime")
+    // By day on purpose: these rows are about ids, and an off-hours alert would
+    // add an anomaly row (which carries the session id only) on a night run.
+    let runtime =
+        StoreReadOnlyRuntime::open_with_audit(root.path(), identity, config, None, Some(audit))
+            .expect("construct runtime")
+            .with_anomaly_clock(Arc::new(symvault_mcp::anomaly::FixedAnomalyClock::midday()));
+    ProtocolHandler::with_tool_call_runtime("symvault", "0.0.0-fixture", Arc::new(runtime))
 }
 
 fn call(handler: &mut ProtocolHandler, tool: &str, arguments: &str) {

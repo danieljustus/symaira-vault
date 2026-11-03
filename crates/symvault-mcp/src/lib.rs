@@ -17,6 +17,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::value::RawValue;
 
+pub mod anomaly;
 pub mod approval;
 mod audit_identity;
 pub mod authguard;
