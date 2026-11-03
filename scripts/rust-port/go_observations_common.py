@@ -16,7 +16,7 @@ The module is also a small CLI for the Makefile targets that only observed a
 `go test` / `go run ... --check` run:
 
   capture-go-json  CONTRACT [--env K=V] -- go test ... -json    keep Action/Package/Test of the finished tests
-  replay-go-json   CONTRACT --output PATH                       write them back as `go test -json` rows
+  replay-go-json   CONTRACT --output PATH [--append]            write them back as `go test -json` rows
   capture-go-text  CONTRACT [--env K=V] -- go test ... -v       keep the `--- PASS: NAME` lines
   replay-go-text   CONTRACT --output PATH
   capture-checked  CONTRACT --file F... [--env K=V] -- cmd      run a Go `--check`, record sha256 of F
@@ -333,6 +333,7 @@ def main(argv=None):
         p = sub.add_parser(name)
         p.add_argument("contract")
         p.add_argument("--output", required=True)
+        p.add_argument("--append", action="store_true", help="append to OUTPUT instead of replacing it")
     for name in ("replay-checked", "replay-verdict"):
         p = sub.add_parser(name)
         p.add_argument("contract")
@@ -367,9 +368,11 @@ def main(argv=None):
         observed = document["observations"]
         if args.command == "replay-go-json":
             rows = observed["events"]
-            Path(args.output).write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
+            with open(args.output, "a" if args.append else "w") as out:
+                out.write("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
         elif args.command == "replay-go-text":
-            Path(args.output).write_text("".join(line + "\n" for line in observed["lines"]))
+            with open(args.output, "a" if args.append else "w") as out:
+                out.write("".join(line + "\n" for line in observed["lines"]))
         elif args.command == "replay-checked":
             expected = observed["files"]
             if sorted(args.file) != sorted(expected):

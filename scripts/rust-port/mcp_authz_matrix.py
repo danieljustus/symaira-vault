@@ -15,9 +15,13 @@ platform: Touch ID, clipboard and autotype backends, secure-input UI):
   testdata/port/mcp/authz-matrix-linux.json    linux
 
   --generate   write only the host's fixture
-  --check      regenerate into memory and require byte equality with the host's
-               fixture; a host without a recorded fixture is a failure, never
-               a skip
+  --check      replay, no Go: the host's frozen fixture must be the bytes the Go
+               capture accepted (scripts/rust-port/fixtures/go-observations/
+               mcp-authz-matrix.<goos>.json), its oracle pin must resolve in git
+               with the recorded source digest; a host without a recorded fixture
+               is a failure, never a skip
+  --capture-go regenerate from the Go oracle, require equality with the frozen
+               fixture (generator stamp aside) and record it for --check
 """
 import argparse
 import hashlib
@@ -31,6 +35,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import go_observations_common as observations
 from build_timeout import oracle_build_timeout, remove_worktree
 from mcp_oracle import CONTRACT, ORDERED, pinned_go, validate_reference
 import mcp_process_contract as process
@@ -227,23 +232,77 @@ def build_fixture(goos):
     }
 
 
+def frozen_source_digest(commit):
+    """The oracle source digest recomputed from git blobs (no checkout, no Go): same algorithm as inventory()."""
+    names = sorted(p for p in process.checked(['git', 'ls-tree', '-r', '--name-only', commit]).decode().splitlines()
+                   if p in {'go.mod', 'go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
+    digest = hashlib.sha256()
+    for name in names:
+        digest.update(name.encode() + b'\0' + process.checked(['git', 'show', f'{commit}:{name}']) + b'\0')
+    return digest.hexdigest(), len(names)
+
+
+def without_generator_stamp(fixture):
+    """The recorded fixture minus the generator digest: that field stamps the script that froze it, which
+    now also carries the replay logic and must not make an unchanged Go observation look stale."""
+    fixture = json.loads(json.dumps(fixture))
+    fixture['oracle'].pop('generator_sha256', None)
+    return fixture
+
+
+def capture(goos, fixture_file):
+    """Capture mode: regenerate the matrix from the pinned Go oracle and require it to equal the frozen fixture."""
+    assert fixture_file.is_file(), f'MCP authz matrix fixture missing for {goos}: {fixture_file.relative_to(ROOT)}'
+    generated = build_fixture(goos)
+    frozen = json.loads(fixture_file.read_text(encoding='utf-8'))
+    assert without_generator_stamp(generated) == without_generator_stamp(frozen), \
+        f'MCP authz matrix fixture stale for {goos}; run --generate on a {goos} host and review the diff'
+    recorded = {'fixture': str(fixture_file.relative_to(ROOT)), 'fixture_sha256': sha256(fixture_file),
+                'source_digest': generated['oracle']['source_digest'], 'probe_sha256': generated['oracle']['probe_sha256'],
+                'seed_sha256': generated['oracle']['seed_sha256'], 'cases': len(generated['cases'])}
+    target = observations.save('mcp-authz-matrix', recorded, oracle_commit=ORDERED, version=generated['oracle']['compiler']['version'],
+                               args=['mcp_authz_matrix.py', '--capture-go'])
+    print(f"captured {observations.rel(target)}: {recorded['cases']} Go-recorded cases ({goos})")
+
+
+def replay_check(goos, fixture_file):
+    """Replay: the frozen per-OS fixture is the recorded Go observation. It must be the bytes the Go capture
+    accepted, its oracle pin must resolve in git with the recorded source digest, and the probes must be unchanged."""
+    if not fixture_file.is_file():
+        raise SystemExit(f'MCP authz matrix fixture missing for {goos}: {fixture_file.relative_to(ROOT)}; run --generate on a {goos} host')
+    recorded = observations.load('mcp-authz-matrix', oracle_commit=ORDERED)['observations']
+    assert recorded['fixture'] == str(fixture_file.relative_to(ROOT)), 'recorded Go observation covers another fixture'
+    if sha256(fixture_file) != recorded['fixture_sha256']:
+        raise SystemExit(f'MCP authz matrix fixture changed for {goos}: it is not the bytes the Go oracle produced')
+    fixture = json.loads(fixture_file.read_text(encoding='utf-8'))
+    oracle = fixture['oracle']
+    assert oracle['commit_sha'] == ORDERED and oracle['reference_contract'] == CONTRACT, 'fixture oracle pin drifted'
+    digest, count = frozen_source_digest(ORDERED)
+    assert digest == oracle['source_digest'] == recorded['source_digest'], 'oracle source digest differs from git blobs'
+    assert oracle['source_files'].endswith(f'({count} files)'), ('oracle source file count', oracle['source_files'], count)
+    assert sha256(PROBE) == oracle['probe_sha256'] == recorded['probe_sha256'], 'authz probe changed'
+    assert sha256(SEED) == oracle['seed_sha256'] == recorded['seed_sha256'], 'authz seed changed'
+    assert len(fixture['cases']) == recorded['cases'] == len(fixture['profiles']) * len(fixture['tools']) * len(TOKEN_MODES)
+    return fixture
+
+
 def main():
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument('--generate', action='store_true')
-    mode.add_argument('--check', action='store_true')
+    mode.add_argument('--generate', action='store_true', help='regenerate the host fixture from the Go oracle (needs Go)')
+    mode.add_argument('--check', action='store_true', help='replay: verify the frozen fixture against the recorded Go observation (no Go)')
+    mode.add_argument('--capture-go', action='store_true', help='regenerate from the Go oracle, require equality with the fixture, record it (needs Go)')
     args = parser.parse_args()
     goos = host_goos()
     fixture_file = fixture_path(goos)
-    if args.check and not fixture_file.is_file():
-        raise SystemExit(f'MCP authz matrix fixture missing for {goos}: {fixture_file.relative_to(ROOT)}; run --generate on a {goos} host')
-    content = json.dumps(build_fixture(goos), indent=2, ensure_ascii=False) + '\n'
+    if args.capture_go:
+        return capture(goos, fixture_file)
     if args.check:
-        if fixture_file.read_text(encoding='utf-8') != content:
-            raise SystemExit(f'MCP authz matrix fixture stale for {goos}; run --generate on a {goos} host and review the diff')
+        fixture = replay_check(goos, fixture_file)
     else:
+        content = json.dumps(build_fixture(goos), indent=2, ensure_ascii=False) + '\n'
         fixture_file.write_text(content, encoding='utf-8')
-    fixture = json.loads(content)
+        fixture = json.loads(content)
     print(f"PASS MCP authz matrix oracle ({goos}): {len(fixture['profiles'])} profiles x {len(fixture['tools'])} tools x "
           f"{len(TOKEN_MODES)} token modes = {len(fixture['cases'])} cases")
 
