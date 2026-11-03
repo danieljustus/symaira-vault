@@ -14,7 +14,7 @@
 //! `"id": null` is a *present* ID — a four-byte value — not an absent one. That
 //! distinction is what separates a request from a notification.
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
 pub mod anomaly;
@@ -24,6 +24,7 @@ pub mod authguard;
 pub mod broker;
 mod call;
 pub mod enroll;
+mod envelope;
 mod go_params;
 pub mod http;
 mod oauth;
@@ -107,82 +108,27 @@ pub const SERVER_INSTRUCTIONS: &str = concat!(
 );
 
 /// A JSON-RPC 2.0 message. Field order matches the Go oracle's struct.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Serialize only: decoding goes through [`envelope::decode`], which applies
+/// `encoding/json`'s member rules (case-insensitive names, `null` no-ops,
+/// lone-surrogate strings) that a derived `Deserialize` cannot express.
+#[derive(Debug, Clone, Serialize)]
 pub struct Message {
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<RpcError>,
-    #[serde(deserialize_with = "deserialize_go_string")]
     pub jsonrpc: String,
-    #[serde(
-        skip_serializing_if = "str_is_empty",
-        default,
-        deserialize_with = "deserialize_go_string"
-    )]
+    #[serde(skip_serializing_if = "str_is_empty")]
     pub method: String,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        default,
-        deserialize_with = "deserialize_present_raw"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Box<RawValue>>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        default,
-        deserialize_with = "deserialize_present_raw"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<Box<RawValue>>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        default,
-        deserialize_with = "deserialize_present_raw"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<Box<RawValue>>,
-}
-
-/// Decodes an envelope string the way `encoding/json` does: a lone surrogate
-/// escape such as `"\uD800"` becomes U+FFFD instead of failing the frame
-/// (serde rejects it, which would answer `-32700` where the oracle answers
-/// with the replacement character in `Method not found`). Non-strings keep
-/// serde's own type error.
-fn deserialize_go_string<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let raw = Box::<RawValue>::deserialize(deserializer)?;
-    if go_params::kind(raw.get()) == go_params::Kind::String {
-        Ok(go_params::decode_string(raw.get()))
-    } else {
-        serde_json::from_str::<String>(raw.get()).map_err(serde::de::Error::custom)
-    }
 }
 
 fn str_is_empty(value: &str) -> bool {
     value.is_empty()
-}
-
-/// Distinguishes an absent key from a key whose value is `null`.
-///
-/// `Option<Box<RawValue>>` would otherwise collapse an explicit `"id": null`
-/// into `None` and turn a request into a notification — the client would then
-/// wait forever for an answer the server decided not to send. serde only calls
-/// this when the key is present, so `#[serde(default)]` covers the absent case
-/// and everything reaching here is a present value, `null` included. This
-/// mirrors the oracle, where the field is a `json.RawMessage` and the emptiness
-/// test is `len(ID) == 0`, which four bytes of `null` do not satisfy.
-fn deserialize_present_raw<'de, D>(deserializer: D) -> Result<Option<Box<RawValue>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let raw = Box::<RawValue>::deserialize(deserializer)?;
-    // `json.Marshal` runs `compact` over a RawMessage on the way out, which
-    // drops interior whitespace and escapes `<`, `>` and `&`. Normalising on
-    // the way in means the echoed value carries the oracle's bytes without the
-    // encoder having to special-case raw fields. It stays a textual transform,
-    // so an id beyond i64 survives exactly.
-    let compacted = symvault_gojson::compact(raw.get());
-    RawValue::from_string(compacted)
-        .map(Some)
-        .map_err(serde::de::Error::custom)
 }
 
 fn is_false(value: &bool) -> bool {
@@ -410,13 +356,13 @@ fn requested_protocol_version(params: &RawValue) -> Result<String, String> {
 
     let mut version = String::new();
     for (key, raw) in go_params::object_members(params.get())? {
-        if go_field_matches(&key, "clientInfo") {
+        if go_params::go_field_matches(&key, "clientInfo") {
             match go_params::kind(raw) {
                 Kind::Null => {}
                 Kind::Object => {
                     for (inner_key, inner_raw) in go_params::object_members(raw)? {
                         for field in ["name", "version"] {
-                            if !go_field_matches(&inner_key, field) {
+                            if !go_params::go_field_matches(&inner_key, field) {
                                 continue;
                             }
                             let inner = go_params::kind(inner_raw);
@@ -438,7 +384,7 @@ fn requested_protocol_version(params: &RawValue) -> Result<String, String> {
                     ));
                 }
             }
-        } else if go_field_matches(&key, "protocolVersion") {
+        } else if go_params::go_field_matches(&key, "protocolVersion") {
             match go_params::kind(raw) {
                 Kind::Null => {}
                 Kind::String => version = go_params::decode_string(raw),
@@ -471,15 +417,6 @@ fn include_all_tools(params: Option<&RawValue>) -> bool {
         .rev()
         .find(|(key, _)| key == "include_all_tools")
         .is_some_and(|(_, raw)| *raw == "true")
-}
-
-/// `encoding/json` field selection for an ASCII field name: case-insensitive,
-/// where the two non-ASCII runes in Go's simple-fold classes for ASCII letters
-/// (U+017F long s, U+212A Kelvin sign) also match.
-fn go_field_matches(key: &str, field: &str) -> bool {
-    key.replace('\u{17F}', "s")
-        .replace('\u{212A}', "k")
-        .eq_ignore_ascii_case(field)
 }
 
 /// Go's name for a JSON value's kind, as it appears in decoder errors. The text
@@ -924,28 +861,16 @@ pub fn handle_line(line: &str, handler: &mut ProtocolHandler) -> Result<Option<S
         .map(Some);
     }
 
-    // Go's json.Unmarshal treats a literal `null` as a no-op against any target,
-    // so the oracle ends up with a zero-valued Message whose jsonrpc is empty
-    // and answers -32600. serde instead fails to build the struct, which would
-    // have answered -32700. Neither is safer; matching the oracle is free.
-    if line.trim() == "null" {
-        return encode(&Message::error_response(
-            None,
-            error_code::INVALID_REQUEST,
-            "Invalid Request",
-            Some(serde_json::Value::String("jsonrpc must be 2.0".to_string())),
-        ))
-        .map(Some);
-    }
-
-    let msg: Message = match serde_json::from_str(line) {
+    // A literal `null` is a no-op against any target in encoding/json, so the
+    // decoder yields the zero message and the guard below answers -32600.
+    let msg = match envelope::decode(line, envelope::Duplicates::Reject) {
         Ok(msg) => msg,
         Err(err) => {
             return encode(&Message::error_response(
                 None,
                 error_code::PARSE_ERROR,
                 "Parse error",
-                Some(serde_json::Value::String(err.to_string())),
+                Some(serde_json::Value::String(err)),
             ))
             .map(Some);
         }

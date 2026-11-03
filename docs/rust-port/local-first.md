@@ -159,7 +159,7 @@ Where the gate differs from the hosted workflows:
   and wrong values). Logs are checked the same way (`log-ok` with exact name
   prefixes, `--sum-passed`, `N passed; 0 failed; 0 ignored` totals; `go-json`
   names; `gaps --exact-path/--min-paths`). One value differs from the workflows:
-  the `symvault-mcp --all-targets` total is 429 (`AREA_MCP_TEST_COUNT`), the
+  the `symvault-mcp --all-targets` total is 438 (`AREA_MCP_TEST_COUNT`), the
   workflows still say 246, which the tree outgrew; raise the constant when
   tests are added. `native_os` must equal the host's (the workflows accepted
   any of the three).
@@ -337,6 +337,11 @@ Findings of the first full runs on `ca0f2300` and what changed:
   stderr after the audit row and the approval-cache invalidation; a poisoned
   detector lock recovered instead of dropping alerts) added 5 unit and 2
   `anomaly_dispatch` tests: `AREA_MCP_TEST_COUNT` is now 415.
+- `mcp-named-tests` (`local/mcp-envelope`): the `symvault-mcp --all-targets`
+  total is now 438 (measured: 0 failed over 55 result lines): the 5
+  `envelope.rs` unit tests plus 4 `stdio_hygiene_contract` tests (the envelope
+  corpus presence guard, the duplicate-envelope-member probes, and the two HTTP
+  replays). `AREA_MCP_TEST_COUNT` was 429.
 - `http-write-contract` (macOS): one run at load 40 to 120 failed `actual
   progressing output required` (the slow reader of `rust/tls-output` received no
   byte within 34 seconds, the Go side and `rust/tcp-output` progressed). Reruns

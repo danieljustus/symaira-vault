@@ -118,6 +118,18 @@ type divergence struct {
 	Rationale           string `json:"rationale"`
 }
 
+// duplicateProbe records a frame that carries the same ENVELOPE member twice
+// (or two case variants of it) and that the oracle ACCEPTS. The port rejects
+// every such frame with -32700 by the duplicate-envelope-key adjudication
+// (ADR 0032 row 4), so these are divergences with the oracle's answer recorded
+// verbatim rather than cases the port replays byte for byte.
+type duplicateProbe struct {
+	Name            string `json:"name"`
+	Why             string `json:"why"`
+	Input           string `json:"input"`
+	OracleStdoutRaw string `json:"oracle_stdout_raw"`
+}
+
 type fixture struct {
 	SchemaVersion       int    `json:"schema_version"`
 	Oracle              oracle `json:"oracle"`
@@ -128,10 +140,11 @@ type fixture struct {
 	// MaxAcceptedNestingDepth is the deepest TOTAL nesting the oracle still
 	// dispatches, counting the enclosing frame object itself. Measured by
 	// binary search, not read off encoding/json's constant.
-	MaxAcceptedNestingDepth int           `json:"max_accepted_nesting_depth"`
-	Cases                   []hygieneCase `json:"cases"`
-	Bounds                  []boundsProbe `json:"bounds"`
-	Divergences             []divergence  `json:"divergences"`
+	MaxAcceptedNestingDepth int              `json:"max_accepted_nesting_depth"`
+	Cases                   []hygieneCase    `json:"cases"`
+	Bounds                  []boundsProbe    `json:"bounds"`
+	DuplicateEnvelopeProbes []duplicateProbe `json:"duplicate_envelope_probes"`
+	Divergences             []divergence     `json:"divergences"`
 }
 
 func runStream(input string) (string, error) {
@@ -409,6 +422,191 @@ func caseInputs() []struct{ name, why, input string } {
 			initializeFrame(`{}`) + promptsGetFrame(`{"name":"find-and-use","arguments":{"query":"x"},"arguments":null}`),
 		},
 		{
+			"envelope_method_null_is_noop",
+			"MCP-004-ENV: a null envelope member is a no-op in encoding/json, not a type error. method:null leaves method empty, so the request is -32600 method is required where a strict serde String decode answers -32700",
+			`{"jsonrpc":"2.0","id":1,"method":null}` + "\n",
+		},
+		{
+			"envelope_method_null_notification_is_silent",
+			"method:null with no id is a notification with an empty method; the handler ignores it and nothing is written",
+			`{"jsonrpc":"2.0","method":null}` + "\n" + ping + "\n",
+		},
+		{
+			"envelope_jsonrpc_null_is_noop",
+			"jsonrpc:null leaves jsonrpc empty, so the frame is -32600 jsonrpc must be 2.0 (echoing the id), not a -32700 parse error",
+			`{"jsonrpc":null,"id":1,"method":"ping"}` + "\n",
+		},
+		{
+			"envelope_id_null_is_a_present_id",
+			"id:null is a four-byte RawMessage, not an absent id: the frame is a request and the answer echoes id null",
+			`{"jsonrpc":"2.0","id":null,"method":"ping"}` + "\n",
+		},
+		{
+			"envelope_all_members_null_except_jsonrpc",
+			"every other envelope member null: method stays empty and params/result stay RawMessage null; with an id present this is -32600 method is required",
+			`{"jsonrpc":"2.0","id":7,"method":null,"params":null}` + "\n",
+		},
+		{
+			"envelope_method_uppercase_key",
+			"MCP-004-ENV: encoding/json matches envelope member names case-insensitively, so \"METHOD\" selects method",
+			`{"jsonrpc":"2.0","id":1,"METHOD":"ping"}` + "\n",
+		},
+		{
+			"envelope_method_titlecase_key",
+			"\"Method\" selects method",
+			`{"jsonrpc":"2.0","id":1,"Method":"ping"}` + "\n",
+		},
+		{
+			"envelope_jsonrpc_titlecase_key",
+			"\"Jsonrpc\" selects jsonrpc, so the version check passes",
+			`{"Jsonrpc":"2.0","id":1,"method":"ping"}` + "\n",
+		},
+		{
+			"envelope_jsonrpc_uppercase_key",
+			"\"JSONRPC\" selects jsonrpc",
+			`{"JSONRPC":"2.0","id":1,"method":"ping"}` + "\n",
+		},
+		{
+			"envelope_id_uppercase_key",
+			"\"ID\" selects id and the answer carries it under the canonical lowercase name",
+			`{"jsonrpc":"2.0","ID":9,"method":"ping"}` + "\n",
+		},
+		{
+			"envelope_id_titlecase_key_null",
+			"\"Id\":null is a present null id selected case-insensitively",
+			`{"jsonrpc":"2.0","Id":null,"method":"ping"}` + "\n",
+		},
+		{
+			"envelope_params_uppercase_key",
+			"\"PARAMS\" selects params: initialize negotiates 2024-11-05 from it",
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","PARAMS":{"protocolVersion":"2024-11-05"}}` + "\n",
+		},
+		{
+			"envelope_params_long_s_literal_key",
+			"U+017F (long s) is in the simple-fold class of s, so a key spelled with it selects params; the raw rune is used here",
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","param` + "\u017f" + `":{"protocolVersion":"2024-11-05"}}` + "\n",
+		},
+		{
+			"envelope_params_long_s_escaped_key",
+			"the same fold through a \\u017f escape: member names are unquoted before matching",
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","param\u017f":{"protocolVersion":"2024-11-05"}}` + "\n",
+		},
+		{
+			"envelope_kelvin_sign_does_not_select_an_envelope_member",
+			"U+212A (Kelvin sign) folds to k, but no envelope member name contains k, so a key built from it selects nothing: method stays empty and the request is -32600",
+			`{"jsonrpc":"2.0","id":1,"` + "\u212a" + `":"x","method":null}` + "\n",
+		},
+		{
+			"envelope_escaped_method_key",
+			"member names are unquoted before matching: \"\\u006dethod\" selects method",
+			`{"jsonrpc":"2.0","id":1,"\u006dethod":"ping"}` + "\n",
+		},
+		{
+			"envelope_near_miss_key_is_unknown",
+			"a key that merely resembles a member (accented e, trailing space) selects nothing, so the method is missing",
+			`{"jsonrpc":"2.0","id":1,"m` + "\u00e9" + `thod":"ping","method ":"ping"}` + "\n",
+		},
+		{
+			"envelope_method_wrong_typed",
+			"a non-string method is an UnmarshalTypeError: -32700",
+			`{"jsonrpc":"2.0","id":1,"method":5}` + "\n",
+		},
+		{
+			"envelope_method_wrong_typed_uppercase_key",
+			"the case-folded key is typed exactly like the exact one: METHOD:5 is -32700",
+			`{"jsonrpc":"2.0","id":1,"METHOD":5}` + "\n",
+		},
+		{
+			"envelope_jsonrpc_wrong_typed",
+			"a non-string jsonrpc is an UnmarshalTypeError: -32700, not the -32600 version error",
+			`{"jsonrpc":2,"id":1,"method":"ping"}` + "\n",
+		},
+		{
+			"envelope_method_wrong_typed_earlier_duplicate_case_variant",
+			"a wrong-typed earlier member fails the decode although a later valid case variant follows, so this is -32700 and not a dispatched ping",
+			`{"jsonrpc":"2.0","id":1,"method":5,"METHOD":"ping"}` + "\n",
+		},
+		{
+			"envelope_method_wrong_typed_later_duplicate_case_variant",
+			"a wrong-typed later case variant fails the decode as well: -32700",
+			`{"jsonrpc":"2.0","id":1,"METHOD":"ping","method":5}` + "\n",
+		},
+		{
+			"envelope_jsonrpc_wrong_typed_earlier_duplicate",
+			"jsonrpc:2 then a valid jsonrpc is still -32700",
+			`{"jsonrpc":2,"JSONRPC":"2.0","id":1,"method":"ping"}` + "\n",
+		},
+		{
+			"envelope_method_array_value",
+			"an array method is -32700",
+			`{"jsonrpc":"2.0","id":1,"method":["ping"]}` + "\n",
+		},
+		{
+			"envelope_id_object_is_echoed_compact",
+			"id is a RawMessage: an object id is accepted, compacted and echoed whatever its shape",
+			`{"jsonrpc":"2.0","id": { "a" : [1, 2] },"method":"ping"}` + "\n",
+		},
+		{
+			"envelope_params_wrong_type_ignored_by_ping",
+			"params is a RawMessage: ping never decodes it, so a scalar there is harmless",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","params":5}` + "\n",
+		},
+		{
+			"envelope_result_member_makes_a_response",
+			"a RESULT member is matched case-insensitively but the frame has no method, so the transport answers -32600 method is required before the handler can treat it as a response; the second line is the normal ping answer",
+			`{"jsonrpc":"2.0","id":1,"RESULT":{}}` + "\n" + ping + "\n",
+		},
+		{
+			"envelope_result_null_makes_a_response",
+			"result:null is a present RawMessage, so the handler classifies the frame as a response and returns nothing; the transport then answers Internal error (-32603) with the id, then the second line is the normal ping answer",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","result":null}` + "\n" + ping + "\n",
+		},
+		{
+			"envelope_error_null_is_not_a_response",
+			"error:null leaves the error pointer nil, so the request is dispatched normally",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":null}` + "\n",
+		},
+		{
+			"envelope_error_empty_object_makes_a_response",
+			"error:{} (matched case-insensitively) is a non-nil RPCError with zero fields, since its members are optional to encoding/json; the handler classifies the frame as a response and the transport answers Internal error (-32603), then the normal ping answer",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","ERROR":{}}` + "\n" + ping + "\n",
+		},
+		{
+			"envelope_error_wrong_typed",
+			"a non-object error is -32700",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":5}` + "\n",
+		},
+		{
+			"envelope_error_code_wrong_typed",
+			"RPCError.Code is an int: a string there fails the decode (-32700)",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":{"code":"x","message":"m"}}` + "\n",
+		},
+		{
+			"envelope_error_code_fraction",
+			"RPCError.Code is an int: 1.5 is an UnmarshalTypeError (-32700)",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":{"code":1.5}}` + "\n",
+		},
+		{
+			"envelope_error_code_beyond_i32_is_accepted",
+			"Go's int is 64-bit: a code beyond i32 decodes fine, so the frame is a response (Internal error -32603 from the transport), then the normal ping answer; an i32-typed port would answer -32700",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":{"code":3000000000,"message":"m"}}` + "\n" + ping + "\n",
+		},
+		{
+			"envelope_error_message_wrong_typed_case_variant",
+			"RPCError members are case-insensitive too: MESSAGE:5 is an UnmarshalTypeError (-32700)",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":{"MESSAGE":5}}` + "\n",
+		},
+		{
+			"envelope_lone_surrogate_in_uppercase_method_key_value",
+			"a lone surrogate in the value of a case-folded method key is U+FFFD, exactly as for the exact key",
+			`{"jsonrpc":"2.0","id":1,"METHOD":"a\uD800b"}` + "\n",
+		},
+		{
+			"envelope_lone_surrogate_in_unknown_key",
+			"a lone surrogate escape in an unknown envelope member name decodes to U+FFFD and selects nothing; the frame is dispatched, where a serde String key rejects the escape and would answer -32700",
+			`{"\uDC00":1,"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n",
+		},
+		{
 			"interleaved_valid_and_invalid",
 			"a hostile client cannot desynchronise the stream: every frame is answered in order regardless of the failures between them",
 			ping + "\n" + "garbage\n" + `{"jsonrpc":"2.0","id":2,"method":"ping"}` + "\n" + "[]\n" + `{"jsonrpc":"2.0","id":3,"method":"ping"}` + "\n",
@@ -437,6 +635,74 @@ func buildCases() ([]hygieneCase, error) {
 		})
 	}
 	return cases, nil
+}
+
+// duplicateEnvelopeInputs are frames the oracle accepts although an envelope
+// member appears twice, exactly or as case variants. Each oracle answer is
+// recorded by execution; the generator refuses a probe the oracle rejects,
+// because that belongs in cases (the port rejects it too).
+func duplicateEnvelopeInputs() []struct{ name, why, input string } {
+	return []struct{ name, why, input string }{
+		{
+			"duplicate_method_case_variant_last_wins",
+			"method then METHOD: encoding/json stores both and the LAST wins (nope), so this is Method not found: nope although the first spelling was ping",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","METHOD":"nope"}` + "\n",
+		},
+		{
+			"duplicate_method_null_after_value_keeps_value",
+			"a trailing method:null is a no-op, so the earlier ping is dispatched",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","method":null}` + "\n",
+		},
+		{
+			"duplicate_method_null_before_value",
+			"method:null then ping is dispatched as ping",
+			`{"jsonrpc":"2.0","id":1,"method":null,"method":"ping"}` + "\n",
+		},
+		{
+			"duplicate_id_case_variant_last_wins",
+			"id then ID: the LAST spelling's value is echoed (2)",
+			`{"jsonrpc":"2.0","id":1,"ID":2,"method":"ping"}` + "\n",
+		},
+		{
+			"duplicate_id_null_after_value",
+			"a RawMessage takes null as a value, so a trailing id:null REPLACES the earlier id (unlike a string member) and the answer echoes null",
+			`{"jsonrpc":"2.0","id":1,"id":null,"method":"ping"}` + "\n",
+		},
+		{
+			"duplicate_jsonrpc_null_after_value_keeps_value",
+			"a trailing jsonrpc:null in another case is a no-op, so the version stays 2.0",
+			`{"jsonrpc":"2.0","JSONRPC":null,"id":1,"method":"ping"}` + "\n",
+		},
+		{
+			"duplicate_params_case_variant_last_wins",
+			"params then PARAMS on initialize: the LAST object is the one decoded (2025-03-26)",
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"},"PARAMS":{"protocolVersion":"2025-03-26"}}` + "\n",
+		},
+		{
+			"duplicate_error_member_last_wins_inside_error_object",
+			"a duplicated RPCError member (CODE after code) is accepted last-wins: the frame is a response (Internal error -32603 from the transport), then a normal ping is answered",
+			`{"jsonrpc":"2.0","id":1,"error":{"code":1,"CODE":2},"method":"ping"}` + "\n" + ping + "\n",
+		},
+	}
+}
+
+func buildDuplicateProbes() ([]duplicateProbe, error) {
+	inputs := duplicateEnvelopeInputs()
+	out := make([]duplicateProbe, 0, len(inputs))
+	for _, in := range inputs {
+		stdout, err := runStream(in.input)
+		if err != nil {
+			return nil, fmt.Errorf("duplicate probe %s: %w", in.name, err)
+		}
+		if strings.Contains(stdout, `"code":-32700`) {
+			return nil, fmt.Errorf("duplicate probe %s: the oracle rejects it (%q); it belongs in cases, not probes", in.name, stdout)
+		}
+		if !utf8.ValidString(stdout) {
+			return nil, fmt.Errorf("duplicate probe %s: stdout is not valid UTF-8", in.name)
+		}
+		out = append(out, duplicateProbe{Name: in.name, Why: in.why, Input: in.input, OracleStdoutRaw: stdout})
+	}
+	return out, nil
 }
 
 func buildBounds() ([]boundsProbe, error) {
@@ -590,6 +856,10 @@ func main() {
 	if err != nil {
 		fatal("build bounds: %v", err)
 	}
+	duplicateProbes, err := buildDuplicateProbes()
+	if err != nil {
+		fatal("build duplicate envelope probes: %v", err)
+	}
 
 	// Both divergences are recorded by executing the oracle, not by reading it.
 	const dupFrame = `{"jsonrpc":"2.0","id":1,"id":2,"method":"ping"}` + "\n"
@@ -623,6 +893,7 @@ func main() {
 		MaxAcceptedNestingDepth: maxDepth,
 		Cases:                   cases,
 		Bounds:                  bounds,
+		DuplicateEnvelopeProbes: duplicateProbes,
 		Divergences: []divergence{{
 			Name:                "duplicate_object_keys_last_wins",
 			OracleBehavior:      "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A plain duplicate key INSIDE params is last-wins in both the oracle and the port (cases duplicate_key_inside_params and duplicate_params_*), and a wrong-typed earlier duplicate there fails the decode with -32602 in both, as encoding/json does; neither is a divergence. A duplicate inside an id or an unknown top-level key is also accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. NOT covered here: tools/call. Go keeps arguments as a json.RawMessage; Rust re-parses them as a serde_json::Value (last-wins per object like encoding/json into a map, but duplicate-key fidelity INSIDE arguments is untested), and a Value nests at most 128 levels where Go accepts up to 10000, so deeper arguments are -32602 in Rust (declared in ADR 0034 item 15). tools/call is not exercised by this fixture at all: the oracle answers 'vault locked' before it decodes params when no tool runtime is attached.",

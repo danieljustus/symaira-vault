@@ -2101,9 +2101,7 @@ fn read_chunked_body(reader: &mut BufReader<HttpStream>) -> Result<Vec<u8>, std:
             let _ = reader.fill_buf();
             reader.get_mut().set_read_timeout(previous_timeout)?;
             reader.get_mut().set_read_deadline(previous_deadline);
-            let invalid = serde_json::from_slice::<Message>(&body[..MAX_HTTP_BODY])
-                .err()
-                .is_some_and(|error| !error.is_eof());
+            let invalid = envelope::prefix_is_definitively_invalid(&body[..MAX_HTTP_BODY]);
             return Err(invalid_http(if invalid {
                 "invalid JSON"
             } else {

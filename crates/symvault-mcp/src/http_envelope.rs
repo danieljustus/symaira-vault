@@ -8,22 +8,19 @@
 //!
 //! * the top level must be a JSON object or `null` (`null` decodes to the zero
 //!   message); arrays and scalars fail;
-//! * keys match the field names case-insensitively using Go's simple Unicode
-//!   folding (`ſ` folds to `s`, the Kelvin sign to `k`), and the last
-//!   occurrence of a repeated key wins;
-//! * `jsonrpc` and `method` must be strings or `null` (`null` leaves the
-//!   previous value untouched); `id`, `params` and `result` keep their raw
-//!   text, including an explicit `null`; `error` must be an object or `null`
-//!   whose `code` is an integer and `message` a string when present.
+//! * the member rules (case-insensitive names with Go's simple Unicode
+//!   folding, `null` no-ops, raw `id`/`params`/`result`, the `error` object)
+//!   live in [`crate::envelope`], shared with the stdio loop; this transport
+//!   asks for Go's last-wins on a repeated member.
 //!
 //! Rust still requires exactly one complete JSON value (ADR 0017): trailing
 //! input is a rejection rather than silently ignored.
-use crate::{Message, RpcError};
+use crate::Message;
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use serde_json::value::RawValue;
 
-/// Entries of one JSON object in source order; `None` is the literal `null`.
-struct Entries(Option<Vec<(String, Box<RawValue>)>>);
+/// Stream-validates one top-level JSON object or `null` without keeping it.
+struct Entries;
 
 impl<'de> Deserialize<'de> for Entries {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -36,149 +33,28 @@ impl<'de> Deserialize<'de> for Entries {
             }
 
             fn visit_unit<E>(self) -> Result<Entries, E> {
-                Ok(Entries(None))
+                Ok(Entries)
             }
 
             fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Entries, A::Error> {
-                let mut entries = Vec::new();
-                while let Some(key) = map.next_key::<String>()? {
-                    entries.push((key, map.next_value::<Box<RawValue>>()?));
+                while map.next_key::<String>()?.is_some() {
+                    map.next_value::<Box<RawValue>>()?;
                 }
-                Ok(Entries(Some(entries)))
+                Ok(Entries)
             }
         }
         deserializer.deserialize_any(EntriesVisitor)
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Field {
-    Jsonrpc,
-    Method,
-    Id,
-    Params,
-    Result,
-    Error,
-    Code,
-    Message,
-    Data,
-}
-
-/// Go's `foldName`: ASCII upper-casing plus the non-ASCII members of the
-/// simple-fold sets that occur in the envelope field names.
-fn fold(key: &str) -> String {
-    key.chars()
-        .map(|character| match character {
-            '\u{17f}' => 'S',
-            '\u{212a}' => 'K',
-            other => other.to_ascii_uppercase(),
-        })
-        .collect()
-}
-
-fn envelope_field(key: &str) -> Option<Field> {
-    match fold(key).as_str() {
-        "JSONRPC" => Some(Field::Jsonrpc),
-        "METHOD" => Some(Field::Method),
-        "ID" => Some(Field::Id),
-        "PARAMS" => Some(Field::Params),
-        "RESULT" => Some(Field::Result),
-        "ERROR" => Some(Field::Error),
-        _ => None,
-    }
-}
-
-fn error_field(key: &str) -> Option<Field> {
-    match fold(key).as_str() {
-        "CODE" => Some(Field::Code),
-        "MESSAGE" => Some(Field::Message),
-        "DATA" => Some(Field::Data),
-        _ => None,
-    }
-}
-
-type RawEntries = Vec<(String, Box<RawValue>)>;
-
-fn entries(text: &str) -> Result<Option<RawEntries>, ()> {
-    serde_json::from_str::<Entries>(text)
-        .map(|entries| entries.0)
-        .map_err(|_| ())
-}
-
-fn present_raw(raw: &RawValue) -> Result<Box<RawValue>, ()> {
-    RawValue::from_string(symvault_gojson::compact(raw.get())).map_err(|_| ())
-}
-
-/// `string` or `null`; `Ok(None)` leaves any previous value in place.
-fn optional_string(raw: &RawValue) -> Result<Option<String>, ()> {
-    serde_json::from_str::<Option<String>>(raw.get()).map_err(|_| ())
-}
-
-fn is_go_int(raw: &RawValue) -> bool {
-    let text = raw.get();
-    let digits = text.strip_prefix('-').unwrap_or(text);
-    !digits.is_empty()
-        && digits.bytes().all(|byte| byte.is_ascii_digit())
-        && (digits == "0" || !digits.starts_with('0'))
-        && text.parse::<i64>().is_ok()
-}
-
-fn decode_error(raw: &RawValue) -> Result<Option<RpcError>, ()> {
-    let Some(fields) = entries(raw.get())? else {
-        return Ok(None);
-    };
-    for (key, value) in fields {
-        match error_field(&key) {
-            Some(Field::Code) if value.get() != "null" && !is_go_int(&value) => return Err(()),
-            Some(Field::Message) => {
-                optional_string(&value)?;
-            }
-            _ => {}
-        }
-    }
-    Ok(Some(RpcError {
-        data: None,
-        message: String::new(),
-        code: 0,
-    }))
-}
-
-/// Decodes one complete request body as Go's `transport.Message`.
+/// Decodes one complete request body as Go's `transport.Message`. Go's own
+/// last-wins rule applies to repeated members (the stdio loop rejects them, the
+/// HTTP handler never did); both share [`crate::envelope`].
 pub(super) fn decode(body: &str) -> Result<Message, ()> {
     if crate::max_nesting_depth(body) > crate::MAX_ACCEPTED_NESTING_DEPTH {
         return Err(());
     }
-    let mut message = Message {
-        error: None,
-        jsonrpc: String::new(),
-        method: String::new(),
-        id: None,
-        params: None,
-        result: None,
-    };
-    let Some(fields) = entries(body)? else {
-        return Ok(message);
-    };
-    for (key, value) in fields {
-        match envelope_field(&key) {
-            Some(Field::Jsonrpc) => {
-                if let Some(text) = optional_string(&value)? {
-                    message.jsonrpc = text;
-                }
-            }
-            Some(Field::Method) => {
-                if let Some(text) = optional_string(&value)? {
-                    message.method = text;
-                }
-            }
-            Some(Field::Id) => message.id = Some(present_raw(&value)?),
-            Some(Field::Params) => message.params = Some(present_raw(&value)?),
-            Some(Field::Result) => message.result = Some(present_raw(&value)?),
-            Some(Field::Error) => message.error = decode_error(&value)?,
-            _ => {}
-        }
-    }
-    Ok(message)
+    crate::envelope::decode(body, crate::envelope::Duplicates::LastWins).map_err(|_| ())
 }
 
 /// Whether a bounded prefix is a definitive syntax/type error (not merely
