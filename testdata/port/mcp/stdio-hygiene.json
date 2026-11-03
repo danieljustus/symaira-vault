@@ -10,7 +10,7 @@
       "internal/mcp/transport/transport.go"
     ],
     "source_digest": "cd7ac18db2a0ac61ad051e25b22253b97b7e207317bc28ba869365503e2acae2",
-    "generator_digest": "7d15d552e52ca0b32914d2d8a23ce10842180cdb7071fbc2f20daf75a5ee6ac5"
+    "generator_digest": "66a85ef09fdfc96ecc5baa745eed7dc09b75da34fd3b8473b89d60f72e776031"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-fixture",
@@ -1442,6 +1442,96 @@
         }
       ],
       "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_error_data_number_overflow",
+      "why": "RPCError.Data is an `any`, so encoding/json decodes it and stores every number as a float64: 1e400 overflows (strconv.ErrRange) and is an UnmarshalTypeError (-32700) although the member is otherwise never used",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":{\"data\":1e400}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number 1e400 into Go struct field RPCError.error.data of type float64\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_error_data_number_overflow_negative",
+      "why": "the overflow is signed: -1e400 is rejected the same way (-32700)",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":{\"data\":-1e400}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number -1e400 into Go struct field RPCError.error.data of type float64\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_error_data_number_overflow_nested_array",
+      "why": "the overflowing number is found at any depth: inside nested arrays it is still -32700",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":{\"data\":[1,[2,[1e400]]]}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number 1e400 into Go struct field RPCError.error.data of type float64\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_error_data_number_overflow_nested_object",
+      "why": "inside nested objects (and through a case-variant DATA key) it is still -32700",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":{\"DATA\":{\"a\":{\"b\":[-1e999]}}}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number -1e999 into Go struct field RPCError.error.data of type float64\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_error_data_large_finite_number_is_accepted",
+      "why": "1e308 fits a float64 (and so does an underflow like 1e-400, which ParseFloat returns as zero without error): the frame is a response, answered Internal error (-32603) by the transport, then the normal ping answer",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":{\"data\":[1e308,1e-400,\"1e400\"]}}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"message\":\"Internal error\",\"code\":-32603},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "error": {
+            "message": "Internal error",
+            "code": -32603
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        },
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
     },
     {
       "name": "envelope_lone_surrogate_in_uppercase_method_key_value",

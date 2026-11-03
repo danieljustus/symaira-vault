@@ -105,6 +105,42 @@ fn is_go_int(text: &str) -> bool {
         && text.parse::<i64>().is_ok()
 }
 
+/// The first number in `value` (an already validated JSON value, walked
+/// iteratively so depth costs no stack) that `encoding/json` cannot store in
+/// the `float64` an `any` target gives it: `strconv.ParseFloat` reports
+/// `ErrRange` exactly when the result overflows to an infinity, while an
+/// underflow is a plain zero. Strings are skipped, so a number-looking string
+/// never counts.
+fn overflowing_number(value: &str) -> Option<&str> {
+    let bytes = value.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => {
+                i += 1;
+                while i < bytes.len() && bytes[i] != b'"' {
+                    i += if bytes[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            b'-' | b'0'..=b'9' => {
+                let start = i;
+                while i < bytes.len()
+                    && matches!(bytes[i], b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9')
+                {
+                    i += 1;
+                }
+                let token = &value[start..i];
+                if token.parse::<f64>().is_ok_and(f64::is_infinite) {
+                    return Some(token);
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    None
+}
+
 fn decode_error(raw: &str, duplicates: Duplicates) -> Result<Option<RpcError>, String> {
     match go_params::kind(raw) {
         Kind::Null => return Ok(None),
@@ -139,7 +175,13 @@ fn decode_error(raw: &str, duplicates: Duplicates) -> Result<Option<RpcError>, S
             1 => {
                 optional_string(value, "RPCError.error.message")?;
             }
-            _ => {}
+            _ => {
+                if let Some(number) = overflowing_number(value) {
+                    return Err(format!(
+                        "json: cannot unmarshal number {number} into Go struct field RPCError.error.data of type float64"
+                    ));
+                }
+            }
         }
     }
     // Only the presence of `error` matters downstream (it makes the message a
@@ -268,6 +310,42 @@ mod tests {
         }
         assert!(decode(r#"{"error":{"code":3000000000}}"#, Duplicates::Reject).is_ok());
         assert!(decode(r#"{"error":{}}"#, Duplicates::Reject).is_ok());
+    }
+
+    #[test]
+    fn error_data_numbers_overflowing_float64_are_rejected_like_go() {
+        for (text, number) in [
+            (r#"{"error":{"data":1e400}}"#, "1e400"),
+            (r#"{"error":{"data":-1e400}}"#, "-1e400"),
+            (r#"{"error":{"DATA":[1,[2,1E999]]}}"#, "1E999"),
+            (r#"{"error":{"data":{"a":{"b":[-1e+999]}}}}"#, "-1e+999"),
+        ] {
+            let error = decode(text, Duplicates::LastWins).expect_err(text);
+            assert_eq!(
+                error,
+                format!(
+                    "json: cannot unmarshal number {number} into Go struct field RPCError.error.data of type float64"
+                ),
+                "{text}"
+            );
+        }
+        for text in [
+            r#"{"error":{"data":1e308}}"#,
+            r#"{"error":{"data":1e-400}}"#,
+            r#"{"error":{"data":"1e400"}}"#,
+            r#"{"error":{"data":{"1e400":"\"1e400"}}}"#,
+            r#"{"error":{"data":[true,null,12345678901234567890123456789012345678901234567890]}}"#,
+            r#"{"data":1e400,"error":{}}"#,
+        ] {
+            assert!(decode(text, Duplicates::LastWins).is_ok(), "{text}");
+        }
+        // The first error in document order wins, as in Go.
+        let error = decode(
+            r#"{"error":{"data":1e400,"code":"x"}}"#,
+            Duplicates::LastWins,
+        )
+        .expect_err("data first");
+        assert!(error.contains("RPCError.error.data"), "{error}");
     }
 
     #[test]

@@ -159,7 +159,7 @@ Where the gate differs from the hosted workflows:
   and wrong values). Logs are checked the same way (`log-ok` with exact name
   prefixes, `--sum-passed`, `N passed; 0 failed; 0 ignored` totals; `go-json`
   names; `gaps --exact-path/--min-paths`). One value differs from the workflows:
-  the `symvault-mcp --all-targets` total is 438 (`AREA_MCP_TEST_COUNT`), the
+  the `symvault-mcp --all-targets` total is 441 (`AREA_MCP_TEST_COUNT`), the
   workflows still say 246, which the tree outgrew; raise the constant when
   tests are added. `native_os` must equal the host's (the workflows accepted
   any of the three).
@@ -342,6 +342,17 @@ Findings of the first full runs on `ca0f2300` and what changed:
   `envelope.rs` unit tests plus 4 `stdio_hygiene_contract` tests (the envelope
   corpus presence guard, the duplicate-envelope-member probes, and the two HTTP
   replays). `AREA_MCP_TEST_COUNT` was 429.
+- `mcp-named-tests` (`local/envelope-data`, MCP-004): `error.data` is walked
+  iteratively and a number overflowing float64 (`1e400`, `-1e400`, nested in
+  arrays or objects) is rejected with Go's exact `UnmarshalTypeError` text
+  (`-32700` on stdio, 400 on HTTP); a finite large number is still accepted.
+  The five Go cases are recorded by `mcpstdiogen` (oracle `caadd5e`, release
+  `v0.22.1`, payload-only delta plus `generator_digest`). The
+  `symvault-mcp --all-targets` total is now 441 (measured: 0 failed over 56
+  result lines); `AREA_MCP_TEST_COUNT` was 438. The two new tests are one
+  `envelope.rs` unit test and `error_data_number_overflow_matches_go_exactly`;
+  438 + 2 is 440, so one more test than the recorded baseline accounts for is
+  present in the base tree (not bisected).
 - `http-write-contract` (macOS): one run at load 40 to 120 failed `actual
   progressing output required` (the slow reader of `rust/tls-output` received no
   byte within 34 seconds, the Go side and `rust/tcp-output` progressed). Reruns
