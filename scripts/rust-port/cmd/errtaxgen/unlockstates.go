@@ -124,6 +124,26 @@ var importSourceFiles = map[string]string{
 	importSourceFile: "title,username,password\nimported/a,alice,s3cret\n",
 }
 
+// The intake sources: a loose credential file, a directory holding one, a watch
+// directory with one staged-able file and a watch directory with nothing to stage
+// (a dotfile, which the watcher skips). `intake <file...>` processes its sources
+// before it opens the vault; `intake watch --once` opens it only for a non-empty
+// scan (cmd/intake/watch.go: onBatch is the only cli.WithVault call).
+const (
+	intakeSourceFile = "creds.env"
+	intakeSourceDir  = "stage"
+	intakeStagedFile = "stage/creds.env"
+	intakeEmptyDir   = "empty"
+)
+
+const intakeSourceBody = "API_KEY=abc123\n"
+
+var (
+	intakeFileFiles  = map[string]string{intakeSourceFile: intakeSourceBody}
+	intakeStageFiles = map[string]string{intakeStagedFile: intakeSourceBody}
+	intakeEmptyFiles = map[string]string{intakeEmptyDir + "/.keep": ""}
+)
+
 // unlockCommand is one command of the unlock-state section. partial marks the
 // commands that are also run on the partial vault shapes.
 type unlockCommand struct {
@@ -200,6 +220,14 @@ var unlockCommands = []unlockCommand{
 	{"file_add", []string{"file", "add", "x", "--field", "f", "--from", importSourceFile}, false, false, importSourceFiles, false},
 	{"device_revoke", []string{"device", "revoke", "x"}, false, false, nil, false},
 	{"mcp_serve_http", []string{"mcp", "serve"}, false, false, nil, false},
+	// `intake <file...>` (a file or a directory) validates its sources and then opens
+	// the vault through cli.WithVault; `intake watch --once` scans first and opens it
+	// only when the scan staged something (--debounce 1ns: the file just written is
+	// old enough), so the empty scan never reaches the passphrase prompt.
+	{"intake_file", []string{"intake", intakeSourceFile}, false, false, intakeFileFiles, false},
+	{"intake_dir", []string{"intake", intakeSourceDir}, false, false, intakeStageFiles, false},
+	{"intake_watch_once_staged", []string{"intake", "watch", intakeSourceDir, "--once", "--debounce", "1ns"}, false, false, intakeStageFiles, false},
+	{"intake_watch_once_empty", []string{"intake", "watch", intakeEmptyDir, "--once", "--debounce", "1ns"}, false, false, intakeEmptyFiles, false},
 }
 
 // unlockStateInputs runs unlockCommands in every unlock state: all of them in

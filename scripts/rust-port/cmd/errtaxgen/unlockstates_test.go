@@ -207,7 +207,8 @@ func TestImportScenariosCarryAValidCSVSourceInTheConfigInvalidAndLockedStatesOnl
 // cli.WithVault/WithVaultRaw/UnlockVault is recorded with an EOF passphrase prompt.
 func TestLockedSweepRecordsEveryVaultOpeningCommand(t *testing.T) {
 	want := []string{"import_csv", "import_csv_dry_run", "export_csv_yes", "broker", "generate_store",
-		"git_log", "template_generate", "ui", "set_value", "file_get", "file_add", "device_revoke", "mcp_serve_http"}
+		"git_log", "template_generate", "ui", "set_value", "file_get", "file_add", "device_revoke", "mcp_serve_http",
+		"intake_file", "intake_dir", "intake_watch_once_staged", "intake_watch_once_empty"}
 	seen := map[string]bool{}
 	for _, in := range unlockStateInputs() {
 		if in.state == stateLocked {
@@ -218,5 +219,53 @@ func TestLockedSweepRecordsEveryVaultOpeningCommand(t *testing.T) {
 		if !seen["unlock_locked_"+name] {
 			t.Errorf("unlock_locked_%s is not recorded", name)
 		}
+	}
+}
+
+// The intake scenarios run in the locked vault only and bring the loose files they
+// read; the staged watch pass needs a 1ns debounce so the file just written is old
+// enough, and the empty watch directory holds a dotfile only (Go never opens the
+// vault for an empty scan).
+func TestIntakeScenariosCarryTheirFilesInTheLockedVaultOnly(t *testing.T) {
+	wantFiles := map[string]map[string]string{
+		"unlock_locked_intake_file":              intakeFileFiles,
+		"unlock_locked_intake_dir":               intakeStageFiles,
+		"unlock_locked_intake_watch_once_staged": intakeStageFiles,
+		"unlock_locked_intake_watch_once_empty":  intakeEmptyFiles,
+	}
+	seen := 0
+	for _, in := range unlockStateInputs() {
+		if !strings.Contains(in.name, "_intake_") || in.name == "unlock_locked_intake_x" {
+			continue
+		}
+		seen++
+		want, ok := wantFiles[in.name]
+		if !ok {
+			t.Errorf("%s is not an expected intake scenario", in.name)
+			continue
+		}
+		if in.state != stateLocked {
+			t.Errorf("%s runs outside the locked vault", in.name)
+		}
+		if len(in.files) != len(want) {
+			t.Errorf("%s: files = %v, want %v", in.name, in.files, want)
+		}
+		for name, body := range want {
+			if in.files[name] != body {
+				t.Errorf("%s: %s = %q, want %q", in.name, name, in.files[name], body)
+			}
+		}
+		if len(in.args) > 2 && in.args[1] == "watch" {
+			joined := strings.Join(in.args, " ")
+			if !strings.Contains(joined, "--once") || !strings.Contains(joined, "--debounce 1ns") {
+				t.Errorf("%s: %v must be a single scan with a 1ns debounce", in.name, in.args)
+			}
+		}
+	}
+	if seen != len(wantFiles) {
+		t.Errorf("recorded %d intake scenarios, want %d", seen, len(wantFiles))
+	}
+	if !strings.Contains(intakeSourceBody, "API_KEY=") || intakeEmptyFiles[intakeEmptyDir+"/.keep"] != "" {
+		t.Error("intake sources changed shape")
 	}
 }

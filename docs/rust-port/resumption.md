@@ -17,6 +17,25 @@ edit. Actual state at `62fa4449`:
 - Do not merge, rebase or push `local/rust-port` from another chat. No push at all until the closing step (user
   instruction in the owner chat: everything local, no GitHub).
 
+## INTAKE-LOCKED (local/intake-locked @ 2c94d000 + 1 commit; CLI-005, local only, no push)
+
+`intake <file>`, `intake <dir>` and `intake watch <dir> --once` in the locked vault (EOF stdin, no cached
+identity) are recorded from the pinned Go binary (oracle `0cc78062`, built from a git clone):
+
+- `intake creds.env` and `intake stage` (a directory argument is a skipped source, not an error) validate their
+  sources first, then `cli.WithVault` hits the EOF passphrase prompt: exit 4, empty stdout, doubled
+  `Error: read passphrase: read Passphrase: EOF`, locked hint.
+- `intake watch stage --once --debounce 1ns` scans first and prints `Scanned 1 candidate(s), staged 1, skipped 0,
+  errors 0` on stdout, then `onBatch` opens the vault: same exit 4 and hint.
+- `intake watch empty --once --debounce 1ns` (a directory holding only a dotfile) **never unlocks**: exit 0,
+  `Scanned 0 candidate(s), ...`, empty stderr. Recorded as such; the native CLI matches.
+- Not recorded: `--dry-run` (Go never opens the vault), and `--json` of the staged scan (prints the random spool
+  path, the generator rejects it as non-deterministic).
+- Native needed no code change: `intake_commands::finish` already routes the `(4, e)` unlock failure through
+  `report_failed_passphrase_read`. Unlock-state corpus: 100 -> **104** scenarios (`locked` 34 -> 38; 38 + 6 x 7 +
+  2 x 12). Negative control: making `finish` skip the shared reporting turns the four locked intake scenarios red
+  (`locked: 4 of 38 differ`; `intake_x` is one of them), the empty watch stays green.
+
 ## Integration 2026-11-02: template, MCP payment/Perplexity, doctor keyring, config --fix
 
 Merged into `local/rust-port` after the green gate at `2ab41aa7` (macos and linux exit 0,
@@ -62,7 +81,8 @@ Independent review of `58460a10..d7c01a1c` (REQUEST_CHANGES) found two defects t
 corpus could not see: every earlier scenario ran with the environment passphrase, so no
 prompt ever reached EOF, and no scenario started from a vault with only one of
 `config.yaml` / `identity.age`. The corpus now has an `unlock_states` section
-(`errtaxgen/unlockstates.go`, 60 Go-recorded scenarios, oracle `0cc78062`) and the native CLI
+(`errtaxgen/unlockstates.go`, 60 Go-recorded scenarios when this review was fixed; 104 now — 38 locked, 42 in the six
+partial-vault shapes, 24 in the two config-invalid states — oracle `0cc78062`) and the native CLI
 follows Go's `UnlockVault` order (`internal/cli/unlock.go`).
 
 | Finding | Before | Now |

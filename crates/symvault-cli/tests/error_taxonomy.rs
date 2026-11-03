@@ -199,7 +199,7 @@ const BARE_DASH_INITIALIZED: usize = 11;
 /// without the environment passphrase (`locked`, EOF at the prompt) and in the
 /// vault shapes that miss `config.yaml` or `identity.age`.
 const UNLOCK_STATES: [(&str, usize); 9] = [
-    ("locked", 34),
+    ("locked", 38),
     ("identity_only", 7),
     ("config_only", 7),
     ("identity_only_locked", 7),
@@ -1909,6 +1909,9 @@ fn locked_vault_sweep_records_exit_4_and_the_locked_hint() {
         "file_add",
         "device_revoke",
         "mcp_serve_http",
+        "intake_file",
+        "intake_dir",
+        "intake_watch_once_staged",
     ];
     for name in swept {
         let case = fixture
@@ -1939,10 +1942,30 @@ fn locked_vault_sweep_records_exit_4_and_the_locked_hint() {
                 "{}",
                 observation.stdout
             );
+        } else if name == "intake_watch_once_staged" {
+            // The scan runs and reports before the batch needs the vault.
+            assert_eq!(
+                observation.stdout, "Scanned 1 candidate(s), staged 1, skipped 0, errors 0\n",
+                "{}",
+                case.name
+            );
         } else {
             assert_eq!(observation.stdout, "", "{}", case.name);
         }
     }
+    // `intake watch --once` opens the vault only for a non-empty scan: an empty directory
+    // never reaches the passphrase prompt, even in the locked vault.
+    let empty = fixture
+        .unlock_states
+        .iter()
+        .find(|case| case.name == "unlock_locked_intake_watch_once_empty")
+        .expect("unlock_locked_intake_watch_once_empty is recorded");
+    assert_eq!(empty.observation.exit_code, 0);
+    assert_eq!(
+        empty.observation.stdout,
+        "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n"
+    );
+    assert_eq!(empty.observation.stderr, "");
     // The CSV source file travels with the scenario, in both lock shapes.
     for name in [
         "unlock_locked_import_csv",
