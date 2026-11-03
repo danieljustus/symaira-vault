@@ -1,0 +1,334 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "8d2e5e156cd95f04e608182ab8179fdd49f1884a",
+    "release": "unreleased",
+    "source_files": [
+      {
+        "path": "cmd/mcp/serve.go",
+        "sha256": "b03f66c9bb5ab9bdd60efe009b134afe3532e21f27c08063d6f9d88daee800d6"
+      },
+      {
+        "path": "cmd/mcp/serve_deps.go",
+        "sha256": "8094121d8b381efcc7a3e02fd41fdc87e86e5444e57a2bbee8f3b7763b24aca0"
+      },
+      {
+        "path": "internal/mcp/serverbootstrap/http.go",
+        "sha256": "ff83f7c73d3caa9c7dcabba4a8878f9f2a083a96cc7665caac67bd9d4d001891"
+      },
+      {
+        "path": "internal/mcp/serverbootstrap/tls.go",
+        "sha256": "3c41644a50bdea14a09ba89c73398701c91e442c152b4887df6b74337b304263"
+      }
+    ],
+    "source_digest": "ed7420a05b2ade868b0b4203cc19e1644f6b0af42a580ff962d08decff042579",
+    "generator_files": [
+      "scripts/rust-port/cmd/approvaltlsgen/main.go"
+    ],
+    "generator_digest": "35fe91760e569d4896d71c892926e444813febce7016571a89fee30912251e8d"
+  },
+  "canonical": {
+    "commands": "init --auth passphrase, an appended `mcp:` section in config.yaml, then `mcp --port 0`",
+    "garbage": "{vault}/garbage.pem contains the single line `not a pem`",
+    "paths": "the fixture certificate directory is {certs}, the throw-away vault directory is {vault}"
+  },
+  "scope": {
+    "compared": "exit code, stdout (empty) and every line of stderr that starts with `Error: `",
+    "not_compared": "stderr lines before the failing check: `MCP server listening on ...` and the legacy-token migration warning (random token id), the cleartext prompt",
+    "ordering": "Go binds the listener and migrates the token registry before it validates the client CA and key pair; the Rust server validates first and so prints none of those lines and leaves no token registry behind",
+    "plain_tls": "non-mTLS certificate/key failures surface Go crypto/tls library text (open ...: no such file or directory, tls: failed to find any PEM data) and are not frozen here",
+    "windows": "recorded texts are the Unix errno texts; the Rust replay is unix-only"
+  },
+  "cases": [
+    {
+      "id": "missing_client_ca_setting",
+      "note": "mTLS enabled, no client CA configured",
+      "mcp": [
+        {
+          "key": "mtls_enabled",
+          "value": "true"
+        },
+        {
+          "key": "tls_cert_file",
+          "value": "{certs}/server.pem"
+        },
+        {
+          "key": "tls_key_file",
+          "value": "{certs}/server.key"
+        }
+      ],
+      "stdin": "",
+      "exit_code": 1,
+      "stdout": "",
+      "error_lines": [
+        "Error: http server: refusing MCP.mtls_enabled=true without MCP.tls_client_ca_file; client verification must remain enabled\n",
+        "Error: http server: refusing MCP.mtls_enabled=true without MCP.tls_client_ca_file; client verification must remain enabled\n"
+      ]
+    },
+    {
+      "id": "insecure_bind_with_mtls",
+      "note": "allow_insecure_bind and mtls_enabled together (the cleartext prompt is answered y)",
+      "mcp": [
+        {
+          "key": "mtls_enabled",
+          "value": "true"
+        },
+        {
+          "key": "allow_insecure_bind",
+          "value": "true"
+        },
+        {
+          "key": "tls_cert_file",
+          "value": "{certs}/server.pem"
+        },
+        {
+          "key": "tls_key_file",
+          "value": "{certs}/server.key"
+        },
+        {
+          "key": "tls_client_ca_file",
+          "value": "{certs}/client-ca.pem"
+        }
+      ],
+      "stdin": "y\n",
+      "exit_code": 1,
+      "stdout": "",
+      "error_lines": [
+        "Error: http server: refusing MCP.allow_insecure_bind=true with MCP.mtls_enabled=true: mTLS requires TLS\n",
+        "Error: http server: refusing MCP.allow_insecure_bind=true with MCP.mtls_enabled=true: mTLS requires TLS\n"
+      ]
+    },
+    {
+      "id": "client_ca_file_missing",
+      "note": "client CA path does not exist",
+      "mcp": [
+        {
+          "key": "mtls_enabled",
+          "value": "true"
+        },
+        {
+          "key": "tls_cert_file",
+          "value": "{certs}/server.pem"
+        },
+        {
+          "key": "tls_key_file",
+          "value": "{certs}/server.key"
+        },
+        {
+          "key": "tls_client_ca_file",
+          "value": "/nonexistent/client-ca.pem"
+        }
+      ],
+      "stdin": "",
+      "exit_code": 1,
+      "stdout": "",
+      "error_lines": [
+        "Error: http server: read client CA certificate: open /nonexistent/client-ca.pem: no such file or directory\n",
+        "Error: http server: read client CA certificate: open /nonexistent/client-ca.pem: no such file or directory\n"
+      ]
+    },
+    {
+      "id": "client_ca_file_not_pem",
+      "note": "client CA file holds no PEM certificate",
+      "mcp": [
+        {
+          "key": "mtls_enabled",
+          "value": "true"
+        },
+        {
+          "key": "tls_cert_file",
+          "value": "{certs}/server.pem"
+        },
+        {
+          "key": "tls_key_file",
+          "value": "{certs}/server.key"
+        },
+        {
+          "key": "tls_client_ca_file",
+          "value": "{vault}/garbage.pem"
+        }
+      ],
+      "stdin": "",
+      "exit_code": 1,
+      "stdout": "",
+      "error_lines": [
+        "Error: http server: parse client CA certificate: no valid PEM block found in \"{vault}/garbage.pem\"\n",
+        "Error: http server: parse client CA certificate: no valid PEM block found in \"{vault}/garbage.pem\"\n"
+      ]
+    },
+    {
+      "id": "server_key_file_missing",
+      "note": "server key path does not exist",
+      "mcp": [
+        {
+          "key": "mtls_enabled",
+          "value": "true"
+        },
+        {
+          "key": "tls_cert_file",
+          "value": "{certs}/server.pem"
+        },
+        {
+          "key": "tls_key_file",
+          "value": "/nonexistent/server.key"
+        },
+        {
+          "key": "tls_client_ca_file",
+          "value": "{certs}/client-ca.pem"
+        }
+      ],
+      "stdin": "",
+      "exit_code": 1,
+      "stdout": "",
+      "error_lines": [
+        "Error: http server: load server TLS key pair failed\n",
+        "Error: http server: load server TLS key pair failed\n"
+      ]
+    },
+    {
+      "id": "server_key_file_not_pem",
+      "note": "server key file holds no PEM key",
+      "mcp": [
+        {
+          "key": "mtls_enabled",
+          "value": "true"
+        },
+        {
+          "key": "tls_cert_file",
+          "value": "{certs}/server.pem"
+        },
+        {
+          "key": "tls_key_file",
+          "value": "{vault}/garbage.pem"
+        },
+        {
+          "key": "tls_client_ca_file",
+          "value": "{certs}/client-ca.pem"
+        }
+      ],
+      "stdin": "",
+      "exit_code": 1,
+      "stdout": "",
+      "error_lines": [
+        "Error: http server: load server TLS key pair failed\n",
+        "Error: http server: load server TLS key pair failed\n"
+      ]
+    },
+    {
+      "id": "server_certificate_file_missing",
+      "note": "server certificate path does not exist",
+      "mcp": [
+        {
+          "key": "mtls_enabled",
+          "value": "true"
+        },
+        {
+          "key": "tls_cert_file",
+          "value": "/nonexistent/server.pem"
+        },
+        {
+          "key": "tls_key_file",
+          "value": "{certs}/server.key"
+        },
+        {
+          "key": "tls_client_ca_file",
+          "value": "{certs}/client-ca.pem"
+        }
+      ],
+      "stdin": "",
+      "exit_code": 1,
+      "stdout": "",
+      "error_lines": [
+        "Error: http server: load server TLS key pair failed\n",
+        "Error: http server: load server TLS key pair failed\n"
+      ]
+    },
+    {
+      "id": "server_certificate_not_pem",
+      "note": "server certificate file holds no PEM certificate",
+      "mcp": [
+        {
+          "key": "mtls_enabled",
+          "value": "true"
+        },
+        {
+          "key": "tls_cert_file",
+          "value": "{vault}/garbage.pem"
+        },
+        {
+          "key": "tls_key_file",
+          "value": "{certs}/server.key"
+        },
+        {
+          "key": "tls_client_ca_file",
+          "value": "{certs}/client-ca.pem"
+        }
+      ],
+      "stdin": "",
+      "exit_code": 1,
+      "stdout": "",
+      "error_lines": [
+        "Error: http server: load server TLS key pair failed\n",
+        "Error: http server: load server TLS key pair failed\n"
+      ]
+    },
+    {
+      "id": "server_key_does_not_match_certificate",
+      "note": "key pair belongs to a different server identity",
+      "mcp": [
+        {
+          "key": "mtls_enabled",
+          "value": "true"
+        },
+        {
+          "key": "tls_cert_file",
+          "value": "{certs}/server.pem"
+        },
+        {
+          "key": "tls_key_file",
+          "value": "{certs}/other-server.key"
+        },
+        {
+          "key": "tls_client_ca_file",
+          "value": "{certs}/client-ca.pem"
+        }
+      ],
+      "stdin": "",
+      "exit_code": 1,
+      "stdout": "",
+      "error_lines": [
+        "Error: http server: load server TLS key pair failed\n",
+        "Error: http server: load server TLS key pair failed\n"
+      ]
+    },
+    {
+      "id": "client_ca_is_checked_before_server_key",
+      "note": "both the client CA and the server key are unreadable: Go reports the client CA",
+      "mcp": [
+        {
+          "key": "mtls_enabled",
+          "value": "true"
+        },
+        {
+          "key": "tls_cert_file",
+          "value": "{certs}/server.pem"
+        },
+        {
+          "key": "tls_key_file",
+          "value": "/nonexistent/server.key"
+        },
+        {
+          "key": "tls_client_ca_file",
+          "value": "/nonexistent/client-ca.pem"
+        }
+      ],
+      "stdin": "",
+      "exit_code": 1,
+      "stdout": "",
+      "error_lines": [
+        "Error: http server: read client CA certificate: open /nonexistent/client-ca.pem: no such file or directory\n",
+        "Error: http server: read client CA certificate: open /nonexistent/client-ca.pem: no such file or directory\n"
+      ]
+    }
+  ]
+}
