@@ -116,18 +116,30 @@ def good_tls():
     profiles = ("tls12", "tls13", "mtls12", "mtls13")
     digest = "ab" * 32
 
-    def make(_):
+    def alpn(impl, name, version):
+        rows = []
+        for case, offered in g.ALPN_OFFERS:
+            selected = None if impl == "rust" else g.ALPN_GO["mtls" if name.startswith("mtls") else "tls"][case]
+            rows.append({"case": case, "offered": list(offered), "selected": selected, "tls_version": version,
+                         "h2_settings_frame": True if selected == "h2" else None,
+                         "http1_status_line": None if selected == "h2" else OK_LINE})
+        return rows
+
+    def make(impl):
         out = {}
         for name in profiles:
             version = "TLSv1.2" if name.endswith("12") else "TLSv1.3"
             out[name] = {"rows": cases("t", 11) + [row("recovery-ping")], "processes": procs(),
                          "control_workers_joined": True, "control_errors": [],
+                         "alpn_offers": alpn(impl, name, version),
                          "identity_controls": [{"rejected": True} for _ in range(3)],
                          "encrypted_peers": [peer(sent_record_bytes=8, record_length=64, server_certificate_sha256=digest,
                                                   tls_version=version) for _ in range(2)]}
         return out
+    declared = [{"profile": profile, "case": case, "go_selected": g.ALPN_GO["tls"][case], "rust_selected": None,
+                 "decision": "alpn-http11-only"} for profile in ("tls12", "tls13") for case, _ in g.ALPN_OFFERS]
     return base(server_certificate_sha256=digest, declared_differences=decl(20, {"https-discovery-on-tls",
-                "secure-origin-matches-http-authority"}), **per_impl(make))
+                "secure-origin-matches-http-authority"}), alpn_declared_differences=declared, **per_impl(make))
 
 
 def good_write():
@@ -487,6 +499,17 @@ class ReceiptProfiles(unittest.TestCase):
             ("http-tls", lambda r: r["declared_differences"].append({"decision": "https-discovery-on-tls"})),
             ("http-tls", lambda r: r["go"]["tls12"]["identity_controls"][0].update(rejected=False)),
             ("http-tls", lambda r: r["rust"]["mtls13"]["encrypted_peers"][0].update(tls_version="TLSv1.2")),
+            # ADR 0034 item 20: Rust must stay HTTP/1.1-only and Go's recorded negotiation must not drift.
+            ("http-tls", lambda r: r["rust"]["tls13"]["alpn_offers"][0].update(selected="h2", h2_settings_frame=True, http1_status_line=None)),
+            ("http-tls", lambda r: r["rust"]["mtls12"]["alpn_offers"][1].update(selected="http/1.1")),
+            ("http-tls", lambda r: r["go"]["tls12"]["alpn_offers"][0].update(selected=None, h2_settings_frame=None, http1_status_line=OK_LINE)),
+            ("http-tls", lambda r: r["go"]["mtls13"]["alpn_offers"][2].update(selected="h2", h2_settings_frame=True, http1_status_line=None)),
+            ("http-tls", lambda r: r["go"]["tls13"]["alpn_offers"][0].update(h2_settings_frame=False)),
+            ("http-tls", lambda r: r["rust"]["tls12"]["alpn_offers"][2].update(http1_status_line="HTTP/1.1 500 X")),
+            ("http-tls", lambda r: r["alpn_declared_differences"].pop()),
+            ("http-tls", lambda r: r["alpn_declared_differences"][0].update(decision="other")),
+            ("http-tls", lambda r: r["alpn_declared_differences"].reverse()),
+            ("http-tls", lambda r: r["go"]["tls12"]["alpn_offers"].reverse()),
             ("http-write", lambda r: r.update(scope="tls-output-probe-only")),
             ("http-write", lambda r: r["declared_differences"].append({"decision": "windows"})),
             ("http-write", lambda r: r["rust"]["tcp-output"]["slow_output"].update(received_chunk_bytes=11 * 1024 * 1024)),

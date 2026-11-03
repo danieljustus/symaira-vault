@@ -112,7 +112,7 @@ parallel (`.NOTPARALLEL`).
 | `http-origin-contract` | rust-http-origin | `http_origin_contract.py` |
 | `http-slow-peer-contract` | rust-http-read-deadlines | `http_slow_peer_contract.py` |
 | `http-timeout-contract` | rust-http-timeouts | `http_timeout_contract.py` |
-| `http-tls-contract` | rust-http-tls | `http_tls_contract.py` |
+| `http-tls-contract` | rust-http-tls | `test_http_tls_contract.py` (ALPN pin negative controls against stand-in TLS servers), `http_tls_contract.py` (also records the ALPN negotiation of 3 client offers per profile: ADR 0034 item 20, 12 offers and 6 declared `alpn-http11-only` differences per receipt) |
 | `http-write-contract` | rust-http-write | `test_http_write_contract.py`, `go test ./scripts/rust-port/internal/diff`, `test_oracle_build.py`, `http_write_contract.py --tls-output-probe-only`, `http_write_mutation.py` (run by `area_http_write_mutation.sh` in a detached worktree of `HEAD` with its own cargo target dir: the live tree and `target/debug/symvault` are never touched, and a guard fails the target and restores `http.rs` if they change), `http_write_contract.py` |
 | `worktree-prune-check` | (local) | `check_worktree_prune.py` fails on any `git worktree prune/repair`, `git gc`, `git prune` in `scripts/` or the Makefile and on missing container git guards; `test_check_worktree_prune.py` holds its negative controls |
 | `area-check-selftest` | (local) | `test_gate_area_check.py`: shrunken, partial and malformed receipts and logs must fail `gate_area_check.py` |
@@ -208,7 +208,7 @@ Running them:
   the lane) and `area_complete`, true only for an unnarrowed run that executed
   exactly that list, exited 0 and ran on a clean tree (`ALLOW_DIRTY=1` runs
   have `dirty: true` and are never complete); a run whose executed list differs
-  fails. `test_local_area_list.py` pins each lane's 51 targets (so a target
+  fails. `test_local_area_list.py` pins each lane's 52 targets (so a target
   removed from the Makefile fails `area-check-selftest`), and
   `area_http_write_mutation.sh` / `area_pairing_oracle.sh` remove their scratch
   worktrees through `worktree_remove.sh` (refuses symlinks and paths outside the
@@ -270,6 +270,7 @@ compile to `mcp-init-differential`, `mcp-list-differential`,
 | `mcp-call-differential` | 248 | 117 |
 | `mcp-clipboard-signals-differential` | 1 | 0 |
 | `mcp-execute-api-policy-differential` | 251 | 77 |
+| `mcp-http-ratelimit-differential` | n/a (not yet measured in a full run; 103 s on the MacBook alone, warm cargo cache, load 9) | n/a |
 | `mcp-oauth-contract` | 2 | 6 |
 | `api-templates-differential` | 2 | 0 |
 | `config-profile-differential` | 11 | 14 |

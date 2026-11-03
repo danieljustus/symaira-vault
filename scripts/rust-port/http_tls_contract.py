@@ -32,8 +32,9 @@ def encoded(data):
     return base64.b64encode(data).decode()
 
 
-def context(identities,version,client=None,ca='server-ca'):
+def context(identities,version,client=None,ca='server-ca',alpn=None):
     result = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    if alpn:result.set_alpn_protocols(alpn)
     result.minimum_version = result.maximum_version = version
     result.check_hostname = True
     result.verify_mode = ssl.CERT_REQUIRED
@@ -78,6 +79,74 @@ class NativeServer:
                            forced_cleanup_not_graceful_evidence=True)
         assert complete
         assert not any(value.encode() in stdout+stderr for value in [SECRET,PASSPHRASE]+self.known)
+
+
+# ADR 0034 item 20 (ratified): the Rust listener negotiates no ALPN protocol, so every connection is HTTP/1.1.
+# Go's plain-TLS listener (`ServeTLS`) enables HTTP/2 and selects `h2` whenever the client offers it; its mTLS
+# listener (`tls.NewListener`, no NextProtos) selects nothing. These tables are the pin: the Go column is what the
+# real Go oracle negotiated (re-observed on every run), the Rust column is the ratified behaviour. Reversing the
+# Rust side needs a new ADR.
+ALPN_OFFERS=[('h2-and-http11',['h2','http/1.1']),('http11-only',['http/1.1']),('h2-only',['h2'])]
+GO_ALPN={'tls':{'h2-and-http11':'h2','http11-only':'http/1.1','h2-only':'h2'},
+         'mtls':{'h2-and-http11':None,'http11-only':None,'h2-only':None}}
+RUST_ALPN=None
+ALPN_DECISION='alpn-http11-only'
+# Client connection preface followed by an empty SETTINGS frame; a real HTTP/2 server answers with its SETTINGS frame (type 4).
+H2_PREFACE=b'PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n'+bytes([0,0,0,4,0,0,0,0,0])
+
+
+def alpn_expected(implementation,profile,case):
+    return RUST_ALPN if implementation=='rust' else GO_ALPN['mtls' if profile.startswith('mtls') else 'tls'][case]
+
+
+def alpn_offer(port,tls,case,offered,row,ping):
+    """Offer `offered`, record the negotiated protocol and prove the connection then speaks it."""
+    row.update(case=case,offered=list(offered),selected=None,tls_version=None,h2_settings_frame=None,http1_status_line=None)
+    with socket.create_connection(('127.0.0.1',port),timeout=5) as raw:
+        with tls.wrap_socket(raw,server_hostname='localhost') as stream:
+            row.update(selected=stream.selected_alpn_protocol(),tls_version=stream.version())
+            if row['selected']=='h2':
+                stream.sendall(H2_PREFACE)
+                header=b''
+                while len(header)<9:
+                    part=stream.recv(9-len(header))
+                    if not part:break
+                    header+=part
+                row['h2_settings_frame']=len(header)==9 and header[3]==4
+            else:
+                stream.sendall(ping)
+                observed=bytearray()
+                while True:
+                    part=stream.recv(4096)
+                    if not part:break
+                    observed+=part
+                    assert len(observed)<1024*1024
+                row['http1_status_line']=parse_response(observed)['status_line']
+
+
+def alpn_check(implementation,profile,rows):
+    """The pinned table for one implementation and profile; raises AssertionError on any drift."""
+    assert [r['case'] for r in rows]==[c for c,_ in ALPN_OFFERS],'ALPN offer cases'
+    for row,(case,offered) in zip(rows,ALPN_OFFERS,strict=True):
+        what=f'{implementation} {profile} {case}'
+        assert row['offered']==offered,what+': offer'
+        assert row['selected']==alpn_expected(implementation,profile,case),f"{what}: negotiated {row['selected']!r}"
+        assert row['tls_version']==('TLSv1.2' if profile.endswith('12') else 'TLSv1.3'),what+': tls_version'
+        if row['selected']=='h2':
+            assert row['h2_settings_frame'] is True and row['http1_status_line'] is None,what+': h2 service'
+        else:
+            assert row['h2_settings_frame'] is None and row['http1_status_line']=='HTTP/1.1 200 OK',what+': HTTP/1.1 service'
+
+
+def alpn_compare(profile,go_rows,rust_rows):
+    """Declared ALPN differences (ADR 0034 item 20) and undeclared ones, per offer."""
+    declared,undeclared=[],[]
+    for a,b in zip(go_rows,rust_rows,strict=True):
+        observation=dict(profile=profile,case=a['case'],go_selected=a['selected'],rust_selected=b['selected'])
+        if a['selected']==b['selected']:continue
+        if b['selected'] is None and a['selected'] in {'h2','http/1.1'}:declared.append(dict(observation,decision=ALPN_DECISION))
+        else:undeclared.append(observation)
+    return declared,undeclared
 
 
 class EmptyTLSResponse(ConnectionError):
@@ -256,6 +325,10 @@ def observe(implementation,binary,home,port,tokens,identities,profile,result):
             row['response'].update(exchange(port,data,trusted,row,head=name.endswith('-head')))
             assert row['response']['status_line'].split()[1]==str(status),'actual TLS route status'
             if name in {'ping','origin-matching'}:assert base64.b64decode(row['response']['body_base64'])==PING_BODY
+        for case,offered in ALPN_OFFERS:
+            row={};result['alpn_offers'].append(row)
+            alpn_offer(port,context(identities,version,'client' if mtls else None,alpn=offered),case,offered,row,request('/mcp',port,tokens,body=PING))
+        alpn_check(implementation,profile,result['alpn_offers'])
         errors=[];workers=[]
         def run(body,row):
             try:encrypted_peer(port,tokens,trusted,body,row)
@@ -292,7 +365,7 @@ def main():
     receipt=dict(passed=False,candidate_commit=checked(['git','rev-parse','HEAD']).decode().strip(),candidate_worktree_clean=clean,
                  candidate_sources=inventory(paths,ROOT),native_os=platform.system(),architecture=platform.machine(),
                  rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),oracle_commit=ORACLE,
-                 go={},rust={},differences=[],declared_differences=[])
+                 go={},rust={},differences=[],declared_differences=[],alpn_declared_differences=[])
     try:
         with tempfile.TemporaryDirectory(prefix='symvault-http-tls-') as raw:
             base,tree=Path(raw),Path(raw)/'oracle'
@@ -333,7 +406,7 @@ def main():
                     for profile in profiles:
                         home=base/(implementation+'-'+profile);home.mkdir();shutil.copytree(seed_home/'vault',home/'vault')
                         assert vault_snapshot(home/'vault')==snapshot
-                        result=dict(rows=[],processes=[],identity_controls=[],encrypted_peers=[]);receipt[implementation][profile]=result
+                        result=dict(rows=[],processes=[],identity_controls=[],encrypted_peers=[],alpn_offers=[]);receipt[implementation][profile]=result
                         observe(implementation,binary,home,port,tokens,identities,profile,result)
                 for profile in profiles:
                     left,right=receipt['go'][profile],receipt['rust'][profile]
@@ -344,6 +417,8 @@ def main():
                         observation=dict(profile=profile,case=a['case'],go=a['response'],rust=b['response'])
                         if decision:receipt['declared_differences'].append(dict(observation,decision=decision))
                         elif any(a['response'][k]!=b['response'][k] for k in FIELDS):receipt['differences'].append(observation)
+                    declared,undeclared=alpn_compare(profile,left['alpn_offers'],right['alpn_offers'])
+                    receipt['alpn_declared_differences']+=declared;receipt['differences']+=undeclared
                     for implementation in ['go','rust']:
                         observed=receipt[implementation][profile]
                         expected=4 if profile.startswith('mtls') else 2
@@ -373,10 +448,11 @@ def main():
                 receipt['candidate_worktree_clean_at_end']=not checked(['git','status','--porcelain=v1']).strip()
                 assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
                 assert not receipt['differences'],'actual undeclared live TLS/mTLS differences retained'
+                assert len(receipt['alpn_declared_differences'])==6,'ADR 0034 item 20: Go selects a protocol on both plain-TLS profiles, Rust none'
                 receipt['passed']=True
             finally:remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
     finally:args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
-    print(f'PASS: 48 verified TLS/mTLS response pairs, 12 identity denials and eight progressing encrypted records per implementation on {platform.system()}')
+    print(f'PASS: 48 verified TLS/mTLS response pairs, 12 identity denials, 12 ALPN offers (6 declared ADR 0034 item 20 differences) and eight progressing encrypted records per implementation on {platform.system()}')
 
 
 if __name__=='__main__':main()
