@@ -1,0 +1,2705 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "auth_rotate_accepts_root_owned_macos_alias_and_migrates_legacy_entry": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9c62c54bfe31d73e748267603ee0c2683d75a7a90b0b43a2db58ed7b6ce36196",
+          "request": {
+            "args": [
+              "init"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\noriginal-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root/seed-vault\nPublic key: age1453s5g95devry75nyftv955vrey9l5suyz2gdk4wpzjpq8evpa9qf3kr3q\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/seed-vault/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGhhYnU5enJLMUZEMDhNeGo5RWlZVmcgdD0zLG09NjU1MzYscD00CmJncnc3NnpzeGFPeEZxOW9NcmtOdXk3QlhQcTR4U3RXaDJhK1AyQnhLS2kvTWhMZU1zY2dMQjdJRDNjCi0tLSBzaWxpSGlMTHM0eGM2Q0NsbjI2RnA4eFdYVXdVZlQyYWdmRFF1bHYxNUdrCmKNAyz92ZMER4mJOBlNUImB8fsa+zCAGNw2vU2sr4IVALdQG6qjMGViSQkWHknCIRsdeSNk+Hx3aAtAOC/qPrnXfZAu3pPLcoXfDi4l0XFhV6IcMmTOLDtc+6jnbReNwdIUtHw65H/wMQ8="
+              }
+            }
+          ]
+        },
+        {
+          "key": "91673f949bdf129e77407901bd8efc1991a7a1e29291f75fc9625d4a248a5dc3",
+          "request": {
+            "args": [
+              "add",
+              "legacy",
+              "--value",
+              "legacy-secret"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Entry created: legacy\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries/legacy.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBhelQwc1djMjNIUEpSOHhzODZLWCtnWkdGMmNzbTJ4bEtWZE44eHNWQUZnCmhWMTlCSUFDblpSMjZ0NitORlM5cHNwOCt1SjNiZ0tsazZhMXZUWTFwUzAKLS0tIFBkM3NOSmZuRVgzaDhxS29sNGpUdmhUOUZ2TW9ZU003ZDcyR2J2UGw2RkkK8ZY5F1Oyo7Suq7EvRS9XQ0s7AwodqW33H4MTPcXhhHOlgi5nM0cAsUO4oa7AbWD5rxFqD+ISV4uX3foJwVGP5G/ZbgLZAQcXc8xGUC+VoTuP0oMuoTLaW4k4Ezcxd5PhhhpNMKvlxGi1W+Ac663HRhAAdOzclDcimIlrAzbjh9mQoOHPholKguI/g2J6AhLViYaswxpolcEqPZoZ2WSeJFd9HYVCkICZyRZgTsdhvqkl7ALASRa5DTfdz98gJk33mmwMjFyqAgqjMk2XresS+6Txk2k5BFaV6M/3X8hqjv9rJsbrET7KvJAUMzAN43Vz68B530zeAKLF155nA8rlx8ruEwTr17B37pNrkZ+bnEKJkaaZtvBYHHHN7xKEErOBBZ4EXEH90EGg7Q=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBMclREUG9YNzBUM1BmaDJTeU5ITWZETDFrZnlzY1d5VmhSKzFwSmNDRkdZCmk5Z0pNSU9EZ0M4L2IzYTBiQ3U3cVRaT2p0STVjUjZZL0V6aTRJVlRoNDgKLS0tIC90ejRwMGVmdXpEaEdxY2ViRlBNNy81YXJDRnZCL2VVb2t3RUwrTW5ocTgKHfXFuktW2Z4aU7WhEdtmyEi/Q3CTbhLHRUyHuW17XFUX+F+l3lzMNA0n1e6bGMDOTYmdrUqUX2KM7/wb6fx0OWLW5P5PuXYwUFQnQ2qn24+eH1CwkxUEm1TZ1G3NfU8pyGzLYnuY0ACRFT61TtP4r1UYaaetPHmztDO50vxpuwSc2ahRLzLzrAXBM7vV512G2DyTnpGDw5ue9k1cHR1W9XcHySj7sdTHW/5Cwi/6zFZO71F7Uabsw9riNlXwWd+9tgvnkqf/2BmIbBdXkdkTm8opgLODWVmsB1RAWqmCkU4/MAHNqtWQCPZHBWY4fRRDU7g6KRJ6cmSeU/b7IwN+tZmBboyhj0Fi/iu53whlbnukYYBnYacXerERReoSTU9i"
+              }
+            }
+          ]
+        },
+        {
+          "key": "b13eb4377176576f26dd31297e95d2a760212cad3c4e0ddf4fe6d3fa0e85ec64",
+          "request": {
+            "args": [
+              "auth",
+              "rotate-passphrase",
+              "-y"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/go-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\nnew-passphrase-1234\nnew-passphrase-1234\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Passphrase rotated successfully.\n"
+            },
+            "stderr": {
+              "text": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nNew passphrase (minimum 12 characters): Confirm new passphrase: "
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/go-vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/audit-symvault.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\"ts\":\"2026-11-03T22:23:10Z\",\"agent\":\"\",\"action\":\"rotate-passphrase\",\"kid\":\"095184fe\",\"hmac\":\"1b71d7d9b3cf2eb4b126998e5bea1fdfb70b6fcccd463f14658e37198aaef00a\",\"ok\":true}\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    last_rotated: 2026-11-03T22:23:10.291728Z\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/entries/legacy.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBOK25tRXFxbGVRTlJVOWFzUDVPVnk3S1F5L3NJc20xNlFoczM0aGdrRTFRCnIvL1NKNlU5K2Z5V0JEenJqaG5WcFRUVTRDVHRScERtZTg5Nmk1UXRrV0EKLS0tIHQrZGVuUkJTTkF0MXR2UGlUbU92LzlFNjMwamtGVFdLeFQ1RFNrclJoeWcK2PnFJA8poq3PsXt9Cq6qHsKY48IZMkwuyT7she4MPSbSiLuuQ2vjIyY/GxD3+tpRdtmT7DAOTORIINID/x8ycs9zNxrfUANdIkunFR00GhfrK7Sh2eEI6Zsy/ap69NtjGqqbnw7OFfGn3Pws/vnC19wr+o4FlLxnh9k3yIaaM4IhyryPxTRTIq4xjdoddEY0HCCJN00noN4dsKZ7IR3Hn3tPt4dhezD4eqAfje2htRtHZLfHgi0I581pSsI64r86R9Zgqfq0VzHLjVdj8JzeYhI15lN6wBBF3sOiAapaGrI95/pqxPO67h3KK5UdkaKnfQY5rWGoNJ8K+lQWzVkzLx7if+VYqMq+ZBdivAcoCt15f1U7Jl94fltmihREp1rk+d2+KasSn2Q+gw=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBHVUpYaWN0czl1MVpCY0hDOHNwR2l3IDE4CjRKbnh5SGtZdWRMckY5RkQ3ZjR6MXNYOWN2RFh3MStPT2FBOW5kTmtPcWMKLS0tIHdKSFRxbi9qN1hDSzEzS2RZU2l0RnlHTlhtYmNiZHV5TEtKMlhJdjBzdEUKCE500z5wlApE8L9Cj0cNPxM7wgPr+LqNBENoZa4VnvceUpEcy+WpHCR/++IVyIcjXCFyRnqyK/X7p5+TG/jZgbDyELCepa3YZji435lI4uBopXF3t66SAy9DcodU4ZyB48ZrM5Xj48gzpg=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB4Wm11TmVTdGpSR25sWnlVbUhRaURmd2J4RC92RnpvYkRaS2Q1eFYvZldjCkw1L3dza1lEdUxOVFlZZE8wVGRUZUhqWnczLy9TWVRuRUNVbmVJOWUyNDQKLS0tIEdvc0dvQlByb2JteTkzSnI4VkhjWHRYa2orR2lhUnZoNlRKdytONmtONDgKZtV8PSNaHWhEgGAUfZdezEs7Y8AoBgoX3L9gCzeFJhGVHRJg0EDov/s3bcyiLtgLj/g6twDgvKHi1poZuzZMI8mxo06wXCjtu+Rk4Av9lFzy/iJzPsGB5oa9VoQUVwklDD44QYZ6mW/O1mxuZZFC0IizHmHzdohKhCqcwxznJjeLZjvhJm0PhE9APsjU4kNwRp+kQ2Y25XlKS1l8mFUIgpSMKLvtmoPX7iB/4uOhAMHch2nzB4isKw4emQOWjOtS7APFRFjLMoxJaaTFTdOxajcHI5HCg5/C+/kPTUuslfGa/mSxwDwqITpfRTbdaXuAPPtEPz9ZsGY7D9GOwVvDnwbrEUogxItg53ZSeGV3CypcX1ioFpb5a7uNaHcUhVNOf8+4I7OHfg=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/legacy.age",
+              "op": "remove",
+              "mode": null,
+              "content": null
+            }
+          ]
+        }
+      ]
+    },
+    "auth_rotate_legacy_migration_matches_go_on_normal_root": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9c62c54bfe31d73e748267603ee0c2683d75a7a90b0b43a2db58ed7b6ce36196",
+          "request": {
+            "args": [
+              "init"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\noriginal-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root/seed-vault\nPublic key: age1uhqml8de99ymm6lytujmetp7m7wjk3e6vxeg39yes0heuy05aufsrza20n\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/seed-vault/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIHg5UHg3VzRubk1uYUxZeGpiTFpCMlEgdD0zLG09NjU1MzYscD00CnBKeGt5ZStjSmErZ2NLcys3UWJZdys1dlY0OFVjY0NBczF5c3RRUXp3RFNUbWRVQnZBT0pvbzhOd3JjCi0tLSAvN0NOTkRNKzloMXIrcUt5cmREUkdLSlVHTzFYZ3A1b2lOUUVic0w2S0kwCsMQibdgQMXoK0/yuPgK5S2W2K/938zx2sbC3+esx9xIuwskyuxKm5rmkc42tSgi1hI93t1hlpNGjaLJUA0RMvcYnT9kxTZWeJ1iStrAPeTd9jY5hfbXDeUhkoc0grNP+gonGtQYv5/bBkI="
+              }
+            }
+          ]
+        },
+        {
+          "key": "91673f949bdf129e77407901bd8efc1991a7a1e29291f75fc9625d4a248a5dc3",
+          "request": {
+            "args": [
+              "add",
+              "legacy",
+              "--value",
+              "legacy-secret"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Entry created: legacy\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries/legacy.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBwRWVjcE9rZFVoQkFMZmZWVWhvR0hoRVBGZ1g0VHJJNm5ZSFRsTjB5bGpVCnV2RzI5OG5PbnZRTmZLNll0MFp1RWVCVXNSR2g2NnZvSER3ZFNNRHVLTEEKLS0tIEZVVE8wYVlWbU01Ymg4QmRMZE03LzY4UWQrdzhYVy8ySFF4ZDRzVk41NlEKg1XHtNPcARuyjcgp9yegq736Iygwl5Do67whx5zSdDAUBEhwHv90hErZr7n8NISwJLbpSNgg5daom+BAdxR1Erk/smt/SfOkHuABkWk2ry0K21LrWfdW2UuV8nzxKPLLkZnAgbOntG5Oacu4SIEK40MQsl3AFPX4nFoTtDot17Xjna4LQUrnUGkuUdvd209Nzb8zorZQ2+3IACJ44IoBq3wbS3M+Okd9UDl+1Vaw60H8VvM1DqLa/9WMKTkEpewCuSFsf8n8yIkrcuL5rShprBy2X4SddaGp99e3O9LPLyZ3X1ToTMuFAynKd0VX5VvwgG7q3HP4WwIGAOUV7BXI4GBV8GUyvqcYay8CgtmHgLRJVHPwOrS/y3LcdOWTubnoB46GNC9bgziDrA=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBmSWRmUytwVWNXbmgxV0s0UzEwTmVjY2FTalRSL0pwV3pkL3RuL0NYMUdVCnpwRXZhZDc1Y2ptTDluK3FvcjR1QlVhQkpQR3haeW9VcjI3UXhsbDhnV0kKLS0tIEUxQVNCOGs5a0k4K3lVWkdsbmhYbUZTNlVmWGo3dnhsVEZTa2QvWXlYSWcKvDJTSCruA06ow9mUpLVwbK6vle1kVoFnq+YTw+m2Wur/di1j+r+jxk0HnPLbSxxaH3Mv3Vj9URDjyZqvfrFCI5p76ky4UprOfGz6xOKiZoORiWLLf72jrtqkSrba1yFlObvAO/v+TAOZz339zZP9SqTt9OG7bqTUtmUZXwECsEgcTtNUk552q1ZOLHKtvNvTtpQNdXt1N0rOqvEdnqtqIsdKAo0xWdIUJfL16Bue3juPAaglGyAsl1I9dN3iO33+FMkAgw+Lml3ZtCOQFN1nWJQjhiSkt39Q6yvDeGji3kRLdzYe6wPNVEhYM8DIuT2HJzAOBTUETF4exfe3CiKeoVIR79KpBPD0ntmQQQ1jXVNSZsHgk4wWwUoR3re2PH9c"
+              }
+            }
+          ]
+        },
+        {
+          "key": "b13eb4377176576f26dd31297e95d2a760212cad3c4e0ddf4fe6d3fa0e85ec64",
+          "request": {
+            "args": [
+              "auth",
+              "rotate-passphrase",
+              "-y"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/go-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\nnew-passphrase-1234\nnew-passphrase-1234\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Passphrase rotated successfully.\n"
+            },
+            "stderr": {
+              "text": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nNew passphrase (minimum 12 characters): Confirm new passphrase: "
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/go-vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/audit-symvault.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\"ts\":\"2026-11-03T22:23:10Z\",\"agent\":\"\",\"action\":\"rotate-passphrase\",\"kid\":\"37351bba\",\"hmac\":\"f25d3eec86c222a971fad7d087819af8f8eb28828b0b30be4a80229bb558ee14\",\"ok\":true}\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    last_rotated: 2026-11-03T22:23:10.465809Z\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/entries/legacy.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBLMkwxV3VhNGlxbjJoM05ydDJ4SFFKekdnc1ZoNjluekZIZHMxSEtMQ1JRCmFreFBmRHBHSFh0YS9qQkJ3dkhJK3lkSWxHL0ZRR0JGNU1hbE9VQzdoV1UKLS0tIG5WWGJ5UUxCUE1lMXpKZElnUnpNSTVRbzVaWCt2QmpkcnNKK1o3dXZlN2cKZJF5UJvYQcwCnlsuLvyoMPJHEWL0hSh+brsMnPOQiH+5snSHceNQI9p8OS6dnmOLETeRknoZPduYsbvxbV5fv/4bb3WxopX4mA8HIC+s2w9XzLK1A/scV4Fx321Ag6JLkVOqLjl7cmEr21CcigatgfNTbMnEs1EEKJWy0Pksn0wM8cdiWXWalvlIHVC2f1N0lRoVzSsIQgp74aRAU3WYl3cgKilMnWTsMYDmAbX+Ovqe07g6KKF1XV1SBOyiLoMnTJR9ojWRPmgNK6uZhOE+QEyfyVO8Y2koeX0mlGy1DeKQ7evNW2HUAcB38jSB4aSl0OyQlpWQpbZtwxFLuOgxAbo3KTk2KMSJvy5PAZfIHTfoUSw4iKWa2GzrLW2uOk5S0tkV7tUs+e/hsw=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBWV2lhWHJTb1lNWVc1UEc0UWExK01nIDE4CjBtcnlHN3NDOTlwUWhuWUFQQ1JJWkFSdThFaG5mY3BWdncvRG42dlllTjAKLS0tIEl3eGRuemZoWWFKYXVFMUpwMnVnS1RwRVNZSk45SzFBT1l2Y1gxTlFvOUkKJ5ZX3N5tKXFq0eeRzCojR7HJPQzRZLi+XarcSOJNCO2+xN2X+fqFppclLe4EA7jbQYb3YWVuX99AH/G1Rd3ictcAwuzKRmSuiR6PRsioim5tqbeYFAsvDHqdg+zSXsvzmS0nOQmV6yrcoA=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBacmVXeFBSTGFNRzU2SVFSSDBXMkFlUWt2ZVc4dnU0anM3bExBS3ViYUI4Cnc3R1dIWTVZR3FoRTZnTUYwRlE0YzBPVVFYNEE4MHpnNHc1WVk1MnQ0ZUEKLS0tIFo4ZzB2UUFsS21IZmV2YmVLVStEbmRNWWQySHFIQjZNZVhWVEdwRlFyYUUKQvmEiJ7d6mcSOa3OYGKi+YGkcygBpkeRR6laenRbAWq/sZQ3+CGTTQMlH6lUuyLBZlRgrheInrCEVQntSudQyHkw3Uq75akI9O4zk5Dzxng6xzL9Bm8FRY/YvsxF1fWA/Y8cCZiNcbzx2UKEdYMtpRd6O1l2roW0EDmQVD0f65sJH0FRCpfFcs4x0X9c+NxdDC9JhWLLLXHjmDDdln5f5A4fklhctZZ1QCnx1OlJ9K/tFaGWS3nhg4Q9y0yieF2M+q2kd2e522ChggK8aFEUeNQb2OB/6I9CUl9IFjpHS7tKRzjJV2yKRI9qsoTUjw+Yx7HRHzdGPK5X8Ehgiy+TOOEwT9qW/UzObPZ0glGwQUNZriYw0VEbQUL1m9QYQzLdJhWCFZPd5A=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/legacy.age",
+              "op": "remove",
+              "mode": null,
+              "content": null
+            }
+          ]
+        }
+      ]
+    },
+    "auth_rotate_passphrase_matches_go_contract": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "011911b40052491c5bd0d4d8754aae311e11eb790a885f753bcffb8586431bf7",
+          "request": {
+            "args": [
+              "auth",
+              "rotate-passphrase",
+              "-y"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "bfc5f2e4c03f8fa7eb15ed56c04e98c8434bd521a03c825c5e1bf01680e2eae4",
+          "request": {
+            "args": [
+              "init"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\noriginal-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root/uninit\nPublic key: age1wn3na59lfchd35fxfun4axut8thx49w5rc9pmt6g30xrrgmtgeuqwkfu7z\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/uninit/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/uninit",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root/uninit\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDJLeTYrcllrcGJhc2dHNjhkS3pTVHcgdD0zLG09NjU1MzYscD00CmRjc3dEdWRiSE9YZlBXQm5ONHZ2emVhMElzazBWYkxqMDlJZXcxK3hOd2tubnJLR1FDNy85UDMxMjhRCi0tLSBpUHpNY1J3WU56eWpVZFRQblI2M2hSRUNyQS9za3lQelNGdXBTSmQ1N0JnCuzsHsm45iYQ/08L+aIIxh4yW1cBrcjWxh4pMHoUqcqBrPjLNCFqvGnYy5kuSZmCLl5rHVYbDtyqN0kbUPCxoXOTPab0eUZAzFqZ4TILaVaxJ2joNdtcnaXVB4yeVu12nkJr3rhtgoGAbRM="
+              }
+            }
+          ]
+        },
+        {
+          "key": "1dece8f5616d2669211b52a8ca90fc9fe0c20b7d62e56b4885c81494b0a6ecc8",
+          "request": {
+            "args": [
+              "auth",
+              "rotate-passphrase",
+              "-y"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "wrong-passphrase\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: current passphrase is incorrect: load identity: zero-key recovery requires a trusted recipients.txt\nError: current passphrase is incorrect: load identity: zero-key recovery requires a trusted recipients.txt\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7fc7396ae1e1f00b2b319d576cb65b5919fb30c8bd8d78358590522ea71dc328",
+          "request": {
+            "args": [
+              "auth",
+              "rotate-passphrase",
+              "-y"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\nshort\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nNew passphrase (minimum 12 characters): Error: passphrase must be at least 12 characters\nError: passphrase must be at least 12 characters\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/uninit/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/uninit\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBrS1FBUTZadS9XaVU4QkRZZ0ZDTFhzVUNBbEtpNDdpSkNmUlM5cldYaWlzCnFURGhpYWprR1BpUDlXaGk4MHBxYWdWSjZPK0hVaVhrQkFTZ29mVU9zV2MKLS0tIGFXRGJ3VmlBUERHNHEwN01xQjhIQkVBVHdLQ2l3R3F1Y09sNWpQbWk3WXMKgTIj7QROVzEa0XgDJcxXBxgzFonLDlOMGjiyb/ROx4Phn4XmupJxjyJ8SlOAEGFU7RGbIZj54bUU4QcaAn5YEv/EEXBzMyGAn3ZndnQGbgMY3Sgn6cJj47X1pztpuus6lxYXIlcHLjq31SkV8mHntZqDFKoQlwibQJlvboyc5m3hvp332IFx91AmhomqGB89erobUNSG2EhA"
+              }
+            }
+          ]
+        },
+        {
+          "key": "a9dd7d8ac025e87eb60d8154742c8cffd0c220a19f38a9ba32dfdd4765d7ae95",
+          "request": {
+            "args": [
+              "auth",
+              "rotate-passphrase",
+              "-y"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\nnew-passphrase-long-1\nnew-passphrase-long-2\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nNew passphrase (minimum 12 characters): Confirm new passphrase: Error: passphrases do not match\nError: passphrases do not match\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2611063f94eb35664a538f4b77b141cfc617f302dc0b44621e33bff561108913",
+          "request": {
+            "args": [
+              "auth",
+              "rotate-passphrase",
+              "-y"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\noriginal-passphrase-123\noriginal-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nNew passphrase (minimum 12 characters): Confirm new passphrase: Error: new passphrase must be different from the current passphrase\nError: new passphrase must be different from the current passphrase\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0f6974cc398b6c303d140517a77c6bdabfd9721b6b2c8c15f0acc3f6c07fdf69",
+          "request": {
+            "args": [
+              "auth",
+              "rotate-passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\nnew-rotated-passphrase-1\nnew-rotated-passphrase-1\nn\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nNew passphrase (minimum 12 characters): Confirm new passphrase: Change vault passphrase? (y/N): Canceled\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7db7e1d69c13e40e889faa86701723228ba8c72db539182ccd8c02636c7df95d",
+          "request": {
+            "args": [
+              "auth",
+              "rotate-passphrase",
+              "-y"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\nnew-rotated-passphrase-1\nnew-rotated-passphrase-1\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Passphrase rotated successfully.\n"
+            },
+            "stderr": {
+              "text": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nNew passphrase (minimum 12 characters): Confirm new passphrase: "
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/uninit/audit-symvault.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\"ts\":\"2026-11-03T22:23:11Z\",\"agent\":\"\",\"action\":\"rotate-passphrase\",\"kid\":\"51bba2b2\",\"hmac\":\"40eb2eb1b0159acf45ab29388bb3e34380b07366ea3fbf47c7ea896d5390667c\",\"ok\":true}\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    last_rotated: 2026-11-03T22:23:11.326918Z\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/uninit\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBLT2F3SHhGZlBmMldVZmc2Znh4U0p3IDE4CkpOQjFOWWcrWngwUXNOM3FJZ1dCQVVBNEIxemZva09OS1Z4MVdPdTBjRDAKLS0tIGJQYkE2WXpmdi9QTi9YR3JEMkMvT3FCK1N5VU5YSGJNdFJIVEQvWGx1RkUKNysdZnLwgzFFZIiPsHeJQy+i/NNeU937NsR/Ed9iTmqkfSuj8FRDTpgktU45PUx1T+HtZ0BpMd1MLcEo7h+SbiOWCGLoEx5iBj3ZqqvPiHAd3t5kMSnHV2dD9VW70IRRixMHnb+cMw00uA=="
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "auth_rotate_rejects_user_owned_ancestor_symlink_before_new_passphrase_validation": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9c62c54bfe31d73e748267603ee0c2683d75a7a90b0b43a2db58ed7b6ce36196",
+          "request": {
+            "args": [
+              "init"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\noriginal-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root/seed-vault\nPublic key: age1mfc9vnrprj4jdqfmpwp4rts2mhyuszcvpfzsgau5un45v3frvuxszk9l6r\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/seed-vault/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIE44bkFLMHlpRjBvZmVWVHcwc3NkWUEgdD0zLG09NjU1MzYscD00CmlCVGdINEl2NmJqQnNGY2lhOXhLYW1HVkVEQnFiQndtV3ZZZW5sUXlaenc3ZC91QnQ5N21YbEQ1ZVRZCi0tLSBnbnFqeTVERVh2VE8rcVcvYmJCcjRvRGs1V3FjL3JhM3JyUGFHclBYU3prCuh8Wn95fwNLHgMHsSCax5Qij891eJTyPfeJ8GdAnXsdG583CtYRTjBpFzLRySvFpnfsAM+DglohIApQR/Eq1pSGoa9IeVgtCJPqZzKdnzwBS+CVXCI6zZRhXwgD6HcyotBMsrlgQHjkJtA="
+              }
+            }
+          ]
+        },
+        {
+          "key": "91673f949bdf129e77407901bd8efc1991a7a1e29291f75fc9625d4a248a5dc3",
+          "request": {
+            "args": [
+              "add",
+              "legacy",
+              "--value",
+              "legacy-secret"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Entry created: legacy\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries/legacy.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBqeEN4NXZFejdYVGMzQXN2SUVwZEF1b1ZlcjFHWjlUdTJId1E3NkVxQkVjCkxJZmNxUUZsd1lSdnFrT2Racys2YTJPVkpyYlhyNnJXWFI0dTdpTnZPNGMKLS0tICs4Q3QzRkoxOWpBQWFWSmJqYU9HUnJEYXlzVFphRll1R08wU2tpU0tvSVEKaWL7VsXDC6T6/MeZlLNtdZZMHjMEE+j1QDsvvNNi0a5IOiBU4H+MHjrNKSnR1tvbV39AFydf/G0bwPwYrUCVV1kQ2BXCtkezD+7DG6DS0fCSa111twYDEEaIGV79FrvTbOf46bNcAIdH89PGYhDlSv3ac+lDPeEVUghzuFV8RZSJEHrbsVsZbfrYjyHgR7cFPh7Nk1PgdVFP7o9n8eZe1RDeZ7ct4av4oyv+aixohHVdOKITJzV4dFZvMT3pelCn6y4VYjbo5Z+qZNTV1BM7rNAL0LHcdngIpfnuGmx+q1L8vpWDtT3O5TUY94fkoxK9Fxi8U1DMkMeJE57GK3+mrrcJ32re6Eaktb2bd188DNYBNrq6KgCXW1H4OEi+dbRS7IHNse37eL7i4A=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBIWldkR2xTajg2d3FQRURORXJ4Y04rWWVRY1NQNDlUME1Ia2M2eTRScndjClNWOWdTMk1TT2hQeGlFVTB5VzZsY3lFZnBoZzhZZkNpMnliS2xHWTZjcUUKLS0tIFRpTitudVF2OUdUTW5nQzhDZWt5enkyN1F6V2MxVWtwRmFJWTFGUTh4RjAKJl2oXQBDejTdzo7X6z1sTAK9KpDoeXnLvpoB1VUyxFiTVEAk+3PszsNPmYu8volkFfYvVz1t0dpteWH2awbYm9Pb3tJULfQ2iY+WBYUIVkzUQjX+XewsI7gW3z40KxjiIkfhKE608HADt3wIgiVPGVqHS9Mbmx7o4BPRoI1HhJmea6u51sakcO5Ao9SF0yZoaGgx+RQQxUGA0Kh0mHCqvUzMDlEjIvWM4181HryNCOzL54WsKcNnZ9CnQUtg9uigc4nZPjIyIaY9uAIupQNzZPP/xwblVjDfrHMWw0kH1mkfohj3bAnpg4SDN5ieKB0AyAevybxLQAJEcXzAHWbtx21qOPiHKwK3rnLXPd2NwScQqtLs3FiASPtRuzwMygiX"
+              }
+            }
+          ]
+        },
+        {
+          "key": "a6a833954d63296eefa4914d724d53134a9bd150a9552280b67d5f56c9bc6267",
+          "request": {
+            "args": [
+              "auth",
+              "rotate-passphrase",
+              "-y"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/user-owned-alias/go-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\nshort\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Current passphrase: Reading Current passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: current passphrase is incorrect: migrate legacy entries: mkdir <ROOT:0:real>/root/user-owned-alias: too many levels of symbolic links\nError: current passphrase is incorrect: migrate legacy entries: mkdir <ROOT:0:real>/root/user-owned-alias: too many levels of symbolic links\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "auth_set_matches_go_contract": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "6f55a9bcf6d1c3e6f144d8b6e39431c92813045a9e65b2c653b02cc6da039a1e",
+          "request": {
+            "args": [
+              "auth",
+              "set",
+              "invalid-method"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: invalid authMethod \"invalid-method\" (valid: passphrase, touchid)\nError: invalid authMethod \"invalid-method\" (valid: passphrase, touchid)\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2d772306241c5748834a9d4b8f72a9d9cadd4f025c57fd5ea59fe3a380dfb215",
+          "request": {
+            "args": [
+              "auth",
+              "set",
+              "passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "61cacc017331f4560deb7810700e2ffd8160d059339db4c38eb89082457e77b3",
+          "request": {
+            "args": [
+              "init"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "passphrase-for-test",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "passphrase-for-test\npassphrase-for-test\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root/uninit\nPublic key: age1v3t02w5puu56zsq9d6azpq0ua7lhk94s6sgljveth6nc74z0l4sqj720cc\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/uninit/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/uninit",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root/uninit\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFFRdi9UZ1VjcHF2c0hEWEFSaE5KUkEgdD0zLG09NjU1MzYscD00CmNBeTUvZ3Z4N0xCbmpiS0I2L2pKV29ZYW8yaTEyZUNXYlZTZm9mNjFLVFRRWXdMQkljTXRjMkVWV3VrCi0tLSBMcUpXbjBLQmtwK3g4c1VaeXNGSU82Wk5GdU1oUEtVN0E1Q2krM09GNWpjCoAvAh1Dz6qNGmVSYFsZcnRW5iD+wXYbrbJOINnVEneMOkIo2oaPIFmIPWm2q+SGgDngbIb5HVMNcwBqrOnQKcRNaMWvRaFre7fNqt+aXIyb823Bt7KwpGTWIdqeVQsB9nn6zg18BTh35X8="
+              }
+            }
+          ]
+        },
+        {
+          "key": "2d772306241c5748834a9d4b8f72a9d9cadd4f025c57fd5ea59fe3a380dfb215",
+          "request": {
+            "args": [
+              "auth",
+              "set",
+              "passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Auth method set to passphrase\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/uninit/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/uninit\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "290c6af78153eaecdc3f2fb7008d28a3a2bc2e1cd62d83f6bb02077081f71316",
+          "request": {
+            "args": [
+              "--quiet",
+              "auth",
+              "set",
+              "passphrase"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "device_accept_matches_go_open_error_order_for_non_directory_entries_root": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9c62c54bfe31d73e748267603ee0c2683d75a7a90b0b43a2db58ed7b6ce36196",
+          "request": {
+            "args": [
+              "init"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\noriginal-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root/seed-vault\nPublic key: age1z2fu50jpv4e7c9xee20085aq5r8n2skn43dp2dlxvmrwm76u342q4v8na6\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/seed-vault/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGFxNXM5VUN1N3ZIZjBnWS9qbVkxaGcgdD0zLG09NjU1MzYscD00Ck11UkFQUzhQbHBOQXRWcTczZW54L1BhYkdCa0g5OEdUTlFCNGFsaFIxcFZBWXhhMlVXM2IrdDZGZy9JCi0tLSAzL1hYTHAydTA5MjBiU1h3WC9Ia0VtVFlaRTFTcElNWUtoa0ROUHJnNHNFCgMRWRq9/O1o5tDsII2Mz7G2KfD1fPdIEPxwwIkN8an4vQPWuMwD4RyyLmed0X/ao8oEzUfoI1tzeIntrObrL8t513/YAgNMfaQOX4XXKpjWT6xz5ZceaL8BhmqZzYoJy7SbOYobaIZlpwg="
+              }
+            }
+          ]
+        },
+        {
+          "key": "91673f949bdf129e77407901bd8efc1991a7a1e29291f75fc9625d4a248a5dc3",
+          "request": {
+            "args": [
+              "add",
+              "legacy",
+              "--value",
+              "legacy-secret"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Entry created: legacy\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries/legacy.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBobDlZWnFKaWxIZFNsdzdPT3FaRU5kT3FySXdwZy9KS290Q0pxelFaWWdvCldVSFc5VWU1UG9lSHhqZ2VuSTJ4a29CV3UyS2hOcWRMNjRzYWwwM0VDTmMKLS0tIEljS2lkZlBQbThSMEVjM0pVbkovbmc3V0hhNjlnNjA4R05qdDJDOUswWmsKpCvhUbTzDEZ+1UmKrB3KX1aUZo16t+Hi4pAnGH5q/Kn9GVyxO68WsO3BiVTOOv2Uf5K1o67SlhRcYe1sCOmTOccdxTl+/8kx6+f0t5LH95/vZfgaLBExM5oujAzGJaDwsh4NdxLzUgVH0OfuF1EmDGVVRwW4o8wnIryoaRQ4gjxMDOesi4Vs1qII5N9iP0A8dYHuAiCgubhhGeuylYJth3DsVXSnXBcuAQ5z272SczriZv8EWupF31vUOK9qpGPJG0XLOxwtV00DP5V0Xx4TrqaqaBuVFp1BVdmaoupEOYsU9F3mDo5+7CCG2nA3dkDELcUmlno9Y7G3xxQb6SKTMph8XtEZFA4YnnsA2tfy2AX66pFE6LKigJsmjyLRbYAXXh/3lKeZlt37Pg=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAzdHhQOVV1eWxkZUt0eWVDLzQvUjRkdW0zRWhWWWQ2K013aUFrWlpuT0FzCjVHekt3dnlJN0RtUldjRGxndVRaa2J1T2ZoOURuQVYrcExUWHBuOFhtZU0KLS0tIHV3M3N0MHlmTUhJSXdVWktDU0hnVWhzQmUzUDArckZTMTdaQ08zUlNJcnMKcKCz6nwVMDKU2eG0ytrI3gl94w+DyGPWlIEBETD8mFDCC6eVpdRjbI0A3N9edkqaznGTiMJGYy5SOjlQ8BQFsiqikJDGrGZEax20leUTcY0UBopkKec1FVHdwX22vtk34y450x2GPz6ITsntsgDsWf9To2GoP1QJ5Vk7qJg8Lcw02GMTsX+iIRbfWe3CUflkSOaKEYpLB9BYRLVUfpDl4JBZEAnw/jmPcc93xwvI0u5OMdGLCbD8ku8pSc3vh+WDRniJk2HDEIi5O7gvBaGURw2m3omXJsH95NJg4h4ONOXoN3Te/NoZIr35gnVRNTB8/xGG0BkBB8WelIF35S5bdHgHLKrIrWKjxDa6RmQcsf8W7qHEMBQgFyypD9gE7dta"
+              }
+            }
+          ]
+        },
+        {
+          "key": "889e4a212d52ec16d95e242f34c127f33be8df12bc4597f90c8d0de1f81aef3d",
+          "request": {
+            "args": [
+              "device",
+              "accept",
+              "0123456789ABCDEF0123456789ABCDEF"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/go-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: open vault: migrate legacy entries: mkdir <ROOT:0:real>/root/go-vault/entries: not a directory\nError: open vault: migrate legacy entries: mkdir <ROOT:0:real>/root/go-vault/entries: not a directory\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "device_accept_matches_go_open_error_order_for_symlinked_entries_root": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9c62c54bfe31d73e748267603ee0c2683d75a7a90b0b43a2db58ed7b6ce36196",
+          "request": {
+            "args": [
+              "init"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\noriginal-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root/seed-vault\nPublic key: age1t2q2jufl40cz5gu52r4gpcglwjw4v6vya5zphug65c3s22k4vs0sucuhp8\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/seed-vault/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkICtkWVQyL1JldGxtZWJDRzNEaU9IZHcgdD0zLG09NjU1MzYscD00CnplMmJQT3pSeEo4cjhVa0kwc2M1aDA4Z1IvdVB3KzJKVWQ0UzYzeTBjazFKVjhUakZEK3JadFJ3aGNZCi0tLSBFeEJLV1RYck55VVcraHNWQ09BVjA2K1JVTERWWVZYaHk2dlJ3Smk0UGQwCnyno6Ik9PhYJnBrkUk7h+GakLJx7IKW1nsUIfRQweHlejh1fLvcNpfdFEOuZWOkWi97dS+8vQ/m8p98t0tKD7w89W++yCp1HOHn/D+PmmGQ2bQrETiRjP4k9IYaQkIz3u9yexuliO2/7XA="
+              }
+            }
+          ]
+        },
+        {
+          "key": "91673f949bdf129e77407901bd8efc1991a7a1e29291f75fc9625d4a248a5dc3",
+          "request": {
+            "args": [
+              "add",
+              "legacy",
+              "--value",
+              "legacy-secret"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Entry created: legacy\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries/legacy.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBsQVNNT2RJZmpKRjBqcmpGNFZiajVXUmVHNDNla0lNcGN6ZCtIR0VIZDFjClg3MmxwMXhsbFA3UThqSktqWDc1RW1mWUtPcCtLZXN4U0h6Vm5ULzhOakEKLS0tIG9uOWpZZWNYUVp1QkdYaFh0dlZwejlFblhoTkVHRTV3VVh3UENHbXAybFkKRr2ZX/NmRxWHRLDYuX/dUUdMeSbh2EHAj+5FIVxAg7aqWnt4y5YymWiMjNkwdQm05BJa2rDmkr/+F79iyFg3Z+VV6HsNtFzBeU19yezk95dvWygV2APF6PduLoiQFJn7U5xN3/WqhCcWrJsNIPYmvqRzWLbvQ0oRyk4X+K8/9iKFXK/KfJb3cIO3B0JGII76bR846HDhh+Ytllf08hs1q3CZX2NkHmeoCkDZx7EO/A7pLANmUreTCUK9a/HtEuXU+TOfbQ7TI0fefzDXqNs/MeNwy24zfMsCPbwSGBnTTKuqbxKNSyH6UHJkb6jxJDBy5nk2eB8PUnSYqL5mw5c3b1JfDylJwaz/BhEoksuZprnWDuyq5wE3DHXBvDsssg0CdcKgL47T3GhAtQ=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBIVGk5K1NXaWo4c0xhaDRzLytMK244MzU3Y3NNLytpOG54RVZvSUtqN0VJCnJpVFJFV3JWd2VXZEJzdXk0b2M3Z3FYTFBxN3V2WmFMa2ttMVM3UE9xV0EKLS0tIG9lazBudmhpOThFMU5oMncrQ2tIZmhZQWhVRUI0RjZYYlRpems0NWNpaUEKh+jFjpJZ9eBdD8GNLuWX149uu4EYix9a+TzhV/7cWltUF5xRSCIpnrwAVrTfo3sKY9XQnUpWmzf4k9ZqsRT+oPcSkc5oPmkoymCBxG617b1KP2BzSWVqIt2QSsSdeOt/0/FMvsEcqyNAs0jiFGqeU0BYwlIfNBHoBdNl2bP3BABV+RHJfNPtvwxFzaz7wgVNyJ9ZFNzqdkkIXV1XRUm2t6OtA1N67Fet9/287Tj/bPkPcM5XHij/qa9z7CLUTcT1qndQRg52x3eUuWWCLH4VujX9610xO2YKwl1j498LuPKnlbA3UTJFFIxdxuKIxdEPhUU8aRqij2dtrINI5/S4kbXKnNcyeCcWY4iRD/tPi75RHLz5JDZGyWq9nxeTRtDR"
+              }
+            }
+          ]
+        },
+        {
+          "key": "889e4a212d52ec16d95e242f34c127f33be8df12bc4597f90c8d0de1f81aef3d",
+          "request": {
+            "args": [
+              "device",
+              "accept",
+              "0123456789ABCDEF0123456789ABCDEF"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/go-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: open vault: migrate legacy entries: mkdir <ROOT:0:real>/root/go-vault/entries: too many levels of symbolic links\nError: open vault: migrate legacy entries: mkdir <ROOT:0:real>/root/go-vault/entries: too many levels of symbolic links\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "find_legacy_migration_matches_go_root_trust_boundary": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9c62c54bfe31d73e748267603ee0c2683d75a7a90b0b43a2db58ed7b6ce36196",
+          "request": {
+            "args": [
+              "init"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\noriginal-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root/seed-vault\nPublic key: age160gst8p8mjfte0afm0xs5w9e48sd0qh0hw4qgy7sd0cyasz8vy5qy4y2v3\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/seed-vault/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFRlTWJDMkVsWkFvcGFyTkRnU3BXUWcgdD0zLG09NjU1MzYscD00ClVDNFVPbDhnY2xab3hndm1YYWpKS2VWTHFjNlRvRWZVM054djRlTG5keXI2UXRmUWg4ek5xaEozcHMwCi0tLSBWY3JLWVM2NTN6bzhSdnkxTjlWd1FMMUlodUFoOUsvNG8rVWRUTTBHazE0CoTuipk6/kgwNPPJPzJoEcQtNbIDlhkjXUwFJJvz8abkLMLup7MBUwtwam89BmVZ1aewS2SP+FZnmBPuN6gy5ZmH5aOcA2Wm1/Rtx30Dg0tJ0KKn1THZl/3aV/Z2pbMV+fjUG0BoBlwqE2o="
+              }
+            }
+          ]
+        },
+        {
+          "key": "91673f949bdf129e77407901bd8efc1991a7a1e29291f75fc9625d4a248a5dc3",
+          "request": {
+            "args": [
+              "add",
+              "legacy",
+              "--value",
+              "legacy-secret"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/seed-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Entry created: legacy\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/seed-vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/entries/legacy.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBtcVU4THhTZ09WOEZDOVVmZnp3cmwxdmdLU2V5R0tpdEtNM0VMOEJqNEhFCjQ3T1h5NnZRdkc1UGZXaDBIQzgzNEplL0o2OS9hVWNQWWptRjRrM01tTEEKLS0tIENrM2J0NlN6YzBOMkFXWTJCR0xnU2M1QWRMN1JsQzlMbXoxZTJTZkxtNGcK/1jt98hyREdrAvb/9BdqGKZhIcY0FuWsmjGGsyL+tyKNj8AgTHwTVio/0eBp977oyqFKgCGqT6PDp+lnCK8npmb1UdGTVpF9rxnfUGt57TqKnBmuesi9N+77OoP1pY9p4XbJ6XLSF/prDMTwbLFvFxPNno/4vdiJNa3Dt3wkwqY3CuoWa+M/a4fJtLXB4z5SS4/7FckJz2hv0cz2lIioZEu+JDYJUPjE+E0yjAEPvHk1ewtFP3lr6u/tafeulx3mmJj3o5sLvyBPVqqmKPhltCjg6MIMcVCg53djxrwkQxHrYnqwJoRIFmrnm3hAYGoWuSVPWU91SNa1J2OF8za6BwvsGiAlwxoDz671iVl5CsvCSM3IVRC8b8ojl5fOVWj7U8lfll3t7KrXhg=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/seed-vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBTNUJlWE5pOTZQZE5uY0Nqd0QvbTQwYnd4aENyTHhoYzBzbmE1Y0dSQlY0ClVGT2J6RGN5a1JHY3c0YmpUUjdqL2wxQVFuTVkzaTRwWDRmdmdtZExMYXcKLS0tIGFEcVJqQWUycFZKZGYxVnRRcnExZWRmT3lON1JwS1kySnJLdXQ0MkcyMUkKBn2mWFUBOuGk/2x4hDbPNw4PuwG2ezempWKW8z8z7BlgORqo5FvvEr5QyrTbfpW88Pg4hotFPLMguMk8QNURGMsrnGl4XtCVwxRjVY5rfRTF+sF4IlYJCAhL4J3ZlNOKWLeOmoRVbrWci47k1OFO8cZYl47fufvE97LpyCNdiq+YsRHdlVUEF8tNxrufgAWFgyTq25RaqDBzaFM/tO1feS5tQMMRsSBwHZFYr1PJkD55YZFOKJta0uopEoDfyL0WOYns4bnUEpNONF5/VTbEditVaQtiGMntMWlQwnFzXVKNtWl3QOws17bH/Az3e0vo/zcJkG5i+zvcDE/pSBV7ofLRX2+nnE9Cs9vryBU+NdPr/DeHdnFjUo+ERm1ZsJQ="
+              }
+            }
+          ]
+        },
+        {
+          "key": "91615056f1838ff8a5a59a6ec6b02efad37a7adfcc20865e1fb9510c498bf8cb",
+          "request": {
+            "args": [
+              "find",
+              "legacy-secret"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/go-vault",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "legacy (matches: password)\n"
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/go-vault/.search-index",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "AfPqVXzMK1sPo9kddDrxm1kwR6pLkkHGC17fBcyEwPIl0TjWPaCt4Ai6s/uwexy6qRuWDG7gZyN5T5xE6gwFMNWhhBPsOd1iQ6Sk3qWhrPjP1UwTsrhaLr1Eag4h5GJB05TXRJXcYsFV/4GGlLMyfuXmh8WBJ3CRGfvZR9s00IQSHNSSNsbkpE+s3mxisohZ1JowQveuHZ+NwOpv8+cGc4ChHeEGAiKtIP/SvPGrc2NJh35gN41jI+IoqDq6B+HD+hpHBp5wX5EGHimUaQ=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/entries/legacy.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBtcVU4THhTZ09WOEZDOVVmZnp3cmwxdmdLU2V5R0tpdEtNM0VMOEJqNEhFCjQ3T1h5NnZRdkc1UGZXaDBIQzgzNEplL0o2OS9hVWNQWWptRjRrM01tTEEKLS0tIENrM2J0NlN6YzBOMkFXWTJCR0xnU2M1QWRMN1JsQzlMbXoxZTJTZkxtNGcK/1jt98hyREdrAvb/9BdqGKZhIcY0FuWsmjGGsyL+tyKNj8AgTHwTVio/0eBp977oyqFKgCGqT6PDp+lnCK8npmb1UdGTVpF9rxnfUGt57TqKnBmuesi9N+77OoP1pY9p4XbJ6XLSF/prDMTwbLFvFxPNno/4vdiJNa3Dt3wkwqY3CuoWa+M/a4fJtLXB4z5SS4/7FckJz2hv0cz2lIioZEu+JDYJUPjE+E0yjAEPvHk1ewtFP3lr6u/tafeulx3mmJj3o5sLvyBPVqqmKPhltCjg6MIMcVCg53djxrwkQxHrYnqwJoRIFmrnm3hAYGoWuSVPWU91SNa1J2OF8za6BwvsGiAlwxoDz671iVl5CsvCSM3IVRC8b8ojl5fOVWj7U8lfll3t7KrXhg=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/go-vault/legacy.age",
+              "op": "remove",
+              "mode": null,
+              "content": null
+            }
+          ]
+        },
+        {
+          "key": "f217dc7efd99882d5711e8390588bdc3ccd8ee5b3a45cbd723197b3cba643bea",
+          "request": {
+            "args": [
+              "init"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root/seed-vault",
+              "USERPROFILE": "<ROOT:1>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\noriginal-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:1>/root/seed-vault\nPublic key: age18t858hcptylvc6ymk60mht22ee885sak5jdz24e97ex7t9g75ujscws4c8\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:1>/root/seed-vault/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "root/seed-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:1>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFlzN2Jkc3k2SytPUmlvUDdTWnoxVkEgdD0zLG09NjU1MzYscD00CkpWZ3NOZVJFbG15MmgvV2lzTWx2WXlmcTI5RGFBVEd1WmdEMFp4QVlzZTQ3MVBtbDhQdnQ2S0FWRmxvCi0tLSBvU1lSTGVuRXlwWlg4UXY0YkV4eUpuMW9CRXZ2R21JdndDL0JjSnZZQkFvCilxjzoaJHqkken7AuYlbgYFDhILJmF+RgAtqOQEh5k5zvjP3ar2cPBm5wWJ9erCzK5qcxvtmOYeDhPgeT8f8sOq7JkgGHrAns4+4ZQn/szs6gxN5XQLzBoEMZiNs1cBwBPLvnrBI2BTOMA="
+              }
+            }
+          ]
+        },
+        {
+          "key": "d5c8fda86c63f79ae9f3b541528d7bb42d71167ab59b31e9f7c745e0e13a84a7",
+          "request": {
+            "args": [
+              "add",
+              "legacy",
+              "--value",
+              "legacy-secret"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "original-passphrase-123",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root/seed-vault",
+              "USERPROFILE": "<ROOT:1>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Entry created: legacy\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "root/seed-vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:1>/root/seed-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/entries/legacy.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB3ZkVCcmVRUHYrb0N0M25ROHhCTEIrNzRRZ21vRDNrK2dBMVNnbUE2MFJrCjFvN0dQdDcwRE5Da2lDTWhNVmNFSHZpa3ExMS9mMEovWFhiN3I5a0xTTmsKLS0tIFliWFV2UjN3SVhRYkJSL0sxMlp5d2ZiNEhoMEVMWnpoNVFPRzhnUmZzVUUKSTm+jDr34RSkzY7Gl+LKnz7V8CDCjW4qAikN43h951PxpBLpBZ4Q5gfh9tLyPAtWt9JJVEh9TL3Y3DuYbGm5BC6qbeGsIa1+YSB3xzNpk3Hu0NtHRHTy30VfC9FwngLMxi49Zd3l7OD8FO8EsEWVMrq1SeSV0LYMCUWiIq720ufXIqWFXDFWXTEne2jsK4of4tbtVLHgshwfvwG+iPJDENoiYW+HMVkVIcRo7UMLvnK5ombn78G9Tg/Mg8DjxFRxtVsDXrwCwIpzAQKHyPL6tcI0MaOVZOHGg+F4TOjVObQIKJA8Qh12AWuPs3ArPsxh6rZjZ3NS0dk//Z2O5pzBSut+yTwTM/7W0hg9TO1wy/vXEKtseDHFETOukklY0BTRtQw3RdtN4XeymA=="
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/seed-vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSArVEZzWUpEdk9SekhaWFY0OVNSeitoQ1JLQW43OHFNVnVUWFJ4dFpQUXkwCm5ySS9MVVMzaHZFVW5GSlhndjVjbFVTNUZZcHNDb1g4U0dHL2lTTmRqM1EKLS0tIDVUcjg4VWdhS0FEYyt6emJ1RTJmamd3dUp2Tm5md3d4VW40aThrU2JpVHMK7xoUIxtyU4+SNUPJMSIV5qtJ/nWqNguoxPhkDX0insHEyJK65fDeCrKB2Mt0l6MKc9sr2Qakq+XXY/kBEz+MNWo2Lj5kL7pm3w/Cd6vH74ykpQb8JmYtwoDA0NLYiiY5l7VdW9jOp84C32n3Tf1ApVfum8oY5pz4ys3Yih9izOdX0Jchx8x/D05HKcU56XCn8a7kYX29wZaklgjtG4P8DZRj+mWcP+DqbMJuz8hZC43cLBYCnNVT8l0kces29xZHAZcpq94/GON33p9cCZyg3M1/0jpK2zuH69nM8iSz8Ns+B3+Uyw21lS+fatfApmyfvEiyepvOPjCA8wRtl9Py+AVCPg0x3xDqNZHoPCClnYp3vpcQIzdRIBVMmyaQt0k="
+              }
+            }
+          ]
+        },
+        {
+          "key": "2571915a99d0942b94863e53117bca734af381f54f5c46b8398f878dbcab6426",
+          "request": {
+            "args": [
+              "find",
+              "legacy-secret"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:1>/root/user-owned-alias/go-vault",
+              "USERPROFILE": "<ROOT:1>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "original-passphrase-123\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: open vault: migrate legacy entries: mkdir <ROOT:1:real>/root/user-owned-alias: too many levels of symbolic links\nError: open vault: migrate legacy entries: mkdir <ROOT:1:real>/root/user-owned-alias: too many levels of symbolic links\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,400 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "agent_token_new_matches_go_summary_shape_and_exit_code": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "7c360fc8c72bb7de9ea7e0db39c5fc7ef5d6daaaa40fd1f8c666c624dca18f69",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "alpha",
+              "--tools",
+              "list_entries,get_entry"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Token created successfully.\n  ID:    tok-20261103-086bf17e\n  Label: \n  Agent: alpha\n  Tools: list_entries, get_entry\n  Expires: 2026-11-04T22:23:01Z\n\nRaw token (copy now — shown once): 304233eb4b64d0e715c0c96e97411e0b7bf8bdfb6dd7a8628e19882686c17357\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-086bf17e\": {\n      \"id\": \"tok-20261103-086bf17e\",\n      \"hash\": \"bb520936b07332427b23ea751e4f6ec3d70e6f83454cefd718da4b6651345df5\",\n      \"prefix\": \"3042\",\n      \"allowed_tools\": [\n        \"list_entries\",\n        \"get_entry\"\n      ],\n      \"tool_registry_hash\": \"01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f\",\n      \"agent_name\": \"alpha\",\n      \"created_at\": \"2026-11-03T22:23:01.859134Z\",\n      \"expires_at\": \"2026-11-04T22:23:01.859134Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "eb6f5e79157dce9faa6dee44fc62bf6a8ec5b48a15c4200cfd2714b71b6390ce",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "",
+              "--tools",
+              "list_entries"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:4>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:5>",
+              "XDG_CACHE_HOME": "<ROOT:4>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:4>/config",
+              "XDG_DATA_HOME": "<ROOT:4>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Token created successfully.\n  ID:    tok-20261103-99f90222\n  Label: \n  Tools: list_entries\n  Expires: 2026-11-04T22:23:01Z\n\nRaw token (copy now — shown once): b9da58f9bbca97d0ac6cfd9066d657264c23c7670fae4434de1f38e8c58128f2\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 5,
+              "path": "mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-99f90222\": {\n      \"id\": \"tok-20261103-99f90222\",\n      \"hash\": \"23e850c4285b4522b710c3ca03ce78b27acdcc087998be2b24198607a7a7ba0d\",\n      \"prefix\": \"b9da\",\n      \"allowed_tools\": [\n        \"list_entries\"\n      ],\n      \"tool_registry_hash\": \"01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f\",\n      \"created_at\": \"2026-11-03T22:23:01.915579Z\",\n      \"expires_at\": \"2026-11-04T22:23:01.915579Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "b487a8ec04d0a3535cab51feb72ede152c393dc33fcf6e6836036fbe5fe9aa15",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "alpha",
+              "--tools",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:8>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:9>",
+              "XDG_CACHE_HOME": "<ROOT:8>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:8>/config",
+              "XDG_DATA_HOME": "<ROOT:8>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: at least one tool must be specified (use --tools '*')\nError: at least one tool must be specified (use --tools '*')\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "agent_token_revoke_matches_go_not_found_and_success_text": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "58649d468e07ae28fecfd2b432a0ef6bd74769ec809c0c28b91b5601d01dd4f7",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "revoke",
+              "alpha",
+              "tok-does-not-exist"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: token \"tok-does-not-exist\" not found or already revoked\nError: token \"tok-does-not-exist\" not found or already revoked\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8761750c1043f9e7f23db7227c9734a733cf6e1b10e568b0a87c805739db0706",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "alpha",
+              "--tools",
+              "*"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Token created successfully.\n  ID:    tok-20261103-e3b84010\n  Label: \n  Agent: alpha\n  Tools: *\n  Expires: 2026-11-04T22:23:01Z\n\nRaw token (copy now — shown once): 2b3af4af2ee4dee9118c238ea3b904cafe7b95261c46cdecf11b814497832ed3\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-e3b84010\": {\n      \"id\": \"tok-20261103-e3b84010\",\n      \"hash\": \"ebb5d0acfa977bb5fc8ecb7d0fde636987fb049db8426a893efd97a077ceb214\",\n      \"prefix\": \"2b3a\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"tool_registry_hash\": \"01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f\",\n      \"agent_name\": \"alpha\",\n      \"created_at\": \"2026-11-03T22:23:01.888311Z\",\n      \"expires_at\": \"2026-11-04T22:23:01.88831Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "8ee7d79b86cf71c237bab9c0c5fb0ea7c13842ec70be326a3e3613290cef5674",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "revoke",
+              "alpha",
+              "tok-20261103-e3b84010"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Token tok-20261103-e3b84010 revoked successfully.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-e3b84010\": {\n      \"id\": \"tok-20261103-e3b84010\",\n      \"hash\": \"ebb5d0acfa977bb5fc8ecb7d0fde636987fb049db8426a893efd97a077ceb214\",\n      \"prefix\": \"2b3a\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"tool_registry_hash\": \"01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f\",\n      \"agent_name\": \"alpha\",\n      \"created_at\": \"2026-11-03T22:23:01.888311Z\",\n      \"expires_at\": \"2026-11-04T22:23:01.88831Z\",\n      \"revoked\": true,\n      \"revoked_at\": \"2026-11-03T22:23:01.933645Z\"\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "8ee7d79b86cf71c237bab9c0c5fb0ea7c13842ec70be326a3e3613290cef5674",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "revoke",
+              "alpha",
+              "tok-20261103-e3b84010"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: token \"tok-20261103-e3b84010\" not found or already revoked\nError: token \"tok-20261103-e3b84010\" not found or already revoked\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "agent_token_rotate_matches_go_summary_shape_for_unknown_and_existing_agent": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "114113d9a40a670d46c99f41ee0b6fca0e20df2e97abb35a3e3cd560607fff81",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "rotate",
+              "alpha",
+              "--tools",
+              "*"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Token rotated successfully.\n  ID:    tok-20261103-8ba76c79\n  Label: \n  Agent: alpha\n  Tools: *\n  Expires: 2026-11-04T22:23:01Z\n\nRaw token (copy now — shown once): af4cb824ba1f2b60f539fd8f196a2cd80ee56b11763aa6bdde522723c3e94d76\n\nWarning: This is the only time the raw token is displayed.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-8ba76c79\": {\n      \"id\": \"tok-20261103-8ba76c79\",\n      \"hash\": \"845a195fc15c7a234c0d56838e6200a34825911915f19da76b2d3f16a3344c7b\",\n      \"prefix\": \"af4c\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"tool_registry_hash\": \"01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f\",\n      \"agent_name\": \"alpha\",\n      \"created_at\": \"2026-11-03T22:23:01.859801Z\",\n      \"expires_at\": \"2026-11-04T22:23:01.8598Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "114113d9a40a670d46c99f41ee0b6fca0e20df2e97abb35a3e3cd560607fff81",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "rotate",
+              "alpha",
+              "--tools",
+              "*"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Token rotated successfully.\n  ID:    tok-20261103-cc4c1cc9\n  Label: \n  Agent: alpha\n  Tools: *\n  Expires: 2026-11-04T22:23:01Z\n\nRaw token (copy now — shown once): 56121572cd3279651dc957537d4d29de98aa3a56e8a7817b78353b8a2400e5e6\n\nWarning: This is the only time the raw token is displayed.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-8ba76c79\": {\n      \"id\": \"tok-20261103-8ba76c79\",\n      \"hash\": \"845a195fc15c7a234c0d56838e6200a34825911915f19da76b2d3f16a3344c7b\",\n      \"prefix\": \"af4c\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"tool_registry_hash\": \"01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f\",\n      \"agent_name\": \"alpha\",\n      \"created_at\": \"2026-11-03T22:23:01.859801Z\",\n      \"expires_at\": \"2026-11-04T22:23:01.8598Z\",\n      \"revoked\": true,\n      \"revoked_at\": \"2026-11-03T22:23:01.91571Z\"\n    },\n    \"tok-20261103-cc4c1cc9\": {\n      \"id\": \"tok-20261103-cc4c1cc9\",\n      \"hash\": \"ac99177409a0606ee39f9b1c26998904b0e5d844c4689182384a7c3c24cdb2c7\",\n      \"prefix\": \"5612\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"tool_registry_hash\": \"01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f\",\n      \"agent_name\": \"alpha\",\n      \"created_at\": \"2026-11-03T22:23:01.915726Z\",\n      \"expires_at\": \"2026-11-04T22:23:01.915726Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

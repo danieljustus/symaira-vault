@@ -1,12 +1,13 @@
 #![deny(unsafe_code)]
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
 use std::{
-    env,
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Command, Output},
 };
 
 struct TempDir(test_temp_root::TempRoot);
@@ -38,19 +39,7 @@ fn run(binary: &Path, vault: &Path, home: &Path, args: &[&str], input: Option<&[
             .to_owned();
         cmd.env("SYMVAULT_PASSPHRASE", pass);
     }
-    if let Some(data) = input {
-        cmd.stdin(Stdio::piped());
-        cmd.stdout(Stdio::piped());
-        cmd.stderr(Stdio::piped());
-        let mut child = cmd.spawn().expect("spawn command");
-        if let Some(mut stdin) = child.stdin.take() {
-            use std::io::Write;
-            stdin.write_all(data).expect("write to stdin");
-        }
-        child.wait_with_output().expect("wait for output")
-    } else {
-        cmd.output().expect("run command")
-    }
+    go_oracle::output_with_input(&mut cmd, input).expect("run command")
 }
 
 fn normalize_key_preview(output: &[u8]) -> String {
@@ -94,11 +83,13 @@ fn assert_same_normalized(go: &Output, rust: &Output, case: &str) {
 
 #[test]
 fn audit_rotate_key_matches_go_contract() {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "audit_rotate_differential",
+        "audit_rotate_key_matches_go_contract",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    oracle.stable_under(|bytes| normalize_key_preview(bytes).into_bytes());
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("home");
     let uninit_vault = home.0.join("uninit");

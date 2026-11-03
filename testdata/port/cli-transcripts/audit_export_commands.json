@@ -1,0 +1,290 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "audit_export_cli_bytes_match_go_for_formats_empty_and_file_output": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "b0bc5ecff423f400cc48be7e604d6fb3e026c1d7dd5f285655f40375d061b568",
+          "request": {
+            "args": [
+              "audit",
+              "export",
+              "--format",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"entries\": [\n    {\n      \"ts\": \"2020-01-01T00:00:00.123456789Z\",\n      \"agent\": \"fixture\",\n      \"action\": \"set\",\n      \"path\": \"safe/\\u003cpassword\\u003e\\u0026\",\n      \"transport\": \"cli\",\n      \"ok\": true,\n      \"original_index\": 0,\n      \"source_file\": \"audit-fixture.log\"\n    }\n  ],\n  \"total\": 1,\n  \"agent\": \"\"\n}\n"
+            },
+            "stderr": {
+              "text": "Exported 1 audit entries\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a469d5cf77c579521229bad458484e5b4c0f8a35e3df463f9959b2c12c41a5d1",
+          "request": {
+            "args": [
+              "audit",
+              "export",
+              "--agent",
+              "fixture",
+              "--format",
+              "table"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "TIME                 AGENT        ACTION               TRANSPORT  STATUS   PATH\n------------------------------------------------------------------------------------------\n2020-01-01T00:00:00. fixture      set                  cli        OK       safe/<password>&\n\nTotal: 1 entries\n"
+            },
+            "stderr": {
+              "text": "Exported 1 audit entries\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "689fe444e9634265362e63c8fbfa9402693b01123f3b7991bc88013c68339249",
+          "request": {
+            "args": [
+              "audit",
+              "export",
+              "--agent",
+              "missing",
+              "--format",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"entries\": null,\n  \"total\": 0,\n  \"agent\": \"missing\"\n}\n"
+            },
+            "stderr": {
+              "text": "Exported 0 audit entries\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "26eb268e0f07c2a22a21ec63f64141897050689b826f7591c8538eb9d23476d0",
+          "request": {
+            "args": [
+              "audit",
+              "export",
+              "--format",
+              "CSV"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: write output: unsupported export format: CSV\nError: write output: unsupported export format: CSV\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a5b8327992428990a990cb3153318405e87647265a0605be9ec5f54715d2172f",
+          "request": {
+            "args": [
+              "audit",
+              "export",
+              "--agent",
+              "fixture",
+              "--format",
+              "json",
+              "--output",
+              "<ROOT:0>/root/go-export.json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Exported 1 audit entries\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/go-export.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"entries\": [\n    {\n      \"ts\": \"2020-01-01T00:00:00.123456789Z\",\n      \"agent\": \"fixture\",\n      \"action\": \"set\",\n      \"path\": \"safe/\\u003cpassword\\u003e\\u0026\",\n      \"transport\": \"cli\",\n      \"ok\": true,\n      \"original_index\": 0,\n      \"source_file\": \"audit-fixture.log\"\n    }\n  ],\n  \"total\": 1,\n  \"agent\": \"fixture\"\n}\n"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "audit_export_json_matches_go_for_filters_and_redaction": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "e341b8eb66f574a51d5d9b11d308471c2b203be7d544ba22c9df09a240630910",
+          "request": {
+            "args": [
+              "audit",
+              "export",
+              "--agent",
+              "fixture",
+              "--format",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"entries\": [\n    {\n      \"ts\": \"2020-01-01T00:00:00.123456789Z\",\n      \"agent\": \"fixture\",\n      \"action\": \"set\",\n      \"path\": \"safe/\\u003cpassword\\u003e\\u0026\",\n      \"transport\": \"cli\",\n      \"ok\": true,\n      \"original_index\": 0,\n      \"source_file\": \"audit-fixture.log\"\n    },\n    {\n      \"ts\": \"2020-01-02T00:00:00Z\",\n      \"agent\": \"fixture\",\n      \"action\": \"get\",\n      \"path\": \"private/password\",\n      \"ok\": false,\n      \"original_index\": 1,\n      \"source_file\": \"audit-fixture.log\"\n    }\n  ],\n  \"total\": 2,\n  \"agent\": \"fixture\"\n}\n"
+            },
+            "stderr": {
+              "text": "Exported 2 audit entries\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "636c800adf5f4cc377e2c3dbec2ed157272f97569886fa9bee0326fba687fafe",
+          "request": {
+            "args": [
+              "audit",
+              "export",
+              "--agent",
+              "fixture",
+              "--action",
+              "get",
+              "--failed",
+              "--redact-paths",
+              "--format",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"entries\": [\n    {\n      \"ts\": \"2020-01-02T00:00:00Z\",\n      \"agent\": \"fixture\",\n      \"action\": \"get\",\n      \"ok\": false,\n      \"redacted_path\": \"redacted:7fb97d8fa7a0\",\n      \"original_index\": 1,\n      \"source_file\": \"audit-fixture.log\"\n    }\n  ],\n  \"total\": 1,\n  \"agent\": \"fixture\",\n  \"action\": \"get\",\n  \"failed_only\": true\n}\n"
+            },
+            "stderr": {
+              "text": "Exported 1 audit entries\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "210fb9a3024a63c00d9c9a6688aac0ea657fab9b6274989fa30533f8ca487965",
+          "request": {
+            "args": [
+              "audit",
+              "export",
+              "--agent",
+              "fixture",
+              "--action",
+              " set ",
+              "--format",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"entries\": [\n    {\n      \"ts\": \"2020-01-01T00:00:00.123456789Z\",\n      \"agent\": \"fixture\",\n      \"action\": \"set\",\n      \"path\": \"safe/\\u003cpassword\\u003e\\u0026\",\n      \"transport\": \"cli\",\n      \"ok\": true,\n      \"original_index\": 0,\n      \"source_file\": \"audit-fixture.log\"\n    }\n  ],\n  \"total\": 1,\n  \"agent\": \"fixture\",\n  \"action\": \"set\"\n}\n"
+            },
+            "stderr": {
+              "text": "Exported 1 audit entries\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

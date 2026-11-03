@@ -1,3 +1,6 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -5,17 +8,18 @@ use std::{
 };
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", root)
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run agent list")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", root)
+            .env("CI", "1")
+            .env("NO_COLOR", "1"),
+    )
+    .expect("run agent list")
 }
 
 fn assert_same(go: &Output, rust: &Output, case: &str) {
@@ -44,11 +48,12 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 
 #[test]
 fn agent_list_matches_go_text_json_and_yaml() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_list_differential",
+        "agent_list_matches_go_text_json_and_yaml",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let root = tempfile::tempdir().expect("vault root");
     let home = tempfile::tempdir().expect("home");

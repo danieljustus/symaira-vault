@@ -1,0 +1,148 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "agent_list_matches_go_text_json_and_yaml": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "7bb6120fb12eab470ab43323b2f7dc687a2c677a9d32a8273e00330de88ca2c6",
+          "request": {
+            "args": [
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "AGENT          TIER       TOKEN      SKILL        LAST SEEN\n----------------------------------------------------------------------\nalpha          standard   valid      managed      2025-02-03 04:05\nclaude-code               none       missing      -\ncodex                     none       missing      -\ndefault                   none       missing      -\nhermes                    none       missing      -\nopenclaw                  none       missing      -\nopencode                  none       missing      -\nzeta           custom     none       installed    -\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "91503dcff50d900555aa899946aaf3b59e4f4def8d62ac01dce1735278e704ed",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_id\":\"tok-alpha\",\"token_valid\":true,\"skill_installed\":true,\"skill_managed\":true,\"last_seen\":\"2025-02-03 04:05\"},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"zeta\",\"tier\":\"custom\",\"token_valid\":false,\"skill_installed\":true,\"skill_managed\":false}],\"count\":8}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "fc916fa17fd2d98973040253e137607f06b1a37004da59a6173b6e3709baa063",
+          "request": {
+            "args": [
+              "--output",
+              "yaml",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "agents:\n    - name: alpha\n      tier: standard\n      tokenid: tok-alpha\n      tokenvalid: true\n      skillinstalled: true\n      skillmanaged: true\n      lastseen: 2025-02-03 04:05\n    - name: claude-code\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: codex\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: default\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: hermes\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: openclaw\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: opencode\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: zeta\n      tier: custom\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: true\n      skillmanaged: false\n      lastseen: \"\"\ncount: 8\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c27113a3b775b8b38dd42606059adaf8eb784165c01f854b2a8bdd25ad1dae50",
+          "request": {
+            "args": [
+              "--output",
+              "future",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "AGENT          TIER       TOKEN      SKILL        LAST SEEN\n----------------------------------------------------------------------\nalpha          standard   valid      managed      2025-02-03 04:05\nclaude-code               none       missing      -\ncodex                     none       missing      -\ndefault                   none       missing      -\nhermes                    none       missing      -\nopenclaw                  none       missing      -\nopencode                  none       missing      -\nzeta           custom     none       installed    -\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

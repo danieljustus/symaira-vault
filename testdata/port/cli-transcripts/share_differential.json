@@ -1,0 +1,515 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "share_list_matches_go_for_formats_and_filters": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "5e7d9052379086194cd2b8311b3ad7e9d542f45a7ada44cc130d0bfdcedbf997",
+          "request": {
+            "args": [
+              "share",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "ID                     FROM               TO                 PATH                         FIELD    STATUS     CREATED          EXPIRES\ngrant-a                source             target             prod/github                  password approved   2025-02-03 04:05 2099-01-01 00:00\ngrant-b                other              target             prod/api                     -        revoked    2024-01-02 03:04 never\ngrant-c                other              source             expired                      -        expired    2024-01-02 03:04 2000-01-01 00:00\n\n3 grant(s) total.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "27f829368fd18b873dc06c48ef949eacc0e41e8fde30c4cf91fb4be97a1966d0",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "share",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "[{\"id\":\"grant-c\",\"from_agent\":\"other\",\"to_agent\":\"source\",\"secret_path\":\"expired\",\"status\":\"approved\",\"created_at\":\"2024-01-02T03:04:05Z\",\"expires_at\":\"2000-01-01T00:00:00Z\"},{\"id\":\"grant-a\",\"from_agent\":\"source\",\"to_agent\":\"target\",\"secret_path\":\"prod/github\",\"secret_field\":\"password\",\"nonce\":\"n1\",\"status\":\"approved\",\"created_at\":\"2025-02-03T04:05:06Z\",\"expires_at\":\"2099-01-01T00:00:00Z\",\"approved_at\":\"2025-02-03T04:06:00Z\",\"approved_by\":\"source\",\"ttl\":3600000000000},{\"id\":\"grant-b\",\"from_agent\":\"other\",\"to_agent\":\"target\",\"secret_path\":\"prod/api\",\"status\":\"revoked\",\"created_at\":\"2024-01-02T03:04:05Z\",\"revoked_at\":\"2024-01-02T03:05:00Z\"}]\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "daedac2687e55496461063233bdd1bcd4d23d86eb7e631e90b4b1174dfe102c1",
+          "request": {
+            "args": [
+              "--output",
+              "yaml",
+              "share",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "- id: grant-a\n  fromagent: source\n  toagent: target\n  secretpath: prod/github\n  secretfield: password\n  nonce: n1\n  status: approved\n  createdat: 2025-02-03T04:05:06Z\n  expiresat: 2099-01-01T00:00:00Z\n  approvedat: 2025-02-03T04:06:00Z\n  revokedat: null\n  approvedby: source\n  ttl: 1h0m0s\n- id: grant-b\n  fromagent: other\n  toagent: target\n  secretpath: prod/api\n  secretfield: \"\"\n  nonce: \"\"\n  status: revoked\n  createdat: 2024-01-02T03:04:05Z\n  expiresat: null\n  approvedat: null\n  revokedat: 2024-01-02T03:05:00Z\n  approvedby: \"\"\n  ttl: 0s\n- id: grant-c\n  fromagent: other\n  toagent: source\n  secretpath: expired\n  secretfield: \"\"\n  nonce: \"\"\n  status: approved\n  createdat: 2024-01-02T03:04:05Z\n  expiresat: 2000-01-01T00:00:00Z\n  approvedat: null\n  revokedat: null\n  approvedby: \"\"\n  ttl: 0s\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7ca37c53e9139f97d1f3c07b40cadb779b1811256aed6246ddd0351dd42a8287",
+          "request": {
+            "args": [
+              "share",
+              "list",
+              "--status",
+              "approved"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "ID                     FROM               TO                 PATH                         FIELD    STATUS     CREATED          EXPIRES\ngrant-a                source             target             prod/github                  password approved   2025-02-03 04:05 2099-01-01 00:00\ngrant-c                other              source             expired                      -        expired    2024-01-02 03:04 2000-01-01 00:00\n\n2 grant(s) match the current filter.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "631b712932a1bbaeddd8bd1ef916b38aecbe60f291de8103c7032a5a35d8c5db",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "share",
+              "list",
+              "--from",
+              "source"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "[{\"id\":\"grant-a\",\"from_agent\":\"source\",\"to_agent\":\"target\",\"secret_path\":\"prod/github\",\"secret_field\":\"password\",\"nonce\":\"n1\",\"status\":\"approved\",\"created_at\":\"2025-02-03T04:05:06Z\",\"expires_at\":\"2099-01-01T00:00:00Z\",\"approved_at\":\"2025-02-03T04:06:00Z\",\"approved_by\":\"source\",\"ttl\":3600000000000}]\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "341a166228a1d8909ca655b5f7e3324aab9a5d9f5a01f495b86dbb26e932408b",
+          "request": {
+            "args": [
+              "--quiet",
+              "share",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "27f829368fd18b873dc06c48ef949eacc0e41e8fde30c4cf91fb4be97a1966d0",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "share",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "[{\"id\":\"special\",\"from_agent\":\"source\",\"to_agent\":\"target\",\"secret_path\":\"<&>\\u2028\",\"status\":\"approved\",\"created_at\":\"2025-02-03T04:05:06Z\"}]\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "daedac2687e55496461063233bdd1bcd4d23d86eb7e631e90b4b1174dfe102c1",
+          "request": {
+            "args": [
+              "--output",
+              "yaml",
+              "share",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "- id: special\n  fromagent: source\n  toagent: target\n  secretpath: '<&> '\n  secretfield: \"\"\n  nonce: \"\"\n  status: approved\n  createdat: 2025-02-03T04:05:06Z\n  expiresat: null\n  approvedat: null\n  revokedat: null\n  approvedby: \"\"\n  ttl: 0s\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "daedac2687e55496461063233bdd1bcd4d23d86eb7e631e90b4b1174dfe102c1",
+          "request": {
+            "args": [
+              "--output",
+              "yaml",
+              "share",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "- id: multiline\n  fromagent: source\n  toagent: target\n  secretpath: \"first\\n  secretfield: untouched\\nlast\\L  \"\n  secretfield: \"\"\n  nonce: \"\"\n  status: approved\n  createdat: 2025-02-03T04:05:06Z\n  expiresat: null\n  approvedat: null\n  revokedat: null\n  approvedby: \"\"\n  ttl: 0s\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "share_revoke_matches_go_and_persists_metadata": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "c6e032eded770d9cf7caa7919f74d67e71284f58ebc6dfe6d7d52409def548c3",
+          "request": {
+            "args": [
+              "share",
+              "revoke",
+              "grant-a"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Share grant grant-a revoked successfully.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "root/mcp-shares.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 1,\n  \"grants\": [\n    {\n      \"id\": \"grant-a\",\n      \"from_agent\": \"source\",\n      \"to_agent\": \"target\",\n      \"secret_path\": \"prod/github\",\n      \"secret_field\": \"password\",\n      \"nonce\": \"n1\",\n      \"status\": \"revoked\",\n      \"created_at\": \"2025-02-03T04:05:06Z\",\n      \"expires_at\": \"2099-01-01T00:00:00Z\",\n      \"approved_at\": \"2025-02-03T04:06:00Z\",\n      \"revoked_at\": \"2026-11-03T22:22:58.673548Z\",\n      \"approved_by\": \"source\",\n      \"ttl\": 3600000000000\n    },\n    {\n      \"id\": \"grant-b\",\n      \"from_agent\": \"other\",\n      \"to_agent\": \"target\",\n      \"secret_path\": \"prod/api\",\n      \"status\": \"approved\",\n      \"created_at\": \"2024-01-02T03:04:05Z\"\n    }\n  ]\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "c6e032eded770d9cf7caa7919f74d67e71284f58ebc6dfe6d7d52409def548c3",
+          "request": {
+            "args": [
+              "share",
+              "revoke",
+              "grant-a"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: revoke share grant: share grant grant-a cannot be revoked (status: revoked)\nError: revoke share grant: share grant grant-a cannot be revoked (status: revoked)\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6fdb7cc3c25c7a122bc1e53e26b4ca49aaaa0abb8cd2dd8e0fa45cb3215797b6",
+          "request": {
+            "args": [
+              "share",
+              "revoke",
+              "missing"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: revoke share grant: share grant missing not found\nError: revoke share grant: share grant missing not found\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "858112c41c3150090bba09d0db5f1c890b8572fce5b732f8aad8f4259a9f37dc",
+          "request": {
+            "args": [
+              "--quiet",
+              "share",
+              "revoke",
+              "grant-b"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "root/mcp-shares.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 1,\n  \"grants\": [\n    {\n      \"id\": \"grant-a\",\n      \"from_agent\": \"source\",\n      \"to_agent\": \"target\",\n      \"secret_path\": \"prod/github\",\n      \"secret_field\": \"password\",\n      \"nonce\": \"n1\",\n      \"status\": \"revoked\",\n      \"created_at\": \"2025-02-03T04:05:06Z\",\n      \"expires_at\": \"2099-01-01T00:00:00Z\",\n      \"approved_at\": \"2025-02-03T04:06:00Z\",\n      \"revoked_at\": \"2026-11-03T22:22:58.673548Z\",\n      \"approved_by\": \"source\",\n      \"ttl\": 3600000000000\n    },\n    {\n      \"id\": \"grant-b\",\n      \"from_agent\": \"other\",\n      \"to_agent\": \"target\",\n      \"secret_path\": \"prod/api\",\n      \"status\": \"revoked\",\n      \"created_at\": \"2024-01-02T03:04:05Z\",\n      \"revoked_at\": \"2026-11-03T22:22:58.806938Z\"\n    }\n  ]\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "27f829368fd18b873dc06c48ef949eacc0e41e8fde30c4cf91fb4be97a1966d0",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "share",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>/root",
+              "USERPROFILE": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "[{\"id\":\"grant-a\",\"from_agent\":\"source\",\"to_agent\":\"target\",\"secret_path\":\"prod/github\",\"secret_field\":\"password\",\"nonce\":\"n1\",\"status\":\"revoked\",\"created_at\":\"2025-02-03T04:05:06Z\",\"expires_at\":\"2099-01-01T00:00:00Z\",\"approved_at\":\"2025-02-03T04:06:00Z\",\"revoked_at\":\"2026-11-03T22:22:58.673548Z\",\"approved_by\":\"source\",\"ttl\":3600000000000},{\"id\":\"grant-b\",\"from_agent\":\"other\",\"to_agent\":\"target\",\"secret_path\":\"prod/api\",\"status\":\"revoked\",\"created_at\":\"2024-01-02T03:04:05Z\",\"revoked_at\":\"2026-11-03T22:22:58.806938Z\"}]\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

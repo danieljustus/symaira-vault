@@ -1,0 +1,469 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "run_matches_go_for_secret_env_file_passthrough_pattern_and_exit": {
+      "seeds": [
+        {
+          "name": "init",
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n[user]\n\tname = Symaira Vault\n\temail = symvault@example.com\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/description",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "Unnamed repository; edit this file 'description' to name the repository.\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/info/exclude",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n/.symvault-rust\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.gitignore",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault-rust",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"schema\": 1,\n  \"kind\": \"rust-created\",\n  \"created_at\": \"2026-11-03T22:22:57.07155Z\",\n  \"vault_id\": \"b9b100b91b2834184f523c2ce2103c9e2f86bdc62d6cc0212c7794febf017f38\"\n}\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: false\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIHZ6d0VkZFBkOXp2cm1EZ3p4ZzQxamcgdD0zLG09NjU1MzYscD00Cjg5ZHFtZ3o2dGxRR0RnZEk1L0RjUk9xaXFvNUd0SEcrdDNPNkU5clltMys2cDZ6b0J1d3NlYXdxU0dzCi0+ICNGSzVTOXMtZ3JlYXNlICZPSyEgYVx+YD8vIG5VCmdlKytDd21KRWcKLS0tIHZBcDFJSU55cVMvOTZZemFRSmNJWkRFRUtlQjAvREdpNXRtVmM4b29LUGcKkfCownzfgjJ+a/9GgLsvE/tv7FunJtwtnTS8enOv+FSroZkc+N9WMNHldndeMxLnmRgJ53KigWALsm7CbFYOKaNPA4P7EgIeCYYAaSc3S8Pu5Ydayl7ZwSTVGOr8LS5lq0S91yhn7ckS7w=="
+              }
+            }
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "key": "e89fb72bf6072eeb0d925d7b2a24d5e9db8c3ee59d4952cb4c330a689b24e482",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "set",
+              "run/password",
+              "--value",
+              "synthetic-run-secret",
+              "--force"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "RUN_PATTERN_CORPUS": "sha256:49882adbab2cd96235f9bd9c452be03f1054ba50841fe156f183b9885a35a752",
+              "RUN_SAFE_MARKER": "ambient-value",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Entry saved: run/password\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/root\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries/run",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/entries/run/password.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBFa3o1RVMrdStWNnhhYnp2UnhDazRMbzRNd3VEN1J3QWFyVHBRYTYyZjFrCm5Ddm9vVGl2dS93OGkxcitQaDRubzlBZUg4TW1RMzZYZ1A2Z3pkang2eUkKLS0tIFhvVDNzK0RGclkxaUVFVGJBODZUYWZZR0dpUExYWDN4VUQrUktpNktFNVUK835xrsv5WX9JSdgXcYUctSFpVA8vQyGKFSyLWDavWJNbtHGZFgBBSwtYrjwxghPAnfntWLB0IHov7SGbqPO1V1klosqnAS+4tJ+hlNrZWYhGxu7jZ4whCx5dX2blVi+3uqn/9mhXzAVeK5hq0ERDwtWljHiy16NazxG6qHcSv2FgWWbenFH4gPjfNDunkldXjECUnYkCR2va3YibfDIG+rWAZ2JbVxgR6hqaiTopqD2saUuiuJCJUQETB9g38limsJApeJ0I88KLmGe1LoVuw8zl8C/pQhWPWUxgzn7YnIf7UH4O8m8UbqCUfoenV0C7DOvXHHHvZpWZtDskcGrYfD30qt75bUPMCRAolTplHSYYUYp1LyGk8eVTYjlhE9PRNw=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA3YVZEc2RiT1BXTWNMMENxY0pqZnRkZ1RpZUw0amtpVjRuMnFHZkpZUkZRCi9jazFMOWdJRGZLME56UkJ5VjAyRlZ1SkR0SG5zLy9hd0gxcVp4SzdMNUEKLS0tIHZVZEx6NmZEMGxheDFWS2gzTHFTNmYyY0xYRGQ2dXJHVzh5czVJUTB4cnMKu9J/5iagrIpHJW9zJ3ssK5eTP7ryzBinivMyOqibrNrRYClISL1fhwxzs2mQE5PLmAy2jGB1WF6tGwY0yEDveLYseSvkUqvttoujN4xWFhbvHZNRhpX/rqKKBGndAAap7vVYLd6N4G7ov1DwPskBlj/Fhqm94YPvgJ+eLP5KxgIGKV9yNfDdUTSPYisHqkChhoQ1RwWF6ZrjMj2lqjXmRlVbCEEVy6TstW6CA3yvk3tiifyrSBabnqaEagRS3fUZFguhboPiMafHAuk0s8WCImH3JBpeeaXN6FP0c25J5hcaQQwfr+RDKRyF3BtwjxB9Ti8xPGtXVeFQt9/HF1TuHcs15p9CTY4GvLL1fRcT5UVnN8NQ4UHFZ6DzeGIIj7+0xSmMfwRd"
+              }
+            }
+          ]
+        },
+        {
+          "key": "c0565822db8cd4199a94c1c757b8a6cf6bf895385aecd6b067c1b546accd64c2",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "set",
+              "run/overlap-short",
+              "--value",
+              "abcd",
+              "--force"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "RUN_PATTERN_CORPUS": "sha256:49882adbab2cd96235f9bd9c452be03f1054ba50841fe156f183b9885a35a752",
+              "RUN_SAFE_MARKER": "ambient-value",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Entry saved: run/overlap-short\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/entries/run/overlap-short.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSArTmJacUFGYzlGNC9PcHg2bmkrTlArY0VFcHlPT09KRHBXaWhOM2t2UEJFClAvSWRJZ0hWRVNXQllCSHQ1MUE1LzcrT3dJY1E5Y3dTdThuTUJFdGNScHcKLS0tIG1IM3dlRGl1MHE3WThIbHhwRXN4WW1mVjIzVk1LZjJYd0pMZG5tbGU1NGMKkXbfVijRemUD1zmhps0YmDIgbqyHEQoPoryUtDJtqvmYnlAWrhnm4WAqFVQLbGL7mASgKwA7OJvnjI7z9C9XycTsF+38Kptvql6tB09anPLGORFeC8V5AFOAHx15Rhs5xIVguqmAGRS1vvS7MVzSUP6Nf1zyaQOITI8eXZLb2BP+r0RTLc4ZnaxI0RBuBJwn8OVKMWOvogS9Ow1u1F7ASSh5YHxsDFEeqKYwzB2vjsaPjQCk8qZyBX2/ttuneglLFChESxFlAw5SPy2tYmuNGsuFyXokGZRXO5lIkPhxuwcQayzoENFKhZF2cLSGO4OKT6cldTSsdKEfe/fQfKcYQs9SIhnXS7ll8MkAPeTPVFAB4h7b16CQ15EWEatYYoCsq18pz7ZmzHOG41M="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBXQmIyZGlLMW9wWk9WZXJnTG42dzkxbHJIUC9HNWlTNkZENE5EeFY0a3lNCjZpNW5QVDNCS2ZEcVN1YmZKZThKVVd2WnE2NDltTDN0OHowU2laMVRhNFEKLS0tIFlqZmR1YXFyd3prMXUrUVZpMjR2Z3Q0aEkxWk9aK3BQYmtCQnFibDczWU0KOYs5fclsDxzawIK5R+ljv12sJW+PQfoEonvLvAjZfc0iGKg9gaImRFSgHEBlpNOO7FPiizhOl8RlpFpN4lOYcsGdE4Gy8ardQfWri2aEbmXK2p7VJ76JovhUqXSMNEscqAP+FiDr7NFPc/Ek0p8NTgP3ez2IQskOK7OW+wwLf2pn4So3yJWiYicLoabAAwIpoUb8zpFPGDQyB8oASGF4DlWj3HQ55t73jNVWpFjwO+hjsIRFhJbI42q9UnQFnrBf4uye/vdmGZUpNzbCcSPqqLal14/g4IuAonYiJm1vGDniXuPRFJBEGqld9ZSqknRR2nC4HzQ5AY3Tu286dcs1m44ucs6nnaD+NZSHmfirGC5fXiNBPpZxj25W9WcHEEnjy7O9Fsw8xW9x8zR5B/0btgyqfk99N43ROI+SflXI5zjWc+m7g1OfaKt1/+1rX66S8NORoVYJlmNpmXGBhyCCTr8+51/ngFjmhqFFcfNBHO+tFDb8Uj/j9A9OtKdpvsI7C2UtN4U1kgYQ6K0kNwnxjWng4gkH4YUfHX9l+6YLSKL2HTQnF3/02u9hdho6USRS35vvUWZqTsDj"
+              }
+            }
+          ]
+        },
+        {
+          "key": "5dcc5044c37870f5faa81e8c1c36c558fe01337ba7a3e19df936e72cb37cada6",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "set",
+              "run/overlap-long",
+              "--value",
+              "bcde",
+              "--force"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "RUN_PATTERN_CORPUS": "sha256:49882adbab2cd96235f9bd9c452be03f1054ba50841fe156f183b9885a35a752",
+              "RUN_SAFE_MARKER": "ambient-value",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Entry saved: run/overlap-long\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/entries/run/overlap-long.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBKRlVXRHBvdTdnSnlZUUswZW9SR2FadWRpd3BnRHJyQ0xJanhaSUVDbkhVCllhN2JXYldvRk9OZnVyU0ZSWCtjc2I0d2VTWjcxYkJkdjBmTzBWOE50MEkKLS0tIHJsbkZpWCsySDNPb3pia01KQ0dnSEJORmxYbllISHFRbEV5VDVRUVlUb0kKJli8rdMpdADIBArniuX9sAyIoBYvtZjnUPtU8Apzb6WSh2Z+Th/uXMhz61hl5qsT3h6KANGdo5NDsiWaM7izxXjnlfXfCfOa44yC64z03gnp67Cvy0GGDZGxi6kwZ5BmzAvOggIFdhFWLySgbpHSudLOJGXX5LT4kylNQuf/PqUhJAOAuVzGr66fexr6VWDOGF948CM8ZMIsSp2E30QnLWy5NVEA1tdXkIkxL0uVuqol7MAh44Akpz66TIHlHqDea6zE1Bki16PkI9Yfz1uw4d3BlH3WZ59VwdPAhzo54psyBt/O1hL+Q3gzclRN3RoAvKrXWWyOGOJp3Gm9Q+DJ84cCAgIRTdKlePp1fO/ujrZG76GiLFgmOO6UG6PNObn/Y6YDV8jCcA=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBsMGw0YTFnckE5elpxK2hMTmR6RlpFaG9vaGFWNDBjUjAzYlZzdXkxRUNNCnJ3VVBQaElDakd0R29YdXd4MGdjT1RhOEdSdjJJdURML1RxN1NieFMyZFkKLS0tIEg2VUxULzNUbXdLL21xSHFvcTREVlBYUFNqZnVNQzAxTFdjaWNuNkc5L1kKadwTQMRgLge2gR74yO5rR+aTAHv8sTJz0AK9mSt20Rps3do39RvYGVG6CDRMfSyfTQOasbz2YEDkk/DoIFU8WotqAI+s594y9HjJm1mZ1s0bUNws0VMcEU7n+nxSP3kekta1c+dTSzowYY9SaLhw8Qvh8jMQKJd0oOfyi9of5MzPa9fFO/MUVOKeXb1XhAl8dwCddSM1Fo/fwLvv8YrC7/KrETuY7n2mqxN3enDsGOdOCgb97citnBCloUGw2HfKZ6itInEJdOQ5dQQnVYXKCqyWb6wIC/w1H75LNsJuwc95JJI0yyLS1mQfiMdj8iXBA0tYwDUyPVYAGizbfrMBaBEH6Ixt1cQoupsyhXxv8ym/4jlA7UXn68Pi88/Xtsb+yxtAzhIy3iR5qAg0v4F7rAgG2XUGEXdwM8wGTapSIW0AbsiDxEPSLHic4Z0fW20rYDrqDY9nBEcP8aB7Ck+cBqKFLwq7Qj9TQUsxoJ/JHNIsZHfIticn5npesHVwki2JM5Jp9l7aurPjjH8rVYQU2abHcy/JA26P91RvxYHfSN13SvEC7nA8muIXx1mOdffX0YLPk6QJNlZhDRoB+OXr3+VC6I9sLSkzihagxrwHXeUhnM88ZfEZgNHM4jyI0ks5Ysa42Fhpx8xviJ+PDPvQnu1GpJigMnssqEP5KeQYKrIp2LqNCi4E1m9EKKpjHRs8Faq51y9qBoPjHAQfrE9d55OYOv3EV12aTTILqsUcxOsgchsgl6DiFv1F/hiy2IVKrAm/iM+IPj2NOw=="
+              }
+            }
+          ]
+        },
+        {
+          "key": "6905cf4852bfd5d2aba5264fdc652e7c999238e181bb3c6272452078d1469fc5",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "run",
+              "--env",
+              "TOKEN=run/password.password",
+              "--env",
+              "OVERLAP=run/overlap-short.password",
+              "--env",
+              "OVERLAP_LONG=run/overlap-long.password",
+              "--env-file",
+              "<ROOT:2>/root",
+              "--passthrough",
+              "RUN_SAFE_MARKER",
+              "--passthrough",
+              "RUN_PATTERN_CORPUS",
+              "--",
+              "sh",
+              "-c",
+              "printf '%s|%s|%s|%s|%s' \"$TOKEN\" \"$FROM_FILE\" \"$RUN_SAFE_MARKER\" \"$RUN_PATTERN_CORPUS\" abcde"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "RUN_PATTERN_CORPUS": "sha256:49882adbab2cd96235f9bd9c452be03f1054ba50841fe156f183b9885a35a752",
+              "RUN_SAFE_MARKER": "ambient-value",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "***|***|ambient-value|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|[REDACTED]|GB82WEST12345698765431|+[REDACTED]|Bearer ***f123456|[REDACTED]|[REDACTED]|[REDACTED]|é[REDACTED]é|Bearer\u000bshort-fixture|[REDACTED]|***"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d72cde2c2057f10bc7f86c669efaabb80d0b5754a73d1e965aa7d0ab2c2b92e8",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "run",
+              "--",
+              "sh",
+              "-c",
+              "printf 'synthetic-error' >&2; exit 7"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "RUN_PATTERN_CORPUS": "sha256:49882adbab2cd96235f9bd9c452be03f1054ba50841fe156f183b9885a35a752",
+              "RUN_SAFE_MARKER": "ambient-value",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "correct horse battery staple",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nsynthetic-errorError: command exited with code 7\nError: command exited with code 7\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

@@ -1,3 +1,6 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
     env, fs,
     ops::Deref,
@@ -37,16 +40,17 @@ fn temporary_root(name: &str) -> TemporaryRoot {
 }
 
 fn run(binary: &Path, args: &[&str], home: &Path, vault: &Path) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", vault)
-        .env("CI", "1")
-        .output()
-        .expect("run CLI")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", vault)
+            .env("CI", "1"),
+    )
+    .expect("run CLI")
 }
 
 fn assert_same(go: &Output, rust: &Output, command: &str) {
@@ -75,11 +79,12 @@ fn assert_same(go: &Output, rust: &Output, command: &str) {
 
 #[test]
 fn agent_profile_show_matches_go_yaml_json_and_nil_fields() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_profile_differential",
+        "agent_profile_show_matches_go_yaml_json_and_nil_fields",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
     let builtin_home = temporary_root("builtin-home");
@@ -235,10 +240,9 @@ fn agent_profile_show_matches_go_yaml_json_and_nil_fields() {
 mod profile_edit_differential {
     use std::{
         env, fs,
-        io::Write,
         os::unix::fs::PermissionsExt,
         path::{Path, PathBuf},
-        process::{Command, Output, Stdio},
+        process::{Command, Output},
     };
 
     fn run(
@@ -249,7 +253,8 @@ mod profile_edit_differential {
         editor: &Path,
         confirmation: &str,
     ) -> Output {
-        let mut child = Command::new(binary)
+        let mut command = Command::new(binary);
+        command
             .args(args)
             .env("HOME", home)
             .env("USERPROFILE", home)
@@ -260,19 +265,9 @@ mod profile_edit_differential {
             .env("EDITOR", editor)
             .env_remove("VISUAL")
             .env("CI", "1")
-            .env("NO_COLOR", "1")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("run profile edit");
-        child
-            .stdin
-            .take()
-            .expect("profile edit stdin")
-            .write_all(confirmation.as_bytes())
-            .expect("confirm profile edit");
-        child.wait_with_output().expect("wait for profile edit")
+            .env("NO_COLOR", "1");
+        super::go_oracle::output_with_input(&mut command, Some(confirmation.as_bytes()))
+            .expect("run profile edit")
     }
 
     fn assert_same(go: &Output, rust: &Output, case: &str) {
@@ -325,10 +320,12 @@ mod profile_edit_differential {
 
     #[test]
     fn agent_profile_edit_matches_go_and_preserves_cancelled_config() {
-        let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-            eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-            return;
-        };
+        let oracle = super::go_oracle::GoOracle::begin(
+            "agent_profile_differential",
+            "agent_profile_edit_matches_go_and_preserves_cancelled_config",
+            Some(super::go_oracle::CONFIG_CLI_ORACLE),
+        );
+        let go_binary = oracle.binary();
         let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
             eprintln!("skipping Rust differential: CARGO_BIN_EXE_symvault is not set");
             return;

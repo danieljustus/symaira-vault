@@ -1,3 +1,5 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
@@ -12,19 +14,20 @@ fn temporary_root(name: &str) -> test_temp_root::TempRoot {
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", root)
-        .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
-        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run CLI")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", root)
+            .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+            .env("CI", "1")
+            .env("NO_COLOR", "1"),
+    )
+    .expect("run CLI")
 }
 
 fn git(root: &Path, args: &[&str]) {
@@ -80,11 +83,12 @@ fn arg_refs(args: &[String]) -> Vec<&str> {
 
 #[test]
 fn sync_matches_go_for_no_remote_pull_push_and_offline_local_remote() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "sync_differential",
+        "sync_matches_go_for_no_remote_pull_push_and_offline_local_remote",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("home");
     let vault = temporary_root("vault");
@@ -92,19 +96,23 @@ fn sync_matches_go_for_no_remote_pull_push_and_offline_local_remote() {
     let remote_work = temporary_root("remote-work");
     fs::create_dir_all(&home).expect("home");
 
-    let init = run(
-        &rust_binary,
-        &[
-            "--vault",
-            vault.to_str().expect("vault path"),
-            "init",
-            "--auth",
-            "passphrase",
-        ],
-        &vault,
-        &home,
-    );
-    assert_success(&init, "Rust init");
+    // `init` generates random keys: record it once as a frozen seed.
+    if let Some(init) = oracle.seed("init", &[&vault, &home], || {
+        run(
+            &rust_binary,
+            &[
+                "--vault",
+                vault.to_str().expect("vault path"),
+                "init",
+                "--auth",
+                "passphrase",
+            ],
+            &vault,
+            &home,
+        )
+    }) {
+        assert_success(&init, "Rust init");
+    }
 
     let no_remote = sync_args(&vault, false, false);
     let no_remote = arg_refs(&no_remote);
@@ -154,7 +162,15 @@ fn sync_matches_go_for_no_remote_pull_push_and_offline_local_remote() {
     git(&remote_work, &["push", "--quiet", "origin", "HEAD"]);
     let pull = sync_args(&vault, false, false);
     let pull = arg_refs(&pull);
+    // The Go pull's repository effects cannot be replayed (object ids embed the
+    // capture-time clock); when replaying, a real `git pull` re-creates the
+    // working-tree state the recorded Go sync left behind.
+    oracle.effects(false);
     let go_pull = run(&go_binary, &pull, &vault, &home);
+    oracle.effects(true);
+    if oracle.replaying() {
+        git(&vault, &["pull", "--quiet", "--ff-only"]);
+    }
     assert_success(&go_pull, "Go pull sync");
     assert_eq!(
         fs::read(vault.join("sync.txt")).expect("Go pull file"),
@@ -227,11 +243,12 @@ fn sync_matches_go_for_no_remote_pull_push_and_offline_local_remote() {
 
 #[test]
 fn force_sync_preserves_dirty_config_like_go() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "sync_differential",
+        "force_sync_preserves_dirty_config_like_go",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("force-home");
     let vault = temporary_root("force-vault");
@@ -240,19 +257,23 @@ fn force_sync_preserves_dirty_config_like_go() {
     let rust_vault = temporary_root("force-rust-vault");
     let remote_work = temporary_root("force-remote-work");
     fs::create_dir_all(&home).expect("home");
-    let init = run(
-        &rust_binary,
-        &[
-            "--vault",
-            vault.to_str().expect("vault path"),
-            "init",
-            "--auth",
-            "passphrase",
-        ],
-        &vault,
-        &home,
-    );
-    assert_success(&init, "Rust force init");
+    // `init` generates random keys: record it once as a frozen seed.
+    if let Some(init) = oracle.seed("init", &[&vault, &home], || {
+        run(
+            &rust_binary,
+            &[
+                "--vault",
+                vault.to_str().expect("vault path"),
+                "init",
+                "--auth",
+                "passphrase",
+            ],
+            &vault,
+            &home,
+        )
+    }) {
+        assert_success(&init, "Rust force init");
+    }
     git(&vault, &["config", "user.name", "Symaira Vault Test"]);
     git(
         &vault,

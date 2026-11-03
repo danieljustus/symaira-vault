@@ -1,0 +1,597 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "agent_profile_edit_matches_go_and_preserves_cancelled_config": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "dbfe714ca6ffa856bf74bffeefe50ebabef5c6f18fcb80d04ae8cc62ee486fb0",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "edit",
+              "demo"
+            ],
+            "env": {
+              "CI": "1",
+              "EDITOR": "<ROOT:0>/profile-editor.sh",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "VISUAL": null,
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "y\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "allowedPaths:\n  - new\ncanWrite: true\n"
+            },
+            "stderr": {
+              "text": "Edited profile for \"demo\":\n\nApply changes? [y/N] Profile for \"demo\" updated.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    demo:\n        allowedPaths:\n            - new\n        canWrite: true\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\n    other:\n        canWrite: true\n        exposeValueTools: true\nvaultDir: <ROOT:0>\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "e3f93b0e6235f46e6afcd669c93150ac7e0304d78f2ea7baaa544c4d7d6fb290",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "edit",
+              "demo"
+            ],
+            "env": {
+              "CI": "1",
+              "EDITOR": "<ROOT:4>/profile-editor.sh",
+              "HOME": "<ROOT:5>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:4>",
+              "USERPROFILE": "<ROOT:5>",
+              "VISUAL": null,
+              "XDG_CACHE_HOME": "<ROOT:5>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:5>/config",
+              "XDG_DATA_HOME": "<ROOT:5>/data"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "n\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "allowedPaths:\n  - discarded\ncanWrite: true\n"
+            },
+            "stderr": {
+              "text": "Edited profile for \"demo\":\n\nApply changes? [y/N] Changes discarded.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "57b398ebc8836cd91ad5cd0623cef618719be55f9a3e4c777b4b972ce9744293",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "edit",
+              "demo"
+            ],
+            "env": {
+              "CI": "1",
+              "EDITOR": "<ROOT:8>/profile-editor.sh",
+              "HOME": "<ROOT:9>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:8>",
+              "USERPROFILE": "<ROOT:9>",
+              "VISUAL": null,
+              "XDG_CACHE_HOME": "<ROOT:9>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:9>/config",
+              "XDG_DATA_HOME": "<ROOT:9>/data"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "y\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: invalid YAML in edited profile: yaml: line 1: did not find expected node content\nError: invalid YAML in edited profile: yaml: line 1: did not find expected node content\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "87ec6b2596dbfd9423ad1030e5604a142d5aa8b6b0ecf74fc23a6315ec7bb2c6",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "edit",
+              "missing"
+            ],
+            "env": {
+              "CI": "1",
+              "EDITOR": "<ROOT:12>/profile-editor.sh",
+              "HOME": "<ROOT:13>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:12>",
+              "USERPROFILE": "<ROOT:13>",
+              "VISUAL": null,
+              "XDG_CACHE_HOME": "<ROOT:13>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:13>/config",
+              "XDG_DATA_HOME": "<ROOT:13>/data"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "y\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: extract agent section: agent \"missing\" not found in config\nError: extract agent section: agent \"missing\" not found in config\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "agent_profile_show_matches_go_yaml_json_and_nil_fields": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "c4b0e92bb2bb66c61edeece68f850f0112a3dc8ff1af584d055c6e2f0c4e3333",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "show",
+              "default",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "SYMVAULT_VAULT": "<ROOT:0>/vault",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "approvalMode: deny\ncanWrite: false\ncanRunCommands: false\nexposeValueTools: true\nautoUnseal: false\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "48ed127e65cad57f8c349c0648acb3bec4f4880c38dc3851b0a3ac6da718cccc",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "show",
+              "default",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "SYMVAULT_VAULT": "<ROOT:0>/vault",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"Name\": \"default\",\n  \"Tier\": null,\n  \"ApprovalMode\": \"deny\",\n  \"AllowedPaths\": [],\n  \"RedactFields\": null,\n  \"PerToolRedactFields\": null,\n  \"CanWrite\": false,\n  \"CanRunCommands\": false,\n  \"CanManageConfig\": null,\n  \"CanUseClipboard\": null,\n  \"CanUseAutotype\": null,\n  \"CanReadValues\": null,\n  \"ExposeValueTools\": true,\n  \"AutoUnseal\": false,\n  \"RequireApproval\": null,\n  \"ApprovalTimeout\": null,\n  \"AllowedTools\": null,\n  \"MaxReadsPerHour\": null,\n  \"MaxReadsPerDay\": null,\n  \"MaxSecretsInSession\": null,\n  \"DynamicProviders\": null,\n  \"AllowedEnvVars\": null,\n  \"AllowedExecutables\": null,\n  \"PromptInjectionMode\": null,\n  \"PreCallHooks\": null,\n  \"PostCallHooks\": null,\n  \"SkillPath\": null,\n  \"SkillVersion\": null,\n  \"ExposePaymentValues\": null,\n  \"PaymentPolicy\": null\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "1d9eb854670f1e34c7e9d1ab72cc5d3a0c20dec40b468d2db39204e45d40c682",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "show",
+              "demo",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "SYMVAULT_VAULT": "<ROOT:1>/vault",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "tier: standard\napprovalMode: prompt\nallowedPaths:\n  - team/*\n  - über/**\nredactFields:\n  - password\nperToolRedactFields:\n  get_entry:\n    - password\ncanWrite: true\ncanRunCommands: false\ncanManageConfig: true\ncanUseClipboard: true\ncanUseAutotype: false\ncanReadValues: true\nexposeValueTools: false\nautoUnseal: false\nrequireApproval: true\napprovalTimeout: 2m0s\nallowed_tools:\n  - get_entry\nmax_reads_per_hour: 7\nmax_reads_per_day: 42\nmax_secrets_in_session: 3\ndynamicProviders:\n  foo:\n    - bar\nallowedEnvVars:\n  - LANG\nallowedExecutables:\n  - git\npromptInjectionMode: deny\nskillPath: /tmp/skill\nskillVersion: v1\nexposePaymentValues: true\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "cdac0aae92122463af2e90ec715ebc057be4cc41b16952e92b036f1bcb0959ab",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "show",
+              "demo",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "SYMVAULT_VAULT": "<ROOT:1>/vault",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"Name\": \"demo\",\n  \"Tier\": \"standard\",\n  \"ApprovalMode\": \"prompt\",\n  \"AllowedPaths\": [\n    \"team/*\",\n    \"über/**\"\n  ],\n  \"RedactFields\": [\n    \"password\"\n  ],\n  \"PerToolRedactFields\": {\n    \"get_entry\": [\n      \"password\"\n    ]\n  },\n  \"CanWrite\": true,\n  \"CanRunCommands\": false,\n  \"CanManageConfig\": true,\n  \"CanUseClipboard\": true,\n  \"CanUseAutotype\": false,\n  \"CanReadValues\": true,\n  \"ExposeValueTools\": false,\n  \"AutoUnseal\": false,\n  \"RequireApproval\": true,\n  \"ApprovalTimeout\": 120000000000,\n  \"AllowedTools\": [\n    \"get_entry\"\n  ],\n  \"MaxReadsPerHour\": 7,\n  \"MaxReadsPerDay\": 42,\n  \"MaxSecretsInSession\": 3,\n  \"DynamicProviders\": {\n    \"foo\": [\n      \"bar\"\n    ]\n  },\n  \"AllowedEnvVars\": [\n    \"LANG\"\n  ],\n  \"AllowedExecutables\": [\n    \"git\"\n  ],\n  \"PromptInjectionMode\": \"deny\",\n  \"PreCallHooks\": null,\n  \"PostCallHooks\": null,\n  \"SkillPath\": \"/tmp/skill\",\n  \"SkillVersion\": \"v1\",\n  \"ExposePaymentValues\": true,\n  \"PaymentPolicy\": null\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "af46a4c94b8d3d648dfe3f360d98e9583fe93300f051335cfac7d78f1a0928f7",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "export",
+              "demo"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "SYMVAULT_VAULT": "<ROOT:1>/vault",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "tier: standard\napprovalMode: prompt\nallowedPaths:\n  - team/*\n  - über/**\nredactFields:\n  - password\nperToolRedactFields:\n  get_entry:\n    - password\ncanWrite: true\ncanRunCommands: false\ncanManageConfig: true\ncanUseClipboard: true\ncanUseAutotype: false\ncanReadValues: true\nexposeValueTools: false\nautoUnseal: false\nrequireApproval: true\napprovalTimeout: 2m0s\nallowed_tools:\n  - get_entry\nmax_reads_per_hour: 7\nmax_reads_per_day: 42\nmax_secrets_in_session: 3\ndynamicProviders:\n  foo:\n    - bar\nallowedEnvVars:\n  - LANG\nallowedExecutables:\n  - git\npromptInjectionMode: deny\nskillPath: /tmp/skill\nskillVersion: v1\nexposePaymentValues: true\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4b46af33e726ad2c8b6189e68c5206284ec4d6a4a5cd6f98d8d9fd1a0cd7f3f8",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "export",
+              "demo",
+              "--output",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "SYMVAULT_VAULT": "<ROOT:1>/vault",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "tier: standard\napprovalMode: prompt\nallowedPaths:\n  - team/*\n  - über/**\nredactFields:\n  - password\nperToolRedactFields:\n  get_entry:\n    - password\ncanWrite: true\ncanRunCommands: false\ncanManageConfig: true\ncanUseClipboard: true\ncanUseAutotype: false\ncanReadValues: true\nexposeValueTools: false\nautoUnseal: false\nrequireApproval: true\napprovalTimeout: 2m0s\nallowed_tools:\n  - get_entry\nmax_reads_per_hour: 7\nmax_reads_per_day: 42\nmax_secrets_in_session: 3\ndynamicProviders:\n  foo:\n    - bar\nallowedEnvVars:\n  - LANG\nallowedExecutables:\n  - git\npromptInjectionMode: deny\nskillPath: /tmp/skill\nskillVersion: v1\nexposePaymentValues: true\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4dc7ea5f882de7d71b9950688464bdf799a57eba61dde1588350a6b65a04d385",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "export",
+              "demo",
+              "--output",
+              "<ROOT:1>/go-profile.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "SYMVAULT_VAULT": "<ROOT:1>/vault",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "go-profile.yaml",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "tier: standard\napprovalMode: prompt\nallowedPaths:\n  - team/*\n  - über/**\nredactFields:\n  - password\nperToolRedactFields:\n  get_entry:\n    - password\ncanWrite: true\ncanRunCommands: false\ncanManageConfig: true\ncanUseClipboard: true\ncanUseAutotype: false\ncanReadValues: true\nexposeValueTools: false\nautoUnseal: false\nrequireApproval: true\napprovalTimeout: 2m0s\nallowed_tools:\n  - get_entry\nmax_reads_per_hour: 7\nmax_reads_per_day: 42\nmax_secrets_in_session: 3\ndynamicProviders:\n  foo:\n    - bar\nallowedEnvVars:\n  - LANG\nallowedExecutables:\n  - git\npromptInjectionMode: deny\nskillPath: /tmp/skill\nskillVersion: v1\nexposePaymentValues: true\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "89753d4e8f302482acc61b85b842e90a30a5fe803d19c010754960676883f5e2",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "show",
+              "missing-agent"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "SYMVAULT_VAULT": "<ROOT:1>/vault",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent \"missing-agent\" not found in config\nError: agent \"missing-agent\" not found in config\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c5ae44362078fd6844a435fbfa47e27ea2e4558f6266cff46dae7a095b904771",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "export",
+              "missing-agent"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "SYMVAULT_VAULT": "<ROOT:1>/vault",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent \"missing-agent\" not found in config\nError: agent \"missing-agent\" not found in config\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "39c4ed1ebaafd4cfc967baf952f7be1da89a7e672b7a0a64c9d536e080a3b5fe",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "show",
+              "demo",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:2>",
+              "SYMVAULT_VAULT": "<ROOT:2>/vault",
+              "XDG_CACHE_HOME": "<ROOT:2>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:2>/config",
+              "XDG_DATA_HOME": "<ROOT:2>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "exposeValueTools: true\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d4d8c6597a0cfb892ea4569ef1bb157f3404ce1ef728d07f41ae0ad2dbbec8ea",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "show",
+              "demo",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:2>",
+              "SYMVAULT_VAULT": "<ROOT:2>/vault",
+              "XDG_CACHE_HOME": "<ROOT:2>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:2>/config",
+              "XDG_DATA_HOME": "<ROOT:2>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"Name\": \"demo\",\n  \"Tier\": null,\n  \"ApprovalMode\": null,\n  \"AllowedPaths\": null,\n  \"RedactFields\": null,\n  \"PerToolRedactFields\": {},\n  \"CanWrite\": null,\n  \"CanRunCommands\": null,\n  \"CanManageConfig\": null,\n  \"CanUseClipboard\": null,\n  \"CanUseAutotype\": null,\n  \"CanReadValues\": null,\n  \"ExposeValueTools\": true,\n  \"AutoUnseal\": null,\n  \"RequireApproval\": null,\n  \"ApprovalTimeout\": null,\n  \"AllowedTools\": null,\n  \"MaxReadsPerHour\": null,\n  \"MaxReadsPerDay\": null,\n  \"MaxSecretsInSession\": null,\n  \"DynamicProviders\": {},\n  \"AllowedEnvVars\": null,\n  \"AllowedExecutables\": null,\n  \"PromptInjectionMode\": null,\n  \"PreCallHooks\": null,\n  \"PostCallHooks\": null,\n  \"SkillPath\": null,\n  \"SkillVersion\": null,\n  \"ExposePaymentValues\": null,\n  \"PaymentPolicy\": null\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f4e0d90262bb766e1ca5c2560fdbde3fe9181c874c02cbcce6aa1688958819c2",
+          "request": {
+            "args": [
+              "agent",
+              "profile",
+              "show",
+              "demo",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:3>",
+              "SYMVAULT_VAULT": "<ROOT:3>/vault",
+              "XDG_CACHE_HOME": "<ROOT:3>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:3>/config",
+              "XDG_DATA_HOME": "<ROOT:3>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"Name\": \"demo\",\n  \"Tier\": null,\n  \"ApprovalMode\": null,\n  \"AllowedPaths\": [],\n  \"RedactFields\": null,\n  \"PerToolRedactFields\": null,\n  \"CanWrite\": null,\n  \"CanRunCommands\": null,\n  \"CanManageConfig\": null,\n  \"CanUseClipboard\": null,\n  \"CanUseAutotype\": null,\n  \"CanReadValues\": null,\n  \"ExposeValueTools\": true,\n  \"AutoUnseal\": null,\n  \"RequireApproval\": null,\n  \"ApprovalTimeout\": null,\n  \"AllowedTools\": null,\n  \"MaxReadsPerHour\": null,\n  \"MaxReadsPerDay\": null,\n  \"MaxSecretsInSession\": null,\n  \"DynamicProviders\": null,\n  \"AllowedEnvVars\": null,\n  \"AllowedExecutables\": null,\n  \"PromptInjectionMode\": null,\n  \"PreCallHooks\": null,\n  \"PostCallHooks\": null,\n  \"SkillPath\": \"/tmp/\\u003cskill\\u003e\\u0026\",\n  \"SkillVersion\": \"v\\u2028x\",\n  \"ExposePaymentValues\": null,\n  \"PaymentPolicy\": null\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

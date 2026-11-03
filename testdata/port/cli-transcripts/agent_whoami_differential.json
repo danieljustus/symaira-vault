@@ -1,0 +1,260 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "agent_whoami_matches_go_output_and_context_errors": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "110c0b4db90718d789ada03a3a72ec10c820affbe252d1dfc5735e59e10f943a",
+          "request": {
+            "args": [
+              "agent",
+              "whoami"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Agent:      alpha\nVault Dir:  <ROOT:1>\nTier:       standard\nPaths:      work/*, über/**\nTools:      get_entry, find\nWrite:      true\nRead Vals:  true\nClipboard:  true\nAutotype:   false\nCommands:   true\nConfig:     false\nApproval:   prompt\nQuota/hr:   7\nQuota/day:  42\nQuota/sess: 3\nTokens:     1 active\nToken File: <ROOT:1>/mcp-tokens/alpha.token\nSkill:      ~/.skills/<agent>&\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b284c24404eab033b55e7b91ba08154dc5d6e6420eb729a0a38db971f997beae",
+          "request": {
+            "args": [
+              "agent",
+              "whoami",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"name\": \"alpha\",\n  \"vault_dir\": \"<ROOT:1>\",\n  \"tier\": \"standard\",\n  \"allowed_paths\": [\n    \"work/*\",\n    \"über/**\"\n  ],\n  \"allowed_tools\": [\n    \"get_entry\",\n    \"find\"\n  ],\n  \"can_write\": true,\n  \"can_read_values\": true,\n  \"can_use_clipboard\": true,\n  \"can_use_autotype\": false,\n  \"can_run_commands\": true,\n  \"can_manage_config\": false,\n  \"approval_mode\": \"prompt\",\n  \"require_approval\": true,\n  \"token_count\": 1,\n  \"token_file\": \"<ROOT:1>/mcp-tokens/alpha.token\",\n  \"quotas\": {\n    \"max_reads_per_hour\": 7,\n    \"max_reads_per_day\": 42,\n    \"max_secrets_in_session\": 3\n  },\n  \"skill_path\": \"~/.skills/\\u003cagent\\u003e\\u0026\"\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "374d3d5269126b1ca551f8efe9dd12e38d7df53dfcc377dd2840bf98c2d10a95",
+          "request": {
+            "args": [
+              "agent",
+              "whoami",
+              "--output",
+              "future"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Agent:      alpha\nVault Dir:  <ROOT:1>\nTier:       standard\nPaths:      work/*, über/**\nTools:      get_entry, find\nWrite:      true\nRead Vals:  true\nClipboard:  true\nAutotype:   false\nCommands:   true\nConfig:     false\nApproval:   prompt\nQuota/hr:   7\nQuota/day:  42\nQuota/sess: 3\nTokens:     1 active\nToken File: <ROOT:1>/mcp-tokens/alpha.token\nSkill:      ~/.skills/<agent>&\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9f09203ffc436177f55b62f472ea355c30f64d54571bbe92232fdedd3b822349",
+          "request": {
+            "args": [
+              "--quiet",
+              "agent",
+              "whoami"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Agent:      alpha\nVault Dir:  <ROOT:1>\nTier:       standard\nPaths:      work/*, über/**\nTools:      get_entry, find\nWrite:      true\nRead Vals:  true\nClipboard:  true\nAutotype:   false\nCommands:   true\nConfig:     false\nApproval:   prompt\nQuota/hr:   7\nQuota/day:  42\nQuota/sess: 3\nTokens:     1 active\nToken File: <ROOT:1>/mcp-tokens/alpha.token\nSkill:      ~/.skills/<agent>&\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d52f11fdaca8ce6a41a09becf8f1f969619b8c9ce8731e4a37f529dea3afaa1d",
+          "request": {
+            "args": [
+              "agent",
+              "whoami",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "empty",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"name\": \"empty\",\n  \"vault_dir\": \"<ROOT:1>\",\n  \"tier\": \"\",\n  \"allowed_paths\": [],\n  \"can_write\": false,\n  \"can_read_values\": false,\n  \"can_use_clipboard\": false,\n  \"can_use_autotype\": false,\n  \"can_run_commands\": false,\n  \"can_manage_config\": false,\n  \"approval_mode\": \"\",\n  \"require_approval\": false,\n  \"token_count\": 0,\n  \"quotas\": {}\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e388196582c86db8f6f22ca3d6c30226df33d82a74e0dcb5cf9e1faa356c2d59",
+          "request": {
+            "args": [
+              "agent",
+              "whoami",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "missing",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent \"missing\" not found in config\nError: agent \"missing\" not found in config\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7eb8f7ae4197c172ba38a079c18a2bf7f1590fe1d9c2aa0374c981a4327847b9",
+          "request": {
+            "args": [
+              "agent",
+              "whoami",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "USERPROFILE": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: SYMVAULT_AGENT not set. Run without agent context or set SYMVAULT_AGENT=<name>\nError: SYMVAULT_AGENT not set. Run without agent context or set SYMVAULT_AGENT=<name>\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}
