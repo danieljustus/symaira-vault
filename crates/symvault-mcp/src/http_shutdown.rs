@@ -379,6 +379,7 @@ mod tests {
                 None,
                 Some(worker_shutdown),
                 timeouts,
+                None,
             )
         });
         ServerProbe {

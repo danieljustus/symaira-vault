@@ -1,0 +1,2326 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "b1da45d1332fdb118b702dedf4addfb28b890cdf",
+    "commit_sha": "b1da45d1332fdb118b702dedf4addfb28b890cdf",
+    "source_files": [
+      "internal/approval/local.go",
+      "internal/config/config_merge.go",
+      "internal/config/schema.go",
+      "internal/mcp/auth/auth.go",
+      "internal/mcp/serverbootstrap/http.go",
+      "internal/mcp/serverbootstrap/http_setup.go",
+      "internal/mcp/util.go"
+    ],
+    "source_digest": "208feb94af4d7ef86b6fd7364174fa639292c82b4a51b4aab87c527e143016f3",
+    "generator_files": [
+      "scripts/rust-port/cmd/http002ratelimitgen/main.go"
+    ],
+    "generator_digest": "d83be04bddbe1c452d1fda9c5599403fdf29e99d499a8f90cb28fb8443a936d4"
+  },
+  "server_name": "symaira",
+  "server_version": "1.0.0",
+  "defaults": {
+    "config_rate_limit": 60,
+    "window_seconds": 60,
+    "max_entries": 10000,
+    "cleanup_interval_ms": 300000,
+    "status": 429,
+    "body": "too many requests\n"
+  },
+  "stack_scenarios": [
+    {
+      "name": "default_config_is_sixty_per_minute",
+      "config_yaml": "mcp:\n  allow_insecure_bind: true\n",
+      "effective_config_rate_limit": 60,
+      "steps": [
+        {
+          "note": "60 requests inside one window are served (here: rejected by the bearer check, which still consumes a slot)",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 60,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "the 61st request is limited",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a limited client stays limited",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "health is not behind the limiter",
+          "request": {
+            "method": "GET",
+            "path": "/health"
+          },
+          "repeat": 1,
+          "compare": "status",
+          "response": {
+            "status": 200
+          }
+        },
+        {
+          "note": "unrouted paths are not behind the limiter",
+          "request": {
+            "method": "GET",
+            "path": "/nonexistent"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Length": "19",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "note": "OAuth discovery is not behind the limiter",
+          "request": {
+            "method": "GET",
+            "path": "/.well-known/oauth-protected-resource"
+          },
+          "repeat": 1,
+          "compare": "status",
+          "response": {
+            "status": 200
+          }
+        },
+        {
+          "note": "OAuth dynamic registration is not behind the limiter",
+          "request": {
+            "method": "POST",
+            "path": "/oauth/register",
+            "headers": {
+              "Content-Type": "application/json",
+              "Origin": "http://127.0.0.1"
+            },
+            "body": "{}"
+          },
+          "repeat": 1,
+          "compare": "status",
+          "response": {
+            "status": 400
+          }
+        },
+        {
+          "note": "OAuth token endpoint is not behind the limiter",
+          "request": {
+            "method": "POST",
+            "path": "/mcp/oauth/token",
+            "headers": {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Origin": "http://127.0.0.1"
+            },
+            "body": "grant_type=authorization_code"
+          },
+          "repeat": 1,
+          "compare": "status",
+          "response": {
+            "status": 400
+          }
+        }
+      ]
+    },
+    {
+      "name": "limit_three_shared_bucket_and_check_order",
+      "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 3\n",
+      "effective_config_rate_limit": 3,
+      "steps": [
+        {
+          "note": "slot 1: /mcp without a bearer is answered by the bearer check",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "slot 2: the local approval API shares the bucket",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "66",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "note": "slot 3: a valid authenticated initialize is still served",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "authenticated": true,
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Length": "1083",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+          }
+        },
+        {
+          "note": "a valid authenticated request is limited before authentication",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "authenticated": true,
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the local approval list is limited",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a local approval action is limited",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/local/approvals/x/approve"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "limiting does not look at the method",
+          "request": {
+            "method": "DELETE",
+            "path": "/mcp"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a HEAD request is limited with the same headers and no body",
+          "request": {
+            "method": "HEAD",
+            "path": "/mcp"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            }
+          }
+        },
+        {
+          "note": "the Origin check runs after the limiter",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "https://attacker.example",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a missing Content-Type is never inspected once limited",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Origin": "http://127.0.0.1"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "health stays reachable",
+          "request": {
+            "method": "GET",
+            "path": "/health"
+          },
+          "repeat": 1,
+          "compare": "status",
+          "response": {
+            "status": 200
+          }
+        },
+        {
+          "note": "unrouted paths stay reachable",
+          "request": {
+            "method": "GET",
+            "path": "/missing"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Length": "19",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "zero_disables_the_limiter",
+      "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 0\n",
+      "effective_config_rate_limit": 0,
+      "steps": [
+        {
+          "note": "70 requests exceed the default of 60 yet none is limited",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 70,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "the local approval API is not limited either",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals"
+          },
+          "repeat": 70,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "66",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative_limit_falls_back_to_sixty",
+      "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: -5\n",
+      "effective_config_rate_limit": -5,
+      "steps": [
+        {
+          "note": "60 requests are served",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 60,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "the 61st is limited",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "proxy_headers_ignored_without_trusted_proxies",
+      "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 2\n",
+      "effective_config_rate_limit": 2,
+      "steps": [
+        {
+          "note": "first request, X-Forwarded-For 10.0.0.1",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "second request, a different X-Forwarded-For",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.0.0.2",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "third request, yet another X-Forwarded-For, shares the socket-address bucket",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.0.0.3",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "X-Real-IP does not help either",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Real-IP": "10.0.0.4",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "trusted_proxy_keys_by_forwarded_for_then_real_ip",
+      "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 2\n  trusted_proxy_ips:\n    - \"127.0.0.1\"\n",
+      "effective_config_rate_limit": 2,
+      "steps": [
+        {
+          "note": "10.0.0.1 slot 1",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "only the first X-Forwarded-For element is the key: 10.0.0.1 slot 2",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.0.0.1, 192.0.2.9",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "10.0.0.1 is exhausted",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "10.0.0.2 has its own bucket, slot 1",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.0.0.2",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "no header: the socket address 127.0.0.1 is the key, slot 1",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "X-Real-IP is used when X-Forwarded-For is absent: 10.0.0.2 slot 2",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Real-IP": "10.0.0.2",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "10.0.0.2 is exhausted via X-Real-IP",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Real-IP": "10.0.0.2",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "X-Forwarded-For wins over X-Real-IP",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.0.0.2",
+              "X-Real-IP": "10.0.0.9",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "whitespace around the first element is trimmed",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "  10.0.0.1 , x",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a non-IP value is used verbatim as the key, slot 1",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "not-an-ip",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "a non-IP value, slot 2",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "not-an-ip",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "a non-IP value is exhausted",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "not-an-ip",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "an empty first element is the empty key, slot 1",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": ", 1.2.3.4",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "the empty key, slot 2",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": ", 1.2.3.4",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "the empty key is exhausted",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": ", 1.2.3.4",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the socket-address bucket is still at slot 1: slot 2",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "the socket-address bucket is exhausted",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the local approval API honours the same key",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "trusted_cidr_with_invalid_entries_ignored",
+      "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 1\n  trusted_proxy_ips:\n    - \"bogus\"\n    - \"127.0.0.0/8\"\n    - \"10.0.0.0/33\"\n",
+      "effective_config_rate_limit": 1,
+      "steps": [
+        {
+          "note": "10.1.1.1 slot 1",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.1.1.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "10.1.1.1 is exhausted",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.1.1.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "10.1.1.2 has its own bucket",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.1.1.2",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "only_invalid_or_foreign_trusted_entries_trust_nobody",
+      "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 1\n  trusted_proxy_ips:\n    - \"bogus\"\n    - \"10.0.0.0/33\"\n    - \"::1\"\n    - \"10.0.0.0/8\"\n",
+      "effective_config_rate_limit": 1,
+      "steps": [
+        {
+          "note": "slot 1 for the socket address",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.1.1.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "13",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "unauthorized\n"
+          }
+        },
+        {
+          "note": "a different forwarded address is ignored and the socket bucket is exhausted",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Forwarded-For": "10.1.1.2",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        }
+      ]
+    }
+  ],
+  "limiter_scenarios": [
+    {
+      "name": "fixed_window_recovers_after_expiry",
+      "limit": 2,
+      "window_ms": 500,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": false
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.2:1",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 700
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "real clock; every gap is at least 150 ms away from the window edge, recorded as 'outcome only'"
+    },
+    {
+      "name": "denied_requests_do_not_extend_the_window",
+      "limit": 1,
+      "window_ms": 500,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 300
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": false
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 300
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "real clock; every gap is at least 150 ms away from the window edge, recorded as 'outcome only'"
+    },
+    {
+      "name": "window_is_fixed_from_the_first_request_not_sliding",
+      "limit": 2,
+      "window_ms": 600,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 300
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": false
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 450
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "real clock; every gap is at least 150 ms away from the window edge, recorded as 'outcome only'"
+    },
+    {
+      "name": "socket_port_is_not_part_of_the_key",
+      "limit": 1,
+      "window_ms": 60000,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2000",
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "different_socket_hosts_have_different_keys",
+      "limit": 1,
+      "window_ms": 60000,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1000",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.2:1000",
+          "allowed": true
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "ipv6_socket_port_is_not_part_of_the_key",
+      "limit": 1,
+      "window_ms": 60000,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "[2001:db8::1]:80",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "[2001:db8::1]:81",
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "ipv6_socket_hosts_differ",
+      "limit": 1,
+      "window_ms": 60000,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "[2001:db8::1]:80",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "[2001:db8::2]:80",
+          "allowed": true
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "forwarded_for_ignored_without_trusted_list",
+      "limit": 1,
+      "window_ms": 60000,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "real_ip_ignored_without_trusted_list",
+      "limit": 1,
+      "window_ms": 60000,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Real-IP": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Real-IP": "2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_exact_ip_honours_forwarded_for",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": true
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_exact_ip_same_forwarded_client_shares_a_key",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1, 9.9.9.9"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "untrusted_peer_cannot_spoof_forwarded_for",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.9"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_cidr_v4",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.0/24"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.77:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.88:1",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": true
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_cidr_v4_outside_range_is_untrusted",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.0/24"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.3.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.3.1:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_cidr_with_host_bits_set_still_matches",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.5/24"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.200:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.201:1",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": true
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_cidr_v6",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "2001:db8::/32"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "[2001:db8:1::5]:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "[2001:db8:2::5]:1",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": true
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_exact_v6",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "2001:db8::1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "[2001:db8::1]:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "[2001:db8::1]:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": true
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_v4_list_does_not_trust_v6_peer",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.0/24"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "[2001:db8::1]:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "[2001:db8::1]:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "invalid_prefix_length_is_ignored",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.0/33"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "leading_zero_prefix_length_is_ignored",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.0/08"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "leading_zero_octet_trusted_entry_is_ignored",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.000.2.1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "garbage_trusted_entry_is_ignored",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "not-an-ip"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "empty_trusted_entry_is_ignored",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        ""
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_forwarded_for_beats_real_ip",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1",
+            "X-Real-IP": "8.8.8.8"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1",
+            "X-Real-IP": "9.9.9.9"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_real_ip_used_without_forwarded_for",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Real-IP": "8.8.8.8"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Real-IP": "9.9.9.9"
+          },
+          "allowed": true
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_forwarded_for_first_element_trimmed",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "  1.1.1.1  , 2.2.2.2"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_forwarded_for_not_validated_as_an_ip",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": "not-an-ip"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": "not-an-ip"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_forwarded_for_empty_first_element_is_the_empty_key",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "headers": {
+            "X-Forwarded-For": ", 1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "headers": {
+            "X-Forwarded-For": ", 2.2.2.2"
+          },
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_without_headers_keys_by_socket_host",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:1",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:2",
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "forwarded_client_shares_the_key_space_with_socket_hosts",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "10.0.0.0/8"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "10.0.0.1:1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "1.1.1.1:9",
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "socket_address_without_port_is_the_whole_string",
+      "limit": 1,
+      "window_ms": 60000,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1",
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "socket_address_without_port_shares_the_key_of_the_same_host_with_a_port",
+      "limit": 1,
+      "window_ms": 60000,
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1",
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1:80",
+          "allowed": false
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    },
+    {
+      "name": "trusted_peer_without_port_is_matched_by_host",
+      "limit": 1,
+      "window_ms": 60000,
+      "trusted_proxies": [
+        "192.0.2.1"
+      ],
+      "steps": [
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1",
+          "headers": {
+            "X-Forwarded-For": "1.1.1.1"
+          },
+          "allowed": true
+        },
+        {
+          "op": "request",
+          "remote_addr": "192.0.2.1",
+          "headers": {
+            "X-Forwarded-For": "2.2.2.2"
+          },
+          "allowed": true
+        }
+      ],
+      "canonical_timing": "single window; no clock involved"
+    }
+  ],
+  "eviction_scenarios": [
+    {
+      "name": "oldest_live_entry_is_evicted_at_the_cap",
+      "limit": 1,
+      "window_ms": 60000,
+      "max_entries": 3,
+      "steps": [
+        {
+          "op": "allow",
+          "ip": "a",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 3
+        },
+        {
+          "op": "allow",
+          "ip": "b",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 3
+        },
+        {
+          "op": "allow",
+          "ip": "c",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 3
+        },
+        {
+          "op": "allow",
+          "ip": "d",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 3
+        },
+        {
+          "op": "allow",
+          "ip": "a",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 3
+        },
+        {
+          "op": "allow",
+          "ip": "c",
+          "allowed": false
+        },
+        {
+          "op": "allow",
+          "ip": "d",
+          "allowed": false
+        },
+        {
+          "op": "allow",
+          "ip": "b",
+          "allowed": true
+        }
+      ],
+      "eviction_count": 3
+    },
+    {
+      "name": "expired_entries_are_dropped_before_live_ones",
+      "limit": 1,
+      "window_ms": 150,
+      "max_entries": 3,
+      "steps": [
+        {
+          "op": "allow",
+          "ip": "a",
+          "allowed": true
+        },
+        {
+          "op": "allow",
+          "ip": "b",
+          "allowed": true
+        },
+        {
+          "op": "allow",
+          "ip": "c",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 350
+        },
+        {
+          "op": "allow",
+          "ip": "d",
+          "allowed": true
+        },
+        {
+          "op": "allow",
+          "ip": "d",
+          "allowed": false
+        }
+      ],
+      "eviction_count": 1
+    },
+    {
+      "name": "under_the_cap_nothing_is_evicted",
+      "limit": 1,
+      "window_ms": 60000,
+      "max_entries": 10,
+      "steps": [
+        {
+          "op": "allow",
+          "ip": "a",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 3
+        },
+        {
+          "op": "allow",
+          "ip": "b",
+          "allowed": true
+        },
+        {
+          "op": "sleep",
+          "sleep_ms": 3
+        },
+        {
+          "op": "allow",
+          "ip": "c",
+          "allowed": true
+        },
+        {
+          "op": "allow",
+          "ip": "a",
+          "allowed": false
+        },
+        {
+          "op": "allow",
+          "ip": "b",
+          "allowed": false
+        }
+      ],
+      "eviction_count": 0
+    }
+  ]
+}

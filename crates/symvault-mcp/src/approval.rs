@@ -197,6 +197,14 @@ impl ApprovalQueue {
     }
 }
 
+/// Whether `path` (query stripped) is served by the local approval API. This
+/// is Go's mux match for `PathLocalApprovals` and the `PathLocalApprovalAction`
+/// subtree.
+pub(crate) fn is_local_route(path: &str) -> bool {
+    let path = path.split_once('?').map_or(path, |(path, _)| path);
+    path == LOCAL_APPROVALS || path.starts_with(LOCAL_APPROVAL_ACTION)
+}
+
 pub(crate) fn handle_local_request(
     queue: &ApprovalQueue,
     secret: &[u8],

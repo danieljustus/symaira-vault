@@ -28,6 +28,7 @@ pub mod payment;
 pub mod perplexity;
 pub mod policy_context;
 mod prompts;
+pub mod ratelimit;
 pub mod render;
 mod request_context;
 pub use request_context::RequestContext;
