@@ -47,6 +47,10 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_list_matches_go_text_json_and_yaml() {
     let oracle = go_oracle::GoOracle::begin(
         "agent_list_differential",
@@ -237,6 +241,10 @@ fn go_decoding_workspace(document: &str) -> (tempfile::TempDir, tempfile::TempDi
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_list_registry_decoding_follows_go_encoding_json() {
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let oracle = go_oracle::GoOracle::begin(

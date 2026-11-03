@@ -44,6 +44,10 @@ fn assert_same(go: &Output, rust: &Output, command: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
     let oracle = go_oracle::GoOracle::begin(
         "profile_differential",

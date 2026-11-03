@@ -8,6 +8,9 @@
     "vcs_modified": "false"
   },
   "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
   "tests": {
     "add_noninteractive_matches_go_and_preserves_existing_entries": {
       "seeds": [
@@ -156,7 +159,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFFtYmRFd1F6Y0pQWXJGK2ZQRkF2c1EgdD0zLG09NjU1MzYscD00Cmd5RmFYZWs0aDJHZkdrNHRPci9zd1pNc2NWNzR5M0FkWEVmcENLMmNmZVdSamViMzZrUituR1FnMzJFCi0+IE17dC5zWm1FLWdyZWFzZSBjbiA2IS88VipACkQ1a1hOOStrK2U1akU2bmFYemFtZms4YmFJVkFNQmttYzRtUFdpV2ZTVCt3VUV2QVhBCi0tLSBJY1hjOHRvOFUyZ2ZNL3lpYWUwaTZPSFkwKzlOZ3BONTllTG1XNXhrZEdzCgwfsIn/JkgTrxwv6PylbkgAGJ8lnazpEkoQalbwDEkapFA8PmEgDRkIdBo+wBYcC92sUAto28lRtkLiYJl2xZHtwHjlq5Om8QuXwwy3q5bdIidiGioOfczCP1/x/JSEMo305WOEXQ14ixw="
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1s80ldm6942gs9x7hy6kzesggguvvavhcpkqyv3hhernfqpk753gs793nux\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [
@@ -818,7 +831,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDRTcmpRbXZzYjcydk1XU093UlVycVEgdD0zLG09NjU1MzYscD00ClArL1BVeXNmZDR2dFg5WG5mRzc3QXlOenFBMklkem5oYi9iMkFjR3RjSHlYREpNYkFrYlNsQlJhOThzCi0+IC1QVi1ncmVhc2UgWzY2J2doW0Mge20sKFsjLkIgKFhUYjIKVjZhSWc0OGFpQUNtbXNUWEI5NmQ2eVZ0d0xOVXRhU2crZUZZd2loVUg0WVY2MVlYcW1VNGViRGVOa0EwWEI5UgpsdmhMTWpQcUVDbzVnVFFnL3FDTklnbmRzSlVBdXFUMDdiak5zOGdtN2JOS1plUQotLS0gWVJxZUptYTdPeW9acFpsZXltU3ArU1pjWjhUNXUwVExmODA2ZDhkY3QrbwrFc4OxYJF2Fay2Tdzj5HNtIPXTWNWebihzTCFStbuVjrx7pT08l4qU26NFf4Cf6TmqBKxrQGQNup3Fl2FPVPJqQHMxcFUbdsyVkalQOjSk9NoGaHDI93zPRtbxrBxWXFXXx0iVOUqJ2Ufj"
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1dsgkzqnmm4re2hftwfpd0pcarxsc4xpytvxq64fza5m49ynh53fsq6lx5k\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [
@@ -1640,7 +1663,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFZad1cvN0ZQVURSTjBNSStNMU82a3cgdD0zLG09NjU1MzYscD00CkVqb0xEcjNyWFBuUFpkUzB4a3pyM0RRMXRjNi9YeUh3VmdhNmJyTlpUbnh0WU56OGRMUFJQdGtRNFdFCi0+IDAhLHYtLlMtZ3JlYXNlID40TCBnKyAwWwpIU0VVVm10TQotLS0genhGU0Q1UWRHM01BZmdia21UTjdBTjFLbFRjOWhISUk3UUF2a1NqL2FkSQo7wQ98PJJ4Ng2/YGuuntpHtTrL+Y3U1lByhXAY+NApQzxuE3n+Y65UTQiRULByH1LIwOzll7Km8KxefMYRSd0bCTPrVNNdWM8wtM5mfSaYLRcHfh5Fr/IwbZVvCKzdbbDsieyUrk+BBBN1"
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1xyua5sx5sha3ak6ff8g5zmqajrrqy7prep7lz9uvnqsqmy2s4epsyd76z2\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [
@@ -2300,7 +2333,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIHFTeDlrV3JLaU9hZTdsV1JWQUgzQ3cgdD0zLG09NjU1MzYscD00CnV0blZ3cXNZMjBISk5GeVNBUzZOK1J0b1BIZExHcFEyZDBpTXZ6Ulgra0pwaVJ2Z0hOQWUvbDNWVXRVCi0+ID1zdDQ3LWdyZWFzZSBRc1JvKyBAKCcxVyA0e2JxK2MKNlErOFJnQktIa3psZ2FvaXBpZEZBUDJIVWdEMHlNUlcyWDBPTmZFVVBuSVMwUWRvN0U1bXBNR1c3YS80MDVibgp6cFVOSWZDQ2xBSWZVUlJ5YktTV28vbEFnU3NPOC9DOEYwRjEzVUswT041OFpWSjFJUQotLS0gaGVmMGI1ZE9SOWhGVjV2bGVkbTlqT1E5azZRZU5KM1drdTB2Zmk3OTh0OApWXeWgvW1jqYCZKaQV0zRAfkPOB8iIatcRUq4D4jfcX4fa05VXzwtwnEIlZLni4UwFbwf2OeYO6MuOxrY95QjvI5DDFWanaXP7px4RGdOH4GinJotZG8AZxyQXXc7PkhSSvCCL/XIO84P3"
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1hg7js85ekrw3hjuljtgst273tlwv5xvdy870k80306hy5gkpwg9qjd87e2\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [
@@ -2440,7 +2483,7 @@
               "op": "file",
               "mode": 420,
               "content": {
-                "text": "/var/folders/7v/7bpq0fjn44lflpxdylsx8qs40000gn/T/symvault-file-791444466/CERT_P12"
+                "text": "<TMPFILE>/CERT_P12"
               }
             }
           ]
@@ -2530,7 +2573,7 @@
               "op": "file",
               "mode": 420,
               "content": {
-                "text": "/var/folders/7v/7bpq0fjn44lflpxdylsx8qs40000gn/T/symvault-file-2059853905/CERT_P12"
+                "text": "<TMPFILE>/CERT_P12"
               }
             }
           ]
@@ -2677,7 +2720,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDJHZkxpNko1OFc1WURyRmJ4cGpsVGcgdD0zLG09NjU1MzYscD00CmJDZjhCdXJ5WTBaTnpFQk9pTFJkWEE0Z3JKUmVKclBGd0xvb21lM2RKWTNVWGQxRDkzQThyTVFrU3FVCi0+IHVGKC1ncmVhc2UgcyZJSiogKGtpCllzSm5sbFNDdGVOYWRyZ290aUJPYXZLdS9aVGxpcnFvNW5PMHJOZwotLS0gRUxCYzg2aHp3bjh5R0FuYWFUMnA0KzRvWVY4QURmZzJyV2l3Um0xclFZawrHtP5Twek/WcVNLXH/O0Bob73cpwJWV6XOuPTsgCVfdfy/lrmsWIG4hI019KsGWZDpPIm2mvogfpoajYpRpY3xJIHpltSkpS1YRo1ZUtmDX2mtMQXQVYMzwoHS/NfVB2Qkfes/rGzlKB1C"
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1hjtg6wgrv97tu2rac2dgdrduhga3rxyzndeumahrf0g9ftn3qdgsqud4wt\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [
@@ -3073,7 +3126,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFVBbWJoS1dKQXlyQlZzdWN5Nm1zQ0EgdD0zLG09NjU1MzYscD00Cnc2RW4ySGZBQTU3N1ZnM3lueEFITDk0R0NJQUlqYWRlVE13WUlRZllSZkVBMkZla0hWUUlFWnlFLytBCi0+IDl7KnZOby1ncmVhc2UKSVdGbDRoN0ZBSk93RzA1Y1Nic2QwKzQzS2ZEVHNodHliRUNHQUxkRUk2RHhEZwotLS0gNFNVSDFmUnc4ZkZMQmE5dVl1MVhnNVZGWkIvTWFwdXNSTnQxTm51Vm5aQQq6HtVfqUUvazqYTBRo8D/8pDKgmt5+yFcYcXtXpUR6L47InAugc+gkDy1zbhVM3VLtUdpyiF4OkMqZynYCKivC3rxMZ42WzxtEqv3PEOHvCwY8AFa5ZLtXokGcsYeW0zXvpCnpsBoiE90h"
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1jyqs80j5stknwdrrh44razp8n5xklw9y4eufmvlf64mdaqnx8cysjx788m\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         },
         {
           "name": "init",
@@ -3220,7 +3283,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEhpMys1S2tyMm5UVUppd2g5MTJBZWcgdD0zLG09NjU1MzYscD00Cmh5N3M5VklHM1pVbmVTeTY2MnZtenFYWnNWa1JHUkdhVlFvOTlyUHFhVGxJTWNXRE5jT1JjWWFOYW1BCi0+IDkwPSV3LWdyZWFzZQozL3hoRHN1VC9VTXl6QkkvRklpZDdPcWtiY2E1ZTdsUDF6d2orWVJtWTc0NVE4RnBCU0JkeEZCNWdDTHhUTm5OCjdId1E0LzA0aWVYeFZPTEJBcWNjZFlCTWppS0N5NWVpMFFFR1BRCi0tLSB3NnNBdzYrRVlCNzRxMGx0YzZBY2h6YzY1R3JTaEgrYjVIVFdzQlhzK2VjCgfRuAczCuPqwv6v6+yde4K23gWZ/9e1vJvKh2IXKNuBmgaechHbct/9WJPtOnmmmZFV5IvDUowt3IJSHTbcKYp6m0EGqpihrUjaPc3n9nc82+7oJjdW2+hmgvUQh6QA8swgg//EZD8+D6o="
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:2>/root\nPublic key: age16mf23dxsnj0hd9xvjychmq0wlh0plsq3rtxeazac8wd639tjuf7sfkes6w\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [
@@ -3399,6 +3472,10 @@
           },
           "fs_delta": []
         }
+      ],
+      "replay_platforms": [
+        "linux",
+        "macos"
       ]
     },
     "init_list_get_match_go_cli_on_a_disposable_vault": {
@@ -3548,7 +3625,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDN6ZUFYSnlUWmtuWVpmSm1xc1hoTWcgdD0zLG09NjU1MzYscD00CmRia2JTcXNDZ0RrajlLVXR1OTJXc2RNL2xrVmtaVWlUUTZPYWpjMU45bHBENm1sREsxWE9wYmF3Y3lFCi0+IDxsLWdyZWFzZSAhLyBdYEQmS0FmIC5PIGM9OCo6Cm5IZUJBaDJhSjhOdDVkU2dqNXJpMDdYRHFwTjk0Vi9Ic0h2eGRWL2YyUDJZcGIrYWV5aGZVbFd1UnRlMTlYYlUKRUZKTXFsMAotLS0gY25IVEFqVENIb2dINmhDM2ZJaDVyL3k5YWxaNDZOa1VIN0hLenF2SE15dwrqs/d4dg55mrMr7mEqJ9dVHDIkQrsZSr6Z9p22HwsvaZGzJUQqlrz3ApSBbi9LenH7QWQ/hnQMF7pOMHp/2xxXsr4bv0V+wZMeXVDrUtCud9uCeU83LQBmVqs+Mwc3gwjxf344ehJCTkEF"
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age19vm37ysyktmcssfclgj47y9c77knykl2ryz7nhhguwfd06j3x4us4pwvrv\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         },
         {
           "name": "rust-generate",
@@ -5352,6 +5439,10 @@
             }
           ]
         }
+      ],
+      "replay_platforms": [
+        "linux",
+        "macos"
       ]
     },
     "set_totp_flags_parity_matches_go": {
@@ -5494,7 +5585,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFpiNFR3TlNwV0tEb1BRNVQ5WHpNcWcgdD0zLG09NjU1MzYscD00Ci9FRXoxcWFOTmdXWVM0R3psV095ZHMrME9pc2daU0lIcnFONS9YZWp2NUlhem9vdk9xcjRNaVVQY1NzCi0+IGdsfi1ncmVhc2UgPEdLIF0sekggQGtcQzoxOV0gO2V0dzcqCms5NDVPZ3ZLb0d5ZjgyRTIvQVJ5anF6RWJnZ2tzME9PUXlsUGRLcHVrQXNQU1h6MmxQWWU2ZkhDNitiazJqUkwKSElBCi0tLSAzL1RKTitIU2ovWHVuYXVlZWJLRm94QmRVbEo3RmNDMDk3di8xdGpHbUkwCm28T3USZ91L7XxG7x3YcWKMPiDwd9UCTbxEIJYxYZZ/CW4P5FNkSjUaItge4LVyJ/wXnkxujCilTGGHnUgO6OOUvI8qVYSvVSvtjNynwWzGfeF3ls7jUzC0HVOrqgEd3v3ctzHQYTtprsw="
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1py470xwy4rtk0ts7jsrvh7teewvylx98q2zxev9t8mj2s9kx9e4srv9ueu\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         },
         {
           "name": "init",
@@ -5634,7 +5735,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIHVVc0tVZ2o1MVNFRm82amF5NlB6T0EgdD0zLG09NjU1MzYscD00Cm9xVUh0aGx1SEh6NDlERGVYMS96N1F6bkQ3ZXQ5ZWg4TzZjek5nU01lMWtaRzQzUUNWSW1kalV1Sk93Ci0+IFh5dihDLi1ncmVhc2UgTDAobnRIdyBfMjJjKwpxdnNaazNhelV5WkFISmpsZ3krbGtuQndBN1RRREFobGJvK1hWR21QMWdqenErZwotLS0gTjFLUzVwaVh0eGI0K1I1OC9kU29LVXoxODliUW9xSkZVbzREUUl3Q1JvQQolwZ38AuhyRpGQtnHxASNyRJELhVOS6LGACE6nCnb/1sfSaa9OLQTPZr7wCSYkgZMiv9GyJ80YX1QJa+ei/kPimCThIUfUgrKYusvoFH/nW3c5Txtd3A7cuwV1wiURO/ck3StqRJSIaxWW"
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:2>/root\nPublic key: age1pl0glugtq5ashm8lar3kxw94fme8cam8k4vslhwg348mt89av97sar853e\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [
@@ -5946,7 +6057,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDJQVXBOaFVoMnlqSTM4SlZVZXVGamcgdD0zLG09NjU1MzYscD00CkcvZWppVUg3SHpuek1HQXlwUGdWKzJHYWVlREMzUmRTUlZEbHVaOTdYQzN6Vy8vR2d3TXg2bGswNW5zCi0+IG0tZ3JlYXNlIEF0byYtL0hyIFIpI1ZGYWlFIHc/anJEZiAyO0lOeWU8WQoydVpDZ2RPUk5UeDdBU2lrWmtYSXpRYjhZV0RxdWNBdktycmdVYm9jTkEKLS0tIFVmM3I0d1l4L0pqZlRhUGpxRkR5OWJNWFBtVGJOQ2orV1Myaml3Q0NXTlEKua+kfznlhw0ekYZeFXzfwlE4+Bt50Zs94l/ZXB9bOUIrZaYh721aVayZAeelvuxKvg4lEfglUd+qO6U4no/hGV9g+4svFPvgjHwDI5W9vs/EeryaO9j3a+tevzVKSEbvApeaP8DSodyeoA=="
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1h9yr82wavnxnrwhvwngwkwett59qarxfhcxpyu02cydmdnuzhv6sg6vdex\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [
@@ -6183,7 +6304,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIHdWbDJPN1M5WWRLaGhZcVEvaGJwUkEgdD0zLG09NjU1MzYscD00CnVlUkRwbEhmSVFXTXdqbnpxTEZ3ZzBBUE9pZzkzRGFMcXBzVzR3QWExMk15WjRJUHFyVDJEaHNPaTE0Ci0+IE4nLWdyZWFzZSA8LGhVfWMgbQpkNUJiUWVvcHUzYmxtSDAvSW82RW1aWGRONzJ0a0RtbW1WL1V2eVJRWWQweUQ0WQotLS0gVGN4ME9ld2g2RDFRbEc1VlgyQjVySERWV3JjdGwxRWxoNVBkMHN6cGQxbwp9h0f5KWahmW13YYBxhxsM5lIXaMx8F8Wr2pnujAN4oj7SzPJaH3AkHpDuISD0Rr6chfd7L/lmyCgddKmBvv00NlwKvljHEj4IRXDQZPtwh0i48+qOaWOcsPqj0KCaJFJC3kBJ6nlmHYLA"
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1u4p4zguuc3su6fp86s25uvv5rnjylatl6r85umpl2gg80lmwce8qkna6tw\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [

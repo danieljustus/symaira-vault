@@ -58,6 +58,10 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn config_validate_matches_go_contract() {
     let oracle = go_oracle::GoOracle::begin(
         "config_validate_differential",
@@ -161,6 +165,10 @@ fn config_validate_matches_go_contract() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn config_inspect_cleans_read_paths_but_preserves_set_target() {
     let oracle = go_oracle::GoOracle::begin(
         "config_validate_differential",

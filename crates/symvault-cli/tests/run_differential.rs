@@ -124,6 +124,10 @@ fn synthetic_pattern_corpus() -> String {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn run_matches_go_for_secret_env_file_passthrough_pattern_and_exit() {
     let oracle = go_oracle::GoOracle::begin(
         "run_differential",
@@ -139,7 +143,7 @@ fn run_matches_go_for_secret_env_file_passthrough_pattern_and_exit() {
 
     // `init` generates random keys; the recorded Go calls were captured against
     // exactly this frozen vault.
-    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+    let init = oracle.seed_run("init", &[&root, &home], || {
         run(
             &rust_binary,
             &string_args(&[
@@ -152,9 +156,8 @@ fn run_matches_go_for_secret_env_file_passthrough_pattern_and_exit() {
             &root,
             &home,
         )
-    }) {
-        assert_success(&init, "Rust init");
-    }
+    });
+    assert_success(&init, "Rust init");
 
     let set = run(
         &go_binary,

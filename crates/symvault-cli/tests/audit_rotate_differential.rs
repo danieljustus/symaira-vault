@@ -82,6 +82,10 @@ fn assert_same_normalized(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn audit_rotate_key_matches_go_contract() {
     let oracle = go_oracle::GoOracle::begin(
         "audit_rotate_differential",
