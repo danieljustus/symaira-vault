@@ -1,47 +1,53 @@
 # Symaira Vault Homebrew Formula
 
-Local Homebrew formula support for [Symaira Vault](https://github.com/danieljustus/symaira-vault) - a modern CLI password manager built with Go and age encryption.
+Homebrew formula support for [Symaira Vault](https://github.com/danieljustus/symaira-vault) - a modern CLI password manager built with Rust and age encryption.
 
 ## Installation
 
-Use the release binaries from GitHub or install from source with Go. The formula
-in this directory is intended for local formula validation and future tap
-publishing.
-
-## Testing the formula template locally
-
-The checked-in formula is a reference template, not an installable release
-formula. Before copying it into a tap, render or replace every `{{ ... }}`
-placeholder with the intended source tag, version, source archive SHA-256,
-commit and date. Verify the resulting URL (the template already prefixes the
-tag with `v`). Only `main.version`, `main.commit` and `main.date` exist in
-`main.go`; remove the unsupported `main.builtBy` assignment from the rendered
-copy. See `scripts/homebrew-formula.sh` for the release formula.
-
-Homebrew 5 requires formula files to live in a tap. From the repository root, create a throwaway local tap and install the prepared formula from it:
-
 ```bash
-brew tap-new local/symvault || true
-cp /path/to/rendered/symvault.rb "$(brew --repository)/Library/Taps/local/homebrew-symvault/Formula/symvault.rb"
-brew install --build-from-source local/symvault/symvault
-brew test local/symvault/symvault
-symvault version
+brew install danieljustus/tap/symvault
 ```
 
-To reinstall after editing the rendered formula:
+`Formula/symvault.rb` in this directory is a rendered reference copy. It installs
+the prebuilt Rust release archive (`symaira-vault_<version>_<os>_<arch>.tar.gz`,
+which wraps `symvault`, `completions/` and `docs/man/`), not a source build. The
+release workflow renders the real tap formula with
+`scripts/homebrew-formula.sh VERSION CHECKSUMS_FILE`; the checked-in copy is that
+script's output for the placeholder version `X.Y.Z` with all-zero checksums, so
+regenerate it instead of editing it:
 
 ```bash
-brew uninstall symvault
-cp /path/to/rendered/symvault.rb "$(brew --repository)/Library/Taps/local/homebrew-symvault/Formula/symvault.rb"
-brew install --build-from-source local/symvault/symvault
-brew test local/symvault/symvault
+scripts/homebrew-formula.sh X.Y.Z placeholder-checksums.txt > homebrew/Formula/symvault.rb
 ```
 
-To remove the local test install:
+## Testing the formula against a locally built archive
+
+Homebrew 5 only loads formulae from a tap, so use a throwaway local tap. Build the
+archive layout from a local release binary (`make completions release-manpages`
+produce the completions and man pages), point the generator at it with
+`SYMVAULT_RELEASE_BASE_URL`, and install:
 
 ```bash
-brew uninstall symvault
-brew untap local/symvault
+# dist/ contains symaira-vault_<v>_darwin_arm64.tar.gz (+ linux archives) and
+# symaira-vault_<v>_checksums.txt
+SYMVAULT_RELEASE_BASE_URL=file://$PWD/dist \
+  scripts/homebrew-formula.sh <v> dist/symaira-vault_<v>_checksums.txt > symvault.rb
+
+brew tap-new local/symvault-test
+cp symvault.rb "$(brew --repository)/Library/Taps/local/homebrew-symvault-test/Formula/symvault.rb"
+brew install --formula local/symvault-test/symvault
+brew test local/symvault-test/symvault   # version + init/set/get round trip
+```
+
+If `symvault` is already installed from another tap, give the throwaway copy a
+different class/file name (for example `SymvaultTest` / `symvault-test.rb`) and add
+`keg_only "local test"` so the existing install is left untouched.
+
+Clean up:
+
+```bash
+brew uninstall symvault   # or the renamed test formula
+brew untap local/symvault-test
 ```
 
 ## Features
