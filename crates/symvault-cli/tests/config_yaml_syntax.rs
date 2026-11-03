@@ -28,6 +28,7 @@ use std::{
 };
 
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Deserialize)]
 struct Oracle {
@@ -121,7 +122,7 @@ const LOAD_CASES: usize = 90;
 /// each kind of scalar and how the section merge treats it.
 const SECTION_CASES: usize = 58;
 /// Inputs on which the native CLI is known to differ from Go.
-const OPEN_DIVERGENCES: usize = 29;
+const OPEN_DIVERGENCES: usize = 33;
 
 fn fixture() -> Fixture {
     const CONTENT: &[u8] = include_bytes!("../../../testdata/port/cli/config-yaml-syntax.json");
@@ -653,6 +654,68 @@ fn mutated_expectation_is_detected() {
     );
 }
 
+/// Commands recorded against the global config of the sandbox HOME
+/// (`~/.symvault/config.yaml`) instead of a `--file` or a vault directory.
+fn is_home_command(command: &str) -> bool {
+    matches!(command, "complete_get" | "completion_bash")
+}
+
+/// What a live run of an open-divergence observation produced.
+struct LiveObservation {
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
+    unchanged: Option<bool>,
+}
+
+/// Runs the command of `expected` the way the generator did and returns the raw
+/// live values. `completion bash` prints a generated script: like the
+/// generator, the stdout is replaced by its `sha256:` digest.
+fn live_open_observation(case_bytes: &[u8], expected: &Observation) -> LiveObservation {
+    let sandbox = Sandbox::new();
+    if is_home_command(&expected.command) {
+        let global = sandbox.root.join("home").join(".symvault");
+        fs::create_dir_all(&global).expect("create global config directory");
+        fs::write(global.join("config.yaml"), case_bytes).expect("write global config");
+        let output = sandbox.run(&expected.args);
+        let stdout = if expected.command == "completion_bash" {
+            format!("sha256:{}", hex::encode(Sha256::digest(&output.stdout)))
+        } else {
+            sandbox.normalize(&output.stdout)
+        };
+        return LiveObservation {
+            exit_code: output.status.code().unwrap_or(255),
+            stdout,
+            stderr: sandbox.normalize(&output.stderr),
+            unchanged: None,
+        };
+    }
+    let config = sandbox.config_path();
+    fs::write(&config, case_bytes).expect("write isolated config");
+    let args = substitute(&expected.args, "__CONFIG__", &config);
+    let output = sandbox.run(&args);
+    let unchanged = expected
+        .config_unchanged
+        .map(|_| fs::read(&config).expect("read config after run") == case_bytes);
+    LiveObservation {
+        exit_code: output.status.code().unwrap_or(255),
+        stdout: sandbox.normalize(&output.stdout),
+        stderr: sandbox.normalize(&output.stderr),
+        unchanged,
+    }
+}
+
+fn home_observation_difference(case_bytes: &[u8], expected: &Observation) -> Option<Difference> {
+    let live = live_open_observation(case_bytes, expected);
+    compare_observation(
+        expected,
+        live.exit_code,
+        &live.stdout,
+        &live.stderr,
+        live.unchanged,
+    )
+}
+
 /// Runs every command recorded for an open divergence and returns, per command,
 /// how the native CLI differs from Go. Empty means the input now matches.
 fn open_divergence_differences(
@@ -662,7 +725,12 @@ fn open_divergence_differences(
     let bytes = decode_hex(&divergence.config_hex);
     let mut differences = Vec::new();
     for observation in &divergence.observations {
-        if let Some(difference) = config_observation_difference(&bytes, observation) {
+        let difference = if is_home_command(&observation.command) {
+            home_observation_difference(&bytes, observation)
+        } else {
+            config_observation_difference(&bytes, observation)
+        };
+        if let Some(difference) = difference {
             differences.push((observation.command.clone(), difference));
         }
     }
@@ -1218,4 +1286,404 @@ fn config_resid_outcomes_are_pinned_to_what_go_prints() {
             );
         },
     );
+}
+
+// --- ADR 0034 items 6 and 9: the ratified native behaviour, pinned exactly -----------
+
+/// What the native CLI must print for one observation of an open divergence that
+/// ADR 0034 ratified. `None` means equal to Go's recording; a given value must
+/// differ from it. The Go side is the fixture, recorded by `yamlsyntaxgen`.
+struct Ratified {
+    name: &'static str,
+    item: &'static str,
+    command: &'static str,
+    exit_code: Option<i32>,
+    stdout: Option<&'static str>,
+    stderr: Option<&'static str>,
+    config_unchanged: Option<bool>,
+}
+
+const NESTING_REFUSAL: &str = "Error: cannot load config: Parse error at line 1, column 260: Collection nested too deeply (limit 256)\n";
+
+const RATIFIED: &[Ratified] = &[
+    // Item 6: the native config get/set refuse beyond 256 nested collections
+    // (yaml_edit MAX_FLOW_DEPTH), yaml.v3 accepts 10000.
+    Ratified {
+        name: "nesting_depth_257",
+        item: "ADR 0034 item 6",
+        command: "get_nested",
+        exit_code: Some(6),
+        stdout: Some(""),
+        stderr: Some(NESTING_REFUSAL),
+        config_unchanged: None,
+    },
+    Ratified {
+        name: "nesting_depth_257",
+        item: "ADR 0034 item 6",
+        command: "set",
+        exit_code: Some(6),
+        stdout: Some(""),
+        stderr: Some(NESTING_REFUSAL),
+        config_unchanged: Some(true),
+    },
+    Ratified {
+        name: "nesting_depth_10000",
+        item: "ADR 0034 item 6",
+        command: "get_nested",
+        exit_code: Some(6),
+        stdout: Some(""),
+        stderr: Some(NESTING_REFUSAL),
+        config_unchanged: None,
+    },
+    Ratified {
+        name: "nesting_depth_10000",
+        item: "ADR 0034 item 6",
+        command: "set",
+        exit_code: Some(6),
+        stdout: Some(""),
+        stderr: Some(NESTING_REFUSAL),
+        config_unchanged: Some(true),
+    },
+    // Go's own limit: both refuse, with different wording.
+    Ratified {
+        name: "nesting_depth_10001",
+        item: "ADR 0034 item 6",
+        command: "get_nested",
+        exit_code: None,
+        stdout: None,
+        stderr: Some(NESTING_REFUSAL),
+        config_unchanged: None,
+    },
+    Ratified {
+        name: "nesting_depth_10001",
+        item: "ADR 0034 item 6",
+        command: "set",
+        exit_code: None,
+        stdout: None,
+        stderr: Some(NESTING_REFUSAL),
+        config_unchanged: None,
+    },
+    // Item 9: shell completion loads the global config fewer times.
+    Ratified {
+        name: "completion_loader_warnings",
+        item: "ADR 0034 item 9",
+        command: "complete_get",
+        exit_code: None,
+        stdout: None,
+        stderr: Some(concat!(
+            "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead\n",
+            "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+        )),
+        config_unchanged: None,
+    },
+    Ratified {
+        name: "completion_loader_warnings",
+        item: "ADR 0034 item 9",
+        command: "completion_bash",
+        exit_code: None,
+        stdout: None,
+        stderr: Some(""),
+        config_unchanged: None,
+    },
+];
+
+/// Compares a live run with the ratified native values and rejects a declaration
+/// that does not differ from Go. Pure, so the negative controls need no binary.
+fn ratified_problems(ratified: &Ratified, go: &Observation, live: &LiveObservation) -> Vec<String> {
+    let mut problems = Vec::new();
+    let want_exit = ratified.exit_code.unwrap_or(go.exit_code);
+    let want_stdout = ratified.stdout.unwrap_or(&go.stdout);
+    let want_stderr = ratified.stderr.unwrap_or(&go.stderr);
+    let want_unchanged = ratified.config_unchanged.or(go.config_unchanged);
+    for (what, declared_equals_go) in [
+        ("exit", ratified.exit_code == Some(go.exit_code)),
+        ("stdout", ratified.stdout == Some(go.stdout.as_str())),
+        ("stderr", ratified.stderr == Some(go.stderr.as_str())),
+        (
+            "config_unchanged",
+            ratified.config_unchanged.is_some() && ratified.config_unchanged == go.config_unchanged,
+        ),
+    ] {
+        if declared_equals_go {
+            problems.push(format!("declared {what} equals Go's"));
+        }
+    }
+    if want_exit == go.exit_code
+        && want_stdout == go.stdout
+        && want_stderr == go.stderr
+        && want_unchanged == go.config_unchanged
+    {
+        problems.push("no declared difference from Go".to_owned());
+    }
+    if live.exit_code != want_exit {
+        problems.push(format!("exit {}, declared {want_exit}", live.exit_code));
+    }
+    if live.stdout != want_stdout {
+        problems.push(format!(
+            "stdout {:?}, declared {want_stdout:?}",
+            live.stdout
+        ));
+    }
+    if live.stderr != want_stderr {
+        problems.push(format!(
+            "stderr {:?}, declared {want_stderr:?}",
+            live.stderr
+        ));
+    }
+    if want_unchanged.is_some() && live.unchanged != want_unchanged {
+        problems.push(format!(
+            "config unchanged {:?}, declared {want_unchanged:?}",
+            live.unchanged
+        ));
+    }
+    problems
+}
+
+fn ratified_go<'a>(
+    fixture: &'a Fixture,
+    ratified: &Ratified,
+) -> (&'a OpenDivergence, &'a Observation) {
+    let divergence = fixture
+        .open_divergences
+        .iter()
+        .find(|divergence| divergence.name == ratified.name)
+        .unwrap_or_else(|| panic!("{} is not an open divergence", ratified.name));
+    let observation = divergence
+        .observations
+        .iter()
+        .find(|observation| observation.command == ratified.command)
+        .unwrap_or_else(|| panic!("{}: no {} observation", ratified.name, ratified.command));
+    (divergence, observation)
+}
+
+/// The native CLI does exactly what ADR 0034 items 6 and 9 ratified, on the same
+/// inputs Go's behaviour is recorded for, and the declarations cover every
+/// observation of those entries.
+#[test]
+fn ratified_native_behaviour_of_adr_0034_items_6_and_9_is_pinned() {
+    let fixture = fixture();
+    let mut covered = BTreeSet::new();
+    for ratified in RATIFIED {
+        let (divergence, go) = ratified_go(&fixture, ratified);
+        covered.insert((ratified.name, ratified.command));
+        assert!(
+            ratified.item.starts_with("ADR 0034 item "),
+            "{}: {}",
+            ratified.name,
+            ratified.item
+        );
+        let live = live_open_observation(&decode_hex(&divergence.config_hex), go);
+        assert_eq!(
+            ratified_problems(ratified, go, &live),
+            Vec::<String>::new(),
+            "{} {}",
+            ratified.name,
+            ratified.command
+        );
+    }
+    for name in [
+        "nesting_depth_257",
+        "nesting_depth_10000",
+        "nesting_depth_10001",
+        "completion_loader_warnings",
+    ] {
+        let divergence = fixture
+            .open_divergences
+            .iter()
+            .find(|divergence| divergence.name == name)
+            .unwrap_or_else(|| panic!("{name} is recorded"));
+        for observation in &divergence.observations {
+            assert!(
+                covered.contains(&(name, observation.command.as_str())),
+                "{name} {} has no ratified declaration",
+                observation.command
+            );
+        }
+    }
+    // Go's side of the nesting limit: 10000 levels are read and written, one
+    // more is refused by yaml.v3 itself.
+    for (name, exit) in [
+        ("nesting_depth_257", 0),
+        ("nesting_depth_10000", 0),
+        ("nesting_depth_10001", 6),
+    ] {
+        let divergence = fixture
+            .open_divergences
+            .iter()
+            .find(|divergence| divergence.name == name)
+            .expect("nesting entry");
+        for observation in &divergence.observations {
+            assert_eq!(
+                observation.exit_code, exit,
+                "{name} {}",
+                observation.command
+            );
+        }
+    }
+    let go_get_257 = fixture
+        .open_divergences
+        .iter()
+        .find(|divergence| divergence.name == "nesting_depth_10001")
+        .and_then(|divergence| divergence.observations.first())
+        .expect("10001 get");
+    assert!(
+        go_get_257
+            .stderr
+            .contains("yaml: exceeded max depth of 10000"),
+        "{}",
+        go_get_257.stderr
+    );
+    let complete = fixture
+        .open_divergences
+        .iter()
+        .find(|divergence| divergence.name == "completion_loader_warnings")
+        .expect("completion entry");
+    let counts: Vec<(String, usize)> = complete
+        .observations
+        .iter()
+        .map(|observation| {
+            (
+                observation.command.clone(),
+                observation
+                    .stderr
+                    .matches("envWhitelist is deprecated")
+                    .count(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        counts,
+        [
+            ("complete_get".to_owned(), 2),
+            ("completion_bash".to_owned(), 1)
+        ],
+        "Go prints the warning twice for __complete and once for completion"
+    );
+}
+
+/// Negative control per pin: Go's own behaviour is rejected as a closed
+/// divergence, and a one-field mutation of the live values is detected.
+#[test]
+fn ratified_pins_reject_go_behaviour_and_mutations() {
+    let fixture = fixture();
+    for ratified in RATIFIED {
+        let (_, go) = ratified_go(&fixture, ratified);
+        let go_live = LiveObservation {
+            exit_code: go.exit_code,
+            stdout: go.stdout.clone(),
+            stderr: go.stderr.clone(),
+            unchanged: go.config_unchanged,
+        };
+        assert!(
+            !ratified_problems(ratified, go, &go_live).is_empty(),
+            "{} {}: Go's behaviour must not satisfy the declaration",
+            ratified.name,
+            ratified.command
+        );
+        let good = LiveObservation {
+            exit_code: ratified.exit_code.unwrap_or(go.exit_code),
+            stdout: ratified.stdout.unwrap_or(&go.stdout).to_owned(),
+            stderr: ratified.stderr.unwrap_or(&go.stderr).to_owned(),
+            unchanged: ratified.config_unchanged.or(go.config_unchanged),
+        };
+        assert_eq!(
+            ratified_problems(ratified, go, &good),
+            Vec::<String>::new(),
+            "{} {}: the declared values satisfy it",
+            ratified.name,
+            ratified.command
+        );
+        for (what, mutated) in [
+            (
+                "exit",
+                LiveObservation {
+                    exit_code: good.exit_code + 1,
+                    stdout: good.stdout.clone(),
+                    stderr: good.stderr.clone(),
+                    unchanged: good.unchanged,
+                },
+            ),
+            (
+                "stdout",
+                LiveObservation {
+                    exit_code: good.exit_code,
+                    stdout: format!("{}x", good.stdout),
+                    stderr: good.stderr.clone(),
+                    unchanged: good.unchanged,
+                },
+            ),
+            (
+                "stderr",
+                LiveObservation {
+                    exit_code: good.exit_code,
+                    stdout: good.stdout.clone(),
+                    stderr: format!("{}x", good.stderr),
+                    unchanged: good.unchanged,
+                },
+            ),
+        ] {
+            assert!(
+                !ratified_problems(ratified, go, &mutated).is_empty(),
+                "{} {}: a mutated {what} must be detected",
+                ratified.name,
+                ratified.command
+            );
+        }
+        if good.unchanged.is_some() {
+            let mutated = LiveObservation {
+                unchanged: good.unchanged.map(|value| !value),
+                exit_code: good.exit_code,
+                stdout: good.stdout.clone(),
+                stderr: good.stderr.clone(),
+            };
+            assert!(
+                !ratified_problems(ratified, go, &mutated).is_empty(),
+                "{} {}: a mutated file effect must be detected",
+                ratified.name,
+                ratified.command
+            );
+        }
+    }
+}
+
+/// The 256/257 boundary of the native limit, on the native binary alone: 256
+/// nested sequences are read and rewritten, 257 are refused (Go accepts both;
+/// the 257 entry above records Go).
+#[test]
+fn native_nesting_limit_is_256_levels() {
+    for (depth, accepted) in [(256usize, true), (257, false)] {
+        let mut bytes = b"a: ".to_vec();
+        bytes.extend(std::iter::repeat_n(b'[', depth));
+        bytes.extend(std::iter::repeat_n(b']', depth));
+        bytes.push(b'\n');
+        for args in [
+            vec!["config", "get", "a", "--file", "__CONFIG__"],
+            vec![
+                "config",
+                "set",
+                "vaultDir",
+                "changed",
+                "--file",
+                "__CONFIG__",
+            ],
+        ] {
+            let sandbox = Sandbox::new();
+            let config = sandbox.config_path();
+            fs::write(&config, &bytes).expect("write config");
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            let output = sandbox.run(&substitute(&args, "__CONFIG__", &config));
+            assert_eq!(
+                output.status.code(),
+                Some(if accepted { 0 } else { 6 }),
+                "depth {depth} {args:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let rewritten = fs::read(&config).expect("read config") != bytes;
+            assert_eq!(
+                rewritten,
+                accepted && args[1] == "set",
+                "depth {depth} {args:?}"
+            );
+        }
+    }
 }

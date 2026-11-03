@@ -28,6 +28,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"debug/buildinfo"
 	"encoding/hex"
 	"encoding/json"
@@ -568,6 +569,15 @@ type openEntry struct {
 const lookaheadReason = "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. " +
 	"The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'"
 
+const nestingReason = "yaml.v3 decodes up to 10000 nested collections (config get prints the value, config set rewrites the file); the native config get and set parse the stream with yaml_edit, whose flow-depth limit is 256, and fail with exit 6 and an unchanged file"
+
+// nestedFlowSequence is `a: [[...]]` with depth closed levels.
+func nestedFlowSequence(depth int) []byte {
+	out := append([]byte("a: "), bytes.Repeat([]byte("["), depth)...)
+	out = append(out, bytes.Repeat([]byte("]"), depth)...)
+	return append(out, '\n')
+}
+
 var textCommands = []string{"validate", "get", "set", "doctor"}
 
 // openInputs are inputs on which the native CLI is known to differ from Go.
@@ -637,6 +647,18 @@ func openInputs() []openEntry {
 			kindWording, []string{"get", "set"}, "validate and doctor agree (defaults); config get and set differ in the node-layer wording of an empty document, exit status and unchanged file agree"},
 		{input{"zero_width_space_root", "accepted", "a document that is only U+200B: not white space for Go, a plain scalar", []byte("\u200b\n")},
 			kindWording, textCommands, "same decode-layer wording gap as scalar_root: yaml.v3 says 'cannot unmarshal !!str `\u200b` into config.Config', the native loader 'invalid type: string'; exit status and the unchanged file agree"},
+		// ADR 0034 item 6: yaml.v3 accepts 10000 nested collections, the native
+		// config get/set (yaml_edit) refuse beyond 256. config validate and doctor
+		// are not recorded: the native read path has no such limit.
+		{input{"nesting_depth_257", "accepted", "257 nested flow sequences, all closed, one level past the native limit", nestedFlowSequence(257)},
+			kindBehavior, []string{"get_nested", "set"}, nestingReason},
+		{input{"nesting_depth_10000", "accepted", "10000 nested flow sequences, all closed: the deepest document yaml.v3 accepts", nestedFlowSequence(10000)},
+			kindBehavior, []string{"get_nested", "set"}, nestingReason},
+		{input{"nesting_depth_10001", "accepted", "10001 nested flow sequences: yaml.v3 refuses with its own depth error", nestedFlowSequence(10001)},
+			kindWording, []string{"get_nested", "set"}, "both refuse the document with exit 6 and leave the file alone: yaml.v3 says 'yaml: exceeded max depth of 10000', the native yaml_edit parser 'Collection nested too deeply (limit 256)'; this entry records Go's upper limit"},
+		// ADR 0034 item 9: the loader warning is printed once per config load.
+		{input{"completion_loader_warnings", "accepted", "the deprecated envWhitelist key in the global config, read by shell completion", []byte("envWhitelist: [FOO]\n")},
+			kindWording, []string{"complete_get", "completion_bash"}, "Go loads the global config at startup for __complete and for completion <shell> (the root's vault-path resolution), so the deprecation warning is printed twice for __complete get '' and once for completion bash; the native completion path loads only what the completer needs: once and not at all. Exit status and stdout are equal (completion bash is compared by its sha256)"},
 	}
 }
 
@@ -746,6 +768,24 @@ var commandSpecs = []commandSpec{
 // keeps one `set` per case, these probe a nested key.
 var openOnlySpecs = []commandSpec{
 	{"set_nested", []string{"config", "set", "agents.x.canWrite", "true", "--file", configMarker}, true},
+	{"get_nested", []string{"config", "get", "a", "--file", configMarker}, false},
+}
+
+// homeSpecs are recorded for open divergences only: commands that read the
+// global config at ~/.symvault/config.yaml of the sandbox HOME and take no
+// --file flag (shell completion).
+var homeSpecs = []commandSpec{
+	{"complete_get", []string{"__complete", "get", ""}, false},
+	{"completion_bash", []string{"completion", "bash"}, false},
+}
+
+func lookupHomeSpec(name string) (commandSpec, bool) {
+	for _, spec := range homeSpecs {
+		if spec.name == name {
+			return spec, true
+		}
+	}
+	return commandSpec{}, false
 }
 
 func lookupSpec(name string) (commandSpec, bool) {
@@ -905,6 +945,14 @@ func buildDivergences(goBinary string) ([]openDivergence, error) {
 				recorded.AgentList = &observed
 				continue
 			}
+			if home, ok := lookupHomeSpec(name); ok {
+				observed, err := runHomeCommand(goBinary, entry.input, home)
+				if err != nil {
+					return nil, err
+				}
+				recorded.Observations = append(recorded.Observations, observed)
+				continue
+			}
 			spec, ok := lookupSpec(name)
 			if !ok {
 				return nil, fmt.Errorf("open divergence %s: unknown command %q", entry.name, name)
@@ -1004,6 +1052,38 @@ func runConfigCommand(goBinary string, item input, name string, argTemplate []st
 		}
 		unchanged := bytes.Equal(after, item.config)
 		result.Unchanged = &unchanged
+	}
+	return result, box.close()
+}
+
+// runHomeCommand records a command that reads the global config of the sandbox
+// HOME (~/.symvault/config.yaml) and no vault: the case's bytes are that file.
+// The output of `completion` is the generated script, recorded as its sha256.
+func runHomeCommand(goBinary string, item input, spec commandSpec) (observation, error) {
+	box, err := newSandbox()
+	if err != nil {
+		return observation{}, err
+	}
+	global := filepath.Join(box.root, "home", ".symvault")
+	if setupErr := os.MkdirAll(global, 0o700); setupErr != nil {
+		return observation{}, errors.Join(setupErr, box.close())
+	}
+	if setupErr := os.WriteFile(filepath.Join(global, "config.yaml"), item.config, 0o600); setupErr != nil {
+		return observation{}, errors.Join(setupErr, box.close())
+	}
+	code, stdout, stderr, err := runOracle(goBinary, box, spec.args)
+	if err != nil {
+		return observation{}, errors.Join(fmt.Errorf("case %s %s: %w", item.name, spec.name, err), box.close())
+	}
+	result := observation{Command: spec.name, Args: spec.args, ExitCode: code}
+	if spec.name == "completion_bash" {
+		sum := sha256.Sum256(stdout)
+		result.Stdout = "sha256:" + hex.EncodeToString(sum[:])
+	} else if result.Stdout, err = box.normalize(stdout); err != nil {
+		return observation{}, errors.Join(fmt.Errorf("case %s %s stdout: %w", item.name, spec.name, err), box.close())
+	}
+	if result.Stderr, err = box.normalize(stderr); err != nil {
+		return observation{}, errors.Join(fmt.Errorf("case %s %s stderr: %w", item.name, spec.name, err), box.close())
 	}
 	return result, box.close()
 }

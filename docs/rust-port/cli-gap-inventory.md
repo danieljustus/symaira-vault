@@ -663,7 +663,7 @@ with its reason, or a byte-level residual named here)
   (`upstream-go-bugs.md` 3, 4, 6).
 - Go loads the global config once at startup for every `__complete` and for `completion <shell>`; Rust's
   completion path loads only what the completer needs, so Go prints a loader warning twice / once where Rust
-  prints it once / not at all (`__complete get ''`, `completion bash`). Ordinary commands match.
+  prints it once / not at all (`__complete get ''`, `completion bash`). Ordinary commands match. Pinned by the open entry `completion_loader_warnings` (ADR 0034 item 9, `config-yaml-syntax.json`).
 
 ## SET-003 fix round: vault-open errors, hidden reads, piped input
 

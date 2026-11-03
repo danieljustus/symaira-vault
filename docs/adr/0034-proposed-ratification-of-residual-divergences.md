@@ -99,6 +99,15 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
   (`outputmodegen`) replayed by `crates/symvault-cli/tests/output_modes.rs`
   with the Rust bytes declared.
 - Recommendation: **ratify**.
+- **Pinned (local/pins-cli, 2026-11-03; no Status cell changes).** `output-modes.json` (`outputmodegen`, oracle `bf7f687b`, 652 cases) holds four
+  Go-recorded text-mode cases, `config-set-recoerce-1e3|y|timestamp|merge`, each
+  labelled `declared_divergence` and carrying the file text Go wrote (`files_after`):
+  `port: 1000`, `vaultDir: "y"`, `vaultDir: 2026-10-31T00:00:00Z`, `vaultDir: !!merge <<`
+  (post `config get`: `1000`, `y`, `2026-10-31T00:00:00Z`, `<<`). `DECLARED` in
+  `crates/symvault-cli/tests/output_modes.rs` pins the ratified Rust text (`port: 1000.0`,
+  `vaultDir: y`, `vaultDir: 2026-10-31`, `vaultDir: "<<"`; `config get` `1000.0`, `y`,
+  `2026-10-31`, `<<`) and fails when a declared value equals Go's or the native run
+  leaves it (`declared_divergences_reject_go_behaviour_and_mutations`).
 
 **4. `config set` value re-coercions that change the number or type: `010`, `0b11`.**
 - Rows: CLI-005, CLI-006 (`cli-gap-inventory.md:204`).
@@ -134,6 +143,18 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
   changes a value Rust loads (rather than only a line number in an error) was
   not probed.
 - Recommendation: **ratify**.
+- **Pinned (local/pins-cli, 2026-11-03; no Status cell changes).** Six Go-recorded cases `config-set-residue-unicode-escape|flow-sequence-spacing|flow-timestamp|anchor-redefined|anchor-comment|binary-time`
+  (same fixture and mechanism as item 3). Go: `x: "café"`; `x: [a, b]`; the flow-mapping
+  timestamp quoted and reported as `!!str`; the alias resolved to the definition in force
+  at the alias (error at line 1, `!!str abc`); `a: &a` with the comment moved behind the
+  collection (`line 1`); `\xff` in the `time.Time` parse error. `DECLARED` pins Rust:
+  `"caf\u00e9"` kept, `[a,b]` kept, the timestamp unquoted and `!!timestamp`, an error at line 3
+  naming `!!int 1` (the last definition), the comment kept and `line 2`, `\xef\xbf\xbd`.
+  Resolved 'Uncertain': the anchor attribution is not only a line number. Rust resolves an
+  alias to the **last** definition of the anchor, so `a: &x abc` / `sessionTimeout: *x` /
+  `b: &x 5m` is rejected by Go and accepted by Rust (and the reverse order the other way
+  round; probed with `config validate`, exit 6 versus 0). The ratification text names the
+  line only; the acceptance difference is not pinned here.
 
 **6. YAML nesting depth: Rust 256, Go 10000.**
 - Rows: CLI-005 (`cli-gap-inventory.md:202`).
@@ -151,6 +172,17 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
 - Uncertain: whether the read path (`serde_yaml_ng`, `config.rs:902`) has its
   own recursion limit different from 256 was not checked.
 - Recommendation: **ratify** (limit); open a separate issue for the latency.
+- **Pinned (local/pins-cli, 2026-11-03; no Status cell changes).** `config-yaml-syntax.json` (`yamlsyntaxgen`, oracle `0cc78062`) holds
+  the open entries `nesting_depth_257` and `nesting_depth_10000` (kind `behavior`; Go
+  `config get a` prints the value and `config set` rewrites the file) and
+  `nesting_depth_10001` (kind `wording`; Go refuses with `yaml: exceeded max depth of 10000`,
+  which records Go's upper bound). `RATIFIED` in `config_yaml_syntax.rs` pins the native
+  refusal byte for byte (exit 6, `Parse error at line 1, column 260: Collection nested too deeply (limit 256)`,
+  file unchanged) and `native_nesting_limit_is_256_levels` the 256/257 boundary.
+  Resolved 'Uncertain': the read path has no limit of 256. `config validate` accepts 257,
+  10000 and 10001 levels (about 10 s at 10000 on this machine), so the 256 limit is
+  specific to `config get`/`config set`. At 10001 Go refuses and `validate` accepts: a
+  further difference that this ratification does not cover and that is not recorded.
 
 **7. `profiles: {x: null}`.**
 - Rows: CLI-005. Also recorded as Go bug 7 in `upstream-go-bugs.md`.
@@ -180,6 +212,14 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
 - Uncertain: I read the Rust code but did not establish which branch of Go's
   panic corresponds to which Rust path.
 - Recommendation: **ratify**.
+- **Pinned (local/pins-cli, 2026-11-03; no Status cell changes).** `output-modes.json` holds `remote-init-no-git-section.text` (a global
+  config without a `git` section) and `remote-init-no-global-config.text` (no global
+  config file), both Go-recorded as exit 2 with the panic header, the signal line (program
+  counter masked) and the first frame of the module, `cmd.enableAutoPush` (the goroutine
+  trace is elided: host paths). Both reach `Default().Git == nil` and dereference it; this
+  resolves 'Uncertain'. `DECLARED` pins Rust: exit 0, `Remote "origin" added successfully.`,
+  the SSH hints on stderr and the saved `config.yaml` text with `auto_push: true` (changed
+  in the first case, added in the second).
 
 **9. `__complete` and `completion <shell>` print the loader warning fewer times.**
 - Rows: CLI-005 (`cli-gap-inventory.md:549-551`).
@@ -192,6 +232,12 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
 - Pin: **unpinned**. Would be pinned by an `error_taxonomy`-style Go-recorded
   case for `__complete get ''` with an `envWhitelist` config.
 - Recommendation: **ratify**.
+- **Pinned (local/pins-cli, 2026-11-03; no Status cell changes).** `config-yaml-syntax.json` holds the open entry `completion_loader_warnings`
+  (kind `wording`): with `envWhitelist: [FOO]` as the global config and no vault, Go prints
+  the deprecation warning twice for `__complete get ''` and once for `completion bash`;
+  exit status and stdout are equal (the completion script is compared by its sha256).
+  `RATIFIED` pins the native stderr exactly (the warning once for `__complete`, nothing for
+  `completion`).
 
 **10. `agent profile show` fails on a duplicate agent key reached through an alias.**
 - Rows: CLI-005 (`cli-gap-inventory.md:374`).
@@ -207,6 +253,10 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
 - Pin: **unpinned**. Would be pinned by a Go-recorded `agent profile show` case
   with `&a x: {...}` then `*a : {...}`.
 - Recommendation: **ratify**.
+- **Pinned (local/pins-cli, 2026-11-03; no Status cell changes).** `output-modes.json` holds `agent-profile-show-duplicate-alias.text`:
+  Go exit 0 printing the later entry (`canWrite: false`, `exposeValueTools: true`).
+  `DECLARED` pins Rust exit 1, empty stdout and `Error: load config: agents: duplicate entry with key "x" at line 2 column 3`
+  printed twice.
 
 ### B. Signals (CLI-007)
 

@@ -827,14 +827,14 @@
     {
       "path": "scripts/rust-port/cmd/outputmodegen/cases.go",
       "snapshot": "scripts/rust-port/cmd/outputmodegen/cases.go.txt",
-      "sha256": "d57871c75823d6ce5c4f813ae45692b3c258834d92010f029a4d392caf1a1093",
-      "bytes": 35184
+      "sha256": "4cd1cf54043c645848678c54ea1e95eb1a707042ecd8b2b5322a6758aa3648ca",
+      "bytes": 40032
     },
     {
       "path": "scripts/rust-port/cmd/outputmodegen/main.go",
       "snapshot": "scripts/rust-port/cmd/outputmodegen/main.go.txt",
-      "sha256": "49186010d75244aca5ba3bf44169c6fa2822549b57c78157df95361c1dc354ec",
-      "bytes": 54986
+      "sha256": "565ba7a275112441958802e27a7e2dc6642fd8b13d602242a1558bbdb5175859",
+      "bytes": 58257
     },
     {
       "path": "scripts/rust-port/refresh-read-policy-fixtures.py",
