@@ -28,42 +28,95 @@ def pages(binary, directory, config, env):
     return actual
 
 
-def verify_manual_paths(go_binary, rust_binary, root, inherited_env, artifact, legacy_binary=None):
-    """The owning native driver calls this with its actual rebuilt Go binary."""
-    binaries = [go_binary, rust_binary] + ([legacy_binary] if legacy_binary else [])
+def normalized_pages(pages_by_name, config):
+    placeholder = literal_roff_text(str(config / 'symaira-vault/config.yaml')).encode()
+    return {name: content.replace(placeholder, b'__CONFIG_PATH__') for name, content in pages_by_name.items()}
+
+
+def manual_digest(normalized):
+    return hashlib.sha256(b''.join(name.encode() + b'\0' + normalized[name] + b'\0' for name in sorted(normalized))).hexdigest()
+
+
+def case_environment(root, index, case, inherited_env):
+    base = root / str(index)
+    base.mkdir(parents=True)
+    home = base / 'home'
+    home.mkdir()
+    config = base / 'config-inputs' / case
+    env = dict(inherited_env)
+    env.update(HOME=str(home), USERPROFILE=str(home), XDG_CONFIG_HOME=str(config),
+               XDG_DATA_HOME=str(home / 'data'), XDG_CACHE_HOME=str(home / 'cache'),
+               SYMVAULT_TEST_KEYRING='memory', SOURCE_DATE_EPOCH='0', TZ='UTC')
+    return base, config, env
+
+
+def observe_go_manual_paths(go_binary, root, inherited_env, artifact):
+    """Capture mode: what the Go binary renders for every literal path case (needs the Go binary).
+
+    Only path-independent facts are kept: the placeholder-normalized manual digest, the page
+    count and the normalized unchanged help of `mcp` and `serve`.
+    """
+    observations = []
+    for index, case in enumerate(CASES):
+        base, config, env = case_environment(root, index, case, inherited_env)
+        go = pages(go_binary, base / 'go', config, env)
+        normalized = normalized_pages(go, config)
+        assert normalized == {name: text.encode() for name, text in artifact['manpages'].items()}, ('unaffected manuals', case)
+        help_pages = {}
+        for command in ['mcp', 'serve']:
+            output = execute([go_binary, command, '--help'], base, env)
+            assert not output.stderr
+            help_pages[command] = output.stdout.decode('utf-8').replace(str(config / 'symaira-vault/config.yaml'), '__CONFIG_PATH__')
+            assert help_pages[command] == artifact['help']['symvault ' + command]
+        observations.append({'case': case, 'manual_count': len(go), 'normalized_manual_digest': manual_digest(normalized),
+                             'help': help_pages})
+    assert [o['case'] for o in observations] == CASES and len(observations) == 18
+    return observations
+
+
+def verify_manual_paths(go_binary, rust_binary, root, inherited_env, artifact, legacy_binary=None, go_recorded=None):
+    """Rust (and optionally live Go) literal manual paths.
+
+    With `go_recorded` (observe_go_manual_paths output committed under
+    scripts/rust-port/fixtures/go-observations) no Go binary runs: the recorded Go facts and the
+    committed artifact are the oracle. Pass `go_binary` for the historical live comparison.
+    """
+    assert (go_binary is None) == (go_recorded is not None), 'exactly one of a live Go binary or recorded Go observations'
+    binaries = [b for b in [go_binary, rust_binary, legacy_binary] if b]
     observations = []
     # These are documentation-only path inputs, not filenames being created.
     # Preserve angle brackets/controls on Windows without creating invalid files.
     for index, case in enumerate(CASES):
-        base = root / str(index)
-        base.mkdir(parents=True)
-        home = base / 'home'
-        home.mkdir()
-        config = base / 'config-inputs' / case
-        env = dict(inherited_env)
-        env.update(HOME=str(home), USERPROFILE=str(home), XDG_CONFIG_HOME=str(config),
-                   XDG_DATA_HOME=str(home / 'data'), XDG_CACHE_HOME=str(home / 'cache'),
-                   SYMVAULT_TEST_KEYRING='memory', SOURCE_DATE_EPOCH='0', TZ='UTC')
-        go = pages(go_binary, base / 'go', config, env)
+        base, config, env = case_environment(root, index, case, inherited_env)
+        config_path = str(config / 'symaira-vault/config.yaml')
         rust = pages(rust_binary, base / 'rust', config, env)
-        assert go == rust, ('manual bytes', case, [name for name in go if go[name] != rust.get(name)])
+        if go_binary is not None:
+            go = pages(go_binary, base / 'go', config, env)
+            assert go == rust, ('manual bytes', case, [name for name in go if go[name] != rust.get(name)])
+        normalized = normalized_pages(rust, config)
+        assert normalized == {name: text.encode() for name, text in artifact['manpages'].items()}, ('unaffected manuals', case)
+        if go_recorded is not None:
+            recorded = go_recorded[index]
+            assert recorded['case'] == case and recorded['manual_count'] == len(rust), ('recorded Go case', case)
+            assert recorded['normalized_manual_digest'] == manual_digest(normalized), ('recorded Go manual digest', case)
+            go_mcp_page = rust['symvault-mcp.1']  # byte-equal to the recorded Go digest, asserted above
+        else:
+            go_mcp_page = go['symvault-mcp.1']
         actual_help = {}
         for command in ['mcp', 'serve']:
             outputs = [execute([binary, command, '--help'], base, env) for binary in binaries]
             assert all(not output.stderr for output in outputs)
             assert len({output.stdout for output in outputs}) == 1, ('unchanged help', command, case)
             text = outputs[0].stdout.decode('utf-8')
-            config_path = str(config / 'symaira-vault/config.yaml')
-            assert text.replace(config_path, '__CONFIG_PATH__') == artifact['help']['symvault '+command]
+            if go_recorded is not None:
+                assert text.replace(config_path, '__CONFIG_PATH__') == recorded['help'][command], ('recorded Go help', command, case)
+            assert text.replace(config_path, '__CONFIG_PATH__') == artifact['help']['symvault ' + command]
             actual_help[command] = text
-        normalized = {name: content.replace(literal_roff_text(str(config / 'symaira-vault/config.yaml')).encode(), b'__CONFIG_PATH__')
-                      for name, content in go.items()}
-        assert normalized == {name: text.encode() for name, text in artifact['manpages'].items()}, ('unaffected manuals', case)
-        observations.append({'case': case, 'manual_count': len(go), 'actual_help': actual_help,
-                             'actual_go_mcp_page': go['symvault-mcp.1'].decode('utf-8'),
+        observations.append({'case': case, 'manual_count': len(rust), 'actual_help': actual_help,
+                             'actual_go_mcp_page': go_mcp_page.decode('utf-8'),
                              'actual_rust_mcp_page': rust['symvault-mcp.1'].decode('utf-8'),
-                             'normalized_manual_digest': hashlib.sha256(b''.join(name.encode()+b'\0'+normalized[name]+b'\0' for name in sorted(normalized))).hexdigest(),
-                             'passed': True})
+                             'normalized_manual_digest': manual_digest(normalized),
+                             'go_source': 'live' if go_binary is not None else 'recorded', 'passed': True})
     assert [observation['case'] for observation in observations] == CASES and len(observations) == 18
     return observations
 

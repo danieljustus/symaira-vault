@@ -127,10 +127,16 @@ def load(contract, *, oracle_commit=None, goos=None):
 
 
 def pack_tree(root):
-    """A directory as {relative path: base64} (regular files only, sorted)."""
+    """A directory as {relative path: base64, or None for a directory} (sorted, no links)."""
     root = Path(root)
-    return {str(p.relative_to(root)): base64.b64encode(p.read_bytes()).decode("ascii")
-            for p in sorted(root.rglob("*")) if p.is_file()}
+    packed = {}
+    for entry in sorted(root.rglob("*")):
+        name = str(entry.relative_to(root))
+        if entry.is_dir() and not entry.is_symlink():
+            packed[name] = None
+        elif entry.is_file():
+            packed[name] = base64.b64encode(entry.read_bytes()).decode("ascii")
+    return packed
 
 
 def unpack_tree(files, root):
@@ -143,8 +149,12 @@ def unpack_tree(files, root):
         for parent in reversed([q for q in target.parents if q != root and root in q.parents]):
             parent.mkdir(exist_ok=True)
             os.chmod(parent, 0o700)
-        target.write_bytes(base64.b64decode(data))
-        os.chmod(target, 0o600)
+        if data is None:
+            target.mkdir(exist_ok=True)
+            os.chmod(target, 0o700)
+        else:
+            target.write_bytes(base64.b64decode(data))
+            os.chmod(target, 0o600)
 
 
 IDENTITIES = [("server-ca", None, True, None), ("server", "server-ca", False, "serverAuth"),
@@ -319,7 +329,6 @@ def main(argv=None):
         p.add_argument("--env", action="append", default=[])
         p.add_argument("--file", action="append", default=[])
         p.add_argument("--artifact", action="append", default=[])
-        p.add_argument("cmd", nargs=argparse.REMAINDER)
     for name in ("replay-go-json", "replay-go-text"):
         p = sub.add_parser(name)
         p.add_argument("contract")
@@ -329,11 +338,15 @@ def main(argv=None):
         p.add_argument("contract")
         p.add_argument("--file", action="append", default=[])
         p.add_argument("--artifact", action="append", default=[])
+    argv = list(sys.argv[1:] if argv is None else argv)
+    command = []
+    if "--" in argv:
+        split = argv.index("--")
+        argv, command = argv[:split], argv[split + 1:]
     args = parser.parse_args(argv)
 
     try:
         if args.command.startswith("capture-"):
-            command = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
             assert command, "no command after --"
             result, env = _run(command, args.env)
             commit, version = _oracle(env)

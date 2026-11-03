@@ -1464,27 +1464,26 @@ CLI_ARTIFACT_TEST_TARGETS := --test completions --test cli_generate_manpages --t
 	--test cli_help_subcommand --test cli_update_help --test cli_get_list_help_differential --test cli_completion_args --test cli_dynamic_setup_help
 cli-artifacts-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_GO) $(GO) test ./scripts/rust-port/cmd/cligap -count=1
-	$(AREA_GO) $(GO) test ./internal/manpages ./scripts/rust-port/cmd/portgen -count=1 -v \
-		> "$(AREA_EVIDENCE)/native-go-manual-tests.txt" 2>&1 || { cat "$(AREA_EVIDENCE)/native-go-manual-tests.txt"; exit 1; }
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_cligap.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-go-text cli-artifacts-go-manual \
+		--output "$(AREA_EVIDENCE)/native-go-manual-tests.txt"
 	$(AREA_CHECK) go-text-pass "$(AREA_EVIDENCE)/native-go-manual-tests.txt" \
 		TestManpageLiteralText TestManualConfigPathIsLiteralAndDescriptionsAreRestored \
 		TestManualLiteralPathDoesNotRewriteOtherDescriptions
-	$(MAKE) port-fixtures-check
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-checked cli-artifacts-port-fixture --file $(PORT_CLI_FIXTURE)
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/manual_path_contract_test.py
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_cli_artifacts_contract.py
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(CARGO) test -p symvault-cli --locked --bin symvault \
+	$(AREA_ENV) $(CARGO) test -p symvault-cli --locked --bin symvault \
 		actual_go_protocol_queries_replay_through_real_rust_sessions_and_store $(call AREA_LOGGED,native-cli-protocol-tests.txt)
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-cli-protocol-tests.txt" \
 		actual_go_protocol_queries_replay_through_real_rust_sessions_and_store --results-ok
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(CARGO) test -p symvault-cli --locked \
+	$(AREA_ENV) $(CARGO) test -p symvault-cli --locked \
 		$(CLI_ARTIFACT_TEST_TARGETS) $(call AREA_LOGGED,native-cli-help-tests.txt)
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-cli-help-tests.txt" --results-ok
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_GO) $(if $(wildcard /opt/homebrew/bin/bash),CLI_ARTIFACTS_BASH=/opt/homebrew/bin/bash) \
-		$(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(AREA_PYTHON) scripts/rust-port/cli_artifacts_contract.py \
-		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-cli-artifacts.json" \
-		--captured-output "$(AREA_EVIDENCE)/native-cli-go-artifacts.json" --require-native-shells
+	$(AREA_ENV) $(if $(wildcard /opt/homebrew/bin/bash),CLI_ARTIFACTS_BASH=/opt/homebrew/bin/bash) \
+		$(AREA_PYTHON) scripts/rust-port/cli_artifacts_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-cli-artifacts.json" --require-native-shells
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-cli-artifacts.json" --profile cli-artifacts
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/cligap.py --binary "$(AREA_CLI)" \
 		--output "$(AREA_EVIDENCE)/native-cli-artifact-gaps.json"
@@ -1493,12 +1492,12 @@ cli-artifacts-contract:
 # rust-intake-cli.yml
 intake-cli-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(CARGO) test -p symvault-sync --locked \
+	$(AREA_ENV) $(CARGO) test -p symvault-sync --locked \
 		--test intake_spool_security --test intake_scan_summary --test intake_watcher_contract --test intake_run_loop \
 		$(call AREA_LOGGED,native-intake-tests.txt)
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-intake-tests.txt" --results-ok
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(AREA_PYTHON) scripts/rust-port/intake_watch_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/intake_watch_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-intake-cli.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-intake-cli.json" --profile intake
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/cligap.py --binary "$(AREA_CLI)" \
@@ -1515,7 +1514,7 @@ serve-cli-contract:
 	$(CARGO) test -p symvault-cli --bin symvault --locked daemon_commands::tests:: $(call AREA_LOGGED,native-serve-daemon-tests.txt)
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-serve-daemon-tests.txt" --results-ok
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/serve_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/serve_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-serve-cli.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-serve-cli.json" --profile serve
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/cligap.py --binary "$(AREA_CLI)" \
@@ -2266,6 +2265,11 @@ GO_OBS_CAPTURE := $(AREA_ENV) $(AREA_GO) $(AREA_PYTHON)
 go-observations-capture-other:
 	$(GO_OBS_CAPTURE) scripts/rust-port/api_transport_contract.py --capture-go
 	$(GO_OBS_CAPTURE) scripts/rust-port/connect_contract.py --capture-go
+	$(AREA_ENV) $(AREA_GO) $(if $(wildcard /opt/homebrew/bin/bash),CLI_ARTIFACTS_BASH=/opt/homebrew/bin/bash) $(AREA_PYTHON) scripts/rust-port/cli_artifacts_contract.py --capture-go --require-native-shells
+	$(GO_OBS_CAPTURE) scripts/rust-port/go_observations_common.py capture-go-text cli-artifacts-go-manual -- $(GO) test ./internal/manpages ./scripts/rust-port/cmd/portgen -count=1 -v
+	$(GO_OBS_CAPTURE) scripts/rust-port/go_observations_common.py capture-checked cli-artifacts-port-fixture --file $(PORT_CLI_FIXTURE) -- $(GO) run ./scripts/rust-port/cmd/portgen --check --output $(PORT_CLI_FIXTURE)
+	$(GO_OBS_CAPTURE) scripts/rust-port/intake_watch_contract.py --capture-go
+	$(GO_OBS_CAPTURE) scripts/rust-port/serve_contract.py --capture-go
 	$(GO_OBS_CAPTURE) scripts/rust-port/egress_contract.py --capture-go
 
 go-observations-selftest:
