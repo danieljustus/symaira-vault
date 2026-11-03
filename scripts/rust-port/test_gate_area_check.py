@@ -108,7 +108,7 @@ def good_timeouts():
                        "slow_peers": [peer(case="x"), peer(case="y")],
                        "idle_boundary": {"idle_wait_seconds": 7, "responses": [1, 2]}} for name in profiles}
     invalid = {impl: [{"exit": code, "expected_exit": code, "forced_cleanup": False, "output_capture_complete": True,
-                       "output_capture_errors": []} for _ in range(2)] for impl, code in (("go", 6), ("rust", 1))}
+                       "output_capture_errors": []} for _ in range(2)] for impl, code in (("go", 6), ("rust", 6))}
     return base(profiles=list(profiles), invalid_config=invalid, **per_impl(make))
 
 
@@ -482,6 +482,7 @@ class ReceiptProfiles(unittest.TestCase):
             ("http-read-deadlines", lambda r: r["go"]["idle_boundary"].update(idle_wait_seconds=5.9)),
             ("http-read-deadlines", lambda r: r["declared_differences"].append({"decision": "x"})),
             ("http-timeouts", lambda r: r["invalid_config"]["go"][0].update(exit=1, expected_exit=1)),
+            ("http-timeouts", lambda r: r["invalid_config"]["rust"][0].update(exit=1, expected_exit=1)),
             ("http-timeouts", lambda r: r["profiles"].append("extra")),
             ("http-tls", lambda r: r["declared_differences"].append({"decision": "https-discovery-on-tls"})),
             ("http-tls", lambda r: r["go"]["tls12"]["identity_controls"][0].update(rejected=False)),

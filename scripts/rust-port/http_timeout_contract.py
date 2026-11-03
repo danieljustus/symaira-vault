@@ -53,7 +53,8 @@ def invalid_config(implementation,binary,home,port,value,tokens,row):
         assert complete
         assert not any(v.encode() in stdout+stderr for v in [SECRET,PASSPHRASE]+list(tokens.values()))
     diagnostic=value.encode() in stderr or b'cannot unmarshal' in stderr
-    row['expected_exit']=6 if implementation=='go' else 1
+    # Both exit 6 (ExitConfigError + doctor hint) since c44e6c45 ported Go's config refusal for mcp serve.
+    row['expected_exit']=6
     assert not row['forced_cleanup'] and row['exit']==row['expected_exit'] and diagnostic,'malformed network timeout was not rejected by actual CLI config loading'
 
 

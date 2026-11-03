@@ -179,7 +179,7 @@ def http_timeouts(r):
     for impl in ("go", "rust"):
         size(r["invalid_config"][impl], 2, f"{impl} invalid_config")
         for row in r["invalid_config"][impl]:
-            expected = 6 if impl == "go" else 1
+            expected = 6  # Rust ported Go ExitConfigError for mcp serve (c44e6c45)
             need(row["exit"] == row["expected_exit"] == expected, f"{impl} invalid_config exit {row['exit']!r}")
             need(not row["forced_cleanup"] and row["output_capture_complete"] and not row["output_capture_errors"],
                  f"{impl} invalid_config capture")
