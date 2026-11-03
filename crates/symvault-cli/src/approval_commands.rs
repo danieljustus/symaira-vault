@@ -158,7 +158,7 @@ fn mint_enroll_code(vault: &Path, port: u16) -> Result<EnrollCode, String> {
 
     let secret = symvault_sync::safeio::read_bounded(&vault.join(ENROLL_SECRET), 64)
         .map_err(|error| format!("load vault-ownership proof secret: {error}"))?
-        .ok_or_else(|| "load vault-ownership proof secret: file not found".to_owned())?;
+        .map_or_else(|| create_enroll_secret(&vault.join(ENROLL_SECRET)), Ok)?;
     if secret.len() != 32 {
         return Err("load vault-ownership proof secret: invalid secret length".to_owned());
     }
@@ -339,6 +339,20 @@ fn terminal_width() -> usize {
 mod queue;
 pub(crate) use queue::{decide, list};
 
+/// Go's `serverbootstrap.EnsureEnrollSecret`: the approval CLI creates the
+/// vault-ownership secret (32 random bytes, 0600) when it is absent, and a
+/// server started later reuses it.
+pub(crate) fn create_enroll_secret(path: &Path) -> Result<Vec<u8>, String> {
+    let mut secret = vec![0; 32];
+    getrandom::fill(&mut secret).map_err(|error| {
+        format!("load vault-ownership proof secret: generate enroll secret: {error}")
+    })?;
+    symvault_sync::safeio::write_atomic(path, &secret).map_err(|error| {
+        format!("load vault-ownership proof secret: write enroll secret: {error}")
+    })?;
+    Ok(secret)
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::Ipv4Addr;
@@ -348,6 +362,19 @@ mod tests {
         render_qr_for_width, select_host, select_pair_host,
     };
     use getifaddrs::InterfaceFlags;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_enroll_secret_is_created_private_like_go_ensure_enroll_secret() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().expect("tempdir");
+        let path = root.path().join(super::ENROLL_SECRET);
+        let secret = super::create_enroll_secret(&path).expect("create secret");
+        assert_eq!(secret.len(), 32);
+        assert_eq!(std::fs::read(&path).expect("read secret"), secret);
+        let mode = std::fs::metadata(&path).expect("stat").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
 
     #[test]
     fn enroll_proof_matches_go_hmac_sha256_hex_contract() {

@@ -175,7 +175,10 @@ fn approval_api_request<T: DeserializeOwned>(
 
     let secret = symvault_sync::safeio::read_bounded(&vault.join(ENROLL_SECRET), 64)
         .map_err(|error| format!("load vault-ownership proof secret: {error}"))?
-        .ok_or_else(|| "load vault-ownership proof secret: file not found".to_owned())?;
+        .map_or_else(
+            || super::create_enroll_secret(&vault.join(ENROLL_SECRET)),
+            Ok,
+        )?;
     if secret.len() != 32 {
         return Err("load vault-ownership proof secret: invalid secret length".to_owned());
     }

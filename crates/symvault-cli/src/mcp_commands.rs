@@ -245,6 +245,10 @@ pub fn run(
         if !address.is_loopback() && tls.is_none() {
             return Err("MCP HTTP listener requires TLS when binding off loopback".to_owned());
         }
+        // Go creates the vault-ownership secret while building the server's
+        // dependencies, before it binds and announces the port, so a client that
+        // waits for "listening" always finds the secret on disk.
+        let enroll_secret = ensure_enroll_secret(root)?;
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
         eprintln!(
@@ -292,7 +296,6 @@ pub fn run(
                 server_working_dir,
             })?;
         let approval_queue = Arc::new(symvault_mcp::approval::ApprovalQueue::default());
-        let enroll_secret = ensure_enroll_secret(root)?;
         let expected_recipient = symvault_crypto::recipient_string(&identity);
         let encrypted_identity = fs::read(root.join("identity.age")).ok();
         let identity_text = symvault_crypto::identity_string(&identity);

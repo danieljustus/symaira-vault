@@ -787,6 +787,12 @@ impl McpServer {
                 .and_then(|port| port.parse::<u16>().ok())
             {
                 server.port = port;
+                // Like Go, the vault-ownership secret exists before the port is
+                // announced, so a client started on "listening" can prove ownership.
+                assert!(
+                    vault.root.join("mcp-server.enroll-secret").is_file(),
+                    "server announced its port before creating the enroll secret"
+                );
                 return server;
             }
             seen.push(line);
