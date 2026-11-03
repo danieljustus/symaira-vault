@@ -474,6 +474,19 @@ approval-fixtures-check:
 approval-replay:
 	$(CARGO) test -p symvault-cli --test approval_queue_replay --locked
 
+# APPROVAL-001 device-token /api/v1/approvals endpoint. deviceapprovalgen records
+# the real Go HTTPHandler + DeviceSessionStore behind Go's ServeMux; the replay
+# drives the Rust MCP HTTP server with the same scenarios and needs no Go.
+.PHONY: device-approval-fixtures-generate device-approval-fixtures-check device-approval-replay
+device-approval-fixtures-generate:
+	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/deviceapprovalgen
+
+device-approval-fixtures-check:
+	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/deviceapprovalgen --check
+
+device-approval-replay:
+	$(CARGO) test -p symvault-mcp --test device_approvals_replay --locked
+
 .PHONY: device-list-differential
 DEVICE_LIST_REPORT ?= $(CARGO_TARGET_DIR)/device-list-differential-$(shell date -u +%Y%m%dT%H%M%SZ).json
 device-list-differential:

@@ -9,12 +9,16 @@ use std::{
     sync::{Condvar, Mutex},
     time::Duration,
 };
+use symvault_sync::device_sessions::DeviceSessionStore;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const DEFAULT_TTL: Duration = Duration::from_secs(5 * 60);
 const PROOF_WINDOW: Duration = Duration::from_secs(30);
 const LOCAL_APPROVALS: &str = "/api/v1/local/approvals";
 const LOCAL_APPROVAL_ACTION: &str = "/api/v1/local/approvals/";
+const DEVICE_APPROVALS: &str = "/api/v1/approvals";
+const DEVICE_APPROVAL_ACTION: &str = "/api/v1/approvals/";
+const DEVICE_UNAUTHORIZED: &str = "unauthorized: valid device token required";
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ApprovalRequest {
@@ -33,7 +37,7 @@ pub struct ApprovalEntry {
     pub id: String,
     pub status: String,
     pub decided_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "omit_empty")]
     pub decided_by: Option<String>,
 }
 
@@ -42,7 +46,7 @@ pub struct ApprovalOutcome {
     pub id: String,
     pub status: String,
     pub decided_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "omit_empty")]
     pub decided_by: Option<String>,
 }
 
@@ -60,11 +64,26 @@ impl ApprovalQueue {
         write: bool,
         reason: impl Into<String>,
     ) -> Result<String, String> {
+        self.enqueue_with_ttl(agent_name, path, write, reason, DEFAULT_TTL)
+    }
+
+    /// Like [`Self::enqueue`] with an explicit lifetime, the way Go's
+    /// `Request.ExpiresAt` overrides the queue default. A zero lifetime keeps
+    /// the default, as Go does for an expiry that is not in the future.
+    pub fn enqueue_with_ttl(
+        &self,
+        agent_name: impl Into<String>,
+        path: impl Into<String>,
+        write: bool,
+        reason: impl Into<String>,
+        ttl: Duration,
+    ) -> Result<String, String> {
+        let ttl = if ttl.is_zero() { DEFAULT_TTL } else { ttl };
         let mut random = [0_u8; 6];
         getrandom::fill(&mut random).map_err(|error| format!("generate approval id: {error}"))?;
         let id = format!("apr-{}", hex(&random));
         let now = OffsetDateTime::now_utc();
-        let expires = now + DEFAULT_TTL;
+        let expires = now + ttl;
         let request = ApprovalRequest {
             agent_name: agent_name.into(),
             path: path.into(),
@@ -98,11 +117,13 @@ impl ApprovalQueue {
             .filter(|entry| entry.status == "pending")
             .cloned()
             .collect::<Vec<_>>();
+        // Go orders by `time.Time`; RFC 3339 strings with trimmed fractional
+        // zeros do not compare like instants, so compare parsed instants.
         pending.sort_by(|a, b| {
-            b.request
-                .created_at
-                .cmp(&a.request.created_at)
-                .then_with(|| a.id.cmp(&b.id))
+            let created = |entry: &ApprovalEntry| {
+                OffsetDateTime::parse(&entry.request.created_at, &Rfc3339).ok()
+            };
+            created(b).cmp(&created(a)).then_with(|| a.id.cmp(&b.id))
         });
         Ok(pending)
     }
@@ -254,6 +275,82 @@ pub(crate) fn handle_local_request(
     Some(ApprovalResponse::json(status, body))
 }
 
+/// Go's `approval.HTTPHandler`, mounted by `serverbootstrap` at
+/// `/api/v1/approvals` and `/api/v1/approvals/`: an enrolled approval device
+/// lists pending requests and approves or denies them with its long-lived
+/// device-session bearer token. It does not accept the MCP legacy or scoped
+/// bearer tokens, and the MCP routes do not accept a device token.
+///
+/// Returns `None` for any method/path pair Go's handler answers with
+/// `http.NotFound`, so the caller's generic 404 (identical bytes) applies
+/// before any authentication is attempted, exactly as in Go.
+pub(crate) fn handle_device_request(
+    queue: &ApprovalQueue,
+    sessions: &DeviceSessionStore,
+    method: &str,
+    path: &str,
+    authorization: &str,
+) -> Option<ApprovalResponse> {
+    let path = path.split_once('?').map_or(path, |(path, _)| path);
+    let list = method == "GET" && path == DEVICE_APPROVALS;
+    let decide = method == "POST" && path.starts_with(DEVICE_APPROVAL_ACTION);
+    if !list && !decide {
+        return None;
+    }
+    let Some(device_id) = device_from_authorization(sessions, authorization) else {
+        return Some(ApprovalResponse::json(401, error_json(DEVICE_UNAUTHORIZED)));
+    };
+    if list {
+        return Some(match queue.pending() {
+            Ok(requests) => ApprovalResponse::json(200, json_line(&RequestsResponse { requests })),
+            Err(_) => ApprovalResponse::json(500, error_json("approval queue unavailable")),
+        });
+    }
+    let id = path
+        .strip_prefix(DEVICE_APPROVAL_ACTION)
+        .unwrap_or_default();
+    let id = id.strip_suffix('/').unwrap_or(id);
+    if id.is_empty() {
+        return Some(ApprovalResponse::json(
+            400,
+            error_json("missing approval request id"),
+        ));
+    }
+    let (base, decision) = if let Some(base) = id.strip_suffix("/approve") {
+        (base, "approved")
+    } else if let Some(base) = id.strip_suffix("/deny") {
+        (base, "denied")
+    } else {
+        return Some(ApprovalResponse::json(
+            404,
+            error_json("unknown approval action"),
+        ));
+    };
+    Some(match queue.decide(base, decision, &device_id) {
+        Ok(outcome) => ApprovalResponse::json(200, json_line(&OutcomeResponse { outcome })),
+        Err((status, message)) => ApprovalResponse::json(status, error_json(&message)),
+    })
+}
+
+/// Go's `deviceFromRequest`: `TrimPrefix(Authorization, "Bearer ")`, an empty
+/// or unchanged result is unauthorized, and so is a session without a device
+/// id. An unreadable store fails closed.
+fn device_from_authorization(sessions: &DeviceSessionStore, authorization: &str) -> Option<String> {
+    let token = authorization.strip_prefix("Bearer ")?;
+    if token.is_empty() {
+        return None;
+    }
+    sessions
+        .validate(token)
+        .ok()
+        .flatten()
+        .filter(|device_id| !device_id.is_empty())
+}
+
+fn omit_empty(value: &Option<String>) -> bool {
+    value.as_deref().is_none_or(str::is_empty)
+}
+
 pub(crate) struct ApprovalResponse {
     pub status: u16,
     pub content_type: &'static str,
@@ -297,8 +394,11 @@ fn error_json(message: &str) -> Vec<u8> {
     json_line(&ErrorResponse { error: message })
 }
 
+/// `json.NewEncoder(w).Encode(v)`: compact, HTML-escaped, newline-terminated.
 fn json_line(value: &impl Serialize) -> Vec<u8> {
-    let mut body = serde_json::to_vec(value).expect("approval responses are serializable");
+    let mut body = symvault_gojson::to_string(value)
+        .expect("approval responses are serializable")
+        .into_bytes();
     body.push(b'\n');
     body
 }
@@ -378,6 +478,8 @@ fn nibble(value: u8) -> Option<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const ZERO: &str = "0001-01-01T00:00:00Z";
 
     fn proof(secret: &[u8], at: OffsetDateTime) -> (String, String) {
         let timestamp = timestamp(at).expect("timestamp");
@@ -486,5 +588,117 @@ mod tests {
             .expect("local API route");
             assert_eq!(response.status, expected, "timestamp {timestamp}");
         }
+    }
+
+    #[test]
+    fn pending_orders_by_instant_not_by_rfc3339_text() {
+        // "...05.12Z" is earlier than "...05.123Z" although it compares greater
+        // as text ('Z' > '3'); Go orders by time.Time.
+        let queue = ApprovalQueue::default();
+        let earlier = queue.enqueue("a", "p", false, "r").expect("enqueue");
+        let later = queue.enqueue("a", "p", false, "r").expect("enqueue");
+        {
+            let mut entries = queue.entries.lock().expect("lock");
+            entries.get_mut(&earlier).unwrap().request.created_at =
+                "2026-01-02T03:04:05.12Z".into();
+            entries.get_mut(&later).unwrap().request.created_at = "2026-01-02T03:04:05.123Z".into();
+        }
+        let ids = queue
+            .pending()
+            .expect("pending")
+            .into_iter()
+            .map(|entry| entry.id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids, [later, earlier]);
+    }
+
+    #[test]
+    fn explicit_lifetime_expires_and_zero_keeps_the_default() {
+        let queue = ApprovalQueue::default();
+        let short = queue
+            .enqueue_with_ttl("a", "p", false, "r", Duration::from_millis(20))
+            .expect("enqueue");
+        let default = queue
+            .enqueue_with_ttl("a", "p", false, "r", Duration::ZERO)
+            .expect("enqueue");
+        std::thread::sleep(Duration::from_millis(60));
+        assert_eq!(
+            queue.decide(&short, "approved", "dev").unwrap_err(),
+            (409, format!("approval request {short} already expired"))
+        );
+        assert!(queue.decide(&default, "approved", "dev").is_ok());
+    }
+
+    #[test]
+    fn empty_decided_by_is_omitted_like_go_omitempty() {
+        let mut entry = ApprovalEntry {
+            request: ApprovalRequest {
+                agent_name: "a".into(),
+                path: "p".into(),
+                write: false,
+                reason: "r".into(),
+                created_at: "c".into(),
+                expires_at: "e".into(),
+            },
+            id: "apr-1".into(),
+            status: "pending".into(),
+            decided_at: ZERO.into(),
+            decided_by: Some(String::new()),
+        };
+        assert!(
+            !String::from_utf8(json_line(&entry))
+                .unwrap()
+                .contains("decided_by")
+        );
+        entry.decided_by = Some("dev".into());
+        assert!(
+            String::from_utf8(json_line(&entry))
+                .unwrap()
+                .contains("\"decided_by\":\"dev\"")
+        );
+    }
+
+    #[test]
+    fn device_route_rejects_wrong_methods_and_bad_bearers_without_deciding() {
+        let sessions = DeviceSessionStore::new(None).expect("in-memory store");
+        let token = sessions.enroll("dev-1", "one", "pk").expect("enroll");
+        let queue = ApprovalQueue::default();
+        let id = queue.enqueue("agent", "p", true, "r").expect("enqueue");
+        let approve = format!("{DEVICE_APPROVAL_ACTION}{id}/approve");
+        // Not Go's routes: left to the caller's 404, no auth attempted.
+        assert!(handle_device_request(&queue, &sessions, "PUT", DEVICE_APPROVALS, "").is_none());
+        assert!(handle_device_request(&queue, &sessions, "POST", DEVICE_APPROVALS, "").is_none());
+        assert!(handle_device_request(&queue, &sessions, "GET", &approve, "").is_none());
+        // Unauthenticated variants.
+        for bad in ["", "Bearer", "Bearer ", "bearer x", &token, "Bearer nope"] {
+            let response = handle_device_request(&queue, &sessions, "POST", &approve, bad)
+                .expect("device route");
+            assert_eq!(response.status, 401, "{bad:?}");
+        }
+        assert_eq!(queue.pending().unwrap().len(), 1);
+        let ok = handle_device_request(
+            &queue,
+            &sessions,
+            "POST",
+            &approve,
+            &format!("Bearer {token}"),
+        )
+        .expect("device route");
+        assert_eq!(ok.status, 200);
+        assert!(
+            String::from_utf8(ok.body)
+                .unwrap()
+                .contains("\"decided_by\":\"dev-1\"")
+        );
+        sessions.revoke("dev-1").expect("revoke");
+        let revoked = handle_device_request(
+            &queue,
+            &sessions,
+            "GET",
+            DEVICE_APPROVALS,
+            &format!("Bearer {token}"),
+        )
+        .expect("device route");
+        assert_eq!(revoked.status, 401);
     }
 }
