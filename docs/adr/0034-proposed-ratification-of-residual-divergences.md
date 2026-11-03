@@ -437,6 +437,17 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
   ALPN/HTTP2"). Would be pinned by adding an ALPN-offer step
   (`h2, http/1.1`) to the ADR 0025 live corpus recording Go's negotiated
   protocol per mode and asserting Rust's.
+- Resolution: pinned by `scripts/rust-port/http_tls_contract.py` (`ALPN_OFFERS`,
+  `alpn_check`, `alpn_compare`): per profile (`tls12`, `tls13`, `mtls12`,
+  `mtls13`) it offers `h2, http/1.1`, `http/1.1` and `h2` to the real Go oracle
+  and to the Rust CLI. Measured Go: plain TLS selects `h2` (and answers an
+  HTTP/2 SETTINGS frame) for the two offers containing it and `http/1.1` for
+  the HTTP/1.1-only offer; mTLS selects nothing and serves HTTP/1.1. Rust
+  selects nothing in all twelve and serves HTTP/1.1 (200). The six plain-TLS
+  pairs are the declared difference `alpn-http11-only`; the mTLS pairs are
+  identical. `gate_area_check.py --profile http-tls` pins both tables;
+  `test_http_tls_contract.py` holds the negative controls (stand-in TLS servers
+  over real sockets).
 - Recommendation: **ratify**.
 
 ### E. Platform, session and import (PLATFORM-001, SESSION-003, IO-001)

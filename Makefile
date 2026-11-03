@@ -1083,7 +1083,7 @@ ffi-ios-simulator-test: ffi-xcframework
 .NOTPARALLEL:
 LOCAL_AREA_DIFFERENTIAL_TARGETS := mcp-init-differential mcp-stdio-differential mcp-list-differential \
 	mcp-call-differential mcp-clipboard-signals-differential \
-	mcp-execute-api-policy-differential mcp-oauth-contract api-templates-differential \
+	mcp-execute-api-policy-differential mcp-http-ratelimit-differential mcp-oauth-contract api-templates-differential \
 	config-profile-differential config-session-differential cfg-overrides-fixtures-check \
 	device-list-differential device-session-differential pairing-differential \
 	git-offline-differential git-winner-differential rust-007-differential \
@@ -1260,6 +1260,7 @@ http-timeout-contract:
 
 http-tls-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_tls_contract.py
 	$(AREA_BUILD_CLI)
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_tls_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-tls.json"

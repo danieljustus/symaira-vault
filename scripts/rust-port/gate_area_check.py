@@ -200,8 +200,40 @@ def http_timeouts(r):
             last_ping(p["rows"], "ping-after", what)
 
 
+# ADR 0034 item 20 (ratified): Rust negotiates no ALPN protocol; Go's plain-TLS listener selects `h2` for any offer
+# containing it and `http/1.1` for an HTTP/1.1-only offer, its mTLS listener selects nothing. Written out here, not
+# imported from the driver, so editing the driver cannot silently weaken the pin.
+ALPN_OFFERS = [("h2-and-http11", ["h2", "http/1.1"]), ("http11-only", ["http/1.1"]), ("h2-only", ["h2"])]
+ALPN_GO = {"tls": {"h2-and-http11": "h2", "http11-only": "http/1.1", "h2-only": "h2"},
+           "mtls": {"h2-and-http11": None, "http11-only": None, "h2-only": None}}
+
+
+def alpn_offers(rows, impl, profile, what):
+    size(rows, 3, f"{what} alpn offers")
+    for row, (case, offered) in zip(rows, ALPN_OFFERS):
+        label = f"{what} alpn {case}"
+        eq(row["case"], case, f"{label} case")
+        eq(row["offered"], offered, f"{label} offered")
+        expected = None if impl == "rust" else ALPN_GO["mtls" if profile.startswith("mtls") else "tls"][case]
+        eq(row["selected"], expected, f"{label} negotiated protocol")
+        eq(row["tls_version"], "TLSv1.2" if profile.endswith("12") else "TLSv1.3", f"{label} tls_version")
+        if expected == "h2":
+            eq(row["h2_settings_frame"], True, f"{label} h2 SETTINGS frame")
+            eq(row["http1_status_line"], None, f"{label} http1_status_line")
+        else:
+            eq(row["h2_settings_frame"], None, f"{label} h2_settings_frame")
+            eq(row["http1_status_line"], "HTTP/1.1 200 OK", f"{label} HTTP/1.1 status line")
+
+
+def alpn_pin(r):
+    expected = [{"profile": profile, "case": case, "go_selected": ALPN_GO["tls"][case], "rust_selected": None,
+                 "decision": "alpn-http11-only"} for profile in ("tls12", "tls13") for case, _ in ALPN_OFFERS]
+    eq(r["alpn_declared_differences"], expected, "alpn_declared_differences")
+
+
 def http_tls(r):
     decisions(r, 20, {"https-discovery-on-tls", "secure-origin-matches-http-authority"})
+    alpn_pin(r)
     profiles = {"tls12", "tls13", "mtls12", "mtls13"}
     for impl, o in both(r):
         eq(set(o), profiles, f"{impl} profiles")
@@ -215,6 +247,7 @@ def http_tls(r):
             processes_ok(p["processes"], 1, f"{what} processes")
             need(p["control_workers_joined"] and not p["control_errors"], f"{what}: workers/control errors")
             need(all(c["rejected"] for c in p["identity_controls"]), f"{what}: identity control not rejected")
+            alpn_offers(p["alpn_offers"], impl, name, what)
             size(p["encrypted_peers"], 2, f"{what} encrypted peers")
             for peer in p["encrypted_peers"]:
                 need(peer["sender_joined"] and peer["peer_terminal_observed"] and not peer["forced_client_close"],
