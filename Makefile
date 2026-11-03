@@ -870,7 +870,7 @@ manpages-differential:
 
 .PHONY: cli-help-differential
 cli-help-differential: manpages-differential
-	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_HELP_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_help --test cli_get_list_help_differential --test cli_dynamic_setup_help --test cli_update_help --locked
+	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_HELP_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_help --test cli_get_list_help_differential --test cli_completion_args --test cli_dynamic_setup_help --test cli_update_help --locked
 
 # SETUP-001: `symvault setup` through a real PTY against a no-cgo Go oracle built
 # from this checked-out source (a no-cgo build cannot see Touch ID; see
@@ -1427,7 +1427,7 @@ broker-egress-contract:
 # rust-cli-artifacts.yml. Native shells: bash (Homebrew bash on macOS, as in
 # CI), zsh and fish must exist; the contract fails without them.
 CLI_ARTIFACT_TEST_TARGETS := --test completions --test cli_generate_manpages --test cli_help \
-	--test cli_help_subcommand --test cli_update_help --test cli_get_list_help_differential --test cli_dynamic_setup_help
+	--test cli_help_subcommand --test cli_update_help --test cli_get_list_help_differential --test cli_completion_args --test cli_dynamic_setup_help
 cli-artifacts-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_GO) $(GO) test ./scripts/rust-port/cmd/cligap -count=1

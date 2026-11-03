@@ -284,7 +284,7 @@ mod tests {
         .unwrap();
         for (path, field, value) in [
             ("a/first", "password", "Val-Alpha-000"),
-            ("work/example", "username", "alice"),
+            ("work/example", "url", "https://example.test"),
             ("work/two", "username", "bob"),
         ] {
             let mut entry = Entry::default();
@@ -309,7 +309,7 @@ mod tests {
             "a/first"
         );
         assert_eq!(
-            resolved_path(get_or_search(&root, &identity, "ALICE")),
+            resolved_path(get_or_search(&root, &identity, "HTTPS:")),
             "work/example"
         );
         // An exact path wins over a search even when it is also a substring.

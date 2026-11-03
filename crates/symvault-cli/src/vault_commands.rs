@@ -255,6 +255,8 @@ pub fn exact_field_with(
 }
 
 /// [`exact_field_with`] on a freshly opened vault.
+// The integration tests include this file without the binary that calls it.
+#[allow(dead_code)]
 pub fn exact_field(
     root: &Path,
     identity: &Identity,
@@ -278,6 +280,8 @@ pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, G
 }
 
 /// Reads the entry stored at exactly `path`, without the `path.field` split.
+// The integration tests include this file without the binary that calls it.
+#[allow(dead_code)]
 pub fn get_exact(root: &Path, identity: &Identity, path: &str) -> Result<GetResult, GetError> {
     let store = open_vault(root, identity).map_err(GetError::Other)?;
     let reader = store.read_session(identity);

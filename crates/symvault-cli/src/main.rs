@@ -1388,6 +1388,9 @@ fn run_cli() -> ExitCode {
     if let Some(index) = completion_protocol::request_index(&args) {
         return completion_protocol::run(&args, index);
     }
+    if let Some(code) = completion_commands::go_argument_shapes(&args) {
+        return code;
+    }
     if has_unescaped_version_flag(&args) {
         return write_unknown_version_flag();
     }
