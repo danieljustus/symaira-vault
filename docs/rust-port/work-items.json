@@ -115,7 +115,7 @@
       "status": "blocked",
       "depends_on": ["RUST-009", "RUST-011", "RUST-012"],
       "contract_rows": ["DIST-001", "DIST-002", "DIST-003", "DIST-004", "DIST-005", "VALUE-001"],
-      "acceptance": ["make rust-full-gate", "make release-contract", "go run ./scripts/rust-port/cmd/valuegate --check (VALUE-001 is measured and reported, not blocking)"],
+      "acceptance": ["make rust-full-gate", "make release-contract", "make value-gate GO_BIN=<go release binary> RUST_BIN=<rust release binary> (python3 scripts/rust-port/valuegate.py measure + check; docs/rust-port/value-gate.md; VALUE-001 is measured and reported, not blocking)"],
       "decision": "Value gate reported, not blocking, per maintainer decision D5 (2026-11-02): VALUE-001 is measured and its result is recorded with the prerelease; a miss does not stop the Rust-only prerelease."
     },
     {

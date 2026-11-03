@@ -842,7 +842,7 @@ budget evidence is recorded before cutover.
 **Objective:** Decide whether the representative Rust implementation earns cutover.
 
 **Files:**
-- Create: `scripts/rust-port/cmd/valuegate/`
+- Create: `scripts/rust-port/valuegate.py` (Go-free, stdlib Python; see `value-gate.md`)
 - Create: `docs/rust-port/value-gate-<date>.json`
 - Modify: release workflow and packaging only after the gate passes
 
