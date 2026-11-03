@@ -251,6 +251,28 @@ pub fn run(
         let enroll_secret = ensure_enroll_secret(root)?;
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
+        // Go saves the runtime port (`cli.SaveRuntimePort`) before it prints
+        // "listening", so a client started on that line finds the server.
+        let server_working_dir = std::env::current_dir()
+            .map_err(|error| format!("inspect server working directory: {error}"))?;
+        let (approval_client_cert, approval_client_key) =
+            configured_approval_tls_identity(root, mtls_enabled)?;
+        runtime_metadata
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .publish(RuntimeMetadata {
+                bind: address.to_string(),
+                port: listener
+                    .local_addr()
+                    .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
+                    .port(),
+                certificate: tls_cert.to_owned(),
+                client_ca: tls_ca.to_owned(),
+                client_auth_required: mtls_enabled,
+                approval_client_certificate: approval_client_cert,
+                approval_client_key,
+                server_working_dir,
+            })?;
         eprintln!(
             "MCP server listening on {bind}:{}",
             listener
@@ -275,26 +297,6 @@ pub fn run(
                 "MCP server is binding \"{address}\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true).{loopback_note}"
             );
         }
-        let server_working_dir = std::env::current_dir()
-            .map_err(|error| format!("inspect server working directory: {error}"))?;
-        let (approval_client_cert, approval_client_key) =
-            configured_approval_tls_identity(root, mtls_enabled)?;
-        runtime_metadata
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .publish(RuntimeMetadata {
-                bind: address.to_string(),
-                port: listener
-                    .local_addr()
-                    .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
-                    .port(),
-                certificate: tls_cert.to_owned(),
-                client_ca: tls_ca.to_owned(),
-                client_auth_required: mtls_enabled,
-                approval_client_certificate: approval_client_cert,
-                approval_client_key,
-                server_working_dir,
-            })?;
         let approval_queue = Arc::new(symvault_mcp::approval::ApprovalQueue::default());
         let expected_recipient = symvault_crypto::recipient_string(&identity);
         let encrypted_identity = fs::read(root.join("identity.age")).ok();

@@ -212,6 +212,11 @@ def main():
     parser.add_argument('--drop-audit-ids', action='store_true',
                         help='negative control: strip the ids from the Rust audit rows')
     args = parser.parse_args()
+    # The binaries run with cwd set to a scratch HOME: a relative path (the
+    # Makefile passes target/... when CARGO_TARGET_DIR is relative) must not
+    # be resolved against that cwd.
+    args.go_cli, args.go_seed, args.rust = (
+        path.resolve() for path in (args.go_cli, args.go_seed, args.rust))
     recorded = json.loads(FIXTURE.read_text())['registry']['hash']
     parser_clean = not git('status', '--porcelain=v1').strip()
     assert parser_clean or args.allow_dirty_for_development, 'a clean worktree is required (--allow-dirty-for-development)'

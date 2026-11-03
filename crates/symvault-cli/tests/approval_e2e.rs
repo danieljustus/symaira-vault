@@ -793,6 +793,10 @@ impl McpServer {
                     vault.root.join("mcp-server.enroll-secret").is_file(),
                     "server announced its port before creating the enroll secret"
                 );
+                assert!(
+                    vault.root.join(".runtime-port").is_file(),
+                    "server announced its port before saving the runtime port"
+                );
                 return server;
             }
             seen.push(line);
