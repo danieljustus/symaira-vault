@@ -355,7 +355,8 @@ pub unsafe extern "C" fn symvault_set_backup_dir(
 }
 
 /// Sets a calling-thread override for synchronous vault operations. Empty clears it.
-/// The caller must clear the override on every exit path.
+/// This replaces the thread's value outright (no restore); bounded scopes use
+/// [`symvault_push_thread_backup_dir`] / [`symvault_pop_thread_backup_dir`].
 ///
 /// # Safety
 /// Pointer/length pair must be valid; `err` null or writable.
@@ -375,6 +376,61 @@ pub unsafe extern "C" fn symvault_set_thread_backup_dir(
             }
             symvault_sync::data_safety::set_thread_backup_dir(path);
             Ok(Ok(Payload::Nothing))
+        })
+    }
+}
+
+/// Opens a calling-thread backup-directory scope: installs `dir` (empty = no
+/// override inside the scope) and saves the displaced value, whoever set it
+/// (C, Swift or Rust). Writes the scope token to `*token`; hand it to
+/// [`symvault_pop_thread_backup_dir`] on every exit path. Scopes nest. Additive:
+/// the ABI revision stays 1.
+///
+/// # Safety
+/// Pointer/length pair must be valid; `token` must be writable; `err` null or writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_push_thread_backup_dir(
+    dir: *const u8,
+    dir_len: usize,
+    token: *mut u64,
+    err: *mut SvBuf,
+) -> i32 {
+    if !token.is_null() {
+        // SAFETY: writable per the contract; 0 is never a valid token.
+        unsafe { token.write(0) };
+    }
+    // SAFETY: forwarded contract.
+    unsafe {
+        run(std::ptr::null_mut(), err, std::ptr::null_mut(), || {
+            if token.is_null() {
+                return Err(BadArgs("argument token is null".to_owned()));
+            }
+            let dir = text(dir, dir_len, "backupDir")?;
+            let path = (!dir.is_empty()).then(|| std::path::PathBuf::from(dir));
+            if path.as_ref().is_some_and(|p| !p.is_absolute()) {
+                return Ok(Err("backup directory must be an absolute path".to_owned()));
+            }
+            let opened = symvault_sync::data_safety::push_thread_backup_dir(path);
+            // SAFETY: checked non-null above; writable per the contract.
+            token.write(opened);
+            Ok(Ok(Payload::Nothing))
+        })
+    }
+}
+
+/// Closes the innermost calling-thread backup-directory scope opened by
+/// [`symvault_push_thread_backup_dir`], restoring exactly the value it
+/// displaced. A token that is not the innermost open scope of this thread is
+/// refused (status 1) and changes nothing.
+///
+/// # Safety
+/// `err` null or writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_pop_thread_backup_dir(token: u64, err: *mut SvBuf) -> i32 {
+    // SAFETY: forwarded contract.
+    unsafe {
+        run(std::ptr::null_mut(), err, std::ptr::null_mut(), || {
+            Ok(symvault_sync::data_safety::pop_thread_backup_dir(token).map(|()| Payload::Nothing))
         })
     }
 }
