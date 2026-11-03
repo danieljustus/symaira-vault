@@ -218,3 +218,15 @@ defects and one Rust fix that came out of the same recording.
   `/prod/a` -> `access denied: path "/prod/a" outside allowed scope`). `go_scope_path` now follows
   `path.Clean` for `scope_allows` (every tool, since Go's `checkScope` is shared); `\` is a separator only on
   Windows like `filepath.ToSlash`. Store-relative entry paths keep `normalize_scope_path`.
+
+## 14. An allowed path that cleans to nothing admits every absolute path
+
+Go's `pathAllowed` compares `path.Clean` forms with `strings.HasPrefix(path, allowed+"/")`.
+An agent `allowed_paths` entry of `""`, `"."` or `"a/.."` cleans to the empty string, so
+`"/"` becomes the prefix and every absolute request path (`/secret`) is admitted.
+
+Rust (`symvault_mcp::call::scope_allows`) follows Go's `path.Clean` boundary for every
+other form but grants nothing for an allowed path that cleans to empty. This is a
+deliberate, stricter deviation (Rust must never be more permissive than Go or than its
+own earlier behaviour); regression tests: `call::scope_tests`. Upstream fix: reject such
+entries at profile load.

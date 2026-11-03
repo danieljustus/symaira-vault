@@ -2039,15 +2039,7 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
     }
 
     pub(crate) fn scope_allows(&self, path: &str) -> bool {
-        if self.config.allowed_paths.is_empty() {
-            return false;
-        }
-        let path = go_scope_path(path);
-        self.config.allowed_paths.iter().any(|allowed| {
-            allowed == "*"
-                || path == go_scope_path(allowed)
-                || path.starts_with(&format!("{}/", go_scope_path(allowed)))
-        })
+        scope_allows(&self.config.allowed_paths, path)
     }
 }
 
@@ -2279,6 +2271,22 @@ fn is_redacted_field(field: &str, patterns: &[String]) -> bool {
 /// keeps a leading `/` and a `..` that climbs above a relative path, so
 /// `/prod/a` and `../prod/a` stay outside an allowed `prod`, as in Go. Only
 /// Windows turns `\` into `/` (`filepath.ToSlash` is the identity elsewhere).
+/// The allowed-path boundary shared by every tool: Go's `pathAllowed` over
+/// [`go_scope_path`], except that an allowed path that cleans to nothing
+/// (`""`, `"."`, `"a/.."`) grants nothing. Go's `HasPrefix(path, "" + "/")`
+/// would admit every absolute path there; failing closed is a deliberate,
+/// stricter deviation.
+pub(crate) fn scope_allows(allowed_paths: &[String], path: &str) -> bool {
+    let path = go_scope_path(path);
+    allowed_paths.iter().any(|allowed| {
+        if allowed == "*" {
+            return true;
+        }
+        let allowed = go_scope_path(allowed);
+        !allowed.is_empty() && (path == allowed || path.starts_with(&format!("{allowed}/")))
+    })
+}
+
 pub(crate) fn go_scope_path(path: &str) -> String {
     let trimmed = path.trim();
     let slashed = if cfg!(windows) {
@@ -2421,5 +2429,42 @@ mod semantic_injection_tests {
         assert!(warning.contains("pattern=\"ignore previous instructions\""));
         assert!(warning.contains("agent=\"fixture\""));
         assert!(!warning.contains("synthetic-secret-value"));
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::scope_allows;
+
+    fn allows(allowed: &[&str], path: &str) -> bool {
+        let allowed: Vec<String> = allowed.iter().map(|value| (*value).to_owned()).collect();
+        scope_allows(&allowed, path)
+    }
+
+    #[test]
+    fn allowed_paths_that_clean_to_nothing_grant_nothing() {
+        for allowed in ["", " ", ".", "./", "a/..", "./a/../"] {
+            for path in ["/secret", "secret", "", "/", "prod/a", "../x"] {
+                assert!(
+                    !allows(&[allowed], path),
+                    "allowed {allowed:?} must not admit {path:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_boundary_follows_go_path_clean() {
+        assert!(allows(&["prod"], "prod"));
+        assert!(allows(&["prod"], "prod/a"));
+        assert!(allows(&["prod/"], "./prod/a/../b"));
+        assert!(!allows(&["prod"], "prod2/a"));
+        assert!(!allows(&["prod"], "/prod/a"));
+        assert!(!allows(&["prod"], "../prod/a"));
+        assert!(!allows(&["prod"], "prod/../other"));
+        assert!(allows(&["/"], "/"));
+        assert!(!allows(&["/"], "/x"));
+        assert!(allows(&["*"], "/anything"));
+        assert!(!allows(&[], "prod"));
     }
 }
