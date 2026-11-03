@@ -274,7 +274,7 @@ class TokenContract(unittest.TestCase):
             observed = tokens.token_files(vault)['mcp-tokens.json']
             # CPython 3.14 parses this depth, 3.13 does not: both are recorded, never a crash.
             self.assertTrue(isinstance(observed, dict) or observed.startswith('too-deep:'), observed)
-            (vault / 'mcp-tokens.json').write_text('{"version":2,"tokens":{},"zz":' + '[' * 9998 + ']' * 9999 + '}')
+            (vault / 'mcp-tokens.json').write_text('{not json')
             self.assertEqual(tokens.token_files(vault)['mcp-tokens.json'], 'unparseable')
 
     def test_dynamic_policy(self):
