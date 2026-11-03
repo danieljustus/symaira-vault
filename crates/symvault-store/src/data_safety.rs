@@ -309,15 +309,33 @@ pub(crate) fn marker_via_capability(root_cap: &fs::File, root: &Path) -> Result<
     #[cfg(unix)]
     {
         let name = Path::new(MARKER_FILE);
-        if let Ok(bytes) = crate::rooted::read(root_cap, name, &root.join(name)) {
+        let marker = crate::rooted::read(root_cap, name, &root.join(name)).ok();
+        if let Some(bytes) = &marker {
             use std::os::unix::fs::MetadataExt;
             let inode = root_cap.metadata().ok().map(|meta| meta.ino());
-            if marker_bytes_valid(&bytes, &vault_id_of(root, inode)) {
+            if marker_bytes_valid(bytes, &vault_id_of(root, inode)) {
                 return Ok(true);
             }
         }
-        if crate::root_identity_from_file(root_cap)? != crate::root_identity(root)? {
+        let identity = crate::root_identity_from_file(root_cap)?;
+        if identity != crate::root_identity(root)? {
             return Err(StoreError::RootChanged(root.to_path_buf()));
+        }
+        // The marker is written with the canonical path (`vault_id`). A store
+        // opened through a symlinked ancestor (macOS `/var` -> `/private/var`)
+        // must still recognise it: accept the canonical form only when it
+        // names the very directory the retained handle holds.
+        #[cfg(unix)]
+        if let Some(bytes) = &marker
+            && let Ok(canonical) = root.canonicalize()
+            && canonical != root
+            && crate::root_identity(&canonical)? == identity
+        {
+            use std::os::unix::fs::MetadataExt;
+            let inode = root_cap.metadata().ok().map(|meta| meta.ino());
+            if marker_bytes_valid(bytes, &vault_id_of(&canonical, inode)) {
+                return Ok(true);
+            }
         }
         Ok(false)
     }
@@ -607,6 +625,34 @@ mod tests {
         assert_eq!(marker.backup.unwrap().path, root.join("fake-backup.tar.gz"));
         ensure_marker(&root).expect("marked");
         assert_eq!(CALLS.with(Cell::get), 1);
+    }
+
+    /// macOS `TMPDIR` lives under `/var`, a root-owned symlink to `/private/var`:
+    /// a store opened through a symlinked ancestor keeps its marker. (The
+    /// trusted-root ownership policy is enforced where the root is opened.)
+    #[cfg(unix)]
+    #[test]
+    fn a_marker_is_recognised_through_a_symlinked_ancestor() {
+        let dir = enforced_vault();
+        let real = dir.path().canonicalize().unwrap();
+        mark_created(&real).expect("mark");
+        let outer = tempfile::tempdir().expect("tempdir");
+        let link = outer.path().join("link");
+        std::os::unix::fs::symlink(real.parent().unwrap(), &link).unwrap();
+        let via_link = link.join(real.file_name().unwrap());
+        assert_ne!(via_link, real);
+        let root_cap = fs::File::open(&via_link).expect("open root");
+        assert!(
+            marker_via_capability(&root_cap, &via_link).expect("same directory"),
+            "the marker was not recognised through the symlinked ancestor"
+        );
+        // A different directory behind the same path is still refused.
+        let other = tempfile::tempdir().expect("tempdir");
+        let other_cap = fs::File::open(other.path()).expect("open other");
+        assert!(matches!(
+            marker_via_capability(&other_cap, &via_link),
+            Err(StoreError::RootChanged(_))
+        ));
     }
 
     #[test]

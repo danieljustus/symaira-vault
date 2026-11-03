@@ -560,7 +560,8 @@ mod tests {
             assert_eq!(vault.join("entries").exists(), keep);
             assert!(
                 vault.join("mcp-tokens.json").exists(),
-                "registry file survives rollback"
+                "registry file survives rollback; apply errors: {:?}",
+                model.state.apply_errors
             );
             assert_eq!(title(&model), "Done");
         }
