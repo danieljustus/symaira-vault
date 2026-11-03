@@ -118,7 +118,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "13e8b169744a338d0ac1cb2163f17cf8cacb1a12283cb9ed0900f9835b2b6d3e"
+    "generator_digest": "1d2261814f643b48b6d9dec85073e5cc67416ae9a9a7037dbfab908642b37635"
   },
   "usage": [
     {
@@ -20511,6 +20511,41 @@
       }
     },
     {
+      "name": "unlock_config_clipboard_invalid_dynamic_generate",
+      "description": "[dynamic generate --engine x --role x] in the config_clipboard_invalid vault shape",
+      "state": "config_clipboard_invalid",
+      "observation": {
+        "args": [
+          "dynamic",
+          "generate",
+          "--engine",
+          "x",
+          "--role",
+          "x"
+        ],
+        "exit_code": 6,
+        "stdout": "",
+        "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+      }
+    },
+    {
+      "name": "unlock_config_clipboard_invalid_mcp_serve_stdio",
+      "description": "[mcp serve --stdio --agent a] in the config_clipboard_invalid vault shape",
+      "state": "config_clipboard_invalid",
+      "observation": {
+        "args": [
+          "mcp",
+          "serve",
+          "--stdio",
+          "--agent",
+          "a"
+        ],
+        "exit_code": 6,
+        "stdout": "",
+        "stderr": "Error: configuration is invalid: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: configuration is invalid: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+      }
+    },
+    {
       "name": "unlock_config_syntax_invalid_device_pair",
       "description": "[device pair] in the config_syntax_invalid vault shape",
       "state": "config_syntax_invalid",
@@ -20615,6 +20650,41 @@
         "args": [
           "get",
           "seed/cert"
+        ],
+        "exit_code": 6,
+        "stdout": "",
+        "stderr": "Error: configuration is invalid: yaml: line 68: did not find expected node content\nError: configuration is invalid: yaml: line 68: did not find expected node content\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+      }
+    },
+    {
+      "name": "unlock_config_syntax_invalid_dynamic_generate",
+      "description": "[dynamic generate --engine x --role x] in the config_syntax_invalid vault shape",
+      "state": "config_syntax_invalid",
+      "observation": {
+        "args": [
+          "dynamic",
+          "generate",
+          "--engine",
+          "x",
+          "--role",
+          "x"
+        ],
+        "exit_code": 6,
+        "stdout": "",
+        "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Load error: yaml: line 68: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+      }
+    },
+    {
+      "name": "unlock_config_syntax_invalid_mcp_serve_stdio",
+      "description": "[mcp serve --stdio --agent a] in the config_syntax_invalid vault shape",
+      "state": "config_syntax_invalid",
+      "observation": {
+        "args": [
+          "mcp",
+          "serve",
+          "--stdio",
+          "--agent",
+          "a"
         ],
         "exit_code": 6,
         "stdout": "",

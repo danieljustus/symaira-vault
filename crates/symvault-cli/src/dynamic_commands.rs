@@ -38,10 +38,14 @@ const LOCKED_HINT: &str = "Unlock with 'symvault unlock'. For non-interactive us
 
 /// `cli.WithVault` unlocks interactively, so of Go's `ExitLocked` errors only a
 /// failed passphrase read can occur here (the `vault locked: ...` variants are
-/// non-interactive only).
+/// non-interactive only). A configuration that does not load or validate is
+/// `ExitConfigError` (exit 6 and the doctor hint), reported by the shared path.
 fn finish(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
+        Err(error) if crate::is_config_invalid(&error) => {
+            crate::report_failed_passphrase_read(&error, false).unwrap_or(ExitCode::from(6))
+        }
         Err(error) if crate::is_not_initialized(&error) => {
             crate::write_not_initialized(&error);
             ExitCode::from(3)

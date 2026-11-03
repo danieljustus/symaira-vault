@@ -125,7 +125,8 @@ type unlockCommand struct {
 	// configOnly marks a command that runs in the config-invalid states only:
 	// `get` unlocks without prompting once stdin is not a terminal
 	// (WithVaultForScripting), so the configuration is resolved non-interactively
-	// and a refusal is not offered a repair.
+	// and a refusal is not offered a repair. `dynamic generate` and `mcp serve`
+	// are recorded here for the same refusal (exit 6 and the doctor hint).
 	configOnly bool
 }
 
@@ -159,6 +160,11 @@ var unlockCommands = []unlockCommand{
 	{"import_review_promote", []string{"import", "review", "promote", "x"}, false, false},
 	{"intake_x", []string{"intake", "x"}, false, false},
 	{"get", []string{"get", seedFileEntry}, false, true},
+	// `dynamic generate` opens the vault through cli.WithVault and `mcp serve
+	// --stdio` through ServeUnlockVault (whose wrapVaultError passes an
+	// ExitConfigError unchanged); both refuse a configuration Go does not load.
+	{"dynamic_generate", []string{"dynamic", "generate", "--engine", "x", "--role", "x"}, false, true},
+	{"mcp_serve_stdio", []string{"mcp", "serve", "--stdio", "--agent", "a"}, false, true},
 }
 
 // unlockStateInputs runs unlockCommands in every unlock state: all of them in

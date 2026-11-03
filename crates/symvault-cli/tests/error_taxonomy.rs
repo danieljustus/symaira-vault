@@ -206,8 +206,8 @@ const UNLOCK_STATES: [(&str, usize); 9] = [
     ("config_only_locked", 7),
     ("config_only_env_disabled", 7),
     ("env_disabled", 7),
-    ("config_clipboard_invalid", 8),
-    ("config_syntax_invalid", 8),
+    ("config_clipboard_invalid", 10),
+    ("config_syntax_invalid", 10),
 ];
 /// Appended to the seeded `config.yaml` of the `*env_disabled` states.
 const ENV_DISABLED_CONFIG_SUFFIX: &str = "security:\n    disable_env_passphrase: true\n";
@@ -398,6 +398,17 @@ struct RunOutput {
     stderr: String,
     /// `tool argv...` per call, sandbox root normalized, in call order.
     calls: Vec<String>,
+    /// Every seeded `config.yaml` as `(path, bytes before the run, bytes after it)`; `None`
+    /// is a file that does not exist.
+    configs: Vec<ConfigSnapshot>,
+}
+
+/// One seeded `config.yaml` around a run.
+#[derive(Clone, Debug)]
+struct ConfigSnapshot {
+    path: String,
+    before: Option<Vec<u8>>,
+    after: Option<Vec<u8>>,
 }
 
 const HOST_TOOLS_DIR: &str = ".host-tools";
@@ -511,6 +522,15 @@ fn run_scenario_full(
         fs::write(path, content).expect("write disposable file");
     }
     install_host_tools(&root);
+    let config_paths: Vec<&str> = seed
+        .iter()
+        .filter(|entry| entry.kind == "file" && entry.path.ends_with("/config.yaml"))
+        .map(|entry| entry.path.as_str())
+        .collect();
+    let configs_before: Vec<Option<Vec<u8>>> = config_paths
+        .iter()
+        .map(|path| fs::read(root.join(path)).ok())
+        .collect();
     let mut command = Command::new(env!("CARGO_BIN_EXE_symvault"));
     for (name, _) in std::env::vars_os() {
         if name.to_string_lossy().starts_with("SYMVAULT_") {
@@ -547,11 +567,21 @@ fn run_scenario_full(
         refused.is_empty(),
         "{args:?} reached host tools that no scenario may use: {refused:?}"
     );
+    let configs = config_paths
+        .iter()
+        .zip(configs_before)
+        .map(|(path, before)| ConfigSnapshot {
+            path: (*path).to_owned(),
+            before,
+            after: fs::read(root.join(path)).ok(),
+        })
+        .collect();
     RunOutput {
         code: output.status.code().unwrap_or(-1),
         stdout: normalize(&output.stdout),
         stderr: normalize(&output.stderr),
         calls,
+        configs,
     }
 }
 
@@ -809,6 +839,33 @@ fn host_call_failure(case: &ScenarioCase, calls: &[String], recorded_here: bool)
     }
 }
 
+/// PLATFORM-001: a configuration Go refuses is reported, never repaired or rewritten, so
+/// the refused `config.yaml` must be byte-identical after the run (the interactive repair
+/// prompts reach EOF and are declined).
+fn config_rewrite_failure(case: &ScenarioCase, run: &RunOutput) -> Option<String> {
+    if !matches!(
+        case.state.as_str(),
+        "config_clipboard_invalid" | "config_syntax_invalid"
+    ) {
+        return None;
+    }
+    if run.configs.is_empty() {
+        return Some(format!("{} seeded no config.yaml to snapshot", case.name));
+    }
+    run.configs
+        .iter()
+        .find(|config| config.before.is_none() || config.before != config.after)
+        .map(|config| {
+            format!(
+                "{} changed {} on a refused configuration\n  before: {:?}\n  after:  {:?}",
+                case.name,
+                config.path,
+                config.before.as_deref().map(String::from_utf8_lossy),
+                config.after.as_deref().map(String::from_utf8_lossy)
+            )
+        })
+}
+
 /// Whether `case` can be compared on this host.
 fn runs_on_this_host(case: &ScenarioCase) -> bool {
     case.platforms.is_empty() || case.platforms.iter().any(|platform| platform == host_os())
@@ -844,6 +901,7 @@ fn replay_scenarios(
         }
         let run = run_case_full(case, seed);
         failures.extend(host_call_failure(case, &run.calls, compare_calls));
+        failures.extend(config_rewrite_failure(case, &run));
         let actual = (run.code, run.stdout, run.stderr);
         if known_divergence(&case.name, state).is_some() {
             match pinned.get(&case.name) {
@@ -1727,7 +1785,7 @@ fn config_invalid_states_record_the_refusal() {
             .iter()
             .filter(|case| case.state == state)
             .collect();
-        assert_eq!(in_state.len(), 8, "{state}");
+        assert_eq!(in_state.len(), 10, "{state}");
         for case in in_state {
             let observation = &case.observation;
             assert_eq!(observation.exit_code, 6, "{}", case.name);
@@ -1768,6 +1826,26 @@ fn config_invalid_states_record_the_refusal() {
         "{}",
         get.stderr
     );
+    // `dynamic generate` opens through cli.WithVault (interactive repair prompt, declined at
+    // EOF); `mcp serve --stdio` resolves non-interactively and reports the cause. Both are
+    // ExitConfigError and reach the doctor hint.
+    for state in ["config_clipboard_invalid", "config_syntax_invalid"] {
+        let dynamic = &case(&format!("unlock_{state}_dynamic_generate")).observation;
+        assert!(
+            dynamic
+                .stderr
+                .contains("Error: configuration is invalid: configuration fix aborted by user\n"),
+            "{}",
+            dynamic.stderr
+        );
+        let serve = &case(&format!("unlock_{state}_mcp_serve_stdio")).observation;
+        assert!(
+            !serve.stderr.contains("fix aborted by user")
+                && !serve.stderr.contains("Apply this fix"),
+            "{}",
+            serve.stderr
+        );
+    }
     // The refusal comes before the passphrase policy and the vault check: the locked and
     // identity-less shapes of the same commands are recorded elsewhere with other exits.
     assert_ne!(
@@ -1786,16 +1864,27 @@ fn mutated_config_refusal_is_detected() {
         .iter()
         .find(|case| case.name == "unlock_config_clipboard_invalid_get")
         .expect("case");
-    let actual = run_case(case, &fixture.vault_seed);
+    let run = run_case_full(case, &fixture.vault_seed);
+    let actual = (run.code, run.stdout.clone(), run.stderr.clone());
     let mut failures = Vec::new();
     record_difference(&case.name, &case.observation, actual.clone(), &mut failures);
     assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(config_rewrite_failure(case, &run), None);
     // A native open that accepted the configuration would exit 0 without the refusal.
     let mut accepted = actual;
     accepted.0 = 0;
     accepted.2 = String::new();
     record_difference(&case.name, &case.observation, accepted, &mut failures);
     assert_eq!(failures.len(), 1, "{failures:?}");
+    // A native open that repaired the refused file in place would change its bytes.
+    let mut repaired = run.clone();
+    repaired.configs[0].after = Some(b"clipboard:\n    auto_clear_duration: 30s\n".to_vec());
+    assert!(
+        config_rewrite_failure(case, &repaired).is_some_and(|failure| failure.contains("changed")),
+    );
+    let mut deleted = run;
+    deleted.configs[0].after = None;
+    assert!(config_rewrite_failure(case, &deleted).is_some());
 }
 
 /// The partial vault shapes really miss their file, and the scenarios only name

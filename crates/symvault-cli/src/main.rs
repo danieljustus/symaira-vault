@@ -5249,6 +5249,10 @@ fn run_mcp(
     })();
     match result {
         Ok(()) => ExitCode::SUCCESS,
+        // Go's `wrapVaultError` passes an `ExitConfigError` through unchanged (its message
+        // never contains `load config`, which would be rewrapped), so `ExecuteRoot` exits 6
+        // with the doctor hint.
+        Err(error) if is_config_invalid(&error) => report_config_invalid(&error),
         Err(error) => {
             print_error_like_go(&error);
             if error.starts_with("vault not initialized") {
