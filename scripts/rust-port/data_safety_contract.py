@@ -27,7 +27,11 @@ Runs the real Rust CLI over Go-created vaults and checks, per seed vault:
   8. crash leftovers: a `.partial` archive and a `.verify-*` scratch directory
      of a dead process are swept by the next gate, those of a live one stay;
   9. the mutator sweep includes `remote init` on a git-backed Go vault (it
-     rewrites `.git/config`): marker and backup precede the config change.
+     rewrites `.git/config`): marker and backup precede the config change;
+ 10. the sweep also covers the commands that hold the vault `.lock` or rewrite
+     identity.age on their own: `migrate kdf --allow-legacy-kdf`
+     (historical Argon2; holds `.lock` for the whole run, so the gate has to run
+     before it, not inside it) and `auth rotate-passphrase`.
 
 Seeds: the frozen Go-created passphrase vault of testdata/port/ffi/mobilebind.json
 (`seed.vault`), a vault made by the Go oracle's own `init` + `set`, and the
@@ -53,6 +57,7 @@ SEED_PASS = "correct horse battery staple"
 INIT_PASS = "initial passphrase value"
 ZERO_PASS = "abcdefghijklmnopqrstuvw"
 STRONG = "StrongPassword123!"
+ROTATED = "rotated passphrase value"
 MARKER = ".symvault-rust"
 AUDIT = "audit-symvault.log"
 GO_READ_SIDE_EFFECTS = {".symvault-migrated", AUDIT}
@@ -125,11 +130,12 @@ class Sandbox:
         env.update(extra or {})
         return env
 
-    def run(self, binary, args, passphrase=SEED_PASS, vault=None, extra=None):
+    def run(self, binary, args, passphrase=SEED_PASS, vault=None, extra=None, stdin=None):
         return subprocess.run(
             [str(binary), *args],
             env=self.env(passphrase, vault, extra),
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL if stdin is None else None,
+            input=stdin,
             capture_output=True,
             text=True,
             timeout=300,
@@ -342,8 +348,28 @@ def git_backed(sandbox):
         check(out.returncode == 0, f"git {args[0]} failed in the seed: {out.stderr.strip()}")
 
 
+LEGACY_KDF_CONFIG = (
+    "vault:\n  format_version: 2\n  argon2id_time: 5\n  argon2id_memory: 65536\n"
+    "  argon2id_threads: 4\n  auto_heal_zero_key: true\nunknown_root: retained\n"
+)
+
+
+def legacy_argon2_identity(sandbox):
+    """Swaps the seed's identity for the historical Go Argon2 envelope of
+    testdata/port/crypto/kdf-policy-v1.json (the one `migrate kdf
+    --allow-legacy-kdf` exists for) plus a config that is migrated with it."""
+    fixture = json.loads((ROOT / "testdata/port/crypto/kdf-policy-v1.json").read_text())
+    (sandbox.vault / "identity.age").write_bytes(base64.b64decode(fixture["cases"][0]["ciphertext"]))
+    (sandbox.vault / "config.yaml").write_text(LEGACY_KDF_CONFIG)
+
+
+def legacy_kdf_passphrase():
+    return json.loads((ROOT / "testdata/port/crypto/kdf-policy-v1.json").read_text())["passphrase"]
+
+
 def sweep_cases(inputs):
-    """(name, rust args, oracle setup: Go args | callable(sandbox) | None, must_mutate_tree)."""
+    """(name, rust args, oracle setup: Go args | callable(sandbox) | None, must_mutate_tree,
+    run options: {passphrase, stdin} for commands that read their secrets from stdin)."""
     kdf = json.loads((ROOT / "testdata/port/crypto/age-kdf.json").read_text())
     recipient = kdf["zero_key_cases"][0]["expected_recipient"]
     inputs.mkdir(exist_ok=True)
@@ -363,6 +389,18 @@ def sweep_cases(inputs):
         ("migrate pseudonymize", ["migrate", "pseudonymize", "--yes"], None, True),
         ("device pair", ["device", "pair"], None, True),
         ("import csv", ["import", str(inputs / "import.csv"), "--format", "csv"], None, True),
+        # `migrate kdf --allow-legacy-kdf` on an unmarked Go vault holds the vault
+        # `.lock` for its whole run. The D1 gate takes the same lock through a
+        # second descriptor, so it must run before this command locks: it
+        # self-deadlocked ("vault is currently locked by another process") when
+        # the gate ran inside the held lock. (The scrypt path of `migrate kdf` has
+        # no Go-derived fixture with a known passphrase for this harness; it holds
+        # no lock and is exercised by migrate_kdf_go_rust_integration.)
+        ("migrate kdf legacy argon2", ["migrate", "kdf", "--yes", "--allow-legacy-kdf"],
+         legacy_argon2_identity, True,
+         {"passphrase": legacy_kdf_passphrase(), "stdin": legacy_kdf_passphrase() + "\n"}),
+        ("auth rotate-passphrase", ["auth", "rotate-passphrase", "--yes"], None, True,
+         {"stdin": f"{SEED_PASS}\n{ROTATED}\n{ROTATED}\n"}),
         ("remote init", ["remote", "init", "git@backup.invalid", "--path", "vault.git"],
          git_backed, True),
     ]
@@ -379,7 +417,8 @@ def run_sweep(base, rust, go):
     for index, name in enumerate(names):
         label = "sweep-" + name.replace(" ", "-")
         sandbox = Sandbox(base, label)
-        _, args, setup, must_mutate = sweep_cases(sandbox.base / "inputs")[index]
+        _, args, setup, must_mutate, *options = sweep_cases(sandbox.base / "inputs")[index]
+        options = options[0] if options else {}
         materialize_ffi_seed(sandbox)
         if callable(setup):
             setup(sandbox)
@@ -389,7 +428,7 @@ def run_sweep(base, rust, go):
         pre = tree(sandbox.vault)
         audit = sandbox.vault / AUDIT
         pre_audit = audit.read_bytes() if audit.exists() else b""
-        out = sandbox.run(rust, args, SEED_PASS)
+        out = sandbox.run(rust, args, options.get("passphrase", SEED_PASS), stdin=options.get("stdin"))
         post = tree(sandbox.vault)
         changed = [k for k in diff_trees(pre, post) if k not in ignored]
         if must_mutate:
