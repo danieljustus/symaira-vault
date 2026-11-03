@@ -318,6 +318,10 @@ pub fn run(
             http_options.read_header_timeout = mcp.read_header_timeout;
             http_options.read_timeout = mcp.read_timeout;
             http_options.write_timeout = mcp.write_timeout;
+            http_options.rate_limit = mcp.rate_limit;
+            http_options
+                .trusted_proxy_ips
+                .clone_from(&mcp.trusted_proxy_ips);
         }
         let runtime_status = (touch_id_available, backend, persistent, message);
         let approval_queue_for_agent = approval_queue.clone();

@@ -286,6 +286,7 @@ PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
 PORT_MCP_INIT_FIXTURE := testdata/port/mcp/initialize.json
 PORT_MCP_HTTP_INIT_FIXTURE := testdata/port/mcp/http-initialize.json
+PORT_MCP_HTTP_RATELIMIT_FIXTURE := testdata/port/mcp/http-ratelimit.json
 PORT_MCP_STDIO_FIXTURE := testdata/port/mcp/stdio-hygiene.json
 PORT_GIT_WINNER_FIXTURE := testdata/port/sync/version-winner.json
 PORT_GIT_OFFLINE_FIXTURE := testdata/port/sync/git-offline.json
@@ -594,6 +595,21 @@ mcp-http-init-differential: mcp-http-init-fixtures-check
 	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive|TestRunHTTPServer_OAuthProtectedResource)$$' -count=1
 	$(CARGO) test -p symvault-mcp --lib http::tests --locked
 	$(CARGO) test -p symvault-mcp --test http_initialize --locked
+
+# HTTP-001/HTTP-002 per-client rate limiter. The producer verifies every declared
+# production source against its pin (b1da45d1), so generation needs a checkout
+# whose limiter sources are unchanged; the check is non-writing, uses a short
+# real clock (about 10 s of sleeps) and is not part of port-contract.
+.PHONY: mcp-http-ratelimit-fixtures-generate mcp-http-ratelimit-fixtures-check mcp-http-ratelimit-differential
+mcp-http-ratelimit-fixtures-generate:
+	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http002ratelimitgen --output $(PORT_MCP_HTTP_RATELIMIT_FIXTURE)
+
+mcp-http-ratelimit-fixtures-check:
+	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http002ratelimitgen --check --output $(PORT_MCP_HTTP_RATELIMIT_FIXTURE)
+
+mcp-http-ratelimit-differential: mcp-http-ratelimit-fixtures-check
+	$(CARGO) test -p symvault-mcp --lib ratelimit::tests --locked
+	$(CARGO) test -p symvault-mcp --test http_ratelimit --locked
 
 # HTTP-003 paired production-handler and Rust adapter lifecycle contracts.
 .PHONY: mcp-oauth-contract

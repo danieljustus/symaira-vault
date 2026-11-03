@@ -8,7 +8,8 @@ mod envelope;
 pub(crate) mod shutdown;
 pub use shutdown::HttpShutdown;
 
-use crate::approval::{ApprovalQueue, handle_device_request, handle_local_request};
+use crate::approval::{ApprovalQueue, handle_device_request, handle_local_request, is_local_route};
+use crate::ratelimit::{REFUSED_BODY, RateLimiter, remote_addr_string};
 use crate::{Error, Message, ProtocolHandler, error_code, is_supported_protocol_version};
 use rustls::{
     RootCertStore, ServerConfig, ServerConnection, StreamOwned,
@@ -667,12 +668,18 @@ impl Default for OAuthTokenTtls {
 /// Explicit transport input/write budgets and OAuth lifetimes.
 /// Zero network budgets retain the built-in defaults; keep-alive idle remains
 /// the Go-compatible 120 seconds. Shutdown is owned by the caller's lifecycle.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct HttpServerOptions {
     pub token_ttls: OAuthTokenTtls,
     pub read_header_timeout: Duration,
     pub read_timeout: Duration,
     pub write_timeout: Duration,
+    /// `mcp.rate_limit`: requests per minute and client on `/mcp` and the
+    /// local approval API. Negative selects Go's default of 60, `0` disables.
+    pub rate_limit: i64,
+    /// `mcp.trusted_proxy_ips`: peers whose `X-Forwarded-For` / `X-Real-IP`
+    /// name the rate-limit client.
+    pub trusted_proxy_ips: Vec<String>,
 }
 
 impl Default for HttpServerOptions {
@@ -683,12 +690,14 @@ impl Default for HttpServerOptions {
             read_header_timeout: timeouts.initial_read,
             read_timeout: timeouts.request_read,
             write_timeout: timeouts.write,
+            rate_limit: crate::ratelimit::DEFAULT_LIMIT,
+            trusted_proxy_ips: Vec::new(),
         }
     }
 }
 
 impl HttpServerOptions {
-    fn timeouts(self) -> Result<HttpTimeouts, std::io::Error> {
+    fn timeouts(&self) -> Result<HttpTimeouts, std::io::Error> {
         let mut result = HttpTimeouts::default();
         for (configured, target) in [
             (self.read_header_timeout, &mut result.initial_read),
@@ -766,6 +775,8 @@ where
     V: Fn(&str) -> bool + Send + Sync + 'static,
 {
     let timeouts = options.timeouts()?;
+    let rate_limiter =
+        RateLimiter::from_config(options.rate_limit, &options.trusted_proxy_ips).map(Arc::new);
     let root = registry_path
         .as_ref()
         .parent()
@@ -788,6 +799,7 @@ where
         Some(Arc::new(local_approval_api)),
         shutdown,
         timeouts,
+        rate_limiter,
     )
 }
 
@@ -923,6 +935,7 @@ where
         None,
         Some(shutdown),
         HttpTimeouts::default(),
+        None,
     )
 }
 
@@ -946,6 +959,7 @@ where
         local_approval,
         None,
         HttpTimeouts::default(),
+        None,
     )
 }
 
@@ -959,6 +973,7 @@ fn serve_loopback_inner_with_shutdown<F>(
     local_approval: Option<Arc<LocalApprovalApi>>,
     shutdown: Option<HttpShutdown>,
     timeouts: HttpTimeouts,
+    rate_limiter: Option<Arc<RateLimiter>>,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
@@ -1071,6 +1086,7 @@ where
             let active_for_thread = Arc::clone(&active);
             let registry_path = registry_path.clone();
             let local_approval = local_approval.clone();
+            let rate_limiter = rate_limiter.clone();
             let request_context = shutdown
                 .as_ref()
                 .map(HttpShutdown::request_context)
@@ -1089,6 +1105,7 @@ where
                     local_approval.as_deref(),
                     timeouts,
                     request_context,
+                    rate_limiter.as_deref(),
                 );
             }) {
                 active.fetch_sub(1, Ordering::AcqRel);
@@ -1145,9 +1162,11 @@ where
         local_approval,
         timeouts,
         crate::RequestContext::default(),
+        None,
     )
 }
 
+#[allow(clippy::too_many_arguments)] // Existing transport inputs plus the server-owned limiter.
 fn serve_connection_shared_with_context<F>(
     stream: impl Into<HttpStream>,
     registry_path: &Path,
@@ -1156,6 +1175,7 @@ fn serve_connection_shared_with_context<F>(
     local_approval: Option<&LocalApprovalApi>,
     timeouts: HttpTimeouts,
     request_context: crate::RequestContext,
+    rate_limiter: Option<&RateLimiter>,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
@@ -1215,6 +1235,7 @@ where
             state,
             local_approval,
             &request_context,
+            rate_limiter,
         )
     })
 }
@@ -1382,6 +1403,7 @@ where
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Existing transport inputs plus the server-owned limiter.
 fn serve_one_authenticated<F>(
     reader: &mut BufReader<HttpStream>,
     request: WireRequest,
@@ -1390,6 +1412,7 @@ fn serve_one_authenticated<F>(
     state: &Mutex<HttpServerState<F>>,
     local_approval: Option<&LocalApprovalApi>,
     request_context: &crate::RequestContext,
+    rate_limiter: Option<&RateLimiter>,
 ) -> Result<bool, std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
@@ -1397,6 +1420,36 @@ where
     let stream = reader.get_mut();
     let secure = stream.is_tls();
     let response_version = request.http_version.as_str();
+    // Go wraps exactly these mux entries in `RateLimiterMiddleware`, outside
+    // the Origin, bearer and body checks: `/mcp` and the local approval API.
+    // A refused request is answered before any of them runs.
+    let request_path = request.path.split('?').next().unwrap_or_default();
+    if let Some(limiter) = rate_limiter
+        && (request_path == "/mcp" || (local_approval.is_some() && is_local_route(request_path)))
+    {
+        let key = limiter.client_key(
+            &remote_addr_string(stream.peer_addr()?),
+            &request.forwarded_for,
+            &request.real_ip,
+        );
+        if !limiter.allow(&key) {
+            write_http_response(
+                stream,
+                HttpResponse {
+                    status: 429,
+                    headers: vec![
+                        ("Content-Type", "text/plain; charset=utf-8"),
+                        ("X-Content-Type-Options", "nosniff"),
+                    ],
+                    body: REFUSED_BODY.as_bytes().to_vec(),
+                },
+                response_version,
+                keep_alive,
+                false,
+            )?;
+            return Ok(keep_alive);
+        }
+    }
     if let Some(local_approval) = local_approval
         && let Some(approval_response) = handle_local_request(
             &local_approval.queue,
@@ -1673,6 +1726,8 @@ struct WireRequest {
     protocol_version: String,
     enroll_timestamp: String,
     enroll_proof: String,
+    forwarded_for: String,
+    real_ip: String,
     connection: String,
     body: String,
     body_error: Option<(u16, &'static str)>,
@@ -1895,6 +1950,8 @@ fn read_wire_request(
         protocol_version: get("mcp-protocol-version"),
         enroll_timestamp: get("x-enroll-timestamp"),
         enroll_proof: get("x-enroll-proof"),
+        forwarded_for: get("x-forwarded-for"),
+        real_ip: get("x-real-ip"),
         connection: get("connection"),
         body,
         body_error,
@@ -3410,6 +3467,7 @@ mod tests {
                 Some(local_approval),
                 Some(worker_shutdown),
                 HttpTimeouts::default(),
+                None,
             )
             .expect("serve production loopback accept loop");
         });
