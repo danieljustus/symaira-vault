@@ -482,6 +482,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         return Err("command must contain at least one element".to_owned());
     }
     let mut materialized_files = materialize_secret_files(options.files)?;
+    // Go creates the timeout context here, before it builds the environment, and
+    // `exec.Cmd.Start` refuses to start a process whose context already expired.
+    let deadline_began = Instant::now();
 
     let mut child_command = Command::new(&options.command[0]);
     child_command.args(&options.command[1..]);
@@ -554,6 +557,15 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     }
     child_command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
+    if options
+        .timeout
+        .is_some_and(|limit| deadline_began.elapsed() >= limit)
+    {
+        return Err(cleanup_after_command_error(
+            &mut materialized_files,
+            "failed to run command: context deadline exceeded".to_owned(),
+        ));
+    }
     let mut child = match child_command.spawn() {
         Ok(child) => child,
         Err(error) => {

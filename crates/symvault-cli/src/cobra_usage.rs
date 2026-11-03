@@ -999,11 +999,21 @@ fn typed_value_error(path: &str, name: &str, arg: &Arg, value: &str) -> Option<S
 /// The error pflag's `stringSlice` reports for `value`: `readAsCSV` hands the whole value
 /// (unless empty) to a default `encoding/csv` reader and returns its first record, so
 /// the message is the reader's own (`ParseError`, or `EOF` for a value of blank
-/// lines). This follows `Reader.readRecord` for the comma separator, strict quotes
-/// and no comment character; `None` means the value is a valid record.
+/// lines). `None` means the value is a valid record.
 fn go_csv_error(value: &str) -> Option<String> {
+    go_csv_record(value).err()
+}
+
+/// pflag's `readAsCSV` (`stringSlice.Set`): an empty value is an empty slice, anything
+/// else is the first record `csv.NewReader(strings.NewReader(val)).Read()` returns, so
+/// `"a,b"` is two elements, `"a,"` has an empty second one, `\"a,b\"` is one, `""` inside
+/// quotes is a quote, a record ends at the first line break outside quotes (later lines
+/// are ignored) and leading blank lines are skipped. The error is the reader's message.
+/// This follows `Reader.readRecord` for the comma separator, strict quotes, no comment
+/// character and no space trimming.
+pub fn go_csv_record(value: &str) -> Result<Vec<String>, String> {
     if value.is_empty() {
-        return None;
+        return Ok(Vec::new());
     }
     let mut reader = CsvLines {
         data: value.as_bytes(),
@@ -1016,23 +1026,24 @@ fn go_csv_error(value: &str) -> Option<String> {
         (line, eof) = reader.read_line();
     }
     if eof {
-        return Some("EOF".to_owned());
+        return Err("EOF".to_owned());
     }
     let rec_line = reader.num_line;
     let mut pos_line = reader.num_line;
     let mut pos_col = 1_usize;
     let mut from = 0_usize;
     let parse_error = |line: usize, column: usize, reason: &str| {
-        Some(if rec_line == line {
+        if rec_line == line {
             format!("parse error on line {line}, column {column}: {reason}")
         } else {
             format!(
                 "record on line {rec_line}; parse error on line {line}, column {column}: {reason}"
             )
-        })
+        }
     };
     const BARE_QUOTE: &str = "bare \" in non-quoted-field";
     const QUOTE: &str = "extraneous or missing \" in quoted-field";
+    let mut fields: Vec<Vec<u8>> = Vec::new();
     loop {
         let rest = &line[from..];
         if rest.first() != Some(&b'"') {
@@ -1042,38 +1053,47 @@ fn go_csv_error(value: &str) -> Option<String> {
                 None => &rest[..rest.len() - csv_newline_len(rest)],
             };
             if let Some(quote) = field.iter().position(|byte| *byte == b'"') {
-                return parse_error(reader.num_line, pos_col + quote, BARE_QUOTE);
+                return Err(parse_error(reader.num_line, pos_col + quote, BARE_QUOTE));
             }
-            // No comma: this was the last field and the record is valid.
-            let index = comma?;
+            fields.push(field.to_vec());
+            // No comma: this was the last field and the record is complete.
+            let Some(index) = comma else { break };
             from += index + 1;
             pos_col += index + 1;
             continue;
         }
         from += 1;
         pos_col += 1;
+        let mut field = Vec::new();
         loop {
             let rest = &line[from..];
             if let Some(index) = rest.iter().position(|byte| *byte == b'"') {
+                field.extend_from_slice(&rest[..index]);
                 from += index + 1;
                 pos_col += index + 1;
                 let rest = &line[from..];
                 match rest.first() {
                     Some(b'"') => {
+                        field.push(b'"');
                         from += 1;
                         pos_col += 1;
                     }
                     Some(b',') => {
                         from += 1;
                         pos_col += 1;
+                        fields.push(std::mem::take(&mut field));
                         break;
                     }
-                    _ if csv_newline_len(rest) == rest.len() => return None,
-                    _ => return parse_error(reader.num_line, pos_col - 1, QUOTE),
+                    _ if csv_newline_len(rest) == rest.len() => {
+                        fields.push(field);
+                        return Ok(csv_strings(fields));
+                    }
+                    _ => return Err(parse_error(reader.num_line, pos_col - 1, QUOTE)),
                 }
             } else if !rest.is_empty() {
                 // End of line inside the quotes: the field continues on the next line (a
                 // following `io.EOF` is not an error by itself, only the missing quote).
+                field.extend_from_slice(rest);
                 pos_col += rest.len();
                 (line, _) = reader.read_line();
                 from = 0;
@@ -1083,10 +1103,39 @@ fn go_csv_error(value: &str) -> Option<String> {
                 }
             } else {
                 // Abrupt end of input inside a quoted field.
-                return parse_error(pos_line, pos_col, QUOTE);
+                return Err(parse_error(pos_line, pos_col, QUOTE));
             }
         }
     }
+    Ok(csv_strings(fields))
+}
+
+/// The fields of a record as text. Every split point is an ASCII byte of a UTF-8 value,
+/// so a field is valid UTF-8 whenever the value was.
+fn csv_strings(fields: Vec<Vec<u8>>) -> Vec<String> {
+    fields
+        .into_iter()
+        .map(|field| String::from_utf8_lossy(&field).into_owned())
+        .collect()
+}
+
+/// The elements of a `stringSlice` flag after pflag parsed every occurrence: the first
+/// occurrence replaces the flag's default and later ones append, each as one CSV record
+/// (`go_csv_record`), so `--tools ""` is an empty slice, not the default. Without any
+/// occurrence the default stays. `evaluate` rejected a malformed occurrence as a usage
+/// error before any command runs, so an error cannot reach this point.
+pub fn string_slice_flag(occurrences: &[String], default: &[&str]) -> Vec<String> {
+    if occurrences.is_empty() {
+        return default.iter().map(|value| (*value).to_owned()).collect();
+    }
+    let mut values = Vec::new();
+    for occurrence in occurrences {
+        match go_csv_record(occurrence) {
+            Ok(record) => values.extend(record),
+            Err(_) => debug_assert!(false, "stringSlice value {occurrence:?} passed evaluate"),
+        }
+    }
+    values
 }
 
 /// Length of the line terminator (`\n`) that ends `line`, as `encoding/csv`'s `lengthNL`.
@@ -2386,6 +2435,158 @@ mod tests {
         ] {
             assert_eq!(go_csv_error(value).as_deref(), expected, "{value:?}");
         }
+    }
+
+    /// `pflag.StringSlice` over real pflag v1.0.10 (`--s=<occurrence>` for each occurrence,
+    /// recorded with a Go program that calls `FlagSet.Parse`): the elements, or the
+    /// reader's message of the first failing occurrence.
+    #[test]
+    fn go_csv_record_equals_pflag_string_slice() {
+        type Row = (
+            &'static [&'static str],
+            Result<&'static [&'static str], &'static str>,
+        );
+        let rows: &[Row] = &[
+            (&[""], Ok(&[])),
+            (&["a"], Ok(&["a"])),
+            (&["a,b"], Ok(&["a", "b"])),
+            (&["a,,b"], Ok(&["a", "", "b"])),
+            (&[","], Ok(&["", ""])),
+            (&["a,"], Ok(&["a", ""])),
+            (&[",a"], Ok(&["", "a"])),
+            (&["\"a,b\",c"], Ok(&["a,b", "c"])),
+            (&["\"a\"\"b\""], Ok(&["a\"b"])),
+            (
+                &["\"a\"b"],
+                Err("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                &["a\"b"],
+                Err("parse error on line 1, column 2: bare \" in non-quoted-field"),
+            ),
+            (
+                &["\"a"],
+                Err("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                &["\""],
+                Err("parse error on line 1, column 2: extraneous or missing \" in quoted-field"),
+            ),
+            (&["\n"], Err("EOF")),
+            (&["\n\na,b"], Ok(&["a", "b"])),
+            (&["a,b\nc"], Ok(&["a", "b"])),
+            (&["a,b\r\nc"], Ok(&["a", "b"])),
+            (&["\"a\nb\",c"], Ok(&["a\nb", "c"])),
+            (&["\"a\r\nb\""], Ok(&["a\nb"])),
+            (&["a\rb"], Ok(&["a\rb"])),
+            (&["a\r"], Ok(&["a"])),
+            (&[" a , b"], Ok(&[" a ", " b"])),
+            (&["\\,"], Ok(&["\\", ""])),
+            (&["a\\,b"], Ok(&["a\\", "b"])),
+            (&["\"\""], Ok(&[""])),
+            (
+                &["\"\"x"],
+                Err("parse error on line 1, column 2: extraneous or missing \" in quoted-field"),
+            ),
+            (&["\"\",a"], Ok(&["", "a"])),
+            (&["a,\"\""], Ok(&["a", ""])),
+            (&["\"a\",\"b\""], Ok(&["a", "b"])),
+            (
+                &["\"a\" ,b"],
+                Err("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (&["é,ü"], Ok(&["é", "ü"])),
+            (&["\"é\",\"ü\""], Ok(&["é", "ü"])),
+            (&["a\n"], Ok(&["a"])),
+            (&["a,b\n"], Ok(&["a", "b"])),
+            (&["\n"], Err("EOF")),
+            (
+                &["x,\"y\n\"z\"w"],
+                Err(
+                    "record on line 1; parse error on line 2, column 1: extraneous or missing \" in quoted-field",
+                ),
+            ),
+            (
+                &["\"a,b\",\"c"],
+                Err("parse error on line 1, column 9: extraneous or missing \" in quoted-field"),
+            ),
+            (&["a,\n\"b"], Ok(&["a", ""])),
+            (&["\"a\"\r\n"], Ok(&["a"])),
+            (&["\"a\"\n\"b\""], Ok(&["a"])),
+            (
+                &["\"a\nb"],
+                Err(
+                    "record on line 1; parse error on line 2, column 2: extraneous or missing \" in quoted-field",
+                ),
+            ),
+            (&["a", "b,c"], Ok(&["a", "b", "c"])),
+            (&["", "x"], Ok(&["x"])),
+            (&["x", ""], Ok(&["x"])),
+            (
+                &["\"a", "b"],
+                Err("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+        ];
+        assert_eq!(rows.len(), 45);
+        let mut errors = 0;
+        for (occurrences, expected) in rows {
+            let occurrences: Vec<String> = occurrences
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect();
+            let mut actual: Result<Vec<String>, String> = Ok(Vec::new());
+            for occurrence in &occurrences {
+                match go_csv_record(occurrence) {
+                    Ok(record) => {
+                        if let Ok(values) = &mut actual {
+                            values.extend(record);
+                        }
+                    }
+                    Err(reason) => {
+                        actual = Err(reason);
+                        break;
+                    }
+                }
+            }
+            let expected = expected
+                .map(|values| {
+                    values
+                        .iter()
+                        .map(|value| (*value).to_owned())
+                        .collect::<Vec<_>>()
+                })
+                .map_err(str::to_owned);
+            assert_eq!(actual, expected, "{occurrences:?}");
+            if let Err(reason) = &expected {
+                errors += 1;
+                let first = occurrences.iter().find_map(|value| go_csv_error(value));
+                assert_eq!(first.as_ref(), Some(reason), "{occurrences:?}");
+            } else {
+                // Every accepted occurrence has no error; string_slice_flag appends them.
+                assert!(
+                    occurrences
+                        .iter()
+                        .all(|value| go_csv_error(value).is_none())
+                );
+                assert_eq!(
+                    Ok(string_slice_flag(&occurrences, &["*"])),
+                    expected,
+                    "{occurrences:?}"
+                );
+            }
+        }
+        assert_eq!(errors, 12);
+    }
+
+    #[test]
+    fn string_slice_flag_keeps_the_default_only_without_an_occurrence() {
+        let none: Vec<String> = Vec::new();
+        assert_eq!(string_slice_flag(&none, &["*"]), ["*"]);
+        assert!(string_slice_flag(&none, &[]).is_empty());
+        let empty = vec![String::new()];
+        assert!(string_slice_flag(&empty, &["*"]).is_empty());
+        let two = vec!["a,b".to_owned(), "\"c,d\"".to_owned()];
+        assert_eq!(string_slice_flag(&two, &["*"]), ["a", "b", "c,d"]);
     }
 
     #[test]

@@ -165,6 +165,10 @@ type fixture struct {
 	// UnlockStates are the commands that unlock the vault, run against the vault
 	// shapes the other sections never reach (see unlockStateInputs).
 	UnlockStates []scenarioCase `json:"unlock_states"`
+	// TypedFlags are the values of typed flags that pflag accepts and the command
+	// then uses (see typedFlagInputs): int64 `file add --max-size`, `stringSlice`
+	// CSV records and re-read `time.Duration` flags.
+	TypedFlags []scenarioCase `json:"typed_flags"`
 }
 
 type treeFile struct {
@@ -414,6 +418,9 @@ type runSpec struct {
 	omit []string
 	// configSuffix is appended to the seeded config.yaml.
 	configSuffix string
+	// parents creates the directories of nested files; without it a file in a
+	// directory that does not exist is an error (the argv shapes rely on that).
+	parents bool
 }
 
 // run executes the oracle in a fresh sandbox whose working directory holds files. A timed-out command keeps the
@@ -437,7 +444,13 @@ func runSpecified(goBinary string, args []string, spec runSpec) (result, error) 
 		return result{}, err
 	}
 	for name, content := range spec.files {
-		if err := os.WriteFile(filepath.Join(box.root, name), []byte(content), 0o600); err != nil {
+		path := filepath.Join(box.root, name)
+		if spec.parents {
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				return result{}, err
+			}
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			return result{}, err
 		}
 	}
@@ -839,13 +852,14 @@ func main() {
 		ServiceManagerCommands:    extras.serviceManager,
 		RunFileUseArgv:            extras.runFileUse,
 		UnlockStates:              extras.unlockStates,
+		TypedFlags:                extras.typedFlags,
 	}
 	content, err := marshalJSON(fresh)
 	if err != nil {
 		fatal("marshal fixture: %v", err)
 	}
-	summary := fmt.Sprintf("%d usage cases, %d arity rows, %d gate rows, %d not-initialized cases, %d argv shapes, %d nil-Args commands, %d extra-positional scenarios, %d run/file-use argv scenarios, %d unlock-state scenarios",
-		len(usage), len(arity), len(gate), len(notInitialized), len(shapes), len(extras.nilArgs), len(extras.extraPositionals), len(extras.runFileUse), len(extras.unlockStates))
+	summary := fmt.Sprintf("%d usage cases, %d arity rows, %d gate rows, %d not-initialized cases, %d argv shapes, %d nil-Args commands, %d extra-positional scenarios, %d run/file-use argv scenarios, %d unlock-state scenarios, %d typed-flag scenarios",
+		len(usage), len(arity), len(gate), len(notInitialized), len(shapes), len(extras.nilArgs), len(extras.extraPositionals), len(extras.runFileUse), len(extras.unlockStates), len(extras.typedFlags))
 	if *check {
 		existing, err := os.ReadFile(*output) // #nosec G304 -- repository fixture path
 		if err != nil {

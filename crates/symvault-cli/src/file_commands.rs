@@ -21,7 +21,8 @@ use symvault_crypto::Identity;
 use symvault_store::{AttachmentInfo, Entry, StoreError};
 use symvault_sync::{GoTime, safeio};
 
-pub const DEFAULT_MAX_ATTACHMENT_SIZE: u64 = 1 << 20;
+/// Go's `DefaultMaxAttachmentSize` (an `int64`: `--max-size` accepts negative values).
+pub const DEFAULT_MAX_ATTACHMENT_SIZE: i64 = 1 << 20;
 
 #[derive(Debug)]
 pub struct AddOptions {
@@ -29,8 +30,72 @@ pub struct AddOptions {
     pub field: String,
     pub source: PathBuf,
     pub secret_type: String,
-    pub max_size: u64,
     pub shred: bool,
+}
+
+/// A source file `file add` already read and size-checked.
+#[derive(Debug)]
+pub struct SourceFile {
+    content: Vec<u8>,
+    filename: String,
+}
+
+/// What Go's `runFileAdd` decides before it opens the vault, in its order: `--field` and
+/// `--from` must be non-empty (invalid input, 9), the source must be stat-able (general
+/// error, 1), its size must not exceed the signed `--max-size` (invalid input, 9; a
+/// negative limit rejects every file) and it must be readable (1). The error is the exit
+/// status and the message Go prints.
+pub fn read_source(field: &str, source: &Path, max_size: i64) -> Result<SourceFile, (u8, String)> {
+    if field.is_empty() {
+        return Err((9, "--field is required".to_owned()));
+    }
+    if source.as_os_str().is_empty() {
+        return Err((9, "--from is required".to_owned()));
+    }
+    let reason = |error: &std::io::Error| {
+        crate::config::go_errno_text(error).map_or_else(|| error.to_string(), str::to_owned)
+    };
+    let metadata = fs::metadata(source).map_err(|error| {
+        (
+            1,
+            format!(
+                "cannot stat source file: stat {}: {}",
+                source.display(),
+                reason(&error)
+            ),
+        )
+    })?;
+    let exceeds = |size: u64| {
+        (
+            9,
+            format!(
+                "source file is {size} bytes, exceeds the {max_size} byte limit (override with --max-size)"
+            ),
+        )
+    };
+    if i128::from(metadata.len()) > i128::from(max_size) {
+        return Err(exceeds(metadata.len()));
+    }
+    let read_failed = |error: &std::io::Error| {
+        let text =
+            crate::config::go_path_error(source, error, true).unwrap_or_else(|| error.to_string());
+        (1, format!("cannot read source file: {text}"))
+    };
+    let source_file = fs::File::open(source).map_err(|error| read_failed(&error))?;
+    let limit = u64::try_from(max_size).unwrap_or(0);
+    let mut content = Vec::new();
+    source_file
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut content)
+        .map_err(|error| read_failed(&error))?;
+    if content.len() as u64 > limit {
+        return Err(exceeds(content.len() as u64));
+    }
+    let filename = source
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .ok_or_else(|| (1, "source path has no file name".to_owned()))?;
+    Ok(SourceFile { content, filename })
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -90,38 +155,13 @@ struct MaterializedFile {
     length: u64,
 }
 
-pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<AddResult, String> {
-    if options.field.is_empty() {
-        return Err("--field is required".to_owned());
-    }
-    let metadata = fs::metadata(&options.source)
-        .map_err(|error| format!("cannot stat source file: {error}"))?;
-    if metadata.len() > options.max_size {
-        return Err(format!(
-            "source file is {} bytes, exceeds the {} byte limit (override with --max-size)",
-            metadata.len(),
-            options.max_size
-        ));
-    }
-    let source_file = fs::File::open(&options.source)
-        .map_err(|error| format!("cannot read source file: {error}"))?;
-    let mut content = Vec::new();
-    source_file
-        .take(options.max_size.saturating_add(1))
-        .read_to_end(&mut content)
-        .map_err(|error| format!("cannot read source file: {error}"))?;
-    if content.len() as u64 > options.max_size {
-        return Err(format!(
-            "source file is {} bytes, exceeds the {} byte limit (override with --max-size)",
-            content.len(),
-            options.max_size
-        ));
-    }
-    let filename = options
-        .source
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .ok_or_else(|| "source path has no file name".to_owned())?;
+pub fn add(
+    root: &Path,
+    identity: &Identity,
+    options: &AddOptions,
+    file: SourceFile,
+) -> Result<AddResult, String> {
+    let SourceFile { content, filename } = file;
     let sha256 = digest(&content);
     let encoded = STANDARD.encode(&content);
     let source = options.source.clone();

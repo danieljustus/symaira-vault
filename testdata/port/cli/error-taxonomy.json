@@ -118,7 +118,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "92035e4304156801cb4a3638d86f5342bffb6a03b47ee17b25649d2f99d979c1"
+    "generator_digest": "9589e0ed506bececd6df9a43e5d381d36caaac6c7535b21f6823163ea7f34428"
   },
   "usage": [
     {
@@ -20397,6 +20397,3455 @@
         "exit_code": 4,
         "stdout": "",
         "stderr": "SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.\nPassphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    }
+  ],
+  "typed_flags": [
+    {
+      "name": "typed_max_size_hex_below_size_initialized",
+      "description": "0x10 is 16: the 100-byte source exceeds it (exit 9, printed twice) (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0x10"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the 16 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the 16 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_hex_above_size_initialized",
+      "description": "0x100 is 256: the source fits (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0x100"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_hex_upper_prefix_initialized",
+      "description": "0X64 is 100: the source fits exactly (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0X64"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_octal_prefix_initialized",
+      "description": "0o144 is 100 (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0o144"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_binary_prefix_initialized",
+      "description": "0b1100100 is 100 (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0b1100100"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_legacy_octal_initialized",
+      "description": "0144 is 100 (a leading 0 means octal with base 0) (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0144"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_underscores_initialized",
+      "description": "1_000 is 1000 (underscores are digit separators with base 0) (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "1_000"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_plus_sign_initialized",
+      "description": "+100 is 100 (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "+100"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_decimal_equal_initialized",
+      "description": "100 allows a 100-byte source (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "100"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_decimal_one_below_initialized",
+      "description": "99 rejects a 100-byte source (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "99"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the 99 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the 99 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_zero_initialized",
+      "description": "0 rejects every non-empty source (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the 0 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the 0 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_negative_initialized",
+      "description": "-1 as a separate word is a value: every file exceeds a negative limit (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "-1"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the -1 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the -1 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_negative_equals_initialized",
+      "description": "--max-size=-0x1 is minus one (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size=-0x1"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the -1 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the -1 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_negative_octal_initialized",
+      "description": "-0o2 is minus two (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "-0o2"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the -2 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the -2 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_min_int64_initialized",
+      "description": "-9223372036854775808 is the smallest int64: accepted, then every file exceeds it (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "-9223372036854775808"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the -9223372036854775808 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the -9223372036854775808 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_min_int64_hex_initialized",
+      "description": "-0x8000000000000000 is the smallest int64 (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "-0x8000000000000000"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the -9223372036854775808 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the -9223372036854775808 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_max_int64_initialized",
+      "description": "9223372036854775807 is the largest int64: the source fits (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "9223372036854775807"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_max_int64_hex_initialized",
+      "description": "0x7fffffffffffffff is the largest int64 (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0x7fffffffffffffff"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_hex_overflow_initialized",
+      "description": "0x8000000000000000 is past int64: a range error before the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0x8000000000000000"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"0x8000000000000000\" for \"--max-size\" flag: strconv.ParseInt: parsing \"0x8000000000000000\": value out of range\nError: invalid argument \"0x8000000000000000\" for \"--max-size\" flag: strconv.ParseInt: parsing \"0x8000000000000000\": value out of range\n"
+      }
+    },
+    {
+      "name": "typed_max_size_decimal_overflow_initialized",
+      "description": "a decimal past int64 is a range error (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "99999999999999999999"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"99999999999999999999\" for \"--max-size\" flag: strconv.ParseInt: parsing \"99999999999999999999\": value out of range\nError: invalid argument \"99999999999999999999\" for \"--max-size\" flag: strconv.ParseInt: parsing \"99999999999999999999\": value out of range\n"
+      }
+    },
+    {
+      "name": "typed_max_size_negative_overflow_initialized",
+      "description": "a negative decimal below int64 is a range error (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size=-99999999999999999999"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"-99999999999999999999\" for \"--max-size\" flag: strconv.ParseInt: parsing \"-99999999999999999999\": value out of range\nError: invalid argument \"-99999999999999999999\" for \"--max-size\" flag: strconv.ParseInt: parsing \"-99999999999999999999\": value out of range\n"
+      }
+    },
+    {
+      "name": "typed_max_size_repeated_last_wins_initialized",
+      "description": "pflag keeps the last --max-size (1 then 100: fits) (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "1",
+          "--max-size",
+          "100"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_repeated_last_rejects_initialized",
+      "description": "pflag keeps the last --max-size (100 then 1: rejected) (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "100",
+          "--max-size",
+          "1"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the 1 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the 1 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_negative_before_vault_uninitialized",
+      "description": "the size check runs before the vault is resolved: no vault, the size error (uninitialized)",
+      "state": "uninitialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "-1"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the -1 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the -1 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_negative_before_vault_initialized",
+      "description": "the size check runs before the vault is resolved: no vault, the size error (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "-1"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: source file is 100 bytes, exceeds the -1 byte limit (override with --max-size)\nError: source file is 100 bytes, exceeds the -1 byte limit (override with --max-size)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_fits_vault_check_uninitialized",
+      "description": "a source that fits reaches the vault check (uninitialized)",
+      "state": "uninitialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0x100"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_fits_vault_check_initialized",
+      "description": "a source that fits reaches the vault check (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "0x100"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#f (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_max_size_negative_missing_source_initialized",
+      "description": "the stat precedes the size check (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "absent.bin",
+          "--max-size",
+          "-1"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: cannot stat source file: stat absent.bin: no such file or directory\nError: cannot stat source file: stat absent.bin: no such file or directory\n"
+      }
+    },
+    {
+      "name": "typed_max_size_negative_gate_first_initialized",
+      "description": "the output-format gate runs before the command body (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "-1",
+          "--output",
+          "xml"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"xml\" is not supported by 'symvault file add' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"xml\" is not supported by 'symvault file add' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "typed_max_size_field_before_size_initialized",
+      "description": "--field is checked before the size (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--from",
+          "a.bin",
+          "--max-size",
+          "-1"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: --field is required\nError: --field is required\n"
+      }
+    },
+    {
+      "name": "typed_file_add_no_flags_uninitialized",
+      "description": "neither --field nor --from: the command body reports --field (exit 9) (uninitialized)",
+      "state": "uninitialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: --field is required\nError: --field is required\n"
+      }
+    },
+    {
+      "name": "typed_file_add_no_flags_initialized",
+      "description": "neither --field nor --from: the command body reports --field (exit 9) (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: --field is required\nError: --field is required\n"
+      }
+    },
+    {
+      "name": "typed_file_add_field_only_uninitialized",
+      "description": "no --from (exit 9) (uninitialized)",
+      "state": "uninitialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: --from is required\nError: --from is required\n"
+      }
+    },
+    {
+      "name": "typed_file_add_field_only_initialized",
+      "description": "no --from (exit 9) (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: --from is required\nError: --from is required\n"
+      }
+    },
+    {
+      "name": "typed_file_add_from_only_initialized",
+      "description": "no --field (exit 9) (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--from",
+          "a.bin"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: --field is required\nError: --field is required\n"
+      }
+    },
+    {
+      "name": "typed_file_add_empty_field_initialized",
+      "description": "--field= is set but empty: the body rejects it (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field=",
+          "--from",
+          "a.bin"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: --field is required\nError: --field is required\n"
+      }
+    },
+    {
+      "name": "typed_file_add_empty_from_initialized",
+      "description": "--from \"\" is set but empty: the body rejects it (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          ""
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: --from is required\nError: --from is required\n"
+      }
+    },
+    {
+      "name": "typed_file_add_missing_source_initialized",
+      "description": "a source that does not exist: the stat error with Go's errno text (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "absent.bin"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: cannot stat source file: stat absent.bin: no such file or directory\nError: cannot stat source file: stat absent.bin: no such file or directory\n"
+      }
+    },
+    {
+      "name": "typed_file_add_directory_source_initialized",
+      "description": "a directory is stat-able and fails on the read (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "f",
+          "--from",
+          "dir"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: cannot read source file: read dir: is a directory\nError: cannot read source file: read dir: is a directory\n"
+      }
+    },
+    {
+      "name": "typed_file_add_hyphen_values_initialized",
+      "description": "pflag takes the next word as the value even when it starts with a dash (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "-x",
+          "--from",
+          "a.bin",
+          "--type",
+          "-y"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#-x (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_file_add_repeated_field_initialized",
+      "description": "a repeated --field keeps the last (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "add",
+          "seed/new",
+          "--field",
+          "one",
+          "--field",
+          "two",
+          "--from",
+          "a.bin"
+        ],
+        "exit_code": 0,
+        "stdout": "Attached a.bin to seed/new#two (100 bytes, sha256:09ecb6ebc8bcefc733f6f2ec44f791abeed6a99edf0cc31519637898aebd52d8)\n",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_plain_initialized",
+      "description": "--only takes comma-separated patterns (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.initialized,vault.config.*"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 3,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 3\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_quoted_element_initialized",
+      "description": "a quoted element is one element without its quotes (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "\"vault.config.*\",vault.initialized"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 3,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 3\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_quoted_comma_initialized",
+      "description": "a quoted comma stays inside one pattern, which matches no check (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "\"vault.config.*,vault.initialized\""
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 0\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_empty_elements_initialized",
+      "description": "empty elements are kept and match no check (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.config.*,,"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 2,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 2\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_empty_value_initialized",
+      "description": "an empty value is an empty slice: no filter, so every check runs (narrowed by --exclude) (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "",
+          "--exclude",
+          "[^v]*,vault.[^ci]*"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.identity.encrypted\",\n      \"name\": \"Identity encrypted\",\n      \"status\": \"ok\",\n      \"message\": \"identity.age is age-encrypted\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.conflict_files\",\n      \"name\": \"Orphaned git-sync conflict files\",\n      \"status\": \"ok\",\n      \"message\": \"no git-sync conflict files\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 5,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 5\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_comma_only_initialized",
+      "description": "a lone comma is two empty elements: a filter that matches nothing (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          ","
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 0\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_repeated_initialized",
+      "description": "repeated flags append (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.initialized",
+          "--only",
+          "vault.config.*"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 3,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 3\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_repeated_empty_initialized",
+      "description": "a repeated flag with an empty value appends nothing (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.initialized,vault.config.*",
+          "--only",
+          ""
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 3,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 3\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_empty_then_value_initialized",
+      "description": "an empty value first, then a value (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "",
+          "--only",
+          "vault.initialized"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_second_line_ignored_initialized",
+      "description": "only the first CSV record is read: the second line is dropped (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.initialized\nvault.config.*"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_leading_blank_lines_initialized",
+      "description": "blank lines before the record are skipped (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "\n\nvault.initialized"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_crlf_initialized",
+      "description": "a CRLF ends the record (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.initialized\r\nvault.config.*"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_leading_space_initialized",
+      "description": "a leading space is part of the pattern, which then matches nothing (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          " vault.initialized"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 0\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_hyphen_value_initialized",
+      "description": "pflag takes the next word as the value even when it starts with a dash (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "-x"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 0\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_doubled_quote_initialized",
+      "description": "a doubled quote inside quotes is one quote character (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "\"vault.\"\"initialized\""
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 0\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_backslash_initialized",
+      "description": "a backslash is no escape in CSV: the comma still splits (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.initialized\\,vault.config.parses"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_only_multiline_quoted_initialized",
+      "description": "a quoted field may hold a line break (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "\"vault.initialized\nx\",vault.config.parses"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_exclude_plain_initialized",
+      "description": "--exclude takes comma-separated patterns (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.initialized,vault.config.*",
+          "--exclude",
+          "vault.config.parses,vault.initialized"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_exclude_quoted_initialized",
+      "description": "a quoted exclude element (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.initialized,vault.config.*",
+          "--exclude",
+          "\"vault.config.parses\",vault.initialized"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_exclude_empty_value_initialized",
+      "description": "an empty --exclude excludes nothing (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.initialized,vault.config.*",
+          "--exclude",
+          ""
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.initialized\",\n      \"name\": \"Vault initialized\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml and identity.age present\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.parses\",\n      \"name\": \"Vault config parses\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml loads without errors\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 3,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 3\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_doctor_exclude_repeated_initialized",
+      "description": "repeated --exclude append (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "doctor",
+          "--no-network",
+          "--json",
+          "--only",
+          "vault.initialized,vault.config.*",
+          "--exclude",
+          "vault.config.parses",
+          "--exclude",
+          "vault.initialized"
+        ],
+        "exit_code": 0,
+        "stdout": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"__ROOT__/xdg-data/symaira-vault\",\n  \"results\": [\n    {\n      \"id\": \"vault.config.validates\",\n      \"name\": \"Vault config validates\",\n      \"status\": \"ok\",\n      \"message\": \"config.yaml passes validation\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n",
+        "stderr": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-__ID__).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-__ID__\n"
+      }
+    },
+    {
+      "name": "typed_slice_token_new_default_initialized",
+      "description": "without --tools the default is * (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: *\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_empty_value_initialized",
+      "description": "--tools \"\" is an empty slice, not the default: at least one tool is required (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          ""
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: at least one tool must be specified (use --tools '*')\nError: at least one tool must be specified (use --tools '*')\n"
+      }
+    },
+    {
+      "name": "typed_slice_token_new_empty_elements_initialized",
+      "description": "empty elements are listed (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "a,,b"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: a, , b\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_quoted_comma_initialized",
+      "description": "a quoted comma is one tool (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "\"a,b\",c"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: a,b, c\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_quoted_newline_initialized",
+      "description": "a quoted line break stays in the tool name (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "\"a\nb\",c"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: a\nb, c\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_second_line_ignored_initialized",
+      "description": "only the first CSV record is read (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "a,b\nc"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: a, b\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_spaces_kept_initialized",
+      "description": "spaces around elements are kept (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          " a , b"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools:  a ,  b\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_repeated_initialized",
+      "description": "repeated flags append (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "a",
+          "--tools",
+          "b"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: a, b\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_repeated_empty_initialized",
+      "description": "an empty repeat after a value appends nothing (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "x,y",
+          "--tools",
+          ""
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: x, y\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_empty_then_value_initialized",
+      "description": "an empty value first, then a value (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "",
+          "--tools",
+          "x"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: x\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_doubled_quote_initialized",
+      "description": "a doubled quote inside quotes (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "\"a\"\"b\""
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: a\"b\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_backslash_initialized",
+      "description": "a backslash is no escape (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "a\\,b"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: a\\, b\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_hyphen_value_initialized",
+      "description": "a value starting with a dash (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "-x"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: -x\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_new_trailing_comma_initialized",
+      "description": "a trailing comma lists an empty tool (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "new",
+          "bot",
+          "--tools",
+          "a,"
+        ],
+        "exit_code": 0,
+        "stdout": "Token created successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: a, \n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n         Store it securely — it cannot be retrieved later.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_rotate_default_initialized",
+      "description": "rotate without --tools: * (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "rotate",
+          "bot"
+        ],
+        "exit_code": 0,
+        "stdout": "Token rotated successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: *\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_rotate_empty_value_initialized",
+      "description": "rotate --tools \"\" requires a tool (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "rotate",
+          "bot",
+          "--tools",
+          ""
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: at least one tool must be specified (use --tools '*')\nError: at least one tool must be specified (use --tools '*')\n"
+      }
+    },
+    {
+      "name": "typed_slice_token_rotate_quoted_initialized",
+      "description": "rotate with a quoted element (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "rotate",
+          "bot",
+          "--tools",
+          "\"a,b\",c"
+        ],
+        "exit_code": 0,
+        "stdout": "Token rotated successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: a,b, c\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_slice_token_rotate_repeated_initialized",
+      "description": "rotate with repeated flags (initialized)",
+      "state": "initialized",
+      "normalize": [
+        "token_values"
+      ],
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "agent",
+          "token",
+          "rotate",
+          "bot",
+          "--tools",
+          "a",
+          "--tools",
+          "b,c"
+        ],
+        "exit_code": 0,
+        "stdout": "Token rotated successfully.\n  ID:    tok-__ID__\n  Label: \n  Agent: bot\n  Tools: a, b, c\n  Expires: __TIME__\n\nRaw token (copy now — shown once): __TOKEN__\n\nWarning: This is the only time the raw token is displayed.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_run_ms_initialized",
+      "description": "100ms: the child outlives it; the error names Duration.String (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "100ms",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 100ms\nError: command timed out after 100ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_fraction_initialized",
+      "description": "250.5ms keeps its fraction (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "250.5ms",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 250.5ms\nError: command timed out after 250.5ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_plus_sign_initialized",
+      "description": "+0.1s: a signed duration is 100ms (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "-t",
+          "+0.1s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 100ms\nError: command timed out after 100ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_leading_dot_initialized",
+      "description": ".1s is 100ms (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          ".1s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 100ms\nError: command timed out after 100ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_micro_sign_initialized",
+      "description": "100000µs (U+00B5) is 100ms (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "100000µs",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 100ms\nError: command timed out after 100ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_greek_mu_initialized",
+      "description": "100000μs (U+03BC) is 100ms (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "100000μs",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 100ms\nError: command timed out after 100ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_compound_initialized",
+      "description": "1ms100us: units add up (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "100ms100us",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 100.1ms\nError: command timed out after 100.1ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_repeated_last_wins_initialized",
+      "description": "pflag keeps the last --timeout (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "5s",
+          "--timeout",
+          "100ms",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 100ms\nError: command timed out after 100ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_repeated_last_wins_clean_initialized",
+      "description": "the last --timeout wins: 5s after 100ms leaves a clean child alone (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "100ms",
+          "--timeout",
+          "5s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_expired_before_start_ns_initialized",
+      "description": "1ns has expired before the process starts: Go does not start it (1µs is a race between the start and the deadline, so it is not recorded) (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "1ns",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: failed to run command: context deadline exceeded\nError: failed to run command: context deadline exceeded\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_zero_initialized",
+      "description": "0 is no timeout (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "0",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_negative_zero_initialized",
+      "description": "-0s is no timeout (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "-0s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_negative_initialized",
+      "description": "a negative duration is no timeout (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "-5s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_negative_short_initialized",
+      "description": "-t -1ns: the shorthand takes a dash-leading value (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "-t",
+          "-1ns",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_huge_initialized",
+      "description": "the largest duration is a timeout that never fires (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "9223372036854775807ns",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_huge_hours_initialized",
+      "description": "2562047h47m16.854775807s is the same largest duration (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "2562047h47m16.854775807s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_negative_vault_check_uninitialized",
+      "description": "a negative timeout is accepted before the vault check (uninitialized)",
+      "state": "uninitialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "-5s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "typed_duration_run_negative_vault_check_initialized",
+      "description": "a negative timeout is accepted before the vault check (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "run",
+          "--timeout",
+          "-5s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_duration_file_use_ms_initialized",
+      "description": "file use -t 100ms (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "-t",
+          "100ms",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 100ms\nError: command timed out after 100ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_file_use_fraction_initialized",
+      "description": "file use --timeout 250.5ms (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--timeout",
+          "250.5ms",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 250.5ms\nError: command timed out after 250.5ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_file_use_expired_before_start_initialized",
+      "description": "file use --timeout 1ns (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--timeout",
+          "1ns",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: failed to run command: context deadline exceeded\nError: failed to run command: context deadline exceeded\n"
+      }
+    },
+    {
+      "name": "typed_duration_file_use_negative_initialized",
+      "description": "file use -t -5s is no timeout (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "-t",
+          "-5s",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_duration_file_use_zero_initialized",
+      "description": "file use --timeout 0 is no timeout (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "--timeout",
+          "0",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exit 0"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+      }
+    },
+    {
+      "name": "typed_duration_file_use_repeated_initialized",
+      "description": "file use keeps the last --timeout (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "file",
+          "use",
+          "seed/cert",
+          "-t",
+          "5s",
+          "-t",
+          "100ms",
+          "--",
+          "/bin/sh",
+          "-c",
+          "exec sleep 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: command timed out after 100ms\nError: command timed out after 100ms\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_compound_initialized",
+      "description": "unlock --ttl 1h30m: pflag accepts it and the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "1h30m"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_fraction_initialized",
+      "description": "unlock --ttl 1.5h: pflag accepts it and the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "1.5h"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_plus_sign_initialized",
+      "description": "unlock --ttl +5s: pflag accepts it and the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "+5s"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_leading_dot_initialized",
+      "description": "unlock --ttl .5s: pflag accepts it and the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          ".5s"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_trailing_dot_initialized",
+      "description": "unlock --ttl 1.s: pflag accepts it and the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "1.s"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_micro_initialized",
+      "description": "unlock --ttl 1µs: pflag accepts it and the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "1µs"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_zero_initialized",
+      "description": "unlock --ttl 0: pflag accepts it and the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "0"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_negative_initialized",
+      "description": "unlock --ttl -5s: pflag accepts it and the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "-5s"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_max_initialized",
+      "description": "unlock --ttl 9223372036854775807ns: pflag accepts it and the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "9223372036854775807ns"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_max_compound_initialized",
+      "description": "unlock --ttl 2562047h47m16.854775807s: pflag accepts it and the command runs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "2562047h47m16.854775807s"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_vault_check_uninitialized",
+      "description": "a valid --ttl reaches the vault check (uninitialized)",
+      "state": "uninitialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "1h30m"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_vault_check_initialized",
+      "description": "a valid --ttl reaches the vault check (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "1h30m"
+        ],
+        "exit_code": 4,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nError: session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support\nEnable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_negative_vault_check_uninitialized",
+      "description": "a negative --ttl reaches the vault check (uninitialized)",
+      "state": "uninitialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "-5s"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "typed_duration_unlock_ttl_repeated_initialized",
+      "description": "unlock keeps the last --ttl (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "unlock",
+          "--ttl",
+          "bogus",
+          "--ttl",
+          "1h"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"bogus\" for \"--ttl\" flag: time: invalid duration \"bogus\"\nError: invalid argument \"bogus\" for \"--ttl\" flag: time: invalid duration \"bogus\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_watch_interval_negative_initialized",
+      "description": "intake watch --once --interval -5s (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--interval",
+          "-5s"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_debounce_negative_initialized",
+      "description": "intake watch --once --debounce -5s (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--debounce",
+          "-5s"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_interval_zero_initialized",
+      "description": "intake watch --once --interval 0 (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--interval",
+          "0"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_debounce_zero_initialized",
+      "description": "intake watch --once --debounce 0 (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--debounce",
+          "0"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_interval_plus_sign_initialized",
+      "description": "intake watch --once --interval +1s (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--interval",
+          "+1s"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_debounce_plus_sign_initialized",
+      "description": "intake watch --once --debounce +1s (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--debounce",
+          "+1s"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_interval_leading_dot_initialized",
+      "description": "intake watch --once --interval .5s (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--interval",
+          ".5s"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_debounce_leading_dot_initialized",
+      "description": "intake watch --once --debounce .5s (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--debounce",
+          ".5s"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_interval_micro_initialized",
+      "description": "intake watch --once --interval 1µs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--interval",
+          "1µs"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_debounce_micro_initialized",
+      "description": "intake watch --once --debounce 1µs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--debounce",
+          "1µs"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_interval_max_initialized",
+      "description": "intake watch --once --interval 9223372036854775807ns (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--interval",
+          "9223372036854775807ns"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_debounce_max_initialized",
+      "description": "intake watch --once --debounce 9223372036854775807ns (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--debounce",
+          "9223372036854775807ns"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_interval_compound_initialized",
+      "description": "intake watch --once --interval 1h30m (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--interval",
+          "1h30m"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_debounce_compound_initialized",
+      "description": "intake watch --once --debounce 1h30m (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--debounce",
+          "1h30m"
+        ],
+        "exit_code": 0,
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_watch_repeated_initialized",
+      "description": "intake watch keeps the last --interval (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--interval",
+          "bogus",
+          "--interval",
+          "1s"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"bogus\" for \"--interval\" flag: time: invalid duration \"bogus\"\nError: invalid argument \"bogus\" for \"--interval\" flag: time: invalid duration \"bogus\"\n"
+      }
+    },
+    {
+      "name": "typed_duration_watch_json_initialized",
+      "description": "intake watch --once --json with a negative interval (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "intake",
+          "watch",
+          "inbox",
+          "--once",
+          "--interval",
+          "-1s",
+          "--json"
+        ],
+        "exit_code": 0,
+        "stdout": "{\"scanned\":0,\"staged\":null}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "typed_duration_dynamic_ttl_fraction_initialized",
+      "description": "dynamic generate --ttl 1.5h (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "dynamic",
+          "generate",
+          "--engine",
+          "e",
+          "--role",
+          "r",
+          "--ttl",
+          "1.5h"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: generate dynamic secret: dynamic secret engine not found\nError: generate dynamic secret: dynamic secret engine not found\n"
+      }
+    },
+    {
+      "name": "typed_duration_dynamic_ttl_negative_initialized",
+      "description": "dynamic generate --ttl -1s (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "dynamic",
+          "generate",
+          "--engine",
+          "e",
+          "--role",
+          "r",
+          "--ttl",
+          "-1s"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: generate dynamic secret: dynamic secret engine not found\nError: generate dynamic secret: dynamic secret engine not found\n"
+      }
+    },
+    {
+      "name": "typed_duration_dynamic_ttl_zero_initialized",
+      "description": "dynamic generate --ttl 0 (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "dynamic",
+          "generate",
+          "--engine",
+          "e",
+          "--role",
+          "r",
+          "--ttl",
+          "0"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: generate dynamic secret: dynamic secret engine not found\nError: generate dynamic secret: dynamic secret engine not found\n"
+      }
+    },
+    {
+      "name": "typed_duration_dynamic_ttl_micro_initialized",
+      "description": "dynamic generate --ttl 1µs (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "dynamic",
+          "generate",
+          "--engine",
+          "e",
+          "--role",
+          "r",
+          "--ttl",
+          "1µs"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: generate dynamic secret: dynamic secret engine not found\nError: generate dynamic secret: dynamic secret engine not found\n"
+      }
+    },
+    {
+      "name": "typed_duration_dynamic_ttl_vault_check_uninitialized",
+      "description": "dynamic generate --ttl reaches the vault check (uninitialized)",
+      "state": "uninitialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "dynamic",
+          "generate",
+          "--engine",
+          "e",
+          "--role",
+          "r",
+          "--ttl",
+          "1h"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "typed_duration_dynamic_ttl_vault_check_initialized",
+      "description": "dynamic generate --ttl reaches the vault check (initialized)",
+      "state": "initialized",
+      "files": {
+        "a.bin": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "dir/inner.txt": "inner",
+        "inbox/.keep": ""
+      },
+      "observation": {
+        "args": [
+          "dynamic",
+          "generate",
+          "--engine",
+          "e",
+          "--role",
+          "r",
+          "--ttl",
+          "1h"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: generate dynamic secret: dynamic secret engine not found\nError: generate dynamic secret: dynamic secret engine not found\n"
       }
     }
   ]
