@@ -572,9 +572,7 @@ fn wait_and_clear(
 pub fn native_get_clipboard() -> Arc<dyn TextClipboard> {
     #[cfg(target_os = "macos")]
     {
-        pasteboard_text_clipboard(Arc::new(
-            crate::desktop_commands::SystemHost::with_search_path(vec!["/usr/bin".into()]),
-        ))
+        pasteboard_text_clipboard(Arc::new(crate::desktop_commands::SystemHost::pasteboard()))
     }
     #[cfg(target_os = "linux")]
     {

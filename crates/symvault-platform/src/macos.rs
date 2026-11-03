@@ -310,7 +310,9 @@ impl Autotype for MacOsPlatform {
 impl Clipboard for MacOsPlatform {
     fn set(&self, text: &[u8]) -> Result<(), PlatformError> {
         // Go's macOS clipboard is atotto's `pbcopy`: its error text is the raw
-        // `os/exec` text, which `PasteboardClipboard` reproduces.
+        // `os/exec` text, which `PasteboardClipboard` reproduces. Unlike
+        // atotto the run has a deadline (30 s, process group killed and
+        // reaped), so a hung `pbcopy` cannot freeze the caller.
         crate::desktop_commands::PasteboardClipboard::system().set(text)
     }
 
