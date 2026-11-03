@@ -206,8 +206,8 @@ const UNLOCK_STATES: [(&str, usize); 9] = [
     ("config_only_locked", 7),
     ("config_only_env_disabled", 7),
     ("env_disabled", 7),
-    ("config_clipboard_invalid", 10),
-    ("config_syntax_invalid", 10),
+    ("config_clipboard_invalid", 12),
+    ("config_syntax_invalid", 12),
 ];
 /// Appended to the seeded `config.yaml` of the `*env_disabled` states.
 const ENV_DISABLED_CONFIG_SUFFIX: &str = "security:\n    disable_env_passphrase: true\n";
@@ -1785,11 +1785,22 @@ fn config_invalid_states_record_the_refusal() {
             .iter()
             .filter(|case| case.state == state)
             .collect();
-        assert_eq!(in_state.len(), 10, "{state}");
+        assert_eq!(in_state.len(), 12, "{state}");
         for case in in_state {
             let observation = &case.observation;
             assert_eq!(observation.exit_code, 6, "{}", case.name);
-            assert!(observation.stdout.is_empty(), "{}", case.name);
+            // Only `import --dry-run` reports before it opens the vault: the format and the
+            // CSV mapping of the source it parsed.
+            if case.name.ends_with("_import_csv_dry_run") {
+                assert_eq!(
+                    observation.stdout,
+                    "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\n",
+                    "{}",
+                    case.name
+                );
+            } else {
+                assert!(observation.stdout.is_empty(), "{}", case.name);
+            }
             assert!(observation.stderr.ends_with(hint), "{}", case.name);
             assert!(
                 observation
@@ -1845,6 +1856,27 @@ fn config_invalid_states_record_the_refusal() {
             "{}",
             serve.stderr
         );
+    }
+    // `import <file>` (plain and --dry-run) parses the valid source first and is refused when
+    // it opens the vault through cli.WithVault: exit 6 and the doctor hint, like every other
+    // command, not a plain exit 1.
+    for state in ["config_clipboard_invalid", "config_syntax_invalid"] {
+        for name in ["import_csv", "import_csv_dry_run"] {
+            let import = case(&format!("unlock_{state}_{name}"));
+            assert_eq!(import.observation.args[..2], ["import", "source.csv"]);
+            assert_eq!(import.files.len(), 1, "{}", import.name);
+            assert!(
+                import.files.contains_key("source.csv"),
+                "{}: no CSV source file",
+                import.name
+            );
+            assert_eq!(import.observation.exit_code, 6, "{}", import.name);
+            assert!(
+                import.observation.stderr.ends_with(hint),
+                "{}",
+                import.observation.stderr
+            );
+        }
     }
     // The refusal comes before the passphrase policy and the vault check: the locked and
     // identity-less shapes of the same commands are recorded elsewhere with other exits.

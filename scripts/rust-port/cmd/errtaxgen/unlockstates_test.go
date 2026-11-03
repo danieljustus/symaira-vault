@@ -169,3 +169,35 @@ func TestConfigInvalidStatesAppendTheirSectionToTheSeededConfig(t *testing.T) {
 		}
 	}
 }
+
+// `import <file>` is refused when it opens the vault, after it parsed a valid
+// source: the scenarios carry that CSV source and run in the config-invalid
+// states only.
+func TestImportScenariosCarryAValidCSVSourceInTheConfigInvalidStatesOnly(t *testing.T) {
+	seen := map[string]bool{}
+	for _, in := range unlockStateInputs() {
+		if len(in.args) == 0 || in.args[0] != "import" || len(in.args) < 2 || in.args[1] != importSourceFile {
+			if len(in.files) != 0 {
+				t.Errorf("%s carries files without an import source", in.name)
+			}
+			continue
+		}
+		seen[in.name] = true
+		if !isConfigInvalidState(in.state) {
+			t.Errorf("%s runs outside the config-invalid states", in.name)
+		}
+		if !strings.HasSuffix(importSourceFile, ".csv") || in.files[importSourceFile] != importSourceFiles[importSourceFile] {
+			t.Errorf("%s: files = %v", in.name, in.files)
+		}
+	}
+	for _, state := range []string{stateConfigClipboardInvalid, stateConfigSyntaxInvalid} {
+		for _, name := range []string{"import_csv", "import_csv_dry_run"} {
+			if !seen["unlock_"+state+"_"+name] {
+				t.Errorf("unlock_%s_%s is not recorded", state, name)
+			}
+		}
+	}
+	if !strings.HasPrefix(importSourceFiles[importSourceFile], "title,") {
+		t.Errorf("source = %q", importSourceFiles[importSourceFile])
+	}
+}

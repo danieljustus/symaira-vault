@@ -116,6 +116,14 @@ func withConfigSuffix(seed []seedFile, suffix string) []seedFile {
 	return out
 }
 
+// importSourceFile is a valid CSV source (the format follows from the extension):
+// the import parses it before it opens the vault.
+const importSourceFile = "source.csv"
+
+var importSourceFiles = map[string]string{
+	importSourceFile: "title,username,password\nimported/a,alice,s3cret\n",
+}
+
 // unlockCommand is one command of the unlock-state section. partial marks the
 // commands that are also run on the partial vault shapes.
 type unlockCommand struct {
@@ -128,6 +136,8 @@ type unlockCommand struct {
 	// and a refusal is not offered a repair. `dynamic generate` and `mcp serve`
 	// are recorded here for the same refusal (exit 6 and the doctor hint).
 	configOnly bool
+	// files are written into the working directory before the run.
+	files map[string]string
 }
 
 // unlockCommands are the commands that unlock the vault through the prompting
@@ -141,30 +151,36 @@ type unlockCommand struct {
 // prompting path in Go (get is non-interactive, set asks for the username first)
 // and differ for reasons of their own.
 var unlockCommands = []unlockCommand{
-	{"device_pair", []string{"device", "pair"}, true, false},
-	{"device_pair_x", []string{"device", "pair", "x"}, true, false},
-	{"list", []string{"list"}, true, false},
-	{"find", []string{"find", "x"}, false, false},
-	{"add", []string{"add", "x"}, false, false},
-	{"delete", []string{"delete", "x"}, false, false},
-	{"edit", []string{"edit", "x"}, false, false},
-	{"verify", []string{"verify"}, true, false},
-	{"unlock", []string{"unlock"}, true, false},
-	{"migrate_pseudonymize", []string{"migrate", "pseudonymize"}, true, false},
-	{"migrate_pseudonymize_yes", []string{"migrate", "pseudonymize", "--yes"}, true, false},
-	{"recipients_add", []string{"recipients", "add", "x"}, false, false},
-	{"recipients_remove", []string{"recipients", "remove", "x"}, false, false},
-	{"run", []string{"run", "--", "x"}, false, false},
-	{"file_use", []string{"file", "use", seedFileEntry, "x"}, false, false},
-	{"import_review_list", []string{"import", "review", "list"}, false, false},
-	{"import_review_promote", []string{"import", "review", "promote", "x"}, false, false},
-	{"intake_x", []string{"intake", "x"}, false, false},
-	{"get", []string{"get", seedFileEntry}, false, true},
+	{"device_pair", []string{"device", "pair"}, true, false, nil},
+	{"device_pair_x", []string{"device", "pair", "x"}, true, false, nil},
+	{"list", []string{"list"}, true, false, nil},
+	{"find", []string{"find", "x"}, false, false, nil},
+	{"add", []string{"add", "x"}, false, false, nil},
+	{"delete", []string{"delete", "x"}, false, false, nil},
+	{"edit", []string{"edit", "x"}, false, false, nil},
+	{"verify", []string{"verify"}, true, false, nil},
+	{"unlock", []string{"unlock"}, true, false, nil},
+	{"migrate_pseudonymize", []string{"migrate", "pseudonymize"}, true, false, nil},
+	{"migrate_pseudonymize_yes", []string{"migrate", "pseudonymize", "--yes"}, true, false, nil},
+	{"recipients_add", []string{"recipients", "add", "x"}, false, false, nil},
+	{"recipients_remove", []string{"recipients", "remove", "x"}, false, false, nil},
+	{"run", []string{"run", "--", "x"}, false, false, nil},
+	{"file_use", []string{"file", "use", seedFileEntry, "x"}, false, false, nil},
+	{"import_review_list", []string{"import", "review", "list"}, false, false, nil},
+	{"import_review_promote", []string{"import", "review", "promote", "x"}, false, false, nil},
+	{"intake_x", []string{"intake", "x"}, false, false, nil},
+	{"get", []string{"get", seedFileEntry}, false, true, nil},
 	// `dynamic generate` opens the vault through cli.WithVault and `mcp serve
 	// --stdio` through ServeUnlockVault (whose wrapVaultError passes an
 	// ExitConfigError unchanged); both refuse a configuration Go does not load.
-	{"dynamic_generate", []string{"dynamic", "generate", "--engine", "x", "--role", "x"}, false, true},
-	{"mcp_serve_stdio", []string{"mcp", "serve", "--stdio", "--agent", "a"}, false, true},
+	{"dynamic_generate", []string{"dynamic", "generate", "--engine", "x", "--role", "x"}, false, true, nil},
+	{"mcp_serve_stdio", []string{"mcp", "serve", "--stdio", "--agent", "a"}, false, true, nil},
+	// `import <file>` (and --dry-run) parses a valid source first and then opens
+	// the vault through cli.WithVault -> unlockVault, so an invalid configuration
+	// is refused only there: exit 6 and the doctor hint, like every other
+	// WithVault command.
+	{"import_csv", []string{"import", importSourceFile}, false, true, importSourceFiles},
+	{"import_csv_dry_run", []string{"import", importSourceFile, "--dry-run"}, false, true, importSourceFiles},
 }
 
 // unlockStateInputs runs unlockCommands in every unlock state: all of them in
@@ -185,6 +201,7 @@ func unlockStateInputs() []scenarioInput {
 				description: fmt.Sprintf("%v in the %s vault shape", cmd.args, state),
 				state:       state,
 				args:        cmd.args,
+				files:       cmd.files,
 			})
 		}
 	}

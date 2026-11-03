@@ -5566,6 +5566,10 @@ fn run_import(
     })();
     match result {
         Ok(()) => ExitCode::SUCCESS,
+        // `cli.WithVault` -> `unlockVault` wraps a configuration that does not
+        // load or validate in an `ExitConfigError`: exit 6 and the doctor hint
+        // (plain and `--dry-run` alike; the source was parsed first).
+        Err(error) if is_config_invalid(&error) => report_config_invalid(&error.lossy()),
         // Cobra and the root executor each print a failure of this command.
         // The message is the exact Go byte string: an entry path that is not
         // valid UTF-8 appears in it unchanged.

@@ -118,7 +118,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "1d2261814f643b48b6d9dec85073e5cc67416ae9a9a7037dbfab908642b37635"
+    "generator_digest": "ef7bd7eb815a0f45809ca0cc96aa50a457b2e67dba26db1622476ecaf3abf9db"
   },
   "usage": [
     {
@@ -20546,6 +20546,41 @@
       }
     },
     {
+      "name": "unlock_config_clipboard_invalid_import_csv",
+      "description": "[import source.csv] in the config_clipboard_invalid vault shape",
+      "state": "config_clipboard_invalid",
+      "files": {
+        "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+      },
+      "observation": {
+        "args": [
+          "import",
+          "source.csv"
+        ],
+        "exit_code": 6,
+        "stdout": "",
+        "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+      }
+    },
+    {
+      "name": "unlock_config_clipboard_invalid_import_csv_dry_run",
+      "description": "[import source.csv --dry-run] in the config_clipboard_invalid vault shape",
+      "state": "config_clipboard_invalid",
+      "files": {
+        "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+      },
+      "observation": {
+        "args": [
+          "import",
+          "source.csv",
+          "--dry-run"
+        ],
+        "exit_code": 6,
+        "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\n",
+        "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+      }
+    },
+    {
       "name": "unlock_config_syntax_invalid_device_pair",
       "description": "[device pair] in the config_syntax_invalid vault shape",
       "state": "config_syntax_invalid",
@@ -20689,6 +20724,41 @@
         "exit_code": 6,
         "stdout": "",
         "stderr": "Error: configuration is invalid: yaml: line 68: did not find expected node content\nError: configuration is invalid: yaml: line 68: did not find expected node content\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+      }
+    },
+    {
+      "name": "unlock_config_syntax_invalid_import_csv",
+      "description": "[import source.csv] in the config_syntax_invalid vault shape",
+      "state": "config_syntax_invalid",
+      "files": {
+        "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+      },
+      "observation": {
+        "args": [
+          "import",
+          "source.csv"
+        ],
+        "exit_code": 6,
+        "stdout": "",
+        "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Load error: yaml: line 68: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+      }
+    },
+    {
+      "name": "unlock_config_syntax_invalid_import_csv_dry_run",
+      "description": "[import source.csv --dry-run] in the config_syntax_invalid vault shape",
+      "state": "config_syntax_invalid",
+      "files": {
+        "source.csv": "title,username,password\nimported/a,alice,s3cret\n"
+      },
+      "observation": {
+        "args": [
+          "import",
+          "source.csv",
+          "--dry-run"
+        ],
+        "exit_code": 6,
+        "stdout": "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\n",
+        "stderr": "Configuration error detected in __ROOT__/xdg-data/symaira-vault/config.yaml\n  ✗ Load error: yaml: line 68: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
       }
     }
   ],
