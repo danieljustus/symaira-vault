@@ -654,9 +654,17 @@ fn auth_rotate_accepts_root_owned_macos_alias_and_migrates_legacy_entry() {
     );
     let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
-    let home = TempDir::new("legacy-trusted-alias");
+    // The fixture needs the root-owned /var -> /private/var alias, so it is
+    // allocated in the per-user macOS temp dir whatever TMPDIR points at.
+    let user_temp = go_oracle::darwin_user_temp_dir().expect(
+        "native trusted-alias fixture requires `getconf DARWIN_USER_TEMP_DIR` on macOS",
+    );
+    let home = TempDir(test_temp_root::TempRoot::existing_in(
+        &user_temp,
+        "symvault-auth-diff-legacy-trusted-alias-",
+    ));
     let home_alias = macos_var_alias(&home.0).expect(
-        "native trusted-alias fixture requires the configured temporary root (TMPDIR) to canonicalize below /private/var; unsupported temporary layout is not migration acceptance",
+        "native trusted-alias fixture requires the per-user temp dir to canonicalize below /private/var; unsupported temporary layout is not migration acceptance",
     );
     assert!(
         home_alias

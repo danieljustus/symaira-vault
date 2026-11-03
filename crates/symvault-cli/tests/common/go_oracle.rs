@@ -202,13 +202,36 @@ fn load(file: &str) -> Option<Transcript> {
     Some(serde_json::from_slice(&bytes).unwrap_or_else(|e| panic!("{}: {e}", path.display())))
 }
 
+/// macOS per-user temporary directory (`/var/folders/..../T`), independent of
+/// `TMPDIR`. Tests that need the root-owned `/var` -> `/private/var` alias
+/// allocate their fixtures here so they work under any `TMPDIR`.
+pub fn darwin_user_temp_dir() -> Option<PathBuf> {
+    static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        if !cfg!(target_os = "macos") {
+            return None;
+        }
+        let output = Command::new("/usr/bin/getconf")
+            .arg("DARWIN_USER_TEMP_DIR")
+            .output()
+            .ok()?;
+        let text = String::from_utf8(output.stdout).ok()?;
+        let text = text.trim();
+        (output.status.success() && !text.is_empty()).then(|| PathBuf::from(text))
+    })
+    .clone()
+}
+
 fn temp_bases() -> Vec<String> {
     let raw = env::temp_dir();
     let mut bases = Vec::new();
-    for candidate in [Some(raw.clone()), fs::canonicalize(&raw).ok()]
+    let candidates = [Some(raw.clone()), fs::canonicalize(&raw).ok()]
         .into_iter()
-        .flatten()
-    {
+        .chain(darwin_user_temp_dir().map(|user| {
+            let canonical = fs::canonicalize(&user).ok();
+            [Some(user), canonical]
+        }).into_iter().flatten());
+    for candidate in candidates.flatten() {
         let text = candidate.to_string_lossy().trim_end_matches('/').to_owned();
         if !text.is_empty() && !bases.contains(&text) {
             bases.push(text);
@@ -883,6 +906,16 @@ impl State {
             .into_iter()
             .map(|(real, placeholder)| (placeholder, real))
             .collect();
+        // The recording may carry `<ROOT:n:real>` (captured under an aliased
+        // TMPDIR such as /var -> /private/var) while this run's TMPDIR has no
+        // alias, so `mapping()` has no `:real` entry for the root: both
+        // spellings are then the same path.
+        for (index, real) in self.real_roots.iter().enumerate() {
+            let placeholder = format!("<ROOT:{index}:real>").into_bytes();
+            if !pairs.iter().any(|(from, _)| *from == placeholder) {
+                pairs.push((placeholder, real.to_string_lossy().into_owned().into_bytes()));
+            }
+        }
         pairs.sort_by_key(|(from, _)| std::cmp::Reverse(from.len()));
         for (from, to) in pairs {
             out = replace_bytes(&out, &from, &to);

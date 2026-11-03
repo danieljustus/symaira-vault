@@ -433,6 +433,13 @@ jobs:
           # keychain-native job below runs this test on a hosted runner.
           SKIP_KEYCHAIN: ${{ runner.environment == 'self-hosted' && '--skip security_framework_items_match_go_layout_on_disposable_keychains' || '' }}
         run: |
+          # The macOS Go-transcript replays assume the per-user temp dir under
+          # the root-owned /var -> /private/var alias; the self-hosted runner's
+          # .env points TMPDIR at an external volume.
+          if [ "$RUNNER_OS" = macOS ] && [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
+            TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
+            export TMPDIR
+          fi
           # shellcheck disable=SC2086 # intentionally empty or two words
           cargo test --workspace --all-features --locked -- $SKIP_KEYCHAIN
 
@@ -441,9 +448,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The trusted-alias auth case needs TMPDIR below the root-owned
-          # /var -> /private/var alias; the self-hosted runner's .env points
-          # TMPDIR at an external volume, so use the per-user macOS temp dir.
+          # Same TMPDIR rule as the workspace test step above (the trusted-alias
+          # auth case itself allocates in the per-user macOS temp dir).
           if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
             TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
             export TMPDIR
