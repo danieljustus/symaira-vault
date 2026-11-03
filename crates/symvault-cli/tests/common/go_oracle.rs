@@ -312,19 +312,53 @@ impl GoOracle {
     /// random. `roots` are every directory the step creates or changes.
     /// Returns the step's result when it actually ran.
     pub fn seed<R>(&self, name: &str, roots: &[&Path], setup: impl FnOnce() -> R) -> Option<R> {
+        self.freeze(name, roots, false, setup)
+    }
+
+    /// Like [`seed`], but the step also runs live on replay (its output is
+    /// compared by the test); the recorded state is installed over its
+    /// effects so the recorded Go calls see exactly what they saw on capture.
+    pub fn pin<R>(&self, name: &str, roots: &[&Path], step: impl FnOnce() -> R) -> R {
+        self.freeze(name, roots, true, step)
+            .expect("pinned step always runs")
+    }
+
+    fn freeze<R>(
+        &self,
+        name: &str,
+        roots: &[&Path],
+        live: bool,
+        setup: impl FnOnce() -> R,
+    ) -> Option<R> {
         let mut st = self.state.borrow_mut();
         for root in roots {
             let text = root.to_string_lossy().into_owned();
             st.scan(text.as_bytes());
         }
-        let recorded = st.prior.seeds.iter().find(|s| s.name == name).cloned();
+        // The nth use of a name installs the nth seed recorded under it.
+        let nth = st.seeds_used.iter().filter(|used| *used == name).count();
+        let recorded = st
+            .prior
+            .seeds
+            .iter()
+            .filter(|s| s.name == name)
+            .nth(nth)
+            .cloned();
         if let Some(seed) = &recorded {
+            let result = if live {
+                drop(st);
+                let result = setup();
+                st = self.state.borrow_mut();
+                Some(result)
+            } else {
+                None
+            };
             apply(&st, &seed.fs_delta);
             st.seeds_used.push(name.to_owned());
             if st.mode == Mode::Capture {
                 st.seeds_captured.push(seed.clone());
             }
-            return None;
+            return result;
         }
         assert!(
             st.mode == Mode::Capture,

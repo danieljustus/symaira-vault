@@ -1,11 +1,12 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
 use std::{
     env, fs,
-    io::Write,
     path::{Path, PathBuf},
-    process::{Command, ExitStatus, Output, Stdio},
+    process::{Command, ExitStatus, Output},
     time::Instant,
 };
 
@@ -39,18 +40,19 @@ impl Drop for TempFixture {
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", root)
-        .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
-        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("CI", "1")
-        .output()
-        .expect("run CLI")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", root)
+            .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+            .env("CI", "1"),
+    )
+    .expect("run CLI")
 }
 
 // Compare search results against a freshly built Go index. The pinned Go
@@ -67,28 +69,20 @@ fn run_search(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output 
 }
 
 fn run_with_input(binary: &Path, args: &[&str], root: &Path, home: &Path, input: &[u8]) -> Output {
-    let mut child = Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", root)
-        .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
-        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("CI", "1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn CLI");
-    child
-        .stdin
-        .take()
-        .expect("CLI stdin")
-        .write_all(input)
-        .expect("write CLI input");
-    child.wait_with_output().expect("wait for CLI")
+    go_oracle::output_with_input(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", root)
+            .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+            .env("CI", "1"),
+        Some(input),
+    )
+    .expect("run CLI with input")
 }
 
 fn assert_success(output: &Output, command: &str) {
@@ -148,18 +142,21 @@ fn assert_initialized(root: &Path) {
 
 #[test]
 fn init_list_get_match_go_cli_on_a_disposable_vault() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "init_list_get_match_go_cli_on_a_disposable_vault",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("home");
     let rust_root = temporary_root("rust");
     let go_root = temporary_root("go");
     fs::create_dir_all(&home).expect("home");
 
-    let rust_init = run(
+    // `init` generates random keys: frozen as a seed for replay.
+    if let Some(rust_init) = oracle.seed("init", &[&rust_root, &home], || {
+        run(
         &rust_binary,
         &[
             "--vault",
@@ -168,10 +165,12 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
             "--auth",
             "passphrase",
         ],
-        &rust_root,
-        &home,
-    );
-    assert_success(&rust_init, "Rust init");
+            &rust_root,
+            &home,
+        )
+    }) {
+        assert_success(&rust_init, "Rust init");
+    }
     assert_initialized(&rust_root);
 
     let go_recipients_list = run(
@@ -507,22 +506,26 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         &rust_root,
         &home,
     );
-    let rust_generate = run(
-        &rust_binary,
-        &[
-            "--vault",
-            rust_root.to_str().unwrap(),
-            "generate",
-            "--length",
-            "16",
-            "--store",
-            "generated.password",
-            "--output",
-            "json",
-        ],
-        &rust_root,
-        &home,
-    );
+    // The generated password is random and overwrites Go's: pin the resulting
+    // state so the recorded Go calls that follow read what they read on capture.
+    let rust_generate = oracle.pin("rust-generate", &[&rust_root, &home], || {
+        run(
+            &rust_binary,
+            &[
+                "--vault",
+                rust_root.to_str().unwrap(),
+                "generate",
+                "--length",
+                "16",
+                "--store",
+                "generated.password",
+                "--output",
+                "json",
+            ],
+            &rust_root,
+            &home,
+        )
+    });
     assert_success(&go_generate, "Go generate store");
     assert_success(&rust_generate, "Rust generate store");
     assert_eq!(
@@ -1000,11 +1003,12 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
 
 #[test]
 fn import_quarantine_matches_pinned_go_cli_batch_contract() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "import_quarantine_matches_pinned_go_cli_batch_contract",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("quarantine-home");
     let go_root = temporary_root("quarantine-go");
@@ -1014,7 +1018,9 @@ fn import_quarantine_matches_pinned_go_cli_batch_contract() {
     let source = home.join("import.csv");
     fs::write(&source, b"title,password\nexample,secret\n").expect("source");
     for root in [&go_root, &rust_root] {
-        let output = run(
+        // `init` generates random keys: frozen as a seed for replay.
+        if let Some(output) = oracle.seed("init", &[root, &home], || {
+            run(
             &rust_binary,
             &[
                 "--vault",
@@ -1023,10 +1029,12 @@ fn import_quarantine_matches_pinned_go_cli_batch_contract() {
                 "--auth",
                 "passphrase",
             ],
-            root,
-            &home,
-        );
-        assert_success(&output, "initialize quarantine differential vault");
+                root,
+                &home,
+            )
+        }) {
+            assert_success(&output, "initialize quarantine differential vault");
+        }
     }
 
     let args = [
@@ -1116,6 +1124,11 @@ fn quarantine_id(stdout: &[u8]) -> String {
 
 #[test]
 fn export_cancel_happens_before_vault_open() {
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "export_cancel_happens_before_vault_open",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("cancel-home");
     let root = temporary_root("cancel-vault");
@@ -1143,9 +1156,9 @@ fn export_cancel_happens_before_vault_open() {
             .any(|window| { window == b"No entries found" })
     );
 
-    if let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") {
+    {
         let go = run_with_input(
-            &PathBuf::from(go_binary),
+            &oracle.binary(),
             &[
                 "--vault",
                 root.to_str().unwrap(),
@@ -1169,18 +1182,21 @@ fn export_cancel_happens_before_vault_open() {
 
 #[test]
 fn add_noninteractive_matches_go_and_preserves_existing_entries() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "add_noninteractive_matches_go_and_preserves_existing_entries",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("add-home");
     let root = temporary_root("add-vault");
     let corrupt_path = root.join("entries/work/corrupt.age");
     fs::create_dir_all(&home).expect("home");
 
-    let init = run(
+    // `init` generates random keys: frozen as a seed for replay.
+    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+        run(
         &rust_binary,
         &[
             "--vault",
@@ -1189,10 +1205,12 @@ fn add_noninteractive_matches_go_and_preserves_existing_entries() {
             "--auth",
             "passphrase",
         ],
-        &root,
-        &home,
-    );
-    assert_success(&init, "Rust init for add differential");
+            &root,
+            &home,
+        )
+    }) {
+        assert_success(&init, "Rust init for add differential");
+    }
 
     let go_explicit = run(
         &go_binary,
@@ -1555,17 +1573,20 @@ fn add_noninteractive_matches_go_and_preserves_existing_entries() {
 
 #[test]
 fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "verify_matches_go_for_missing_rebuild_and_tampered_manifest",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("verify-home");
     let root = temporary_root("verify-vault");
     fs::create_dir_all(&home).expect("home");
 
-    let init = run(
+    // `init` generates random keys: frozen as a seed for replay.
+    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+        run(
         &rust_binary,
         &[
             "--vault",
@@ -1574,10 +1595,12 @@ fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
             "--auth",
             "passphrase",
         ],
-        &root,
-        &home,
-    );
-    assert_success(&init, "Rust init for verify differential");
+            &root,
+            &home,
+        )
+    }) {
+        assert_success(&init, "Rust init for verify differential");
+    }
 
     // Go's Vault.Open repairs a missing manifest before VerifyManifestIntegrity;
     // run it first so the CLI comparison observes that production behavior.
@@ -1700,11 +1723,12 @@ fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
 
 #[test]
 fn file_add_get_roundtrip_matches_go_cli() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "file_add_get_roundtrip_matches_go_cli",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("file-home");
     let root = temporary_root("file-vault");
@@ -1720,7 +1744,9 @@ fn file_add_get_roundtrip_matches_go_cli() {
     fs::write(&go_source, go_content).expect("Go fixture");
     fs::write(&rust_source, rust_content).expect("Rust fixture");
 
-    let init = run(
+    // `init` generates random keys: frozen as a seed for replay.
+    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+        run(
         &rust_binary,
         &[
             "--vault",
@@ -1729,10 +1755,12 @@ fn file_add_get_roundtrip_matches_go_cli() {
             "--auth",
             "passphrase",
         ],
-        &root,
-        &home,
-    );
-    assert_success(&init, "Rust init for file differential");
+            &root,
+            &home,
+        )
+    }) {
+        assert_success(&init, "Rust init for file differential");
+    }
 
     let go_add = run(
         &go_binary,
@@ -1954,11 +1982,12 @@ fn file_add_get_roundtrip_matches_go_cli() {
 
 #[test]
 fn file_use_materializes_and_cleans_attachment_like_go_cli() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "file_use_materializes_and_cleans_attachment_like_go_cli",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("file-use-home");
     let root = temporary_root("file-use-vault");
@@ -1972,7 +2001,9 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     let content = b"file-use-secret\0\xff";
     fs::write(&source, content).expect("source fixture");
 
-    let init = run(
+    // `init` generates random keys: frozen as a seed for replay.
+    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+        run(
         &rust_binary,
         &[
             "--vault",
@@ -1981,10 +2012,12 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             "--auth",
             "passphrase",
         ],
-        &root,
-        &home,
-    );
-    assert_success(&init, "Rust init for file use differential");
+            &root,
+            &home,
+        )
+    }) {
+        assert_success(&init, "Rust init for file use differential");
+    }
     let add = run(
         &go_binary,
         &[
@@ -2236,23 +2269,26 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
 
 #[test]
 fn builtin_templates_match_go_cli() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "builtin_templates_match_go_cli",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = temporary_root("template-home");
     let root = temporary_root("template-vault");
     fs::create_dir_all(&home).unwrap();
-    assert_success(
-        &run(
+    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+        run(
             &rust_binary,
             &["init", "--auth", "passphrase"],
             &root,
             &home,
-        ),
-        "init template vault",
-    );
+        )
+    }) {
+        assert_success(&init, "init template vault");
+    }
     assert_success(
         &run(
             &rust_binary,
@@ -2313,24 +2349,29 @@ fn builtin_templates_match_go_cli() {
 
 #[test]
 fn get_flags_parity_matches_go() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "get_flags_parity_matches_go",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let root = temporary_root("get-flags");
     let home = temporary_root("get-flags-home");
     fs::create_dir_all(&root).unwrap();
     fs::create_dir_all(&home).unwrap();
 
-    let init = run(
+    // `init` generates random keys: frozen as a seed for replay.
+    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+        run(
         &rust_binary,
         &["init", "--auth", "passphrase"],
-        &root,
-        &home,
-    );
-    assert_success(&init, "Rust init for get flags parity");
+            &root,
+            &home,
+        )
+    }) {
+        assert_success(&init, "Rust init for get flags parity");
+    }
 
     let add = run(
         &rust_binary,
@@ -2475,11 +2516,12 @@ fn get_flags_parity_matches_go() {
 
 #[test]
 fn set_totp_flags_parity_matches_go() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "set_totp_flags_parity_matches_go",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let go_root = temporary_root("set-totp-go");
     let go_home = temporary_root("set-totp-go-home");
@@ -2488,8 +2530,11 @@ fn set_totp_flags_parity_matches_go() {
     for (root, home) in [(&go_root, &go_home), (&rust_root, &rust_home)] {
         fs::create_dir_all(root).unwrap();
         fs::create_dir_all(home).unwrap();
-        let init = run(&rust_binary, &["init", "--auth", "passphrase"], root, home);
-        assert_success(&init, "init for set totp");
+        if let Some(init) = oracle.seed("init", &[root, home], || {
+            run(&rust_binary, &["init", "--auth", "passphrase"], root, home)
+        }) {
+            assert_success(&init, "init for set totp");
+        }
     }
 
     let secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
@@ -2552,24 +2597,29 @@ fn set_totp_flags_parity_matches_go() {
 
 #[test]
 fn template_name_and_prefix_parity_matches_go() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_differential",
+        "template_name_and_prefix_parity_matches_go",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let root = temporary_root("template-prefix");
     let home = temporary_root("template-prefix-home");
     fs::create_dir_all(&root).unwrap();
     fs::create_dir_all(&home).unwrap();
 
-    let init = run(
+    // `init` generates random keys: frozen as a seed for replay.
+    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+        run(
         &rust_binary,
         &["init", "--auth", "passphrase"],
-        &root,
-        &home,
-    );
-    assert_success(&init, "init for template prefix test");
+            &root,
+            &home,
+        )
+    }) {
+        assert_success(&init, "init for template prefix test");
+    }
 
     for (path, val) in [
         ("deploy/api", "apisecret12345"),
