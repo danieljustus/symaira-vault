@@ -1,0 +1,388 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+    "go_version": "go1.26.10",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "kdf_resource_policy_go_rust_integration": {
+      "seeds": [
+        {
+          "name": "policy-go-scrypt-config",
+          "fs_delta": [
+            {
+              "root": 8,
+              "path": "root",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 8,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "vault:\n  format_version: 2\n  argon2id_time: 5\n  argon2id_memory: 65536\n  argon2id_threads: 4\n  auto_heal_zero_key: true\nunknown_root: retained\n"
+              }
+            },
+            {
+              "root": 8,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 8,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBxTE1aQUErNFlGemdpQkg4ejU5OG5nIDEwCk4zcDRVbHZuVytIRjlFWHFUWGFTVkw4ZHJkSjVHVVhNSlNjcWxvV1dsb2cKLS0tIGZlK2JXWm1HSnE1MVZ3M3JJdC93Mko0UFJCT1BJdjNqV0RKMXNSZUliTTQKfuLkg4PmEalfL8ZNJHRLUmVCb8+p4aOSAWEGh+AxbE94F3tc+TFC5PMB+B6QD/pKpIaljltRGZGzz2st+J0uDufwhfAhV+eDWoGAbDJnQnh/WIhEmrDUYt2EzRwTjhwp+0utwC48mRY6Zw=="
+              }
+            }
+          ]
+        },
+        {
+          "name": "policy-rust-scrypt-config",
+          "fs_delta": [
+            {
+              "root": 18,
+              "path": "root",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 18,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "vault:\n  format_version: 2\n  argon2id_time: 5\n  argon2id_memory: 65536\n  argon2id_threads: 4\n  auto_heal_zero_key: true\nunknown_root: retained\n"
+              }
+            },
+            {
+              "root": 18,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 18,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBzYWRtZ2tnMlRBYU05TCtHaXdyZXp3IDEwCnJJdlhNT2RQTVRsdWZXL2U5WURnVTJzRk0yL0dVeDQrUU1qTHFWdng3bGsKLS0tIDR3STVtMFc3dmlzTUNjSkYwSlZJN29ZRzBIbGozVGpZdE5LN1UzSHJuQmcKpKduMOFK6CeIIFlGYWLcc4aeEIbdcvBnorSj77bvIse6C43s0qc0brelr4eZyVGaRPKaUupH5mpvve/HuTZefPz5+Nz/kwE0P+1Su9GgxGBwVT0unuUyHmQbZdhd5dFbdq+LSUEwDNDuKw=="
+              }
+            }
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "key": "3736f831caae7d3833474a3f5f2136c245ff5b5cf4629260b4eb630ce6f6cdea",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "migrate",
+              "kdf",
+              "--yes"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root/home",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:0>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/home/data",
+              "XDG_STATE_HOME": "<ROOT:1>"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": ""
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: argon2id resource policy: use migrate kdf --allow-legacy-kdf for a historical identity\nError: argon2id resource policy: use migrate kdf --allow-legacy-kdf for a historical identity\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d046c0c47536f592b275ac7e538fc832194d3f3b5163185c55d4bdf58a6c9c6d",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:2>/root",
+              "migrate",
+              "kdf",
+              "--allow-legacy-kdf"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:2>/root/home",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:2>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:2>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:2>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:2>/root/home/data",
+              "XDG_STATE_HOME": "<ROOT:3>"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "public-kdf-policy-fixture-passphrase\nn\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nMigrate historical Argon2 parameters to the current resource policy (encrypted identity and config backups are retained) (y/N): Canceled\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2286e5004a3899f6df08a86b1c0de8f7f99f0895d24381561a48050799a9a9e4",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:4>/root",
+              "migrate",
+              "kdf",
+              "--yes",
+              "--allow-legacy-kdf"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:4>/root/home",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:4>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:4>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:4>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:4>/root/home/data",
+              "XDG_STATE_HOME": "<ROOT:5>"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "wrong public fixture\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: migrate KDF resource policy: unlock historical identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block\nError: migrate KDF resource policy: unlock historical identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 4,
+              "path": "root/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            }
+          ]
+        },
+        {
+          "key": "e7fddfd7943fe246e63bc51fcdff5ef3f53288b326a63e4d6dc41c3a2e0e6a30",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:6>/root",
+              "migrate",
+              "kdf",
+              "--yes",
+              "--allow-legacy-kdf"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:6>/root/home",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:6>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:6>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:6>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:6>/root/home/data",
+              "XDG_STATE_HOME": "<ROOT:7>"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "public-kdf-policy-fixture-passphrase\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "✓ Migrated vault identity to the current Argon2 resource policy.\nThe original identity and config backups are retained as .bak files.\n"
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 6,
+              "path": "root/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 6,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "unknown_root: retained\nvault:\n    argon2id_memory: 65536\n    argon2id_threads: 4\n    argon2id_time: 3\n    auto_heal_zero_key: true\n    format_version: 2\n"
+              }
+            },
+            {
+              "root": 6,
+              "path": "root/config.yaml.bak",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "vault:\n  format_version: 2\n  argon2id_time: 5\n  argon2id_memory: 65536\n  argon2id_threads: 4\n  auto_heal_zero_key: true\nunknown_root: retained\n"
+              }
+            },
+            {
+              "root": 6,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDEwWkRHNzliaENzbmtoSm54YlBtM2cgdD0zLG09NjU1MzYscD00ClZYU09GWjZjUkpxUDgzV3dLOTR0ZmFMV0lQVElDMHpDVmk2ek85TFFTaWlMU0ZBc0czd01FNXNoNGFvCi0tLSBjRWkvRjJnbkMzTk9WUlM5UVpOM3hRN0dhamJkMWt6RzNtSW5JSW01OWNVCsrZN1dUJJBwP542S3p4WuXrNnUdXMpE34jwKGgYCEucnnExd5MfPdAhJnuXxqbbOyZrNHPLEocNPDz562K1VXfMaJTB2U6OBEPrdJQHsw3Ot8aT/yMBV9+qP3rctE/sF2hOWKVFdo+imI4="
+              }
+            },
+            {
+              "root": 6,
+              "path": "root/identity.age.bak",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEhpSVJxL1RWUmdzNmZIMVBHS0FpcHcgdD01LG09MzIscD0xClZiZGxnWDZrL0lyeDR4a0RBU0JLT01YTDRVWU45UHJnWk02dHdMcG5JTlBPWHVzemh3MzA5VGdOK2U4Ci0tLSBRRVlCTXB5ejZqU2lxaVp6U0xrSkExd3FqZkhuWXdVNklrRzNpUU5yN0R3ClKyCN7NFicgDE7VQ5vosJXdL5tpsKXxeUZIH81fRFEA+6Pk50DIbmj3ATAR0a+3noburqMfY2P/+kYDxuIV8UiAkh3L9jWEniKZ4VRimfBhXHpaXiVyhA7sYvX+laimti3EnNiQQcKfgU4="
+              }
+            }
+          ]
+        },
+        {
+          "key": "366c1612aee4e8c55f3c9bf4eceb361b8908b34f9162405cef5f3cd3c63d9d8c",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:8>/root",
+              "migrate",
+              "kdf",
+              "--yes",
+              "--allow-legacy-kdf"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:8>/root/home",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:8>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:8>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:8>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:8>/root/home/data",
+              "XDG_STATE_HOME": "<ROOT:9>"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "public-kdf-policy-fixture-passphrase\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "✓ Migrated vault identity to the current Argon2 resource policy.\nThe original identity and config backups are retained as .bak files.\n"
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 8,
+              "path": "root/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 8,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "unknown_root: retained\nvault:\n    argon2id_memory: 65536\n    argon2id_threads: 4\n    argon2id_time: 3\n    auto_heal_zero_key: true\n    format_version: 2\n"
+              }
+            },
+            {
+              "root": 8,
+              "path": "root/config.yaml.bak",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "vault:\n  format_version: 2\n  argon2id_time: 5\n  argon2id_memory: 65536\n  argon2id_threads: 4\n  auto_heal_zero_key: true\nunknown_root: retained\n"
+              }
+            },
+            {
+              "root": 8,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIG5xME1qMHBtYlpZWS9sbXhzTTBQK1EgdD0zLG09NjU1MzYscD00CnpVc2JIcVM0bVd0NkFtRENTWUNpSTVRTGQ1MWtCZm9yWHpQa0hnNGVJUThIb0NCb0gyc1ozQVZyUHFvCi0tLSBSNTdBWGNzQ2FHdW5rczdQaG9aempqZWJ4ODhUbU9HNFBNSkFmcUpvbkdnCp1EiOHS4QhvEEe63cJIU2XjWHzSU63EdSqSm7Lr6A5YNafEX+gMKnDrRMT8e0Dv7gZhKtmNHOJuJoNojsPRj2Zoj7anNGfOVgdJv3Ypjnkvlxy7ea/6jzeHF3xhrYssBC4LlgL6heyfhOU="
+              }
+            },
+            {
+              "root": 8,
+              "path": "root/identity.age.bak",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBxTE1aQUErNFlGemdpQkg4ejU5OG5nIDEwCk4zcDRVbHZuVytIRjlFWHFUWGFTVkw4ZHJkSjVHVVhNSlNjcWxvV1dsb2cKLS0tIGZlK2JXWm1HSnE1MVZ3M3JJdC93Mko0UFJCT1BJdjNqV0RKMXNSZUliTTQKfuLkg4PmEalfL8ZNJHRLUmVCb8+p4aOSAWEGh+AxbE94F3tc+TFC5PMB+B6QD/pKpIaljltRGZGzz2st+J0uDufwhfAhV+eDWoGAbDJnQnh/WIhEmrDUYt2EzRwTjhwp+0utwC48mRY6Zw=="
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

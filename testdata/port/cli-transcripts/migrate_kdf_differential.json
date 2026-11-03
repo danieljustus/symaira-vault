@@ -1,0 +1,495 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "migrate_kdf_go_rust_integration": {
+      "seeds": [
+        {
+          "name": "scrypt-vaults-migrate",
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "vault:\n  format_version: 1\n  scrypt_work_factor: 10\n  auto_migrate_kdf: false\n  argon2id_time: 2\n  argon2id_memory: 19456\n  argon2id_threads: 1\ncustom:\n  retained: true\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBLdzE5MmoxVXE0RXlUZTRDcjNDZ2V3IDEwClRSaFBQMEVLdzlsQThGQTlJd0puUDh0bzlJZXdhYUl5dEx6dXVyYmk2cnMKLS0tIHBKWmhCT2NXcDcrQXVlUnlia1pTaDQyREdGWk9MeWVJaEVDRlRXNzNhUmsK4m2TepevS3kx0veQ9bKKYmWu0/4+L/8y343SDMZh285TPDW8Dvsk28f157HtsBkBiG1X88+fPMkvEn6FZzW/ych71uL9JEzw4RFWQ9rxj6OUE6ToBbIvoe5NTeBEflu55rHi+ZscKhiIkw=="
+              }
+            },
+            {
+              "root": 1,
+              "path": "root",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "vault:\n  format_version: 1\n  scrypt_work_factor: 10\n  auto_migrate_kdf: false\n  argon2id_time: 2\n  argon2id_memory: 19456\n  argon2id_threads: 1\ncustom:\n  retained: true\n"
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBLdzE5MmoxVXE0RXlUZTRDcjNDZ2V3IDEwClRSaFBQMEVLdzlsQThGQTlJd0puUDh0bzlJZXdhYUl5dEx6dXVyYmk2cnMKLS0tIHBKWmhCT2NXcDcrQXVlUnlia1pTaDQyREdGWk9MeWVJaEVDRlRXNzNhUmsK4m2TepevS3kx0veQ9bKKYmWu0/4+L/8y343SDMZh285TPDW8Dvsk28f157HtsBkBiG1X88+fPMkvEn6FZzW/ych71uL9JEzw4RFWQ9rxj6OUE6ToBbIvoe5NTeBEflu55rHi+ZscKhiIkw=="
+              }
+            }
+          ]
+        },
+        {
+          "name": "scrypt-vaults-cancel",
+          "fs_delta": [
+            {
+              "root": 6,
+              "path": "root",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 6,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "vault:\n  format_version: 1\n  scrypt_work_factor: 10\n  auto_migrate_kdf: false\n  argon2id_time: 2\n  argon2id_memory: 19456\n  argon2id_threads: 1\ncustom:\n  retained: true\n"
+              }
+            },
+            {
+              "root": 6,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 6,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCA5Z2wvemcrNmNEaHg2UmFCeTlaNzZRIDEwCnNORFovZDhXRE9xbCsvd1AvOGpJQmpLSHZyVWxCSDBuU1llRUVkL3RRSFkKLS0tIGdFSlZQQmx5ZlhZdU9nQ1VlNWs0eXRNQ2VRVm56ZUgxSkxpOHlnNCtNbEUKRXL9/+RytotZ3pKph6ksqULW/JwOz6Rf7oVZs2Vg0oDmpdFjnhPV6AO7iXyJ0JiZUVXcVHqrHHZIjr6vvXDqKf5cjP0xmZs9L/s3LYIkPC6npL+yoYCF4XsiJIH5DHsroyjTBMua/fIllQ=="
+              }
+            },
+            {
+              "root": 7,
+              "path": "root",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 7,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "vault:\n  format_version: 1\n  scrypt_work_factor: 10\n  auto_migrate_kdf: false\n  argon2id_time: 2\n  argon2id_memory: 19456\n  argon2id_threads: 1\ncustom:\n  retained: true\n"
+              }
+            },
+            {
+              "root": 7,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 7,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCA5Z2wvemcrNmNEaHg2UmFCeTlaNzZRIDEwCnNORFovZDhXRE9xbCsvd1AvOGpJQmpLSHZyVWxCSDBuU1llRUVkL3RRSFkKLS0tIGdFSlZQQmx5ZlhZdU9nQ1VlNWs0eXRNQ2VRVm56ZUgxSkxpOHlnNCtNbEUKRXL9/+RytotZ3pKph6ksqULW/JwOz6Rf7oVZs2Vg0oDmpdFjnhPV6AO7iXyJ0JiZUVXcVHqrHHZIjr6vvXDqKf5cjP0xmZs9L/s3LYIkPC6npL+yoYCF4XsiJIH5DHsroyjTBMua/fIllQ=="
+              }
+            }
+          ]
+        },
+        {
+          "name": "argon2id-vaults",
+          "fs_delta": [
+            {
+              "root": 10,
+              "path": "root",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 10,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "vault:\n  format_version: 1\n  scrypt_work_factor: 10\n  auto_migrate_kdf: false\n  argon2id_time: 2\n  argon2id_memory: 19456\n  argon2id_threads: 1\ncustom:\n  retained: true\n"
+              }
+            },
+            {
+              "root": 10,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 10,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGp0eTA2aWhxNGE0VUo2SlpWL0VYUFEgdD0yLG09MTk0NTYscD0xClp3RUNncDZUeVRCVzNNNitNNVNNTlIzUDExSnAxY1FKak5xVEFpN2EycFBZSHc2dlNLRVlxdWNHd2RBCi0+IDUyLWdyZWFzZQpuSGZ6TnJVODJVb01IWGJ3ang4a1ViQTNYbTFVdDJMczB5ZEF4M1BsUUdDVGFMN2I3b21rUStieEJRCi0tLSBkR0syWDB1ZG0vYnY4YXZhckpFczN5NHJ1SHpleDNMWTdhejJWUWVNcVg0Cg4IiLsGPfjyV57Bq1KjbnBArGherhYsP0USxOEY0DHMLJIBSyyo3MVVURkHDPABUeSRHuh1jMlw6O6O0l/lBKAG+wAqYb8gM5vnhg1ZjkqdW3ABGq5TJS4mDjaEOZADo/JaUr6ega4kEGc="
+              }
+            },
+            {
+              "root": 11,
+              "path": "root",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 11,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "vault:\n  format_version: 1\n  scrypt_work_factor: 10\n  auto_migrate_kdf: false\n  argon2id_time: 2\n  argon2id_memory: 19456\n  argon2id_threads: 1\ncustom:\n  retained: true\n"
+              }
+            },
+            {
+              "root": 11,
+              "path": "root/entries",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 11,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGp0eTA2aWhxNGE0VUo2SlpWL0VYUFEgdD0yLG09MTk0NTYscD0xClp3RUNncDZUeVRCVzNNNitNNVNNTlIzUDExSnAxY1FKak5xVEFpN2EycFBZSHc2dlNLRVlxdWNHd2RBCi0+IDUyLWdyZWFzZQpuSGZ6TnJVODJVb01IWGJ3ang4a1ViQTNYbTFVdDJMczB5ZEF4M1BsUUdDVGFMN2I3b21rUStieEJRCi0tLSBkR0syWDB1ZG0vYnY4YXZhckpFczN5NHJ1SHpleDNMWTdhejJWUWVNcVg0Cg4IiLsGPfjyV57Bq1KjbnBArGherhYsP0USxOEY0DHMLJIBSyyo3MVVURkHDPABUeSRHuh1jMlw6O6O0l/lBKAG+wAqYb8gM5vnhg1ZjkqdW3ABGq5TJS4mDjaEOZADo/JaUr6ega4kEGc="
+              }
+            }
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "key": "1da8225e44c208c2d0912578f8c981eb419da5ce5e2831a19cac8346ae239fdc",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "migrate",
+              "kdf",
+              "--yes"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root/home",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:0>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/home/data",
+              "XDG_STATE_HOME": "<ROOT:2>"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "fixture migrate passphrase\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Your vault identity is currently protected with scrypt.\n✓ Migrated vault identity to argon2id.\nThe previous identity.age was backed up to identity.age.bak.\n"
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    auto_heal_zero_key: true\n    format_version: 2\n    argon2id_time: 2\n    argon2id_memory: 19456\n    argon2id_threads: 1\nvaultDir: <ROOT:0>/root/home/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGhXam5ieDl0TldTUFpQckhNVUIvL3cgdD0yLG09MTk0NTYscD0xCmV3N1NyTEk1Z3pCZ25GdmNTWWlBeUhob2IzNThUemU4VGR2V0g1N1BMejVCUVpkYTh6UTRZOHhSODlvCi0tLSBxd0U5bWRKSjFRK3llVkkxenMxaURPS2JScDBGcVh3NXgzaytYY1ByeWdFCtO9PZtGG9xEOnk4Bg2U3FBFtIdGYXcE4JLpo4apDCUY+kXo728RPDlixkhPck1iGrxIuGqPY0ZWIN0Pa96T9hxOrEd61pWKewstWVbXqKYzY+xbKUMDJWYN6wQaFjc5OL87htjTcWq1Jhs="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/identity.age.bak",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBLdzE5MmoxVXE0RXlUZTRDcjNDZ2V3IDEwClRSaFBQMEVLdzlsQThGQTlJd0puUDh0bzlJZXdhYUl5dEx6dXVyYmk2cnMKLS0tIHBKWmhCT2NXcDcrQXVlUnlia1pTaDQyREdGWk9MeWVJaEVDRlRXNzNhUmsK4m2TepevS3kx0veQ9bKKYmWu0/4+L/8y343SDMZh285TPDW8Dvsk28f157HtsBkBiG1X88+fPMkvEn6FZzW/ych71uL9JEzw4RFWQ9rxj6OUE6ToBbIvoe5NTeBEflu55rHi+ZscKhiIkw=="
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBlL2JlcE5XUEh3ZE9jVjVGRUFWTUJvVGVkZnovaGJRa3ZsNjNOOE1nWDBNCjJoNUxsaENIQThBNzltQk52QnlLMVd0TlRDMSs3d0RsNmd3NkhObkN5M28KLS0tIFhucjBvZFA5OGk3NXF0QktScjg4NXJ1dmpvZkFPNHhaMm1TMzVJTkpnOE0KxLiyThY2o/DAuDGY/L/se17Q4JowFaVVPJ5xlmg1eqODnuAWK9EANe8XB4q3qo6HgYCObVaGQNRzKvGA3joKAHJ24PHsbaSzhrK51A0JnkOaKK1zFizmZEH9pg3MSDFNU8OItFm4zX0FSrSmhtFGuK1yjgR4o6xie0ebqACwyIVnRlU/RfQBzNUar21BCu5WjNUnqkpm9kvf"
+              }
+            }
+          ]
+        },
+        {
+          "key": "0572b5bd93996f8b58dab331270ac10ed324c7eb59ef4ac4e3f4d47f6edadb2e",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:1>/root",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root/home",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:1>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/home/data",
+              "XDG_STATE_HOME": "<ROOT:5>"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "fixture migrate passphrase\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "root/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 2\n    argon2id_time: 2\n    argon2id_memory: 19456\n    argon2id_threads: 1\nvaultDir: <ROOT:1>/root/home/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 1,
+              "path": "root/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBHOWFEeUJOZ2hHZ2ZiN05rNy90V1o5bzhaVU9GNXAwNHVFTHVCc294ZzJZCkJxMTNWM09QbkQrVGtyaG5LR2J5L1J2SFFFSTRWbklHQXZDUVl3TEk2VDQKLS0tIDRwS0dFbzVtQjVwdDl6UzRjczZJMFhEQ2FEVU5kcEUvbWdkVCt5OU9KMlUKIrhzyLCsaPIosYrIXePCef0BfpcYD3NZsR8kB/5fjqKv6Oo8w0hxNHzjl8Hck3T8GU3V1vQoPQ2siP75NfjnJSVPHAdzF0weD0ApBLw5XnT7w2nLCNpDzeOXO/nf7Tia+/6IOGkN1VxTibsvPZUejWNJdYenT2K0rm+FySKFtXoVrCIVeDCpMlmfB0KvFg5czwgSTdD1xXlC"
+              }
+            }
+          ]
+        },
+        {
+          "key": "5f5002e6ca14cbc6572d3631ccf9b1406f69068351dbfa7c4788d5b3a8f3db08",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:6>/root",
+              "migrate",
+              "kdf"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:6>/root/home",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:6>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:6>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:6>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:6>/root/home/data",
+              "XDG_STATE_HOME": "<ROOT:8>"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "fixture migrate passphrase\nn\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Your vault identity is currently protected with scrypt.\n"
+            },
+            "stderr": {
+              "text": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nMigrate the vault identity to argon2id now (identity.age is backed up to identity.age.bak first) (y/N): Canceled\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 6,
+              "path": "root/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 6,
+              "path": "root/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 6,
+              "path": "root/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 10\n    auto_heal_zero_key: true\n    format_version: 1\n    argon2id_time: 2\n    argon2id_memory: 19456\n    argon2id_threads: 1\nvaultDir: <ROOT:6>/root/home/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 6,
+              "path": "root/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpN29RamEzR1o0YW9UVXQ5UW5qYjltZ1hOaTRlRlNyVEh3VkQzSHV5NnhJCnRRMzM3T2xUU0phdWFoZU5wZWc2VHk4Y3ErWDZuN0NQbEVFTkxLZWlDcFkKLS0tIHZ2V0FKcDJWMFdtdDh5Z2xxSmFlV3J6bE5rWjZDcVJzcFNTN091cGVsYVUKNN+KcX/d++zkX7N554NOSvV4xUXOwMiDtnXrWCJY/tLIHULRdMIYLeQztP7ok8Ifkz0zR4mDWVN60Z1IdwNj6TZrUtqeqGOpKiH0/O1MFZQfwLRDZE68WZgvbxI9YYwFV5HyYo/z04CT4myhjinlqDlEGUEjdLG/4xyimTh9J5jy/Wja3EDmTxaoybbU99LTAETcBubtnS3G"
+              }
+            }
+          ]
+        },
+        {
+          "key": "87ade6737e8f9691cd8686fb40bf9636ab5624f880452d94c2cb2436c33bc687",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:10>/root",
+              "migrate",
+              "kdf",
+              "--yes"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:10>/root/home",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "USERPROFILE": "<ROOT:10>/root/home",
+              "XDG_CACHE_HOME": "<ROOT:10>/root/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:10>/root/home/config",
+              "XDG_DATA_HOME": "<ROOT:10>/root/home/data",
+              "XDG_STATE_HOME": "<ROOT:12>"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": ""
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "✓ Your vault identity is already protected with argon2id.\nNo migration is needed.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

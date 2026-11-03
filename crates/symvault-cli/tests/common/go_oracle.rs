@@ -183,9 +183,12 @@ pub struct GoOracle {
 }
 
 fn transcript_path(file: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../testdata/port/cli-transcripts")
-        .join(format!("{file}.json"))
+    // SYMVAULT_ORACLE_DIR redirects transcripts (capture determinism checks).
+    let dir = env::var_os("SYMVAULT_ORACLE_DIR").filter(|d| !d.is_empty()).map_or_else(
+        || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/cli-transcripts"),
+        PathBuf::from,
+    );
+    dir.join(format!("{file}.json"))
 }
 
 fn load(file: &str) -> Option<Transcript> {
@@ -216,7 +219,11 @@ impl GoOracle {
         let mode = mode();
         let (go_path, oracle, prior) = match mode {
             Mode::Capture => {
-                let binary = env::var_os("SYMVAULT_GO_BINARY")
+                // A test pinned to another revision finds its binary in
+                // SYMVAULT_GO_BINARY_<first 8 hex of the commit>.
+                let binary = expected_commit
+                    .and_then(|c| env::var_os(format!("SYMVAULT_GO_BINARY_{}", &c[..8])))
+                    .or_else(|| env::var_os("SYMVAULT_GO_BINARY"))
                     .expect("SYMVAULT_ORACLE=capture requires SYMVAULT_GO_BINARY");
                 let binary = PathBuf::from(binary);
                 let oracle = inspect_oracle(&binary, expected_commit);
