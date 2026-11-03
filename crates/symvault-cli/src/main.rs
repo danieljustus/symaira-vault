@@ -3828,10 +3828,10 @@ fn run_get(
         // stdin is not a terminal.
         let identity =
             device::unlock_vault_for_transport(&vault, io::IsTerminal::is_terminal(&io::stdin()))?;
-        let result = vault_commands::get(&vault, &identity, query);
         if length || digest || metadata {
-            let value = match result {
-                Ok(vault_commands::GetResult::Field { value, .. }) => value,
+            // Go demands an exact `path.field` before it searches anything.
+            let value = match vault_commands::exact_field(&vault, &identity, query)? {
+                Some(vault_commands::GetResult::Field { value, .. }) => value,
                 _ => {
                     return Err(reported(
                         9,
@@ -3876,16 +3876,9 @@ fn run_get(
             }
             return Ok(());
         }
-        let result = match result {
-            Err(error) if error.starts_with("cannot read entry: entry not found: ") => {
-                let path = error.trim_start_matches("cannot read entry: entry not found: ");
-                return Err(reported(
-                    2,
-                    &format!("entry not found: {path}: entry not found"),
-                    Some("Try: symvault find <search-term>"),
-                ));
-            }
-            other => other?,
+        let result = match search_commands::get_or_search(&vault, &identity, query) {
+            Ok(result) => result,
+            Err(error) => return Err(report_get_error(error)),
         };
         if print {
             let (path, field) = match &result {
@@ -3918,6 +3911,40 @@ fn run_get(
         )
     })();
     finish_vault_result_doubled_exit3(result)
+}
+
+/// Go's failure shapes of `get`: a miss is a `not found` (2) with the `find`
+/// hint, an ambiguous search lists its hits on stderr first (`cliout.Warnf`,
+/// which `--quiet` does not silence here), and a path the store rejects is a
+/// plain read failure (1) whose cause Go prints twice.
+fn report_get_error(error: vault_commands::GetError) -> String {
+    const FIND_HINT: &str = "Try: symvault find <search-term>";
+    match error {
+        vault_commands::GetError::NotFound(path) => reported(
+            2,
+            &format!("entry not found: {path}: entry not found"),
+            Some(FIND_HINT),
+        ),
+        vault_commands::GetError::Ambiguous { query, paths } => {
+            let mut stderr = io::stderr();
+            let _ = writeln!(stderr, "Multiple matches:");
+            for path in &paths {
+                let _ = writeln!(stderr, "  {path}");
+            }
+            reported(
+                2,
+                &format!("ambiguous path: {query}: entry not found"),
+                Some(FIND_HINT),
+            )
+        }
+        vault_commands::GetError::InvalidPath(path) => {
+            let detail = import_commands::go_invalid_path_text(path.as_bytes())
+                .map(|text| String::from_utf8_lossy(&text).into_owned())
+                .unwrap_or_else(|| format!("entry path {path:?} is not valid"));
+            format!("cannot read entry: cannot read entry {path}: {detail}: {detail}")
+        }
+        vault_commands::GetError::Other(message) => message,
+    }
 }
 
 /// Go's `emitExposureAudit`: `get --print` records that plaintext left the

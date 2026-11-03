@@ -827,8 +827,8 @@
     {
       "path": "scripts/rust-port/cmd/outputmodegen/cases.go",
       "snapshot": "scripts/rust-port/cmd/outputmodegen/cases.go.txt",
-      "sha256": "8415239e80f10bbf055d7f62dc171631880135cafc0d8761bde34e9e53b051d3",
-      "bytes": 32738
+      "sha256": "d57871c75823d6ce5c4f813ae45692b3c258834d92010f029a4d392caf1a1093",
+      "bytes": 35184
     },
     {
       "path": "scripts/rust-port/cmd/outputmodegen/main.go",

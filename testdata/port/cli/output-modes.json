@@ -110,7 +110,7 @@
       "scripts/rust-port/cmd/outputmodegen/cases.go",
       "scripts/rust-port/cmd/outputmodegen/main.go"
     ],
-    "generator_digest": "0ed53655543fc388ba48c04b97015b2079f717334765107151c480b63603ee54",
+    "generator_digest": "50bda393d071061ed970a57cdd035a99d5197ca271f86e3639fa68a7dc883a87",
     "gate_digest": "c2536c1ffaf681feaa8fa8824f7e302e9633b2c2711c9ecd98531283064e51f1",
     "goos": "darwin"
   },
@@ -3261,6 +3261,1659 @@
       "exit": 2,
       "stdout": "",
       "stderr": "Error: entry not found: nope/missing: entry not found\nError: entry not found: nope/missing: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-path-one.text",
+      "path": "get",
+      "scenario": "get-search-path-one",
+      "mode": "text",
+      "desc": "get with a query that is a substring of exactly one path",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "first"
+      ],
+      "exit": 0,
+      "stdout": "Path: a/first\nModified: 2026-10-31 22:21\n\npassword: Val-Alpha-000\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-path-one.json",
+      "path": "get",
+      "scenario": "get-search-path-one",
+      "mode": "json",
+      "desc": "get with a query that is a substring of exactly one path",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "first",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"password\":\"***\"},\"TOTP\":null,\"Path\":\"a/first\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-path-one.yaml",
+      "path": "get",
+      "scenario": "get-search-path-one",
+      "mode": "yaml",
+      "desc": "get with a query that is a substring of exactly one path",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "first",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "fields:\n    password: '***'\ntotp: null\npath: a/first\nmodified: 2026-10-31 22:21\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-path-one.output-json",
+      "path": "get",
+      "scenario": "get-search-path-one",
+      "mode": "output-json",
+      "desc": "get with a query that is a substring of exactly one path",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "first",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"password\":\"***\"},\"TOTP\":null,\"Path\":\"a/first\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-path-one.quiet",
+      "path": "get",
+      "scenario": "get-search-path-one",
+      "mode": "quiet",
+      "desc": "get with a query that is a substring of exactly one path",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "first",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-case.text",
+      "path": "get",
+      "scenario": "get-search-field-case",
+      "mode": "text",
+      "desc": "get with an upper-case query (the search is case-insensitive)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "ALICE"
+      ],
+      "exit": 0,
+      "stdout": "Path: work/example\nModified: 2026-10-31 22:21\n\nnotes: a,b\npassword: Val-Alpha-001\nurl: https://example.test\nusername: alice\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-case.json",
+      "path": "get",
+      "scenario": "get-search-field-case",
+      "mode": "json",
+      "desc": "get with an upper-case query (the search is case-insensitive)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "ALICE",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"notes\":\"a,b\",\"password\":\"***\",\"url\":\"https://example.test\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/example\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-case.yaml",
+      "path": "get",
+      "scenario": "get-search-field-case",
+      "mode": "yaml",
+      "desc": "get with an upper-case query (the search is case-insensitive)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "ALICE",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "fields:\n    notes: a,b\n    password: '***'\n    url: https://example.test\n    username: alice\ntotp: null\npath: work/example\nmodified: 2026-10-31 22:21\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-case.output-json",
+      "path": "get",
+      "scenario": "get-search-field-case",
+      "mode": "output-json",
+      "desc": "get with an upper-case query (the search is case-insensitive)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "ALICE",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"notes\":\"a,b\",\"password\":\"***\",\"url\":\"https://example.test\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/example\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-case.quiet",
+      "path": "get",
+      "scenario": "get-search-field-case",
+      "mode": "quiet",
+      "desc": "get with an upper-case query (the search is case-insensitive)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "ALICE",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-case.text",
+      "path": "get",
+      "scenario": "get-search-multi-case",
+      "mode": "text",
+      "desc": "get with an upper-case query that is a substring of two paths",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "WORK"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: WORK: entry not found\nError: ambiguous path: WORK: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-case.json",
+      "path": "get",
+      "scenario": "get-search-multi-case",
+      "mode": "json",
+      "desc": "get with an upper-case query that is a substring of two paths",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "WORK",
+        "--json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: WORK: entry not found\nError: ambiguous path: WORK: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-case.yaml",
+      "path": "get",
+      "scenario": "get-search-multi-case",
+      "mode": "yaml",
+      "desc": "get with an upper-case query that is a substring of two paths",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "WORK",
+        "--output",
+        "yaml"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: WORK: entry not found\nError: ambiguous path: WORK: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-case.output-json",
+      "path": "get",
+      "scenario": "get-search-multi-case",
+      "mode": "output-json",
+      "desc": "get with an upper-case query that is a substring of two paths",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "WORK",
+        "--output",
+        "json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: WORK: entry not found\nError: ambiguous path: WORK: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-case.quiet",
+      "path": "get",
+      "scenario": "get-search-multi-case",
+      "mode": "quiet",
+      "desc": "get with an upper-case query that is a substring of two paths",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "WORK",
+        "--quiet"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Multiple matches:\n  work/example\n  work/two\nError: ambiguous path: WORK: entry not found\nError: ambiguous path: WORK: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-one.text",
+      "path": "get",
+      "scenario": "get-search-field-one",
+      "mode": "text",
+      "desc": "get with a query that matches one entry only by a field value",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "alice"
+      ],
+      "exit": 0,
+      "stdout": "Path: work/example\nModified: 2026-10-31 22:21\n\nnotes: a,b\npassword: Val-Alpha-001\nurl: https://example.test\nusername: alice\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-one.json",
+      "path": "get",
+      "scenario": "get-search-field-one",
+      "mode": "json",
+      "desc": "get with a query that matches one entry only by a field value",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "alice",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"notes\":\"a,b\",\"password\":\"***\",\"url\":\"https://example.test\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/example\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-one.yaml",
+      "path": "get",
+      "scenario": "get-search-field-one",
+      "mode": "yaml",
+      "desc": "get with a query that matches one entry only by a field value",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "alice",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "fields:\n    notes: a,b\n    password: '***'\n    url: https://example.test\n    username: alice\ntotp: null\npath: work/example\nmodified: 2026-10-31 22:21\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-one.output-json",
+      "path": "get",
+      "scenario": "get-search-field-one",
+      "mode": "output-json",
+      "desc": "get with a query that matches one entry only by a field value",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "alice",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"notes\":\"a,b\",\"password\":\"***\",\"url\":\"https://example.test\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/example\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-one.quiet",
+      "path": "get",
+      "scenario": "get-search-field-one",
+      "mode": "quiet",
+      "desc": "get with a query that matches one entry only by a field value",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "alice",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-url.text",
+      "path": "get",
+      "scenario": "get-search-field-url",
+      "mode": "text",
+      "desc": "get with a query inside the url field of one entry",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "example.test"
+      ],
+      "exit": 0,
+      "stdout": "Path: work/example\nModified: 2026-10-31 22:21\n\nnotes: a,b\npassword: Val-Alpha-001\nurl: https://example.test\nusername: alice\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-url.json",
+      "path": "get",
+      "scenario": "get-search-field-url",
+      "mode": "json",
+      "desc": "get with a query inside the url field of one entry",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "example.test",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"notes\":\"a,b\",\"password\":\"***\",\"url\":\"https://example.test\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/example\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-url.yaml",
+      "path": "get",
+      "scenario": "get-search-field-url",
+      "mode": "yaml",
+      "desc": "get with a query inside the url field of one entry",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "example.test",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "fields:\n    notes: a,b\n    password: '***'\n    url: https://example.test\n    username: alice\ntotp: null\npath: work/example\nmodified: 2026-10-31 22:21\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-url.output-json",
+      "path": "get",
+      "scenario": "get-search-field-url",
+      "mode": "output-json",
+      "desc": "get with a query inside the url field of one entry",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "example.test",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"notes\":\"a,b\",\"password\":\"***\",\"url\":\"https://example.test\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/example\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-url.quiet",
+      "path": "get",
+      "scenario": "get-search-field-url",
+      "mode": "quiet",
+      "desc": "get with a query inside the url field of one entry",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "example.test",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-comma.text",
+      "path": "get",
+      "scenario": "get-search-field-comma",
+      "mode": "text",
+      "desc": "get with a query that matches one entry only by its notes field",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "a,b"
+      ],
+      "exit": 0,
+      "stdout": "Path: work/example\nModified: 2026-10-31 22:21\n\nnotes: a,b\npassword: Val-Alpha-001\nurl: https://example.test\nusername: alice\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-comma.json",
+      "path": "get",
+      "scenario": "get-search-field-comma",
+      "mode": "json",
+      "desc": "get with a query that matches one entry only by its notes field",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "a,b",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"notes\":\"a,b\",\"password\":\"***\",\"url\":\"https://example.test\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/example\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-comma.yaml",
+      "path": "get",
+      "scenario": "get-search-field-comma",
+      "mode": "yaml",
+      "desc": "get with a query that matches one entry only by its notes field",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "a,b",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "fields:\n    notes: a,b\n    password: '***'\n    url: https://example.test\n    username: alice\ntotp: null\npath: work/example\nmodified: 2026-10-31 22:21\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-comma.output-json",
+      "path": "get",
+      "scenario": "get-search-field-comma",
+      "mode": "output-json",
+      "desc": "get with a query that matches one entry only by its notes field",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "a,b",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"notes\":\"a,b\",\"password\":\"***\",\"url\":\"https://example.test\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/example\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-comma.quiet",
+      "path": "get",
+      "scenario": "get-search-field-comma",
+      "mode": "quiet",
+      "desc": "get with a query that matches one entry only by its notes field",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "a,b",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-path.text",
+      "path": "get",
+      "scenario": "get-search-multi-path",
+      "mode": "text",
+      "desc": "get with a query that is a substring of two paths",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: work: entry not found\nError: ambiguous path: work: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-path.json",
+      "path": "get",
+      "scenario": "get-search-multi-path",
+      "mode": "json",
+      "desc": "get with a query that is a substring of two paths",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: work: entry not found\nError: ambiguous path: work: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-path.yaml",
+      "path": "get",
+      "scenario": "get-search-multi-path",
+      "mode": "yaml",
+      "desc": "get with a query that is a substring of two paths",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--output",
+        "yaml"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: work: entry not found\nError: ambiguous path: work: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-path.output-json",
+      "path": "get",
+      "scenario": "get-search-multi-path",
+      "mode": "output-json",
+      "desc": "get with a query that is a substring of two paths",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--output",
+        "json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: work: entry not found\nError: ambiguous path: work: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-path.quiet",
+      "path": "get",
+      "scenario": "get-search-multi-path",
+      "mode": "quiet",
+      "desc": "get with a query that is a substring of two paths",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--quiet"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Multiple matches:\n  work/example\n  work/two\nError: ambiguous path: work: entry not found\nError: ambiguous path: work: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-dash.text",
+      "path": "get",
+      "scenario": "get-search-multi-dash",
+      "mode": "text",
+      "desc": "get with the lone - argument (matches field values of every entry)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "-"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  a/first\n  work/example\n  work/two\nError: ambiguous path: -: entry not found\nError: ambiguous path: -: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-dash.json",
+      "path": "get",
+      "scenario": "get-search-multi-dash",
+      "mode": "json",
+      "desc": "get with the lone - argument (matches field values of every entry)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "-",
+        "--json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  a/first\n  work/example\n  work/two\nError: ambiguous path: -: entry not found\nError: ambiguous path: -: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-dash.yaml",
+      "path": "get",
+      "scenario": "get-search-multi-dash",
+      "mode": "yaml",
+      "desc": "get with the lone - argument (matches field values of every entry)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "-",
+        "--output",
+        "yaml"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  a/first\n  work/example\n  work/two\nError: ambiguous path: -: entry not found\nError: ambiguous path: -: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-dash.output-json",
+      "path": "get",
+      "scenario": "get-search-multi-dash",
+      "mode": "output-json",
+      "desc": "get with the lone - argument (matches field values of every entry)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "-",
+        "--output",
+        "json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  a/first\n  work/example\n  work/two\nError: ambiguous path: -: entry not found\nError: ambiguous path: -: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-dash.quiet",
+      "path": "get",
+      "scenario": "get-search-multi-dash",
+      "mode": "quiet",
+      "desc": "get with the lone - argument (matches field values of every entry)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "-",
+        "--quiet"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Multiple matches:\n  a/first\n  work/example\n  work/two\nError: ambiguous path: -: entry not found\nError: ambiguous path: -: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-mixed.text",
+      "path": "get",
+      "scenario": "get-search-multi-mixed",
+      "mode": "text",
+      "desc": "get with path matches (a/first, work/two) listed before the field match (work/example)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "t"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  a/first\n  work/two\n  work/example\nError: ambiguous path: t: entry not found\nError: ambiguous path: t: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-mixed.json",
+      "path": "get",
+      "scenario": "get-search-multi-mixed",
+      "mode": "json",
+      "desc": "get with path matches (a/first, work/two) listed before the field match (work/example)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "t",
+        "--json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  a/first\n  work/two\n  work/example\nError: ambiguous path: t: entry not found\nError: ambiguous path: t: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-mixed.yaml",
+      "path": "get",
+      "scenario": "get-search-multi-mixed",
+      "mode": "yaml",
+      "desc": "get with path matches (a/first, work/two) listed before the field match (work/example)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "t",
+        "--output",
+        "yaml"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  a/first\n  work/two\n  work/example\nError: ambiguous path: t: entry not found\nError: ambiguous path: t: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-mixed.output-json",
+      "path": "get",
+      "scenario": "get-search-multi-mixed",
+      "mode": "output-json",
+      "desc": "get with path matches (a/first, work/two) listed before the field match (work/example)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "t",
+        "--output",
+        "json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  a/first\n  work/two\n  work/example\nError: ambiguous path: t: entry not found\nError: ambiguous path: t: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-mixed.quiet",
+      "path": "get",
+      "scenario": "get-search-multi-mixed",
+      "mode": "quiet",
+      "desc": "get with path matches (a/first, work/two) listed before the field match (work/example)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "t",
+        "--quiet"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Multiple matches:\n  a/first\n  work/two\n  work/example\nError: ambiguous path: t: entry not found\nError: ambiguous path: t: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-none.text",
+      "path": "get",
+      "scenario": "get-search-none",
+      "mode": "text",
+      "desc": "get with a query that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "zzz-no-match"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: zzz-no-match: entry not found\nError: entry not found: zzz-no-match: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-none.json",
+      "path": "get",
+      "scenario": "get-search-none",
+      "mode": "json",
+      "desc": "get with a query that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "zzz-no-match",
+        "--json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: zzz-no-match: entry not found\nError: entry not found: zzz-no-match: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-none.yaml",
+      "path": "get",
+      "scenario": "get-search-none",
+      "mode": "yaml",
+      "desc": "get with a query that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "zzz-no-match",
+        "--output",
+        "yaml"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: zzz-no-match: entry not found\nError: entry not found: zzz-no-match: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-none.output-json",
+      "path": "get",
+      "scenario": "get-search-none",
+      "mode": "output-json",
+      "desc": "get with a query that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "zzz-no-match",
+        "--output",
+        "json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: zzz-no-match: entry not found\nError: entry not found: zzz-no-match: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-none.quiet",
+      "path": "get",
+      "scenario": "get-search-none",
+      "mode": "quiet",
+      "desc": "get with a query that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "zzz-no-match",
+        "--quiet"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Error: entry not found: zzz-no-match: entry not found\nError: entry not found: zzz-no-match: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-dotted-none.text",
+      "path": "get",
+      "scenario": "get-search-dotted-none",
+      "mode": "text",
+      "desc": "get with path.field whose field does not exist and that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work/example.pass"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: work/example.pass: entry not found\nError: entry not found: work/example.pass: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-dotted-none.json",
+      "path": "get",
+      "scenario": "get-search-dotted-none",
+      "mode": "json",
+      "desc": "get with path.field whose field does not exist and that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work/example.pass",
+        "--json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: work/example.pass: entry not found\nError: entry not found: work/example.pass: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-dotted-none.yaml",
+      "path": "get",
+      "scenario": "get-search-dotted-none",
+      "mode": "yaml",
+      "desc": "get with path.field whose field does not exist and that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work/example.pass",
+        "--output",
+        "yaml"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: work/example.pass: entry not found\nError: entry not found: work/example.pass: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-dotted-none.output-json",
+      "path": "get",
+      "scenario": "get-search-dotted-none",
+      "mode": "output-json",
+      "desc": "get with path.field whose field does not exist and that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work/example.pass",
+        "--output",
+        "json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: entry not found: work/example.pass: entry not found\nError: entry not found: work/example.pass: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-dotted-none.quiet",
+      "path": "get",
+      "scenario": "get-search-dotted-none",
+      "mode": "quiet",
+      "desc": "get with path.field whose field does not exist and that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work/example.pass",
+        "--quiet"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Error: entry not found: work/example.pass: entry not found\nError: entry not found: work/example.pass: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-trailing-dot.text",
+      "path": "get",
+      "scenario": "get-search-trailing-dot",
+      "mode": "text",
+      "desc": "get with an exact path with an empty field after the dot (the whole entry)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "a/first."
+      ],
+      "exit": 0,
+      "stdout": "Path: a/first\nModified: 2026-10-31 22:21\n\npassword: Val-Alpha-000\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-trailing-dot.json",
+      "path": "get",
+      "scenario": "get-search-trailing-dot",
+      "mode": "json",
+      "desc": "get with an exact path with an empty field after the dot (the whole entry)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "a/first.",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"password\":\"***\"},\"TOTP\":null,\"Path\":\"a/first\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-trailing-dot.yaml",
+      "path": "get",
+      "scenario": "get-search-trailing-dot",
+      "mode": "yaml",
+      "desc": "get with an exact path with an empty field after the dot (the whole entry)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "a/first.",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "fields:\n    password: '***'\ntotp: null\npath: a/first\nmodified: 2026-10-31 22:21\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-trailing-dot.output-json",
+      "path": "get",
+      "scenario": "get-search-trailing-dot",
+      "mode": "output-json",
+      "desc": "get with an exact path with an empty field after the dot (the whole entry)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "a/first.",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"password\":\"***\"},\"TOTP\":null,\"Path\":\"a/first\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-trailing-dot.quiet",
+      "path": "get",
+      "scenario": "get-search-trailing-dot",
+      "mode": "quiet",
+      "desc": "get with an exact path with an empty field after the dot (the whole entry)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "a/first.",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": []
+    },
+    {
+      "id": "get-search-empty.text",
+      "path": "get",
+      "scenario": "get-search-empty",
+      "mode": "text",
+      "desc": "get with an empty query",
+      "seed": "entries",
+      "argv": [
+        "get",
+        ""
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot read entry: cannot read entry : entry path \"\": invalid path: path is empty: entry path \"\": invalid path: path is empty\nError: cannot read entry: cannot read entry : entry path \"\": invalid path: path is empty: entry path \"\": invalid path: path is empty\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-empty.json",
+      "path": "get",
+      "scenario": "get-search-empty",
+      "mode": "json",
+      "desc": "get with an empty query",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "",
+        "--json"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot read entry: cannot read entry : entry path \"\": invalid path: path is empty: entry path \"\": invalid path: path is empty\nError: cannot read entry: cannot read entry : entry path \"\": invalid path: path is empty: entry path \"\": invalid path: path is empty\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-empty.yaml",
+      "path": "get",
+      "scenario": "get-search-empty",
+      "mode": "yaml",
+      "desc": "get with an empty query",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "",
+        "--output",
+        "yaml"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot read entry: cannot read entry : entry path \"\": invalid path: path is empty: entry path \"\": invalid path: path is empty\nError: cannot read entry: cannot read entry : entry path \"\": invalid path: path is empty: entry path \"\": invalid path: path is empty\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-empty.output-json",
+      "path": "get",
+      "scenario": "get-search-empty",
+      "mode": "output-json",
+      "desc": "get with an empty query",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "",
+        "--output",
+        "json"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot read entry: cannot read entry : entry path \"\": invalid path: path is empty: entry path \"\": invalid path: path is empty\nError: cannot read entry: cannot read entry : entry path \"\": invalid path: path is empty: entry path \"\": invalid path: path is empty\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-empty.quiet",
+      "path": "get",
+      "scenario": "get-search-empty",
+      "mode": "quiet",
+      "desc": "get with an empty query",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "",
+        "--quiet"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: cannot read entry: cannot read entry : entry path \"\": invalid path: path is empty: entry path \"\": invalid path: path is empty\nError: cannot read entry: cannot read entry : entry path \"\": invalid path: path is empty: entry path \"\": invalid path: path is empty\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-parent.text",
+      "path": "get",
+      "scenario": "get-search-parent",
+      "mode": "text",
+      "desc": "get with a path with a .. segment",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "../x"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot read entry: cannot read entry ../x: entry path \"../x\": invalid path: path contains '..' segment: entry path \"../x\": invalid path: path contains '..' segment\nError: cannot read entry: cannot read entry ../x: entry path \"../x\": invalid path: path contains '..' segment: entry path \"../x\": invalid path: path contains '..' segment\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-parent.json",
+      "path": "get",
+      "scenario": "get-search-parent",
+      "mode": "json",
+      "desc": "get with a path with a .. segment",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "../x",
+        "--json"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot read entry: cannot read entry ../x: entry path \"../x\": invalid path: path contains '..' segment: entry path \"../x\": invalid path: path contains '..' segment\nError: cannot read entry: cannot read entry ../x: entry path \"../x\": invalid path: path contains '..' segment: entry path \"../x\": invalid path: path contains '..' segment\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-parent.yaml",
+      "path": "get",
+      "scenario": "get-search-parent",
+      "mode": "yaml",
+      "desc": "get with a path with a .. segment",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "../x",
+        "--output",
+        "yaml"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot read entry: cannot read entry ../x: entry path \"../x\": invalid path: path contains '..' segment: entry path \"../x\": invalid path: path contains '..' segment\nError: cannot read entry: cannot read entry ../x: entry path \"../x\": invalid path: path contains '..' segment: entry path \"../x\": invalid path: path contains '..' segment\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-parent.output-json",
+      "path": "get",
+      "scenario": "get-search-parent",
+      "mode": "output-json",
+      "desc": "get with a path with a .. segment",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "../x",
+        "--output",
+        "json"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: cannot read entry: cannot read entry ../x: entry path \"../x\": invalid path: path contains '..' segment: entry path \"../x\": invalid path: path contains '..' segment\nError: cannot read entry: cannot read entry ../x: entry path \"../x\": invalid path: path contains '..' segment: entry path \"../x\": invalid path: path contains '..' segment\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-parent.quiet",
+      "path": "get",
+      "scenario": "get-search-parent",
+      "mode": "quiet",
+      "desc": "get with a path with a .. segment",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "../x",
+        "--quiet"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: cannot read entry: cannot read entry ../x: entry path \"../x\": invalid path: path contains '..' segment: entry path \"../x\": invalid path: path contains '..' segment\nError: cannot read entry: cannot read entry ../x: entry path \"../x\": invalid path: path contains '..' segment: entry path \"../x\": invalid path: path contains '..' segment\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-field-print.text",
+      "path": "get",
+      "scenario": "get-search-field-print",
+      "mode": "text",
+      "desc": "get --print of a single field match (the audit record names the resolved path)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "alice",
+        "--print"
+      ],
+      "exit": 0,
+      "stdout": "Path: work/example\nModified: 2026-10-31 22:21\n\nnotes: a,b\npassword: Val-Alpha-001\nurl: https://example.test\nusername: alice\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": [
+        {
+          "path": "home/vault/audit-symvault.log",
+          "change": "added",
+          "kind": "file",
+          "mode": 384,
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-search-field-print.json",
+      "path": "get",
+      "scenario": "get-search-field-print",
+      "mode": "json",
+      "desc": "get --print of a single field match (the audit record names the resolved path)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "alice",
+        "--print",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"notes\":\"a,b\",\"password\":\"Val-Alpha-001\",\"url\":\"https://example.test\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/example\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": [
+        {
+          "path": "home/vault/audit-symvault.log",
+          "change": "added",
+          "kind": "file",
+          "mode": 384,
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-search-field-print.yaml",
+      "path": "get",
+      "scenario": "get-search-field-print",
+      "mode": "yaml",
+      "desc": "get --print of a single field match (the audit record names the resolved path)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "alice",
+        "--print",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "fields:\n    notes: a,b\n    password: Val-Alpha-001\n    url: https://example.test\n    username: alice\ntotp: null\npath: work/example\nmodified: 2026-10-31 22:21\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": [
+        {
+          "path": "home/vault/audit-symvault.log",
+          "change": "added",
+          "kind": "file",
+          "mode": 384,
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-search-field-print.output-json",
+      "path": "get",
+      "scenario": "get-search-field-print",
+      "mode": "output-json",
+      "desc": "get --print of a single field match (the audit record names the resolved path)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "alice",
+        "--print",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "{\"Fields\":{\"notes\":\"a,b\",\"password\":\"Val-Alpha-001\",\"url\":\"https://example.test\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/example\",\"Modified\":\"2026-10-31 22:21\"}\n",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+      "tree": [
+        {
+          "path": "home/vault/audit-symvault.log",
+          "change": "added",
+          "kind": "file",
+          "mode": 384,
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-search-field-print.quiet",
+      "path": "get",
+      "scenario": "get-search-field-print",
+      "mode": "quiet",
+      "desc": "get --print of a single field match (the audit record names the resolved path)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "alice",
+        "--print",
+        "--quiet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tree": [
+        {
+          "path": "home/vault/audit-symvault.log",
+          "change": "added",
+          "kind": "file",
+          "mode": 384,
+          "audit": [
+            {
+              "agent": "",
+              "action": "expose_plaintext",
+              "path": "work/example",
+              "ok": true,
+              "argv_hash_len": 16,
+              "signed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-search-multi-print.text",
+      "path": "get",
+      "scenario": "get-search-multi-print",
+      "mode": "text",
+      "desc": "get --print of an ambiguous query (no audit record)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--print"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: work: entry not found\nError: ambiguous path: work: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-print.json",
+      "path": "get",
+      "scenario": "get-search-multi-print",
+      "mode": "json",
+      "desc": "get --print of an ambiguous query (no audit record)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--print",
+        "--json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: work: entry not found\nError: ambiguous path: work: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-print.yaml",
+      "path": "get",
+      "scenario": "get-search-multi-print",
+      "mode": "yaml",
+      "desc": "get --print of an ambiguous query (no audit record)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--print",
+        "--output",
+        "yaml"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: work: entry not found\nError: ambiguous path: work: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-print.output-json",
+      "path": "get",
+      "scenario": "get-search-multi-print",
+      "mode": "output-json",
+      "desc": "get --print of an ambiguous query (no audit record)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--print",
+        "--output",
+        "json"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nMultiple matches:\n  work/example\n  work/two\nError: ambiguous path: work: entry not found\nError: ambiguous path: work: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-multi-print.quiet",
+      "path": "get",
+      "scenario": "get-search-multi-print",
+      "mode": "quiet",
+      "desc": "get --print of an ambiguous query (no audit record)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--print",
+        "--quiet"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Multiple matches:\n  work/example\n  work/two\nError: ambiguous path: work: entry not found\nError: ambiguous path: work: entry not found\nTry: symvault find <search-term>\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-length.text",
+      "path": "get",
+      "scenario": "get-search-length",
+      "mode": "text",
+      "desc": "get --length of a query that is not an exact path.field (refused before any search)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--length"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: field is required for --length, --digest, or --metadata\nError: field is required for --length, --digest, or --metadata\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-length.json",
+      "path": "get",
+      "scenario": "get-search-length",
+      "mode": "json",
+      "desc": "get --length of a query that is not an exact path.field (refused before any search)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--length",
+        "--json"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: field is required for --length, --digest, or --metadata\nError: field is required for --length, --digest, or --metadata\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-length.yaml",
+      "path": "get",
+      "scenario": "get-search-length",
+      "mode": "yaml",
+      "desc": "get --length of a query that is not an exact path.field (refused before any search)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--length",
+        "--output",
+        "yaml"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: field is required for --length, --digest, or --metadata\nError: field is required for --length, --digest, or --metadata\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-length.output-json",
+      "path": "get",
+      "scenario": "get-search-length",
+      "mode": "output-json",
+      "desc": "get --length of a query that is not an exact path.field (refused before any search)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--length",
+        "--output",
+        "json"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: field is required for --length, --digest, or --metadata\nError: field is required for --length, --digest, or --metadata\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-length.quiet",
+      "path": "get",
+      "scenario": "get-search-length",
+      "mode": "quiet",
+      "desc": "get --length of a query that is not an exact path.field (refused before any search)",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "work",
+        "--length",
+        "--quiet"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "Error: field is required for --length, --digest, or --metadata\nError: field is required for --length, --digest, or --metadata\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-length-none.text",
+      "path": "get",
+      "scenario": "get-search-length-none",
+      "mode": "text",
+      "desc": "get --digest of a query that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "zzz-no-match",
+        "--digest"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: field is required for --length, --digest, or --metadata\nError: field is required for --length, --digest, or --metadata\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-length-none.json",
+      "path": "get",
+      "scenario": "get-search-length-none",
+      "mode": "json",
+      "desc": "get --digest of a query that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "zzz-no-match",
+        "--digest",
+        "--json"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: field is required for --length, --digest, or --metadata\nError: field is required for --length, --digest, or --metadata\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-length-none.yaml",
+      "path": "get",
+      "scenario": "get-search-length-none",
+      "mode": "yaml",
+      "desc": "get --digest of a query that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "zzz-no-match",
+        "--digest",
+        "--output",
+        "yaml"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: field is required for --length, --digest, or --metadata\nError: field is required for --length, --digest, or --metadata\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-length-none.output-json",
+      "path": "get",
+      "scenario": "get-search-length-none",
+      "mode": "output-json",
+      "desc": "get --digest of a query that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "zzz-no-match",
+        "--digest",
+        "--output",
+        "json"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: field is required for --length, --digest, or --metadata\nError: field is required for --length, --digest, or --metadata\n",
+      "tree": []
+    },
+    {
+      "id": "get-search-length-none.quiet",
+      "path": "get",
+      "scenario": "get-search-length-none",
+      "mode": "quiet",
+      "desc": "get --digest of a query that matches nothing",
+      "seed": "entries",
+      "argv": [
+        "get",
+        "zzz-no-match",
+        "--digest",
+        "--quiet"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "Error: field is required for --length, --digest, or --metadata\nError: field is required for --length, --digest, or --metadata\n",
       "tree": []
     },
     {

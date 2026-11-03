@@ -404,7 +404,7 @@ fn import_entry_path(prefix: &str, entry_path: &[u8]) -> Vec<u8> {
 /// corekit's `fsutil.ValidatePath` in its check order. Every test is on ASCII
 /// bytes, which Go's rune decoding also sees one by one inside an invalid
 /// sequence, so the bytes need no decoding; only the quoting is byte-aware.
-fn go_invalid_path_text(path: &[u8]) -> Option<Vec<u8>> {
+pub(crate) fn go_invalid_path_text(path: &[u8]) -> Option<Vec<u8>> {
     let trimmed = importer::go_trim_space(path);
     let quoted = importer::go_quote_bytes(trimmed);
     let normalized: Vec<u8> = trimmed
