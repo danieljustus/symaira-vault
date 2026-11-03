@@ -159,7 +159,7 @@ Where the gate differs from the hosted workflows:
   and wrong values). Logs are checked the same way (`log-ok` with exact name
   prefixes, `--sum-passed`, `N passed; 0 failed; 0 ignored` totals; `go-json`
   names; `gaps --exact-path/--min-paths`). One value differs from the workflows:
-  the `symvault-mcp --all-targets` total is 386 (`AREA_MCP_TEST_COUNT`), the
+  the `symvault-mcp --all-targets` total is 408 (`AREA_MCP_TEST_COUNT`), the
   workflows still say 246, which the tree outgrew; raise the constant when
   tests are added. `native_os` must equal the host's (the workflows accepted
   any of the three).
@@ -239,7 +239,7 @@ Running them:
 | Windows branches and legs, Winsock ETW trace, upload-artifact steps | void; evidence stays in `$(CARGO_TARGET_DIR)/area-evidence` |
 | `rust-http-macos.yml`, `rust-macos-satellites.yml` | consolidated hosted jobs of the same contracts, same values; run by the per-contract targets |
 | `rust-http-head` second part (`http_process_contract` / `http_oauth_contract` receipts) and `rust-http-oauth` "original strict HTTP corpus" | `http-process-contract` (stricter, from `rust-mcp-http-process.yml`) and `http-oauth-contract` |
-| `symvault-mcp --all-targets` total 246 | 386 (see "Exact counts") |
+| `symvault-mcp --all-targets` total 246 | 408 (see "Exact counts") |
 | `rust-store` `SYMVAULT_RUN_WINDOWS_CROSSLANG=1` | Windows only |
 | `rust-pairing` "Verify complete port contract on native macOS" (`make port-contract` with the backend selectors unset) | **not run on macOS locally** (15 to 18 minutes hosted); the Linux lane runs `port-contract`; the macOS result stays a closing-CI result |
 | `rust-pairing` `native_closeout.py portable` | **not run**: it forces `CARGO_TARGET_DIR` to `<repo>/target` and builds there. Its content is covered by `policy-fixtures-check` (`policygen --check`, in `port-contract`), `device_pairing_cli` and the `symvault-core`/`symvault-platform` all-targets run (`rust-test`) |
@@ -328,6 +328,11 @@ Findings of the first full runs on `ca0f2300` and what changed:
   API template drift guard added by `37376a4a`, H1) is one new, legitimate test.
   `AREA_MCP_TEST_COUNT` is now 305; the guard returns early (still a passing
   test) once the Go copy is deleted, so the count survives Go removal.
+- `mcp-named-tests` (`local/anomaly`): the `symvault-mcp --all-targets` total is
+  now 408 (measured: 0 failed, also under `TZ=Pacific/Kiritimati`, i.e. at 03:00
+  local): the MCP anomaly detector added 9 unit tests (`anomaly.rs`), the 3
+  `anomaly_replay` tests (Go-recorded `anomaly-detector.json`) and the 10
+  `anomaly_dispatch` tests. `AREA_MCP_TEST_COUNT` is now 408.
 - `http-write-contract` (macOS): one run at load 40 to 120 failed `actual
   progressing output required` (the slow reader of `rust/tls-output` received no
   byte within 34 seconds, the Go side and `rust/tcp-output` progressed). Reruns

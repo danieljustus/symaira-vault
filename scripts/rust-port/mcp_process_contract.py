@@ -145,7 +145,11 @@ def protocol_bytes(r, home, name, implementation, agent):
                r'type=off_hours severity=low agent='+re.escape(agent)+
                r'(?: path=public/(?:fixture|missing) request_id=[0-9a-f]{16})?'
                r' description="Entry access during off-hours by agent '+re.escape(agent)+r'"')
-    assert len(stderr)<65536 and all(implementation=='go' and re.fullmatch(pattern,line)
+    # Both implementations run the same detector since PLATFORM-002 (ADR 0034
+    # item 29): the Rust port emits the identical off-hours line, so the same
+    # narrow allowance applies to it. Anything else on stderr still fails.
+    assert implementation in ('go','rust'), (name,'unknown implementation')
+    assert len(stderr)<65536 and all(re.fullmatch(pattern,line)
                                   for line in stderr.splitlines()), (name,'unexpected stderr retained')
     return raw, stderr, semantic(frames,home)
 

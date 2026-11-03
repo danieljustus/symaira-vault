@@ -202,7 +202,10 @@ fn set_and_delete_tty_approval_replay_go_handlers_and_mutation_order() {
         let runtime =
             StoreReadOnlyRuntime::open_with_audit(root.path(), identity, config, None, Some(audit))
                 .expect("open synthetic store runtime")
-                .with_approval_seam(Arc::clone(&fake) as Arc<dyn ApprovalSeam>);
+                .with_approval_seam(Arc::clone(&fake) as Arc<dyn ApprovalSeam>)
+                // The recording ran by day; a night run must not raise off-hours
+                // alerts (they would add audit rows and clear the approval cache).
+                .with_anomaly_clock(Arc::new(symvault_mcp::anomaly::FixedAnomalyClock::midday()));
 
         let calls = if repeat { 2 } else { 1 };
         let mut result = None;

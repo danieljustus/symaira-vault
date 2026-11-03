@@ -616,6 +616,21 @@ mcp-http-init-differential: mcp-http-init-fixtures-check
 # production source against its pin (b1da45d1), so generation needs a checkout
 # whose limiter sources are unchanged; the check is non-writing, uses a short
 # real clock (about 10 s of sleeps) and is not part of port-contract.
+# PLATFORM-002 / ADR 0034 item 29: the MCP anomaly detector. anomalygen records
+# the real internal/anomaly detector (rate, off-hours, canary, sweep, tool
+# chain) plus source-bound dispatch facts at the ordered reference
+# mcp-anomaly-ordered-v1 (24acdb08); the replay and process tests need no Go.
+.PHONY: mcp-anomaly-fixtures-generate mcp-anomaly-fixtures-check mcp-anomaly-replay
+mcp-anomaly-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/anomalygen
+
+mcp-anomaly-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/anomalygen --check
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./scripts/rust-port/cmd/anomalygen -count=1
+
+mcp-anomaly-replay: mcp-anomaly-fixtures-check
+	$(CARGO) test -p symvault-mcp --test anomaly_replay --test anomaly_dispatch --locked
+
 .PHONY: mcp-http-ratelimit-fixtures-generate mcp-http-ratelimit-fixtures-check mcp-http-ratelimit-differential
 mcp-http-ratelimit-fixtures-generate:
 	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http002ratelimitgen --output $(PORT_MCP_HTTP_RATELIMIT_FIXTURE)
@@ -1170,7 +1185,9 @@ AREA_KDF_MIGRATION_TESTS := 10
 # gate asserts the real count, so a shrunken run still fails. Raise it together
 # with the new tests (and the workflows' constant when they run again).
 # 386 after merging local/tls-write-deadline (+1 TLS write-deadline regression).
-AREA_MCP_TEST_COUNT := 386
+# 408 on local/anomaly (+22: 9 detector unit tests in anomaly.rs, 3
+# anomaly_replay and 10 anomaly_dispatch tests; measured: 408 passed, 0 failed).
+AREA_MCP_TEST_COUNT := 408
 
 .PHONY: area-oracle-runner
 area-oracle-runner:

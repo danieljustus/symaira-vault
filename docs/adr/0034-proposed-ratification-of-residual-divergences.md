@@ -514,6 +514,42 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
 - Recommendation: **maintainer decision**. Weighing "loses a security
   feature": the audit-row and approval-cache invalidation part leans to
   parity; the desktop notification part leans to item 28.
+- **Implemented (local branch `local/anomaly`, 2026-11-03; no Status cell
+  changes).** Maintainer decision: port the detector, the `anomaly_<type>`
+  audit rows, the warning log and the approval-cache invalidation; desktop
+  notifications stay absent (item 28, fail closed).
+  `crates/symvault-mcp/src/anomaly.rs` ports `internal/anomaly` (canary,
+  off-hours, sweep, rate, tool chain, in Go's rule order, with an injected
+  clock) and `StoreReadOnlyRuntime::call_with_context` runs it after each
+  dispatched tool call like `server_dispatch.go:250-300`: only the first alert
+  writes the row (`anomaly_<type>`, `ok=false`, the alert's path, session id
+  only, no request or token id), logs the dispatch line and clears the approval
+  cache; every alert logs the detector-hook line. Pins:
+  `testdata/port/mcp/anomaly-detector.json` (generator
+  `scripts/rust-port/cmd/anomalygen`, bound to `mcp-anomaly-ordered-v1`
+  `24acdb08` by source-blob provenance: 14 scenarios, 104 events from the real
+  Go detector, plus dispatch facts read from the pinned `server_dispatch.go`;
+  `make mcp-anomaly-fixtures-check`), replayed Go-free by
+  `crates/symvault-mcp/tests/anomaly_replay.rs` (with six altered-detector
+  negative controls), the call-path wiring by
+  `crates/symvault-mcp/tests/anomaly_dispatch.rs` (rows, log lines, cache
+  invalidation, calls the detector must not see) and a real
+  `symvault mcp --stdio` process by
+  `crates/symvault-cli/tests/mcp_anomaly_process.rs`.
+  **Declared differences:** (1) Rust runs the detector synchronously after the
+  handler and before the response; Go chains it on a worker and joins it at
+  close, so row and log order relative to the response differs. (2) Canary:
+  Go consults the process-local `vault.IsCanaryPath` set, which the MCP server
+  never fills from disk; Rust reads the entry's persisted `canary` flag, so a
+  canary entry alerts across processes (Rust-stricter). (3) Local time:
+  Rust reads the host zone with `localtime_r` on Unix and falls back to UTC on
+  Windows, so off-hours there follows UTC. (4) slog quoting of non-ASCII
+  values approximates `unicode.IsPrint` (`char::is_control`). (5) Not
+  ported: desktop notifications for severity >= high (item 28); Go's
+  `stale_access` type has no rule in Go either. Off-hours is wall-clock
+  dependent as in Go; replay tests pin the clock, and tests that are not about
+  the detector (`audit_identity`, clipboard and write-approval replays) inject
+  `FixedAnomalyClock::midday()` so a night run is unaffected.
 
 ## Already decided elsewhere (listed by reference, not repeated)
 

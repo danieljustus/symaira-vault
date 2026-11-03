@@ -1,3 +1,6 @@
+use crate::anomaly::{
+    AnomalyAlert, AnomalyClock, AnomalyMonitor, DetectorConfig, ToolCallEvent, WarnSink,
+};
 use crate::approval::ApprovalQueue;
 use crate::authguard::{
     AuthMethodBackend, Challenger, OperationType, UnavailableAuthMethodBackend,
@@ -354,6 +357,13 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
         }
     }
 
+    fn is_canary(&self, path: &str) -> bool {
+        // Not `get`: this lookup is not a tool read and must not be counted as one.
+        self.store
+            .get(path, &self.identity)
+            .is_ok_and(|entry| entry.canary)
+    }
+
     fn resolve_secret_ref_at_path(
         &self,
         reference: &str,
@@ -496,6 +506,9 @@ pub struct StoreReadOnlyRuntime {
     approval: Arc<dyn ApprovalSeam>,
     secure_input: Arc<dyn SecureInputSeam>,
     approval_cache: Mutex<HashSet<String>>,
+    /// PLATFORM-002: Go's `anomalyDetector` (rate, off-hours, canary, sweep,
+    /// tool chain), run after each dispatched tool call.
+    anomaly: AnomalyMonitor,
     approval_key_counter: std::sync::atomic::AtomicI64,
     approval_mode: String,
     require_approval: bool,
@@ -612,6 +625,7 @@ impl StoreReadOnlyRuntime {
             approval: Arc::new(PlatformApproval),
             secure_input: Arc::new(PlatformSecureInput),
             approval_cache: Mutex::new(HashSet::new()),
+            anomaly: AnomalyMonitor::new(),
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
             require_approval,
@@ -694,6 +708,7 @@ impl StoreReadOnlyRuntime {
             approval: Arc::new(PlatformApproval),
             secure_input: Arc::new(PlatformSecureInput),
             approval_cache: Mutex::new(HashSet::new()),
+            anomaly: AnomalyMonitor::new(),
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
             require_approval,
@@ -739,6 +754,35 @@ impl StoreReadOnlyRuntime {
     pub fn with_can_manage_config(mut self, allowed: bool) -> Self {
         self.can_manage_config = allowed;
         self
+    }
+
+    /// Replaces the anomaly detector's clock (default: the local wall clock).
+    /// Tests inject a fixed clock so off-hours and window rules are exact.
+    #[must_use]
+    pub fn with_anomaly_clock(mut self, clock: Arc<dyn AnomalyClock>) -> Self {
+        self.anomaly = self.anomaly.with_clock(clock);
+        self
+    }
+
+    /// Replaces where anomaly warning lines go (default: stderr, like Go's
+    /// default `slog` logger).
+    #[must_use]
+    pub fn with_anomaly_log(mut self, sink: WarnSink) -> Self {
+        self.anomaly = self.anomaly.with_sink(sink);
+        self
+    }
+
+    /// Replaces the detector thresholds (default: Go's defaults).
+    #[must_use]
+    pub fn with_anomaly_config(mut self, config: DetectorConfig) -> Self {
+        self.anomaly = self.anomaly.with_config(config);
+        self
+    }
+
+    /// Number of tool-call events in the detector's sliding window.
+    #[must_use]
+    pub fn anomaly_window_len(&self) -> usize {
+        self.anomaly.window_len()
     }
 
     /// Replaces the controlling-terminal approval seam. Production callers keep
@@ -3042,7 +3086,12 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         arguments: &Value,
         context: &crate::RequestContext,
     ) -> Result<ToolCallResult, String> {
-        context.check()?;
+        let started = Instant::now();
+        if let Err(error) = context.check() {
+            // Go's handlers observe the cancelled context: a failed call.
+            self.observe_anomaly(name, arguments, false, started, &Err(error.clone()));
+            return Err(error);
+        }
         // Go registers rate limiting as a pre-call hook. It runs only after
         // tool availability, argument decoding, and authorization have
         // succeeded, and hook failures are returned as handler errors so the
@@ -3054,6 +3103,26 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 "rate limit exceeded: max {limit} requests per minute"
             ));
         }
+        // Go computes the canary flag when the completion event is built; here
+        // it is read before the handler so a call that deletes the entry is
+        // still attributed to the canary.
+        let is_canary = self.canary_target(arguments);
+        let result = self.dispatch_tool(name, arguments, context);
+        self.observe_anomaly(name, arguments, is_canary, started, &result);
+        result
+    }
+}
+
+impl StoreReadOnlyRuntime {
+    /// The handler dispatch and the per-tool audit rows of `call_with_context`,
+    /// i.e. everything Go's `executeTool` runs between the pre-call hooks and
+    /// `detectAnomalyAsync`.
+    fn dispatch_tool(
+        &self,
+        name: &str,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
         let mut approval_failed = false;
         let result = if matches!(name, "set_entry_field" | "delete_entry" | "symaira_delete")
             && !self.approval_queue_attached
@@ -3227,6 +3296,91 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             _ => {}
         }
         result
+    }
+
+    /// Go `req.RequireString("path")`: the entry path of the call, or empty.
+    fn call_path(arguments: &Value) -> &str {
+        arguments
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+    }
+
+    fn canary_target(&self, arguments: &Value) -> bool {
+        let path = Self::call_path(arguments);
+        !self.agent_name.is_empty() && !path.is_empty() && self.inner.store().is_canary(path)
+    }
+
+    /// Go `detectAnomalyAsync` (`server_dispatch.go`), run synchronously after
+    /// the handler so the audit rows and the cache invalidation are ordered
+    /// before the response. Only the first alert of a call is audited and
+    /// invalidates the cache; every alert is logged by the monitor.
+    /// Desktop notifications are not ported (ADR 0034 item 28).
+    fn observe_anomaly(
+        &self,
+        name: &str,
+        arguments: &Value,
+        is_canary: bool,
+        started: Instant,
+        result: &Result<ToolCallResult, String>,
+    ) {
+        if self.agent_name.is_empty() {
+            return;
+        }
+        let (ok, field_length) = match result {
+            Err(_) => (false, 0),
+            Ok(value) => (
+                true,
+                if !value.is_error && matches!(name, "get_entry" | "get_entry_value") {
+                    value.text.len()
+                } else {
+                    0
+                },
+            ),
+        };
+        let path = Self::call_path(arguments);
+        let event = ToolCallEvent {
+            timestamp: self.anomaly.now(),
+            agent: self.agent_name.clone(),
+            tool: name.to_owned(),
+            path: path.to_owned(),
+            duration: started.elapsed(),
+            ok,
+            is_canary: is_canary && !path.is_empty(),
+            request_id: crate::audit_identity::current().request_id,
+            field_length,
+        };
+        let alerts = self.anomaly.check(event);
+        if let Some(alert) = alerts.first() {
+            self.record_anomaly(alert);
+        }
+    }
+
+    fn record_anomaly(&self, alert: &AnomalyAlert) {
+        self.anomaly.warn_dispatched(alert);
+        {
+            // Go logs with `context.Background()`: the row carries the session
+            // id only, never the request or token id of the triggering call.
+            let _scope = crate::audit_identity::CallAuditScope::enter(
+                crate::audit_identity::CallAuditIdentity::default(),
+            );
+            self.append_audit(
+                &format!("anomaly_{}", alert.alert_type.as_str()),
+                &alert.path,
+                false,
+            );
+        }
+        self.invalidate_approval_cache();
+    }
+
+    /// Go `invalidateApprovalCache`: forget every remembered approval so the
+    /// next call is approved again. A poisoned lock is cleared too (fail
+    /// closed).
+    fn invalidate_approval_cache(&self) {
+        match self.approval_cache.lock() {
+            Ok(mut cache) => cache.clear(),
+            Err(poisoned) => poisoned.into_inner().clear(),
+        }
     }
 }
 
