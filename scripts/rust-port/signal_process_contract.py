@@ -15,11 +15,16 @@ built from ORACLE; Rust must produce the same observation. The one documented
 difference is Go's persistent <vault>/broker-ca.pem, which Rust replaces with a
 per-instance temporary CA directory that must not survive any catchable signal.
 
-Go-only oracle records (`go_only`, not compared against Rust): a stdio `mcp` server with an
-armed clipboard auto-clear timer. The Rust leg would need the real macOS pasteboard
-(`/usr/bin/pbcopy` is the only lookup), so the Rust side of that behavior is carried by the
-injected-clipboard process test `approval::tests::stdio_armed_clipboard_signal_clears_and_requests_shutdown`.
-Go runs against fake pasteboard tools on a PATH that cannot reach the real ones.
+Go-only oracle records (`go_only`, not compared against Rust): a stdio `mcp` server and the
+`ui` terminal UI (PTY, Enter copies the selected entry) with an armed clipboard auto-clear
+timer. The Rust leg would need the real macOS pasteboard (`/usr/bin/pbcopy` is the only
+lookup), so the Rust side is carried by injected-clipboard process tests:
+`approval::tests::stdio_armed_clipboard_signal_clears_and_requests_shutdown` (mcp) and
+`tui::tests::ui_signal_with_held_copy_process_contract` (ui; Makefile target
+`signal-process-contract` runs both). Go runs against fake pasteboard tools on a PATH that
+cannot reach the real ones. Declared Rust-safer differences: SIGQUIT clears an armed
+clipboard (Go has no SIGQUIT in its auto-clear subscription and leaves the secret), in `ui`
+and in stdio `mcp`; a `ui` copy kept until quit (duration 0) is cleared before a SIGHUP death.
 """
 import argparse
 import hashlib
@@ -534,23 +539,105 @@ def clipboard_case(go, base, template, sig):
     return record
 
 
+def ui_clipboard_case(go, base, template, sig):
+    """Go only: `ui` on a pseudo-terminal copies the selected entry (an armed auto-clear), then gets `sig`.
+
+    Same fake-pasteboard PATH as `clipboard_case`: the real pasteboard is never touched. Go's
+    `StartAutoClear` subscription takes SIGINT, SIGTERM and SIGHUP: SIGHUP clears and `ui`
+    keeps running (a second SIGHUP, with nothing armed, kills it by the signal); SIGQUIT is not
+    subscribed, so Go dumps goroutines, exits 2 and leaves the secret on the clipboard.
+    """
+    name = f"ui-clipboard-armed-{sig.lower()}"
+    home = new_home(base, template, name)
+    fake = home / "fakebin"
+    fake.mkdir()
+    for tool in FAKE_CLIPBOARD_TOOLS:
+        (fake / tool).write_text(FAKE_CLIPBOARD)
+        (fake / tool).chmod(0o755)
+    checked([go, "--vault", home / "vault", "set", "github", "--value", CLIPBOARD_SECRET], cwd=home, env=isolated(home))
+    env = isolated(home)
+    env["PATH"] = f"{fake}:/bin"
+    env["TERM"] = "xterm-256color"
+    events = fake / "events"
+
+    def logged():
+        return events.read_text().split() if events.exists() else []
+
+    master, slave = pty.openpty()
+    screen = bytearray()
+    popen = subprocess.Popen([str(go), "ui"], cwd=home, env=env, stdin=slave, stdout=slave,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+    os.close(slave)
+
+    def wait_until(done, seconds):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and not done():
+            read_pty(master, screen, 0.05)
+        return done()
+
+    try:
+        assert wait_until(lambda: ALT_SCREEN_ON in screen, 30), "ui never entered the alternate screen"
+        read_pty(master, screen, 0.5)
+        os.write(master, b"\r")  # Enter copies the selected entry's field
+        assert wait_until(lambda: logged() == ["secret"], 10), ("control: the copy must reach the fake tool", logged())
+        assert CLIPBOARD_SECRET.encode() not in screen, "control: the secret is never drawn"
+        popen.send_signal(getattr(signal, sig))
+        wait_until(lambda: popen.poll() is not None, SURVIVE_WINDOW if sig == "SIGHUP" else DIE_WINDOW)
+        serving = popen.poll() is None
+        record = dict(case=name, command="ui-clipboard-armed", signal=sig, serving_after_signal=serving,
+                      ending=None if serving else ending(popen.returncode), second_ending=None)
+        if serving:
+            assert wait_until(lambda: logged() == ["secret", "clear"], 5), ("clear after signal", logged())
+            popen.send_signal(signal.SIGHUP)  # nothing armed any more
+            assert wait_until(lambda: popen.poll() is not None, DIE_WINDOW), "second SIGHUP must end ui"
+            record["second_ending"] = ending(popen.returncode)
+        # The fake tool is a child of the UI and may finish after it exited.
+        wait_until(lambda: logged() == ["secret", "clear"], 3)
+        record["clipboard_events"] = logged()
+    finally:
+        if popen.poll() is None:
+            popen.kill()
+            popen.wait()
+        os.close(master)
+    return record
+
+
 def exercise_go_only(go, base, template):
-    return [clipboard_case(go, base, template, sig) for sig in ("SIGINT", "SIGTERM", "SIGHUP")]
+    return ([clipboard_case(go, base, template, sig) for sig in ("SIGINT", "SIGTERM", "SIGHUP")]
+            + [ui_clipboard_case(go, base, template, sig) for sig in ("SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT")])
 
 
 GO_EXPECTED_CLIPBOARD = {  # (serving after the signal, ending when it stopped)
     "SIGINT": (False, ["exit", 0]), "SIGTERM": (False, ["exit", 0]), "SIGHUP": (True, None),
 }
+# `ui` with an armed copy: (serving after the signal, ending, ending after a second SIGHUP, events).
+# SIGQUIT is not part of Go's auto-clear subscription, so Go leaves the secret on the clipboard.
+GO_EXPECTED_UI_CLIPBOARD = {
+    "SIGINT": (False, ["exit", 1], None, ["secret", "clear"]),
+    "SIGTERM": (False, ["exit", 0], None, ["secret", "clear"]),
+    "SIGHUP": (True, None, ["signal", signal.SIGHUP], ["secret", "clear"]),
+    "SIGQUIT": (False, ["exit", 2], None, ["secret"]),
+}
 
 
 def check_go_only(records):
     """The Go clipboard records must show clear-then-shutdown (SIGINT/SIGTERM) or clear-and-serve (SIGHUP)."""
-    assert [r["signal"] for r in records] == list(GO_EXPECTED_CLIPBOARD), ("go_only cases", [r["case"] for r in records])
-    for record in records:
+    mcp = [r for r in records if r["command"] == "mcp-clipboard-armed"]
+    ui = [r for r in records if r["command"] == "ui-clipboard-armed"]
+    assert len(mcp) + len(ui) == len(records), ("go_only commands", [r["case"] for r in records])
+    assert [r["signal"] for r in mcp] == list(GO_EXPECTED_CLIPBOARD), ("go_only mcp cases", [r["case"] for r in mcp])
+    assert [r["signal"] for r in ui] == list(GO_EXPECTED_UI_CLIPBOARD), ("go_only ui cases", [r["case"] for r in ui])
+    for record in mcp:
         serving, final = GO_EXPECTED_CLIPBOARD[record["signal"]]
         assert record["serving_after_signal"] is serving, ("oracle drifted: clipboard signal", record)
         assert record["ending"] == final, ("oracle drifted: clipboard signal", record)
         assert record["clipboard_events"] == ["secret", "clear"], ("oracle drifted: clipboard clear", record)
+    for record in ui:
+        serving, final, second, events = GO_EXPECTED_UI_CLIPBOARD[record["signal"]]
+        assert record["serving_after_signal"] is serving, ("oracle drifted: ui clipboard signal", record)
+        assert record["ending"] == final, ("oracle drifted: ui clipboard signal", record)
+        assert record["second_ending"] == second, ("oracle drifted: ui second SIGHUP", record)
+        assert record["clipboard_events"] == events, ("oracle drifted: ui clipboard clear", record)
 
 
 def exercise(binary, base, template):

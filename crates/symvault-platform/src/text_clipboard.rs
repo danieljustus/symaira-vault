@@ -178,6 +178,47 @@ impl OwnedTextClipboard {
     pub fn take_clear_result(&self) -> Option<Result<(), symvault_core::platform::PlatformError>> {
         self.shared.0.lock().ok()?.cleared.take()
     }
+    /// A cloneable handle for a process signal thread. It shares the owner's
+    /// state, so a signal cannot race an older timer or a newer copy.
+    pub fn handle(&self) -> OwnedClipboardHandle {
+        OwnedClipboardHandle {
+            shared: self.shared.clone(),
+        }
+    }
+}
+
+/// Signal-side view of an [`OwnedTextClipboard`].
+#[derive(Clone)]
+pub struct OwnedClipboardHandle {
+    shared: Arc<(std::sync::Mutex<ClipboardState>, std::sync::Condvar)>,
+}
+impl OwnedClipboardHandle {
+    /// Go's `StartAutoClear` subscription is live exactly while a copy waits on
+    /// its timer (a positive duration). Such a subscription clears on SIGHUP and
+    /// the program keeps running. The result is reported like an expiry.
+    pub fn clear_if_armed(&self) -> bool {
+        let (lock, changed) = &*self.shared;
+        let mut state = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !(state.active && state.deadline.is_some()) {
+            return false;
+        }
+        let result = clear_owned(&mut state);
+        state.cleared = Some(result);
+        changed.notify_all();
+        true
+    }
+    /// Clears a still-held copy (armed or kept until quit) before the process
+    /// ends from a signal.
+    pub fn clear_before_exit(&self) {
+        let (lock, changed) = &*self.shared;
+        let mut state = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ = clear_owned(&mut state);
+        changed.notify_all();
+    }
 }
 fn clear_owned(state: &mut ClipboardState) -> Result<(), symvault_core::platform::PlatformError> {
     state.deadline = None;

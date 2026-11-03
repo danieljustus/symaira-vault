@@ -25,6 +25,10 @@
 //! server keeps serving. The router in `symvault-platform` `approval.rs`
 //! requests this shutdown through the terminator installed here.
 //!
+//! SIGQUIT with an armed clipboard timer: Go's timer does not subscribe SIGQUIT,
+//! so Go shuts down and leaves the copied secret on the clipboard. Rust clears it
+//! before exiting 0 (declared Rust-safer difference, `clear_armed_stdio_clipboard`).
+//!
 //! Known residuals against Go (#1242):
 //! - Go's SIGQUIT goroutine dump (ADR 0034 item 11) is a maintainer decision and
 //!   is not reproduced here.
@@ -97,6 +101,13 @@ mod unix {
         let shutdown = Arc::new(move |signal: i32| {
             REQUESTED.store(true, Ordering::Release);
             warn_quit(signal);
+            if signal == SIGQUIT {
+                // Go's clipboard timer does not subscribe SIGQUIT, so Go exits 0
+                // with the copied secret still on the clipboard. Clear it first
+                // (declared Rust-safer difference; SIGINT/SIGTERM were already
+                // cleared by the signal router).
+                symvault_platform::approval::clear_armed_stdio_clipboard();
+            }
             let (lock, changed) = &STDIO_FINISHED;
             let deadline = Instant::now() + STDIO_SHUTDOWN_GRACE;
             let mut finished = lock
@@ -195,3 +206,87 @@ pub fn stdio_finished() {}
 
 #[cfg(not(unix))]
 pub fn park_if_requested() {}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::{env, fs, io::Write, os::unix::process::ExitStatusExt, process::Command, sync::Arc};
+    use symvault_core::platform::{Clipboard, PlatformError};
+
+    struct EventClipboard(std::path::PathBuf);
+    impl Clipboard for EventClipboard {
+        fn set(&self, _: &[u8]) -> Result<(), PlatformError> {
+            Ok(())
+        }
+        fn clear(&self) -> Result<(), PlatformError> {
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.0)
+                .unwrap();
+            writeln!(file, "clear").unwrap();
+            Ok(())
+        }
+    }
+
+    /// stdio `mcp` with an armed clipboard timer. Go: SIGQUIT is not part of the
+    /// timer's subscription, so Go shuts down (exit 0, warning) and leaves the
+    /// secret on the clipboard. Rust clears first (declared Rust-safer
+    /// difference). Control: without an armed timer nothing is cleared. The child
+    /// owns the process-wide router and records clears in a file instead of
+    /// touching the real pasteboard.
+    #[test]
+    fn sigquit_shutdown_clears_an_armed_clipboard() {
+        if let Ok(spec) = env::var("SYMVAULT_MCP_QUIT_CHILD") {
+            let events = std::path::PathBuf::from(env::var("SYMVAULT_MCP_QUIT_EVENTS").unwrap());
+            let root = std::path::PathBuf::from(env::var("SYMVAULT_MCP_QUIT_ROOT").unwrap());
+            symvault_platform::approval::install_stdio_clipboard_signal_router(Arc::new(
+                EventClipboard(events),
+            ))
+            .unwrap();
+            super::install_stdio(root).unwrap();
+            let (cancel, _canceled) = std::sync::mpsc::channel();
+            let _registration = (spec == "armed").then(|| {
+                symvault_platform::approval::register_stdio_clipboard_auto_clear(
+                    cancel,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                )
+                .expect("router installed")
+            });
+            signal_hook::low_level::raise(libc::SIGQUIT).unwrap();
+            // The shutdown thread exits 0; reaching the end would be a failure.
+            std::thread::sleep(std::time::Duration::from_secs(30));
+            std::process::exit(99);
+        }
+        for (spec, clears) in [("armed", "clear\n"), ("idle", "")] {
+            let dir = tempfile::tempdir().unwrap();
+            let events = dir.path().join("events");
+            fs::write(dir.path().join(".runtime-port"), "1").unwrap();
+            let output = Command::new(env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "mcp_commands::mcp_shutdown::tests::sigquit_shutdown_clears_an_armed_clipboard",
+                ])
+                .env("SYMVAULT_MCP_QUIT_CHILD", spec)
+                .env("SYMVAULT_MCP_QUIT_EVENTS", &events)
+                .env("SYMVAULT_MCP_QUIT_ROOT", dir.path())
+                .output()
+                .expect("run SIGQUIT child");
+            assert_eq!(output.status.code(), Some(0), "{spec}: {output:?}");
+            assert_eq!(output.status.signal(), None, "{spec}: {output:?}");
+            assert_eq!(
+                fs::read_to_string(&events).unwrap_or_default(),
+                clears,
+                "{spec}"
+            );
+            assert!(
+                !dir.path().join(".runtime-port").exists(),
+                "{spec}: records cleared"
+            );
+            assert!(
+                String::from_utf8_lossy(&output.stderr)
+                    .contains("Received SIGQUIT, shutting down gracefully..."),
+                "{spec}: {output:?}"
+            );
+        }
+    }
+}

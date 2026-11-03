@@ -273,9 +273,13 @@ class SignalContractControls(unittest.TestCase):
     # --- Go-only armed-clipboard observation (CLI-007 residual 1) ---
     @staticmethod
     def clipboard_records():
-        return [dict(case=f"mcp-clipboard-armed-{sig.lower()}", command="mcp-clipboard-armed", signal=sig,
-                     serving_after_signal=serving, ending=final, clipboard_events=["secret", "clear"])
-                for sig, (serving, final) in contract.GO_EXPECTED_CLIPBOARD.items()]
+        mcp = [dict(case=f"mcp-clipboard-armed-{sig.lower()}", command="mcp-clipboard-armed", signal=sig,
+                    serving_after_signal=serving, ending=final, clipboard_events=["secret", "clear"])
+               for sig, (serving, final) in contract.GO_EXPECTED_CLIPBOARD.items()]
+        ui = [dict(case=f"ui-clipboard-armed-{sig.lower()}", command="ui-clipboard-armed", signal=sig,
+                   serving_after_signal=serving, ending=final, second_ending=second, clipboard_events=list(events))
+              for sig, (serving, final, second, events) in contract.GO_EXPECTED_UI_CLIPBOARD.items()]
+        return mcp + ui
 
     def test_go_only_clipboard_expectations_hold_and_detect_drift(self):
         contract.check_go_only(self.clipboard_records())
@@ -283,13 +287,22 @@ class SignalContractControls(unittest.TestCase):
                               (1, dict(ending=["exit", 1])),
                               (2, dict(serving_after_signal=False, ending=["signal", signal.SIGHUP])),
                               (0, dict(clipboard_events=["secret"])),  # the clear must happen
-                              (1, dict(clipboard_events=["clear", "secret"]))):
+                              (1, dict(clipboard_events=["clear", "secret"])),
+                              (5, dict(serving_after_signal=False, ending=["signal", signal.SIGHUP],
+                                       second_ending=None)),  # ui SIGHUP must clear and keep running
+                              (5, dict(second_ending=["exit", 0])),  # ... and the next SIGHUP kills it
+                              (5, dict(clipboard_events=["secret"])),
+                              (6, dict(clipboard_events=["secret", "clear"])),  # Go's SIGQUIT does not clear
+                              (6, dict(ending=["exit", 0])),
+                              (3, dict(ending=["exit", 0]))):  # ui SIGINT fails with status 1
             records = self.clipboard_records()
             records[index].update(change)
             with self.assertRaisesRegex(AssertionError, "oracle drifted"):
                 contract.check_go_only(records)
         with self.assertRaises(AssertionError):
             contract.check_go_only(self.clipboard_records()[:2])
+        with self.assertRaises(AssertionError):
+            contract.check_go_only(self.clipboard_records()[:6])
 
     def test_ending_and_normalization(self):
         self.assertEqual(contract.ending(-1), ["signal", 1])

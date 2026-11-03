@@ -236,7 +236,7 @@ def good_connect():
 
 
 def good_signal():
-    return base(expect_mismatch=False, go_only=[{"n": i} for i in range(3)],
+    return base(expect_mismatch=False, go_only=[{"n": i} for i in range(7)],
                 **per_impl(lambda _: [{"n": i} for i in range(41)]))
 
 

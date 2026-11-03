@@ -428,8 +428,9 @@ def signal(r):
     eq(r["expect_mismatch"], False, "expect_mismatch")
     for impl, rows in both(r):
         size(rows, 41, f"{impl} signal observations")
-    # Go-only armed-clipboard observations (the Rust leg would need the real pasteboard).
-    size(r["go_only"], 3, "go-only clipboard observations")
+    # Go-only armed-clipboard observations (the Rust leg would need the real pasteboard):
+    # 3 stdio `mcp` (SIGINT/SIGTERM/SIGHUP) + 4 `ui` (SIGINT/SIGTERM/SIGHUP/SIGQUIT).
+    size(r["go_only"], 7, "go-only clipboard observations")
 
 
 def http_drain(r):

@@ -1474,6 +1474,8 @@ signal-process-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(CARGO) test -p symvault-cli --bin symvault --locked run_commands $(call AREA_LOGGED,native-signal-tests.txt)
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-signal-tests.txt" --results-ok
+	$(CARGO) test -p symvault-cli --bin symvault --locked -- tui::tests mcp_shutdown::tests process_signals::tests $(call AREA_LOGGED,native-signal-clipboard-tests.txt)
+	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-signal-clipboard-tests.txt" ui_signal_with_held_copy_process_contract armed_signal_clear_follows_the_copy_lifetime sigquit_shutdown_clears_an_armed_clipboard armed_clipboard_guard_takes_over_an_inherited_sighup_ignore --results-ok
 	rm -f "$(CARGO_TARGET_DIR)/native-signals.json"
 	$(MAKE) signal-process-differential
 	$(AREA_CHECK) receipt "$(CARGO_TARGET_DIR)/native-signals.json" --profile signal

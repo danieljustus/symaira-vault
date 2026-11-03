@@ -1084,7 +1084,7 @@ Residuals (probed, not fixed):
 ## CLI-007: residual packet (`--allow-locked`, `ui`, armed clipboard), 2026-11-03
 
 Measured on the real Go oracle (`45b8577e`, same as `signal_process_contract.py`), fixed in Rust, and
-pinned by `make signal-process-contract` (41 compared observations per implementation, 3 Go-only).
+pinned by `make signal-process-contract` (41 compared observations per implementation, 7 Go-only).
 
 | Surface | Go (real process) | Rust before | Rust now |
 | --- | --- | --- | --- |
@@ -1097,6 +1097,11 @@ pinned by `make signal-process-contract` (41 compared observations per implement
 | `ui`, SIGINT | `Error: ui failed: program was killed: program was interrupted` twice, exit 1, terminal restored | exit 0, silent | same as Go |
 | `ui`, SIGHUP | death by SIGHUP, terminal left raw | exit 0, terminal restored (`ctrlc` `termination`) | same as Go |
 | `ui`, SIGQUIT | exit 2 (goroutine dump), terminal left raw | death by SIGQUIT | exit 2, terminal left raw |
+| `ui` with an armed copy (Enter, default 30 s auto-clear), SIGHUP | clipboard cleared, **`ui` keeps running** (the copy's `StartAutoClear` subscribes SIGINT/SIGTERM/SIGHUP); the next SIGHUP, with nothing armed, kills it by SIGHUP | secret left on the clipboard, death by SIGHUP (review finding: regression against the `ctrlc` build) | same as Go: `OwnedClipboardHandle::clear_if_armed` clears and `ui` shows `Clipboard cleared`; the next SIGHUP dies by SIGHUP |
+| same, SIGINT/SIGTERM | cleared, exit 1 (`program was interrupted`) / 0 | cleared on the exit path | same |
+| same, SIGQUIT | exit 2, **secret left on the clipboard** (SIGQUIT is not in Go's auto-clear subscription) | secret left on the clipboard | **declared Rust-safer difference**: cleared, then exit 2 |
+| `ui` with a copy kept until quit (`auto_clear_duration: 0`), SIGHUP | no subscription: death by SIGHUP, secret left | secret left | **declared Rust-safer difference**: cleared, then death by SIGHUP |
+| stdio `mcp` with an armed timer, SIGQUIT | shuts down (exit 0, warning) and **leaves the secret** (the timer does not subscribe SIGQUIT) | secret left | **declared Rust-safer difference**: `clear_armed_stdio_clipboard` first, then the Go shutdown (exit 0, warning) |
 
 The task description called the clipboard row "only clears and the server keeps running"; the
 real Go process shows that this is true for SIGHUP only. Ordinary approval prompts under an armed
@@ -1105,7 +1110,14 @@ combination is covered by the injected-clipboard process test, not by a Go obser
 
 The armed-clipboard Go observation (`go_only` in the receipt) uses fake `pbcopy`/`xclip`/... tools on a
 PATH that cannot reach the real ones; the Rust CLI would use `/usr/bin/pbcopy`, so its leg is the
-process test `approval::tests::stdio_armed_clipboard_signal_clears_and_requests_shutdown`.
+process test `approval::tests::stdio_armed_clipboard_signal_clears_and_requests_shutdown`. The `ui`
+armed-copy Go records (`ui-clipboard-armed-*`, a pseudo-terminal sends Enter first) have the same
+shape; the Rust leg is the injected-clipboard process test
+`tui::tests::ui_signal_with_held_copy_process_contract` (real signals to a child process that records
+clipboard events in a file), and the stdio SIGQUIT clear is held by
+`mcp_shutdown::tests::sigquit_shutdown_clears_an_armed_clipboard`. A copy armed in `ui` under an
+inherited `SIG_IGN` for SIGHUP is cleared as well (Go's `Notify` overrides the ignore; unit-tested in
+`process_signals::tests`).
 
 Bounded claims (no Go-vs-Rust observation, listed so they stay visible):
 

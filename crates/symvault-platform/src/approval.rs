@@ -412,6 +412,53 @@ fn shutdown_after_clipboard_clear(signal: i32) {
 }
 
 #[cfg(unix)]
+fn clear_and_cancel_auto_clear(state: &SecureInputSignalState, active: &ActiveClipboardAutoClear) {
+    if !active.clear_claimed.swap(true, Ordering::AcqRel) {
+        let _ = state.clipboard.clear();
+    }
+    let _ = active.cancel.send(());
+    // Keep the registration active through clear(), like Go's signal.Notify
+    // subscription. Remove it before returning so a later signal regains
+    // the idle process disposition.
+    let mut inner = state
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if inner
+        .clipboard_auto_clear
+        .as_ref()
+        .is_some_and(|current| current.id == active.id)
+    {
+        inner.clipboard_auto_clear = None;
+    }
+}
+
+/// Clears an armed stdio auto-clear timer's clipboard before the process ends
+/// for a signal Go does not tie to the timer. Go's `serve` shuts down on
+/// SIGQUIT but its clipboard timer subscribes SIGINT/SIGTERM/SIGHUP only, so Go
+/// leaves the copied secret on the clipboard; clearing it is a declared
+/// Rust-safer difference. Returns whether a registered timer was cleared.
+#[cfg(unix)]
+pub fn clear_armed_stdio_clipboard() -> bool {
+    let Some(state) = SECURE_INPUT_SIGNAL_STATE.get() else {
+        return false;
+    };
+    let active = state
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clipboard_auto_clear
+        .clone();
+    match active {
+        Some(active) => {
+            clear_and_cancel_auto_clear(state, &active);
+            true
+        }
+        None => false,
+    }
+}
+
+#[cfg(unix)]
 fn dispatch_stdio_signal(signal: i32) {
     let Some(state) = SECURE_INPUT_SIGNAL_STATE.get() else {
         terminate_for_stdio_signal(signal);
@@ -438,25 +485,7 @@ fn dispatch_stdio_signal(signal: i32) {
         (prompt_active, active)
     };
     if let Some(active) = active {
-        if !active.clear_claimed.swap(true, Ordering::AcqRel) {
-            let _ = state.clipboard.clear();
-        }
-        let _ = active.cancel.send(());
-        // Keep the registration active through clear(), like Go's signal.Notify
-        // subscription. Remove it before returning so a later signal regains
-        // the idle process disposition.
-        let mut inner = state
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if inner
-            .clipboard_auto_clear
-            .as_ref()
-            .is_some_and(|current| current.id == active.id)
-        {
-            inner.clipboard_auto_clear = None;
-        }
-        drop(inner);
+        clear_and_cancel_auto_clear(state, &active);
         // Go's `serve` subscribes SIGINT/SIGTERM next to the clipboard timer:
         // both subscribers receive the signal, so the timer clears and the
         // server shuts down (real Go process: armed SIGTERM clears, then exit 0).
