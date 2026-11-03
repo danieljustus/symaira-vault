@@ -1062,16 +1062,9 @@ fn real_server_process_and_cli_decide_an_agent_write_over_mtls() {
 fn real_server_refuses_a_cli_without_the_vault_ownership_secret() {
     let vault = mtls_vault_for_real_server();
     let _server = McpServer::start(&vault);
-    // The server reports its port before it writes the vault-ownership secret.
+    // `McpServer::start` already asserts the secret exists at "listening" (Go
+    // creates it first); no wait here, so a regression of that order fails.
     let secret_path = vault.root.join("mcp-server.enroll-secret");
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while !secret_path.is_file() {
-        assert!(
-            Instant::now() < deadline,
-            "server did not write its ownership secret"
-        );
-        thread::sleep(Duration::from_millis(20));
-    }
     let before = approval_cli(&vault, &["list", "--json"]);
     assert!(before.status.success(), "{before:?}");
 
