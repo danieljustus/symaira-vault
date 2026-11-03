@@ -1132,7 +1132,8 @@ the Go tree. `scripts/rust-port/cmd/approvalgen` freezes the same contract befor
 - **Rust divergences found and fixed.** Body JSON was not HTML-escaped (`<`, `>`, `&` become `\u003c`, `\u003e`, `\u0026`, Go's `Encoder` default; affected the local API too);
   `pending()` ordered by RFC 3339 text, which misorders `...05.12Z` vs `...05.123Z`; an empty `decided_by` was serialized.
 - **Rate limiter.** Go's per-IP limiter (one bucket shared with `/mcp` and the local API) now wraps these routes in Rust too; the recording here ran the handler on a bare mux, so the replay disables the limiter (`rate_limit: 0`) and the throttling is frozen by `http002ratelimitgen` (scenario `limit_three_device_approval_routes_share_the_bucket`, plus the `rate_limit: 0` and trusted-proxy steps).
-- **Not covered / residual.** The device enrollment routes `/api/v1/devices/enroll` and `/api/v1/devices/enroll-code` (Go mounts them behind the same limiter; the Rust server does not serve them), the 15-minute store cleanup,
+- **Device enrollment.** `/api/v1/devices/enroll` and `/api/v1/devices/enroll-code` are ported and wrapped by the same limiter (see the section "APPROVAL-001: device enrollment" at the end of this file).
+- **Not covered / residual.** The 15-minute store cleanup,
   HEAD body suppression on the generic 404, TLS/mTLS (owned by the HTTP fixtures).
 
 ## APPROVAL-001: Rust server + Rust CLI end to end, 2026-11-03
@@ -1507,3 +1508,47 @@ Residual risk: the matched timestamp grammar is a port of `time.Parse`
 possible string; re-record with `scripts/rust-port/go_timestamp_oracle.go.txt`
 if Go's toolchain changes. The `time` crate is only used to hold the parsed
 instant.
+
+## APPROVAL-001: device enrollment, 2026-11-03
+
+Go mounts two exact-path routes beside the approval transports
+(`cmd/mcp/serve_deps.go`, `serverbootstrap/http.go`), both behind the shared
+per-client limiter. The Rust MCP HTTP server now serves them
+(`crates/symvault-mcp/src/enroll.rs`, `LocalApprovalApi::with_device_enrollment`,
+wired by `crates/symvault-cli/src/mcp_commands.rs`).
+
+- **Mint (`POST /api/v1/devices/enroll-code`).** Order of checks as in Go:
+  method (anything but POST is the mux 404), loopback peer (403), HMAC proof
+  over the whole-second UTC timestamp within 30 s (401), certificate
+  fingerprint present (503), then a 32-character base32-hex code valid five
+  minutes; the body is `{"code","expires_at","fingerprint"}`. The fingerprint is
+  the SHA-256 of the vault's `mcp-server.crt`, computed once at start (Go pins
+  that file even when the server presents a configured certificate).
+- **Redeem (`POST /api/v1/devices/enroll`).** First JSON value of the body with
+  `encoding/json` semantics, `strings.TrimSpace` on the code, a single-use
+  `TokenStore` (five failures anywhere start a 30 s cooldown that also refuses
+  valid codes), then `DeviceSessionStore.Enroll` with an empty public key; the
+  body is `{"device_id","expires_at","token"}`; only the hash of the token is
+  persisted.
+- **Recording.** `scripts/rust-port/cmd/deviceenrollgen` (`make
+  device-enroll-fixtures-check`) freezes 27 cases / 266 exchanges into
+  `testdata/port/approval/device-enroll.json`; `crates/symvault-mcp/tests/
+  device_enroll_replay.rs` (`make device-enroll-replay`) replays them against
+  the Rust server, and `approval_e2e.rs` drives the real `symvault mcp` process.
+  Throttling is `http002ratelimitgen` scenario
+  `limit_three_device_enroll_routes_share_the_bucket`.
+- **Rust divergence found by the recording and fixed.** The proof was signed
+  over the timestamp text including its fraction and parsed with the `time`
+  crate; Go signs the whole-second UTC text of a `time.Parse(RFC3339)` value
+  (also for the local approval API, which shares `verify_proof`).
+- **Declared, stricter than Go (never more permissive).** A repeated
+  `X-Enroll-Timestamp`/`X-Enroll-Proof` header is refused (smuggling policy of
+  `DUPLICATE_SENSITIVE_HEADERS`; Go takes the first); a body above 1 MiB is
+  refused before routing; a non-UTF-8 body is refused (Go substitutes U+FFFD);
+  a lone surrogate escape in the JSON is `400 malformed request body` (Go
+  substitutes U+FFFD). Nesting is bounded at Go's 10000 levels by a pre-scan
+  (serde_json would skip any depth in ignored values).
+- **Not covered / residual.** The end of the 30 s cooldown over HTTP (injected
+  clock corpus in `symvault-sync`), a non-loopback TCP peer (answered through
+  the handler with a documentation-range address), HEAD on the generic 404, Go's
+  15-minute `StartCleanup` (expiry is enforced on use).

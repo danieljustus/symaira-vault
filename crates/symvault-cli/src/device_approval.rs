@@ -3,10 +3,11 @@
 //!
 //! Ported from `cmd/device_approval.go` (the two commands) and
 //! `internal/pairing/devicesession.go` (the store); oracle pin `3232e31f`.
-//! Only the store surface those two commands exercise is ported: `Enroll`,
+//! Only the store surface those two commands exercise lives here: `Enroll`,
 //! `Validate` and `CleanupExpired` are called by the Go server's approval
-//! enrollment path (`internal/approval/enroll.go`), not by the CLI, and are
-//! still unported (APPROVAL-001 / RUST-011).
+//! enrollment path (`internal/approval/enroll.go`), not by the CLI. The Rust
+//! server runs that path in `symvault-mcp` (`enroll.rs`) over
+//! `symvault_sync::DeviceSessionStore`.
 //!
 //! Measured, not guessed, about the oracle:
 //! - The store lives at `<vault>/.symvault/device-sessions.json`, keys are
@@ -618,8 +619,8 @@ pub(crate) fn revoke(vault: &Path, device_id: &str, yes: bool, quiet: bool) -> R
 /// hand out. Nothing usable is persisted: only the SHA-256 hash and the display
 /// prefix reach the file.
 ///
-/// Nothing in the CLI calls this yet — the Go server's enrollment handler does
-/// (`internal/approval/enroll.go`), and that path is still unported.
+/// Nothing in the CLI calls this — the server's enrollment handler does
+/// (`symvault_mcp::enroll`, over `symvault_sync::DeviceSessionStore`).
 #[allow(dead_code)]
 pub(crate) fn enroll(
     vault: &Path,

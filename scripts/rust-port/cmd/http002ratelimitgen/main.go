@@ -49,6 +49,7 @@ import (
 const oracleCommit = "b1da45d1332fdb118b702dedf4addfb28b890cdf"
 
 var sources = []string{
+	"internal/approval/enroll.go",
 	"internal/approval/http.go",
 	"internal/approval/local.go",
 	"internal/config/config_merge.go",
@@ -57,6 +58,8 @@ var sources = []string{
 	"internal/mcp/serverbootstrap/http.go",
 	"internal/mcp/serverbootstrap/http_setup.go",
 	"internal/mcp/util.go",
+	"internal/pairing/devicesession.go",
+	"internal/pairing/token.go",
 }
 
 // baseConfigYAML opts into plaintext loopback so the stack can be driven
@@ -104,9 +107,13 @@ type stackScenario struct {
 	Name string `json:"name"`
 	// ConfigYAML is loaded by the production config loader (Go) and by the
 	// Rust config loader; it is the only source of the knobs.
-	ConfigYAML         string      `json:"config_yaml"`
-	EffectiveRateLimit int         `json:"effective_config_rate_limit"`
-	Steps              []stackStep `json:"steps"`
+	ConfigYAML         string `json:"config_yaml"`
+	EffectiveRateLimit int    `json:"effective_config_rate_limit"`
+	// Enroll mounts the two device enrollment routes beside the approval
+	// APIs, as cmd/mcp.RunHTTPServerWithApproval does; other scenarios leave
+	// them unmounted (404, not limited).
+	Enroll bool        `json:"enroll,omitempty"`
+	Steps  []stackStep `json:"steps"`
 }
 
 type stackStep struct {
@@ -293,6 +300,23 @@ func deviceApprovals(method, path string) stackRequest {
 	return stackRequest{Method: method, Path: path}
 }
 
+// enrollCode targets the loopback pairing-code mint route. No proof is sent:
+// an unproven request is answered 401 by the handler, which has still
+// consumed a limiter slot, and a wrong method is the handler's own 404.
+func enrollCode(method string) stackRequest {
+	return stackRequest{Method: method, Path: "/api/v1/devices/enroll-code"}
+}
+
+// enrollRedeem targets the pairing-code redemption route; an empty JSON
+// object is answered 400 (no code) by the handler.
+func enrollRedeem(method, path string) stackRequest {
+	req := stackRequest{Method: method, Path: path}
+	if method == http.MethodPost {
+		req.Body = "{}"
+	}
+	return req
+}
+
 type plannedStep struct {
 	note    string
 	request stackRequest
@@ -310,6 +334,7 @@ func stackScenarios(scratch string) []stackScenario {
 		limit   int
 		trusted []string
 		useDef  bool
+		enroll  bool
 		steps   []plannedStep
 	}
 	loop := []string{"127.0.0.1"}
@@ -353,10 +378,29 @@ func stackScenarios(scratch string) []stackScenario {
 			step("the enrollment paths are not mounted here and are not limited", deviceApprovals(http.MethodPost, "/api/v1/devices/enroll"), 1, "full"),
 			step("health stays reachable", stackRequest{Method: http.MethodGet, Path: "/health"}, 1, "status"),
 		}},
-		{name: "zero_disables_the_limiter", limit: 0, steps: []plannedStep{
+		{name: "limit_three_device_enroll_routes_share_the_bucket", limit: 3, enroll: true, steps: []plannedStep{
+			step("slot 1: the pairing-code mint without a proof is answered 401 by the handler, which still consumes a slot", enrollCode(http.MethodPost), 1, "full"),
+			step("slot 2: a redemption without a code is answered 400 and shares the bucket", enrollRedeem(http.MethodPost, "/api/v1/devices/enroll"), 1, "full"),
+			step("slot 3: a method the redemption handler does not route is its own 404 inside the limiter", enrollRedeem(http.MethodGet, "/api/v1/devices/enroll"), 1, "full"),
+			step("the redemption route is limited", enrollRedeem(http.MethodPost, "/api/v1/devices/enroll"), 1, "full"),
+			step("the mint route is limited", enrollCode(http.MethodPost), 1, "full"),
+			step("limiting does not look at the method of the mint route", enrollCode(http.MethodGet), 1, "full"),
+			step("a redemption with a query string is limited", enrollRedeem(http.MethodPost, "/api/v1/devices/enroll?x=1"), 1, "full"),
+			step("/mcp shares the enrollment bucket", unauthMCP(nil), 1, "full"),
+			step("the local approval API shares the enrollment bucket", localApprovals(http.MethodGet, "/api/v1/local/approvals"), 1, "full"),
+			step("the device approval API shares the enrollment bucket", deviceApprovals(http.MethodGet, "/api/v1/approvals"), 1, "full"),
+			step("the redemption route has no subtree: a trailing slash is the mux 404 and is not limited", enrollRedeem(http.MethodPost, "/api/v1/devices/enroll/"), 1, "full"),
+			step("the mint route has no subtree either", stackRequest{Method: http.MethodPost, Path: "/api/v1/devices/enroll-code/"}, 1, "full"),
+			step("a sibling prefix is no enrollment route and is not limited", enrollRedeem(http.MethodPost, "/api/v1/devices/enrollx"), 1, "full"),
+			step("a path the mux cleans is redirected before the limiter", enrollRedeem(http.MethodPost, "//api/v1/devices/enroll"), 1, "full"),
+			step("health stays reachable", stackRequest{Method: http.MethodGet, Path: "/health"}, 1, "status"),
+		}},
+		{name: "zero_disables_the_limiter", limit: 0, enroll: true, steps: []plannedStep{
 			step("70 requests exceed the default of 60 yet none is limited", unauthMCP(nil), 70, "full"),
 			step("the local approval API is not limited either", localApprovals(http.MethodGet, "/api/v1/local/approvals"), 70, "full"),
 			step("the device approval API is not limited either", deviceApprovals(http.MethodGet, "/api/v1/approvals"), 70, "full"),
+			step("the device enrollment redemption is not limited either", enrollRedeem(http.MethodPost, "/api/v1/devices/enroll"), 70, "full"),
+			step("the pairing-code mint is not limited either", enrollCode(http.MethodPost), 70, "full"),
 		}},
 		{name: "negative_limit_falls_back_to_sixty", limit: -5, steps: []plannedStep{
 			step("60 requests are served", unauthMCP(nil), 60, "full"),
@@ -368,7 +412,7 @@ func stackScenarios(scratch string) []stackScenario {
 			step("third request, yet another X-Forwarded-For, shares the socket-address bucket", unauthMCP(map[string]string{"X-Forwarded-For": "10.0.0.3"}), 1, "full"),
 			step("X-Real-IP does not help either", unauthMCP(map[string]string{"X-Real-IP": "10.0.0.4"}), 1, "full"),
 		}},
-		{name: "trusted_proxy_keys_by_forwarded_for_then_real_ip", limit: 2, trusted: loop, steps: []plannedStep{
+		{name: "trusted_proxy_keys_by_forwarded_for_then_real_ip", limit: 2, trusted: loop, enroll: true, steps: []plannedStep{
 			step("10.0.0.1 slot 1", unauthMCP(map[string]string{"X-Forwarded-For": "10.0.0.1"}), 1, "full"),
 			step("only the first X-Forwarded-For element is the key: 10.0.0.1 slot 2", unauthMCP(map[string]string{"X-Forwarded-For": "10.0.0.1, 192.0.2.9"}), 1, "full"),
 			step("10.0.0.1 is exhausted", unauthMCP(map[string]string{"X-Forwarded-For": "10.0.0.1"}), 1, "full"),
@@ -391,6 +435,12 @@ func stackScenarios(scratch string) []stackScenario {
 			step("a device decision for another forwarded client has its own bucket, slot 1", stackRequest{Method: http.MethodPost, Path: "/api/v1/approvals/x/approve", Headers: map[string]string{"X-Forwarded-For": "10.0.0.7"}}, 1, "full"),
 			step("a device decision for that forwarded client, slot 2", stackRequest{Method: http.MethodPost, Path: "/api/v1/approvals/x/approve", Headers: map[string]string{"X-Forwarded-For": "10.0.0.7"}}, 1, "full"),
 			step("a device decision for that forwarded client is exhausted", stackRequest{Method: http.MethodPost, Path: "/api/v1/approvals/x/approve", Headers: map[string]string{"X-Forwarded-For": "10.0.0.7"}}, 1, "full"),
+			step("the device enrollment redemption honours the same key: the socket address is exhausted", enrollRedeem(http.MethodPost, "/api/v1/devices/enroll"), 1, "full"),
+			step("the pairing-code mint honours the same key: the socket address is exhausted", enrollCode(http.MethodPost), 1, "full"),
+			step("a redemption for the exhausted forwarded client is limited", stackRequest{Method: http.MethodPost, Path: "/api/v1/devices/enroll", Headers: map[string]string{"X-Forwarded-For": "10.0.0.7"}, Body: "{}"}, 1, "full"),
+			step("a redemption for a fresh forwarded client has its own bucket, slot 1", stackRequest{Method: http.MethodPost, Path: "/api/v1/devices/enroll", Headers: map[string]string{"X-Forwarded-For": "10.0.0.8"}, Body: "{}"}, 1, "full"),
+			step("a mint for that forwarded client shares its bucket, slot 2", stackRequest{Method: http.MethodPost, Path: "/api/v1/devices/enroll-code", Headers: map[string]string{"X-Forwarded-For": "10.0.0.8"}}, 1, "full"),
+			step("a redemption for that forwarded client is exhausted", stackRequest{Method: http.MethodPost, Path: "/api/v1/devices/enroll", Headers: map[string]string{"X-Forwarded-For": "10.0.0.8"}, Body: "{}"}, 1, "full"),
 		}},
 		{name: "trusted_cidr_with_invalid_entries_ignored", limit: 1, trusted: []string{"bogus", "127.0.0.0/8", "10.0.0.0/33"}, steps: []plannedStep{
 			step("10.1.1.1 slot 1", unauthMCP(map[string]string{"X-Forwarded-For": "10.1.1.1"}), 1, "full"),
@@ -417,14 +467,14 @@ func stackScenarios(scratch string) []stackScenario {
 		}
 		cfg, err := config.LoadFromBytes([]byte(yaml))
 		check(err)
-		sc := stackScenario{Name: p.name, ConfigYAML: yaml, EffectiveRateLimit: cfg.MCP.RateLimit}
-		sc.Steps = runStack(scratch, p.name, cfg, p.steps)
+		sc := stackScenario{Name: p.name, ConfigYAML: yaml, EffectiveRateLimit: cfg.MCP.RateLimit, Enroll: p.enroll}
+		sc.Steps = runStack(scratch, p.name, cfg, p.enroll, p.steps)
 		scenarios = append(scenarios, sc)
 	}
 	return scenarios
 }
 
-func runStack(scratch, name string, cfg *config.Config, steps []plannedStep) []stackStep {
+func runStack(scratch, name string, cfg *config.Config, enroll bool, steps []plannedStep) []stackStep {
 	vaultDir, err := os.MkdirTemp(scratch, "stack-")
 	check(err)
 	registry := auth.NewTokenRegistry(auth.TokenRegistryFilePath(vaultDir))
@@ -439,11 +489,22 @@ func runStack(scratch, name string, cfg *config.Config, steps []plannedStep) []s
 	check(err)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
+	options := []serverbootstrap.HTTPServerOption{
+		serverbootstrap.WithApprovalAPI(approval.NewHTTPHandler(approval.NewQueue(), deviceSessions)),
+		serverbootstrap.WithLocalApprovalAPI(approval.NewLocalHTTPHandler(approval.NewQueue(), []byte("fixture-enroll-secret"), mcputil.IsLoopbackHost)),
+	}
+	if enroll {
+		// The wiring of cmd/mcp.RunHTTPServerWithApproval: one shared code
+		// store behind both enrollment routes.
+		codes := pairing.NewTokenStore()
+		options = append(options,
+			serverbootstrap.WithDeviceEnrollAPI(approval.NewEnrollHTTPHandler(codes, deviceSessions)),
+			serverbootstrap.WithDeviceEnrollCodeAPI(approval.NewEnrollCodeHTTPHandler(codes, "fixture-fingerprint", mcputil.IsLoopbackHost, []byte("fixture-enroll-secret"))))
+	}
 	go func() {
 		done <- serverbootstrap.RunHTTPServerOnListener(ctx, listener, vault, vaultDir, "fixture",
 			func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error) { return &mcpserver.Server{}, nil },
-			serverbootstrap.WithApprovalAPI(approval.NewHTTPHandler(approval.NewQueue(), deviceSessions)),
-			serverbootstrap.WithLocalApprovalAPI(approval.NewLocalHTTPHandler(approval.NewQueue(), []byte("fixture-enroll-secret"), mcputil.IsLoopbackHost)))
+			options...)
 	}()
 	defer func() {
 		cancel()

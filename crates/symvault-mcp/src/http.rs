@@ -11,6 +11,9 @@ pub use shutdown::HttpShutdown;
 use crate::approval::{
     ApprovalQueue, handle_device_request, handle_local_request, is_device_route, is_local_route,
 };
+use crate::enroll::{
+    PairingCodes, handle_enroll_code_request, handle_enroll_request, is_enroll_route,
+};
 use crate::ratelimit::{REFUSED_BODY, RateLimiter, remote_addr_string};
 use crate::{Error, Message, ProtocolHandler, error_code, is_supported_protocol_version};
 use rustls::{
@@ -421,10 +424,17 @@ pub enum OAuthConsentDecision {
 }
 
 #[derive(Clone)]
+struct DeviceEnrollment {
+    codes: Arc<PairingCodes>,
+    fingerprint: String,
+}
+
+#[derive(Clone)]
 pub struct LocalApprovalApi {
     queue: Arc<ApprovalQueue>,
     secret: Vec<u8>,
     device_sessions: Option<Arc<symvault_sync::DeviceSessionStore>>,
+    enrollment: Option<DeviceEnrollment>,
     active_mcp_requests: Arc<AtomicUsize>,
 }
 
@@ -434,8 +444,34 @@ impl LocalApprovalApi {
             queue,
             secret,
             device_sessions: None,
+            enrollment: None,
             active_mcp_requests: Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    /// Mounts Go's device enrollment routes (`/api/v1/devices/enroll-code`
+    /// and `/api/v1/devices/enroll`) beside the approval API. `codes` is the
+    /// process-wide pairing-code store; `fingerprint` is the SHA-256 of the
+    /// certificate a pairing QR code pins (empty when TLS is unavailable,
+    /// which refuses every mint with 503). Enrolment issues sessions into the
+    /// store given to [`Self::with_device_sessions`], so the routes stay
+    /// unmounted (404, unlimited) until that store is set too.
+    #[must_use]
+    pub fn with_device_enrollment(
+        mut self,
+        codes: Arc<PairingCodes>,
+        fingerprint: impl Into<String>,
+    ) -> Self {
+        self.enrollment = Some(DeviceEnrollment {
+            codes,
+            fingerprint: fingerprint.into(),
+        });
+        self
+    }
+
+    /// The enrollment routes' state, when they are mounted.
+    fn enrollment_routes(&self) -> Option<(&DeviceEnrollment, &symvault_sync::DeviceSessionStore)> {
+        Some((self.enrollment.as_ref()?, self.device_sessions.as_deref()?))
     }
 
     /// Mounts Go's device-token approval transport (`/api/v1/approvals`)
@@ -1424,13 +1460,15 @@ where
     let response_version = request.http_version.as_str();
     // Go wraps exactly these mux entries in `RateLimiterMiddleware`, outside
     // the Origin, bearer and body checks: `/mcp`, the local approval API and
-    // (only when mounted) the device approval API. A refused request is
-    // answered before any of them runs.
+    // (only when mounted) the device approval API and the two device
+    // enrollment routes. A refused request is answered before any of them
+    // runs.
     let request_path = request.path.split('?').next().unwrap_or_default();
     let limited_route = request_path == "/mcp"
         || local_approval.is_some_and(|api| {
             is_local_route(request_path)
                 || (api.device_sessions.is_some() && is_device_route(request_path))
+                || (api.enrollment_routes().is_some() && is_enroll_route(request_path))
         });
     if let Some(limiter) = rate_limiter
         && limited_route
@@ -1498,6 +1536,41 @@ where
                 status: approval_response.status,
                 headers: vec![("Content-Type", approval_response.content_type)],
                 body: approval_response.body,
+            },
+            response_version,
+            keep_alive,
+            false,
+        )?;
+        return Ok(keep_alive);
+    }
+    if let Some(local_approval) = local_approval
+        && let Some((enrollment, sessions)) = local_approval.enrollment_routes()
+        && let Some(enroll_response) = handle_enroll_code_request(
+            &enrollment.codes,
+            &enrollment.fingerprint,
+            &local_approval.secret,
+            stream.peer_addr()?.ip(),
+            &request.method,
+            &request.path,
+            &request.enroll_timestamp,
+            &request.enroll_proof,
+        )
+        .or_else(|| {
+            handle_enroll_request(
+                &enrollment.codes,
+                sessions,
+                &request.method,
+                &request.path,
+                &request.body,
+            )
+        })
+    {
+        write_http_response(
+            stream,
+            HttpResponse {
+                status: enroll_response.status,
+                headers: vec![("Content-Type", enroll_response.content_type)],
+                body: enroll_response.body,
             },
             response_version,
             keep_alive,
@@ -3144,6 +3217,8 @@ mod tests {
             .expect("enqueue approval");
         let secret = b"go-contract-secret".to_vec();
         let timestamp = OffsetDateTime::now_utc()
+            .replace_nanosecond(0)
+            .expect("whole second")
             .format(&Rfc3339)
             .expect("format proof timestamp");
         let mut mac = Hmac::<Sha256>::new_from_slice(&secret).expect("HMAC key");
@@ -3236,6 +3311,8 @@ mod tests {
             path: &str,
         ) -> String {
             let timestamp = OffsetDateTime::now_utc()
+                .replace_nanosecond(0)
+                .expect("whole second")
                 .format(&Rfc3339)
                 .expect("format proof timestamp");
             let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC key");
@@ -3386,6 +3463,8 @@ mod tests {
             path: &str,
         ) -> String {
             let timestamp = OffsetDateTime::now_utc()
+                .replace_nanosecond(0)
+                .expect("whole second")
                 .format(&Rfc3339)
                 .expect("format proof timestamp");
             let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC key");

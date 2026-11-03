@@ -502,6 +502,22 @@ device-approval-fixtures-check:
 device-approval-replay:
 	$(CARGO) test -p symvault-mcp --test device_approvals_replay --locked
 
+# PAIRING-001 / APPROVAL-001 server-side device enrollment routes
+# (/api/v1/devices/enroll-code and /enroll). deviceenrollgen records the real Go
+# handlers over the real pairing.TokenStore and DeviceSessionStore behind Go's
+# ServeMux (about 4 s of real-clock pauses); the replay drives the Rust MCP HTTP
+# server with the same scenarios and needs no Go. Throttling of both routes is
+# recorded by http002ratelimitgen (mcp-http-ratelimit-differential).
+.PHONY: device-enroll-fixtures-generate device-enroll-fixtures-check device-enroll-replay
+device-enroll-fixtures-generate:
+	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/deviceenrollgen
+
+device-enroll-fixtures-check:
+	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/deviceenrollgen --check
+
+device-enroll-replay:
+	$(CARGO) test -p symvault-mcp --test device_enroll_replay --locked
+
 .PHONY: device-list-differential
 DEVICE_LIST_REPORT ?= $(CARGO_TARGET_DIR)/device-list-differential-$(shell date -u +%Y%m%dT%H%M%SZ).json
 device-list-differential:
@@ -1147,10 +1163,13 @@ AREA_KDF_MIGRATION_TESTS := 10
 # scope boundary, sharing corpus and clipboard auto-clear replays), 354 on
 # local/device-approvals (device-token approvals replay: 4 tests, plus 4 unit
 # tests in approval.rs), 369 at local/integ5 after local/http-ratelimit (limiter
-# unit tests and the 5 http_ratelimit tests; measured: 52 result lines, 0 failed); the
+# unit tests and the 5 http_ratelimit tests; measured: 52 result lines, 0 failed),
+# 385 on local/device-enroll (device enrollment routes: 11 unit tests in
+# enroll.rs and the 5 device_enroll_replay tests; measured: 53 result lines,
+# 385 passed, 0 failed); the
 # gate asserts the real count, so a shrunken run still fails. Raise it together
 # with the new tests (and the workflows' constant when they run again).
-AREA_MCP_TEST_COUNT := 369
+AREA_MCP_TEST_COUNT := 385
 
 .PHONY: area-oracle-runner
 area-oracle-runner:
