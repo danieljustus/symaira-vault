@@ -49,10 +49,26 @@ TOKEN_MODES = ['none', 'excluding', 'including']
 # (timestamps, earlier denials) cannot be frozen byte for byte. Their frozen
 # value is the mask below; the replay applies the identical mask to Rust.
 MASKS = {
-    'generate_password': ('random_password', lambda text: {'masked': 'random_password', 'length': len(text)}),
+    'generate_password': ('random_password', lambda text: {'masked': 'random_password', 'length': len(undo_mcp_sanitizer(text))}),
     # normalize() already turned the JSON array text into {'json_text': [...]}.
     'symaira_audit_self': ('audit_rows', lambda text: {'masked': 'audit_rows', 'json_array': isinstance(text, dict) and isinstance(text.get('json_text'), list)}),
 }
+
+
+def undo_mcp_sanitizer(text):
+    """Inverts the only rewrites the MCP output sanitizer can apply to a
+    generated password (internal/mcp/server/render.go sanitizeBytes, mirrored by
+    crates/symvault-mcp/src/render.rs): `</name...>` -> `</ name... >` and
+    `-->` -> `-- >`. The password charset has neither a space nor a control or
+    non-ASCII character, so every space comes from the sanitizer and the original
+    length is recoverable exactly. Without this, about 1 password in 8,700
+    (`-->` or `</x...>` among 16 characters of an 82-character alphabet) is
+    longer than 16 and the masked length differs between two otherwise identical
+    observations. Any other space or character stays in the measured text, so a
+    wrong-length password is still a visible difference."""
+    if not isinstance(text, str):
+        return text
+    return re.sub(r'</ ([^ >]+) >', r'</\1>', text).replace('-- >', '-->')
 
 
 def host_goos():
@@ -107,6 +123,16 @@ def mask(tool, response):
     return response
 
 
+def differing_rows(first, second, limit=600):
+    """The rows two observations of one profile disagree on, as readable text,
+    so a nondeterminism failure names the tool, the token mode and both values
+    instead of only the tool/mode pair."""
+    return [{'tool': a['tool'], 'token': a['token'],
+             'first': json.dumps(a['response'], ensure_ascii=False)[:limit],
+             'second': json.dumps(b['response'], ensure_ascii=False)[:limit]}
+            for a, b in zip(first, second) if a != b]
+
+
 def record(go, seed, base, tools, receipt):
     profiles, cases = [], []
     for name, profile in process.profiles():
@@ -135,8 +161,7 @@ def record(go, seed, base, tools, receipt):
             assert len(rows) == len(tools) * len(TOKEN_MODES), (name, 'every tool x token mode executed')
             observed.append(rows)
         if observed[0] != observed[1]:
-            unstable = [(a['tool'], a['token']) for a, b in zip(*observed) if a != b]
-            receipt.setdefault('nondeterministic', {})[name] = unstable
+            receipt.setdefault('nondeterministic', {})[name] = differing_rows(*observed)
         profiles.append({'name': name, 'agent': agent, 'builtin': builtin or None,
                          'overlay': profile, 'config_yaml': config_yaml,
                          'loaded_go_profile': json.loads(loaded)})

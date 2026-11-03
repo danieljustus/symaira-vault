@@ -2061,6 +2061,7 @@ policy-context-differential: policy-context-fixtures-check
 
 .PHONY: mcp-authz-fixtures-check mcp-authz-differential
 mcp-authz-fixtures-check:
+	python3 -B scripts/rust-port/test_mcp_authz_matrix.py
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_authz_matrix.py --check
 
 mcp-authz-differential: mcp-authz-fixtures-check
