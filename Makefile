@@ -1226,24 +1226,39 @@ worktree-prune-check:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_worktree_remove.py
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/check_worktree_prune.py
 
+# Committed Go observations (scripts/rust-port/fixtures/go-observations/<contract>.<goos>.json).
+# The http-*/mcp-* process contracts below replay them and run Rust only, with no Go on the PATH.
+# This is the ONE target that needs Go: it builds the pinned Go oracle and re-records the Go half
+# (GOTOOLCHAIN=go1.26.6; run once per OS, on Linux inside the gate image). Two consecutive runs are
+# byte-identical; commit the changed files.
+GO_OBSERVATION_CAPTURES := \
+	http_framing_contract.py http_head_contract.py http_origin_contract.py http_slow_peer_contract.py \
+	http_timeout_contract.py
+.PHONY: go-observations-capture-http
+go-observations-capture-http:
+	@for script in $(GO_OBSERVATION_CAPTURES); do \
+		echo "capture-go: $$script"; \
+		$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/$$script --capture-go $(CAPTURE_ARGS) || exit 1; \
+	done
+
 http-framing-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_framing_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/http_framing_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-framing.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-framing.json" --profile http-framing
 
 http-head-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_head_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/http_head_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-head.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-head.json" --profile http-head
 
 http-origin-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_origin_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/http_origin_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-origin.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-origin.json" --profile http-origin
 
@@ -1251,14 +1266,14 @@ http-origin-contract:
 http-slow-peer-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_slow_peer_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/http_slow_peer_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-read-deadlines.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-read-deadlines.json" --profile http-read-deadlines
 
 http-timeout-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_timeout_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/http_timeout_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-timeouts.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-timeouts.json" --profile http-timeouts
 

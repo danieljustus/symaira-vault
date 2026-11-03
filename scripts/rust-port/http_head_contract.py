@@ -17,7 +17,15 @@ from urllib.parse import urlencode
 sys.dont_write_bytecode = True
 from http_oauth_contract import CHALLENGE, HEX32, PASSPHRASE, PROBE, REDIRECT, STATE, Server, consent, headers
 from http_process_contract import SECRET, request
-from mcp_process_contract import ORACLE, ROOT, checked, oracle_build_timeout, remove_worktree, inventory, isolated, vault_snapshot
+from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, capture_arguments_ok, checked, go_capture_session,
+                                  inventory, isolated, load_go_observations, pinned_seed, provenance, replay_seed,
+                                  save_go_observations, scrub_parts, vault_snapshot)
+
+CONTRACT='http-head'
+PORT=28102  # fixed so request bytes (Host header) are identical in capture and replay
+NORMALIZATION=['fixed loopback port','seed vault and tokens pinned in the file','Date header, log timestamps, peer ports',
+               'per-run OAuth entropy (client id, issued-at, consent flow) replaced by same-length placeholders; the 13 compared rows and the pipeline stay byte-exact']
+ENTROPY_PARTS=('registration','client_id','client_snapshot','authorization_heads','browser_control')
 
 
 def parse_response(raw):
@@ -177,12 +185,37 @@ def observe(binary, home, port, tokens, result):
         server.close()
 
 
+def capture(args):
+    """Go half only: build the oracle, observe it, write the committed observations."""
+    with go_capture_session(CONTRACT, args, {'seed': ('httpheadseed', PROBE.read_bytes())}) as session:
+        base = session['base']
+        tokens = pinned_seed(session, 'main', base / 'seed',
+                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
+        snapshot = vault_snapshot(base / 'seed/vault')
+        result = dict(implementation='go', rows=[], processes=[], pipeline={}, authorization_heads=[])
+        home = base / 'go'
+        home.mkdir()
+        shutil.copytree(base / 'seed/vault', home / 'vault')
+        assert vault_snapshot(home / 'vault') == snapshot
+        observe(session['go'], home, PORT, tokens, result)
+        for row in result['authorization_heads']:
+            row['request_base64'] = ''  # 512 near-identical requests; only the status/header multiset is compared
+        scrub_parts(result, ENTROPY_PARTS)
+        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()),
+                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'], go=result)
+        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
+    print(f'CAPTURED: {len(result["rows"])} Go HEAD responses -> {path}')
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rust', type=Path, required=True)
-    parser.add_argument('--receipt', type=Path, required=True)
+    add_capture_arguments(parser, rust_required=False)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
+    if capture_arguments_ok(args):
+        return capture(args)
+    document = load_go_observations(CONTRACT, {})
+    recorded = document['data']
     clean = not checked(['git','status','--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust = args.rust.resolve()
@@ -192,59 +225,41 @@ def main():
     receipt = dict(passed=False, candidate_commit=checked(['git','rev-parse','HEAD']).decode().strip(),
                    candidate_worktree_clean=clean, candidate_sources=inventory(paths,ROOT), native_os=platform.system(),
                    architecture=platform.machine(), rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(), oracle_commit=ORACLE,
-                   go=dict(implementation='go', rows=[], processes=[], pipeline={}, authorization_heads=[]),
-                   rust=dict(implementation='rust', rows=[], processes=[], pipeline={}, authorization_heads=[]), differences=[])
+                   go=recorded['go'],
+                   rust=dict(implementation='rust', rows=[], processes=[], pipeline={}, authorization_heads=[]), differences=[],
+                   go_observations=provenance(document), port=recorded['port'], fixture_snapshot=recorded['fixture_snapshot'],
+                   **recorded['info'])
     try:
         with tempfile.TemporaryDirectory(prefix='symvault-http-head-') as raw:
-            base, tree = Path(raw), Path(raw)/'oracle'
-            checked(['git','worktree','add','--detach',tree,ORACLE])
-            try:
-                files = checked(['git','ls-tree','-r','--name-only',ORACLE]).decode().splitlines()
-                sources = sorted(p for p in files if p in {'go.mod','go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
-                embedded = sorted(p for p in files if p.startswith('internal/mcp/apitemplates/builtin/'))
-                assert len(embedded)==17
-                receipt.update(oracle_sources=inventory(sources,tree), oracle_embedded=inventory(embedded,tree), seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest())
-                helper = tree/'scripts/rust-port/cmd/httpheadseed'
-                helper.mkdir()
-                (helper/'main.go').write_bytes(PROBE.read_bytes())
-                suffix = '.exe' if os.name=='nt' else ''
-                go,seed = base/('go-cli'+suffix),base/('go-seed'+suffix)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree,timeout=oracle_build_timeout())
-                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpheadseed'],tree,timeout=oracle_build_timeout())
-                receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
-                seed_home=base/'seed';seed_home.mkdir()
-                tokens=json.loads(checked([seed,'--root',seed_home/'vault'],seed_home,isolated(seed_home)))
-                snapshot=vault_snapshot(seed_home/'vault');receipt['fixture_snapshot']=snapshot
-                with socket.socket() as selection:
-                    selection.bind(('127.0.0.1',0));port=selection.getsockname()[1]
-                receipt['port']=port
-                for implementation,binary in [('go',go),('rust',rust)]:
-                    home=base/implementation;home.mkdir();shutil.copytree(seed_home/'vault',home/'vault')
-                    assert vault_snapshot(home/'vault')==snapshot
-                    observe(binary,home,port,tokens,receipt[implementation])
-                for a,b in zip(receipt['go']['rows'],receipt['rust']['rows'],strict=True):
-                    assert a['case']==b['case'] and a['request_sha256']==b['request_sha256']
-                    assert not base64.b64decode(a['response']['body_base64']) and not base64.b64decode(b['response']['body_base64']), 'HEAD response must not carry entity bytes'
-                    if any(a['response'][k]!=b['response'][k] for k in ['status_line','headers_without_date','body_base64']):
-                        receipt['differences'].append(dict(case=a['case'],go=a['response'],rust=b['response']))
-                assert len(receipt['go']['rows'])==len(receipt['rust']['rows'])==13
-                assert all(len(receipt[k]['authorization_heads'])==512 for k in ['go','rust'])
-                assert receipt['go']['client_id'] != receipt['rust']['client_id'], 'independent actual issuer entropy'
-                assert receipt['go']['pipeline']['request_sha256']==receipt['rust']['pipeline']['request_sha256']
-                for a,b in zip(receipt['go']['pipeline']['responses'],receipt['rust']['pipeline']['responses'],strict=True):
-                    assert all(a[k]==b[k] for k in ['status_line','headers_without_date','body_base64'])
-                assert not receipt['differences']
-                assert inventory(paths,ROOT)==receipt['candidate_sources']
-                assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
-                assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256']
-                receipt['candidate_worktree_clean_at_end']=not checked(['git','status','--porcelain=v1']).strip()
-                assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
-                receipt['passed']=True
-            finally:
-                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
+            base = Path(raw)
+            seed_home = base/'seed'
+            tokens = replay_seed(recorded, 'main', seed_home)
+            snapshot = vault_snapshot(seed_home/'vault')
+            assert snapshot == receipt['fixture_snapshot'], 'recorded seed vault bytes changed'
+            home=base/'rust';home.mkdir();shutil.copytree(seed_home/'vault',home/'vault')
+            assert vault_snapshot(home/'vault')==snapshot
+            observe(rust,home,receipt['port'],tokens,receipt['rust'])
+            for a,b in zip(receipt['go']['rows'],receipt['rust']['rows'],strict=True):
+                assert a['case']==b['case'] and a['request_sha256']==b['request_sha256']
+                assert not base64.b64decode(a['response']['body_base64']) and not base64.b64decode(b['response']['body_base64']), 'HEAD response must not carry entity bytes'
+                if any(a['response'][k]!=b['response'][k] for k in ['status_line','headers_without_date','body_base64']):
+                    receipt['differences'].append(dict(case=a['case'],go=a['response'],rust=b['response']))
+            assert len(receipt['go']['rows'])==len(receipt['rust']['rows'])==13
+            assert all(len(receipt[k]['authorization_heads'])==512 for k in ['go','rust'])
+            assert receipt['go']['client_id'] != receipt['rust']['client_id'], 'independent actual issuer entropy'
+            assert receipt['go']['pipeline']['request_sha256']==receipt['rust']['pipeline']['request_sha256']
+            for a,b in zip(receipt['go']['pipeline']['responses'],receipt['rust']['pipeline']['responses'],strict=True):
+                assert all(a[k]==b[k] for k in ['status_line','headers_without_date','body_base64'])
+            assert not receipt['differences']
+            assert inventory(paths,ROOT)==receipt['candidate_sources']
+            assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
+            assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256']
+            receipt['candidate_worktree_clean_at_end']=not checked(['git','status','--porcelain=v1']).strip()
+            assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
+            receipt['passed']=True
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
-    print(f"PASS: 13 HEAD responses, one HEAD/GET pipeline and 512 authorization HEADs with a real browser recovery per implementation on {platform.system()}")
+    print(f"PASS: 13 HEAD responses, one HEAD/GET pipeline and 512 authorization HEADs with a real browser recovery per implementation on {platform.system()} (Go side replayed from {receipt['go_observations']['path']})")
 
 
 if __name__=='__main__':

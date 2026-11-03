@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real native MCP CLI/profile discovery and call-time authorization comparison."""
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -311,6 +312,350 @@ def vault_snapshot(root):
             data = path.read_bytes()
             result[path.relative_to(root).as_posix()] = {'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
     return result
+
+
+# ---------------------------------------------------------------------------
+# Committed Go observations (capture once with Go, replay without Go).
+#
+# Every http_*/mcp process contract used to build the Go oracle from its pinned
+# commit and run it next to the Rust binary. The Go half is now recorded once
+# (`--capture-go`, Go required, no Rust binary needed) into
+# scripts/rust-port/fixtures/go-observations/<contract>.<goos>.json and the
+# default replay mode runs only Rust against those observations with the
+# unchanged comparison logic. A missing, foreign-OS, foreign-oracle or
+# foreign-argument file is a failure, never a skip.
+#
+# Normalisation before recording (so two captures are byte-identical): ports are
+# fixed per contract, the encrypted seed vault / TLS identities are pinned in the
+# file (a re-capture reuses them; --reseed regenerates), measured wall-clock
+# values are replaced by the midpoint of the bounds the comparison already
+# asserts (the real value is asserted inside those bounds at capture time, see
+# bounded()), and per-run entropy that the comparison never reads byte-for-byte
+# is replaced by length-preserving deterministic placeholders (stable_entropy()).
+# ---------------------------------------------------------------------------
+GO_OBS_DIR = Path(os.environ.get('SYMVAULT_GO_OBSERVATIONS_DIR') or ROOT / 'scripts/rust-port/fixtures/go-observations')
+GO_OBS_SCHEMA = 1
+
+
+def native_goos():
+    return {'Darwin': 'darwin', 'Linux': 'linux', 'Windows': 'windows'}[platform.system()]
+
+
+def go_obs_path(contract, goos=None):
+    return GO_OBS_DIR / f'{contract}.{goos or native_goos()}.json'
+
+
+def canonical_json(value):
+    return json.dumps(value, indent=1, sort_keys=True, ensure_ascii=True) + '\n'
+
+
+DATE_HEADER = re.compile(rb'(?i)(\r?\n|^)(date: )[A-Za-z]{3}, \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT')
+LOG_TIMESTAMP = re.compile(rb'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}')
+PEER_PORT = re.compile(rb'(remote=\[?(?:127\.0\.0\.1|::1)\]?:)\d{5}')
+EPOCH_DATE = 'Thu, 01 Jan 1970 00:00:00 GMT'
+LARGE_REQUEST_BASE64 = 65536
+
+
+def _normalize_bytes(raw):
+    raw = DATE_HEADER.sub(lambda m: m[1] + m[2] + EPOCH_DATE.encode(), raw)
+    raw = LOG_TIMESTAMP.sub(b'1970/01/01 00:00:00', raw)
+    return PEER_PORT.sub(lambda m: m[1] + b'00000', raw)
+
+
+def normalize_go_record(value):
+    """Strip the per-run bytes no comparison reads: Date headers, log timestamps, peer ports.
+
+    Same-length replacements (framing stays valid). Request bodies above 64 KiB are not stored: the
+    driver regenerates them and the comparison reads only request_sha256.
+    """
+    import base64
+    if isinstance(value, (list, tuple)):
+        if len(value) == 2 and isinstance(value[0], str) and value[0].lower() == 'date' and isinstance(value[1], str):
+            return [value[0], EPOCH_DATE]
+        return [normalize_go_record(v) for v in value]
+    if isinstance(value, dict):
+        result = {}
+        for key, item in value.items():
+            if key == 'request_base64' and isinstance(item, str) and len(item) > LARGE_REQUEST_BASE64:
+                result[key] = ''
+            elif key.endswith('_base64') and isinstance(item, str):
+                try:
+                    raw = base64.b64decode(item, validate=True)
+                except Exception:
+                    result[key] = item
+                else:
+                    result[key] = base64.b64encode(_normalize_bytes(raw)).decode()
+            else:
+                result[key] = normalize_go_record(item)
+        return result
+    return value
+
+
+def save_go_observations(contract, data, contract_args, normalization, go_version, oracle=None):
+    """Write the committed Go observations of one contract (canonical, byte-stable)."""
+    data = normalize_go_record(data)
+    document = dict(schema=GO_OBS_SCHEMA, contract=contract, goos=native_goos(), goarch=platform.machine(),
+                    oracle_commit=oracle or ORACLE, go_version=go_version, contract_args=contract_args,
+                    normalization=normalization, data=data)
+    path = go_obs_path(contract)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(canonical_json(document), encoding='utf-8')
+    return path
+
+
+def load_go_observations(contract, contract_args=None, oracle=None, required=True):
+    """Return the committed document; missing/mismatched observations FAIL (never skip)."""
+    path = go_obs_path(contract)
+    if not path.is_file():
+        if not required:
+            return None
+        raise SystemExit(f'FAIL: no committed Go observations for {contract} on {native_goos()}: {path} '
+                         '(run `make go-observations-capture-http` with Go installed, then commit)')
+    raw = path.read_bytes()
+    document = json.loads(raw)
+    assert document.get('schema') == GO_OBS_SCHEMA, (contract, 'observation schema')
+    assert document['contract'] == contract and document['goos'] == native_goos(), (contract, 'observation identity')
+    assert document['oracle_commit'] == (oracle or ORACLE), (contract, 'observation oracle commit')
+    assert contract_args is None or document['contract_args'] == contract_args, (contract, 'observation contract args',
+                                                                                  document['contract_args'], contract_args)
+    assert canonical_json(document).encode() == raw, (contract, 'observation file is not canonical')
+    document['data'] = restore_pairs(document['data'])
+    document['_path'] = str(path)
+    document['_sha256'] = hashlib.sha256(raw).hexdigest()
+    return document
+
+
+PAIR_LISTS = {'headers', 'headers_without_date'}
+
+
+def restore_pairs(value):
+    """JSON turns the live (name, value) header tuples into lists; restore them so == against Rust holds."""
+    if isinstance(value, list):
+        return [restore_pairs(v) for v in value]
+    if isinstance(value, dict):
+        return {k: ([tuple(pair) for pair in v] if k in PAIR_LISTS and isinstance(v, list) and all(isinstance(p, list) and len(p) == 2 for p in v)
+                    else restore_pairs(v)) for k, v in value.items()}
+    return value
+
+
+def provenance(document):
+    return dict(path=Path(document['_path']).relative_to(ROOT).as_posix() if Path(document['_path']).is_relative_to(ROOT) else document['_path'],
+                sha256=document['_sha256'], goos=document['goos'], goarch=document['goarch'],
+                oracle_commit=document['oracle_commit'], go_version=document['go_version'],
+                normalization=document['normalization'])
+
+
+def pack_tree(root):
+    """{relative path: base64 bytes} of every file below root."""
+    import base64
+    return {p.relative_to(root).as_posix(): base64.b64encode(p.read_bytes()).decode()
+            for p in sorted(Path(root).rglob('*')) if p.is_file()}
+
+
+def unpack_tree(packed, root):
+    import base64
+    for name, text in packed.items():
+        target = Path(root) / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(base64.b64decode(text))
+    return Path(root)
+
+
+def bounded(value, lower, upper, what):
+    """Assert a measured value inside the contract's bounds; record the bounds' midpoint."""
+    assert lower <= value <= upper, (what, value, lower, upper)
+    return (lower + upper) / 2
+
+
+def canonical_close(row):
+    """Record a slow peer's terminal state in its canonical form.
+
+    Go races a complete 400 JSON error against a bare close when the absolute read deadline expires,
+    and the peer sees EOF or a reset depending on scheduling. The comparison accepts every one of
+    those outcomes, so the recording is canonicalised to the bare EOF (the verdict was asserted on
+    the real outcome at capture time, before this call).
+    """
+    assert row['peer_terminal_observed'] and not row['forced_client_close']
+    row['received_base64'] = ''
+    row.pop('response', None)
+    row['termination'] = 'actual-empty-eof-or-reset'
+    row['peer_terminal_kind'] = 'eof'
+    row['sender_stop_reason'] = 'write-failed-after-peer-close:BrokenPipeError'
+    return row
+
+
+def redact_path(row, keys, path):
+    """Replace a per-run temp path inside base64 text members."""
+    import base64
+    for key in keys:
+        if row.get(key):
+            row[key] = base64.b64encode(base64.b64decode(row[key]).replace(str(path).encode(), b'<HOME>')).decode()
+    return row
+
+
+def at_least_recorded(value, minimum, what):
+    """Assert a measured lower bound; record the bound itself (the comparison only reads `>=`)."""
+    assert value >= minimum, (what, value, minimum)
+    return minimum
+
+
+EPOCH_FIELD = re.compile(r'("[a-z_]*_at\\?"\s*:\s*)(\d{9,11})')
+ISO_TIMESTAMP = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})')
+TOKEN_ID = re.compile(r'tok-\d{8}-[0-9a-f]{8}')
+
+
+def scrub_parts(record, keys, seen=None):
+    """stable_entropy() on the named members only (deterministic rows stay byte-exact)."""
+    seen = {} if seen is None else seen
+    for key in keys:
+        if key in record:
+            record[key] = stable_entropy(record[key], seen)
+    return record
+
+
+def stable_entropy(value, seen=None):
+    """Replace 32/64-hex entropy by deterministic same-length placeholders.
+
+    Applies to strings and, recursively, to base64 payloads that decode to text. Equal inputs map to
+    equal placeholders (first-seen index), so structural equalities survive.
+    """
+    import base64
+    seen = {} if seen is None else seen
+    hexish = re.compile(r'(?<![0-9a-f])([0-9a-f]{64}|[0-9a-f]{32})(?![0-9a-f])')
+
+    def placeholder(match):
+        token = match.group(1)
+        if token not in seen:
+            seen[token] = hashlib.sha256(f'placeholder-{len(seen)}'.encode()).hexdigest()
+        return seen[token][:len(token)]
+
+    def scrub_text(text):
+        text = EPOCH_FIELD.sub(lambda m: m[1] + '0' * len(m[2]), text)
+        text = ISO_TIMESTAMP.sub('1970-01-01T00:00:00Z', text)
+        text = TOKEN_ID.sub('tok-19700101-00000000', text)
+        return hexish.sub(placeholder, text)
+
+    def walk(item):
+        if isinstance(item, str):
+            return scrub_text(item)
+        if isinstance(item, float):
+            return 0.0
+        if isinstance(item, list):
+            return [walk(v) for v in item]
+        if isinstance(item, dict):
+            return {scrub_text(k): (walk_b64(v) if k.endswith('_base64') and isinstance(v, str) else walk(v)) for k, v in item.items()}
+        return item
+
+    def walk_b64(text):
+        try:
+            raw = base64.b64decode(text, validate=True).decode('utf-8')
+        except Exception:
+            return text
+        return base64.b64encode(scrub_text(raw).encode('utf-8')).decode()
+
+    return walk(value)
+
+
+@contextlib.contextmanager
+def oracle_checkout(reference):
+    """Detached worktree of the pinned oracle commit (capture mode only; needs Git, not Go)."""
+    with tempfile.TemporaryDirectory(prefix='symvault-go-capture-') as raw:
+        tree = Path(raw) / 'oracle'
+        checked(['git', 'worktree', 'add', '--detach', tree, reference])
+        try:
+            yield Path(raw), tree
+        finally:
+            remove_worktree(lambda: checked(['git', 'worktree', 'remove', '--force', tree]), 'oracle worktree')
+
+
+def oracle_inventory(tree, reference):
+    files = checked(['git', 'ls-tree', '-r', '--name-only', reference]).decode().splitlines()
+    sources = sorted(p for p in files if p in {'go.mod', 'go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
+    embedded = sorted(p for p in files if p.startswith('internal/mcp/apitemplates/builtin/'))
+    assert len(embedded) == 17
+    return sources, embedded
+
+
+@contextlib.contextmanager
+def go_capture_session(contract, args, helpers, builder=None, reference=ORACLE, env=None):
+    """Capture mode: build the Go CLI and fixture helpers from the pinned oracle commit.
+
+    helpers: {receipt-name: (cmd-dir, source bytes)}; every helper is written below
+    scripts/rust-port/cmd/<cmd-dir>/main.go of the detached oracle worktree and built.
+    Yields a dict with base, tree, go, helper binaries, prior observations (to reuse the
+    pinned seed vault / identities unless --reseed) and the oracle receipt fields.
+    """
+    prior = None if args.reseed else load_go_observations(contract, required=False)
+    build_env = env
+    with oracle_checkout(reference) as (base, tree):
+        sources, embedded = oracle_inventory(tree, reference)
+        info = dict(oracle_sources=inventory(sources, tree), oracle_embedded=inventory(embedded, tree))
+        suffix = '.exe' if os.name == 'nt' else ''
+        go = base / ('go-cli' + suffix)
+
+        def build(binary, package):
+            if builder is not None:
+                builder(tree, binary, package)
+            else:
+                checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', binary, package], tree, build_env,
+                        timeout=oracle_build_timeout())
+
+        binaries = {}
+        for name, (directory, source) in helpers.items():
+            target = tree / 'scripts/rust-port/cmd' / directory
+            target.mkdir()
+            (target / 'main.go').write_bytes(source)
+            binaries[name] = base / ('go-' + name + suffix)
+        build(go, '.')
+        for name, (directory, _) in helpers.items():
+            build(binaries[name], './scripts/rust-port/cmd/' + directory)
+        info['go_binary_sha256'] = hashlib.sha256(go.read_bytes()).hexdigest()
+        for name, binary in binaries.items():
+            info[name + '_binary_sha256'] = hashlib.sha256(binary.read_bytes()).hexdigest()
+        yield dict(base=base, tree=tree, go=go, helpers=binaries, prior=prior['data'] if prior else None,
+                   info=info, go_version=go_version_of(build_env))
+
+
+def pinned_seed(session, key, seed_home, produce):
+    """Tokens + seed vault for one fixture; a re-capture reuses the pinned bytes (determinism)."""
+    session.setdefault('seeds', {})
+    prior = ((session['prior'] or {}).get('seeds') or {}).get(key)
+    seed_home.mkdir(parents=True, exist_ok=True)
+    if prior:
+        unpack_tree(prior['vault'], seed_home / 'vault')
+        tokens = prior['tokens']
+    else:
+        tokens = produce(seed_home)
+        prior = dict(tokens=tokens, vault=pack_tree(seed_home / 'vault'))
+    session['seeds'][key] = prior
+    return tokens
+
+
+def replay_seed(data, key, seed_home):
+    """Replay counterpart: write the recorded seed vault, return its tokens."""
+    entry = data['seeds'][key]
+    Path(seed_home).mkdir(parents=True, exist_ok=True)
+    unpack_tree(entry['vault'], Path(seed_home) / 'vault')
+    return entry['tokens']
+
+
+def go_version_of(env=None):
+    return subprocess.check_output(['go', 'env', 'GOVERSION'], env=env or os.environ.copy()).decode().strip()
+
+
+def add_capture_arguments(parser, rust_required=True):
+    parser.add_argument('--rust', type=Path, required=rust_required)
+    parser.add_argument('--receipt', type=Path, required=rust_required)
+    parser.add_argument('--capture-go', action='store_true',
+                        help='build/run ONLY the Go oracle and write the committed Go observations (Go required)')
+    parser.add_argument('--reseed', action='store_true',
+                        help='with --capture-go: regenerate the pinned seed vault / identities instead of reusing them')
+
+
+def capture_arguments_ok(args):
+    if not args.capture_go:
+        assert args.rust and args.receipt, '--rust and --receipt are required in replay mode'
+    return args.capture_go
 
 
 # ---------------------------------------------------------------------------
