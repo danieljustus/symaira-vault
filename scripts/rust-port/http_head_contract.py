@@ -28,10 +28,10 @@ def parse_response(raw):
                 body_base64=base64.b64encode(body).decode(), raw_base64=base64.b64encode(raw).decode())
 
 
-def exchange(port, data, retained):
+def exchange(port, data, retained, timeout=5):
     raw = bytearray()
     try:
-        with socket.create_connection(('127.0.0.1', port), timeout=5) as stream:
+        with socket.create_connection(('127.0.0.1', port), timeout=timeout) as stream:
             stream.sendall(data)
             while True:
                 part = stream.recv(4096)

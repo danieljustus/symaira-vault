@@ -80,10 +80,10 @@ class EmptyTLSResponse(ConnectionError):
     """Actual post-handshake EOF with no HTTP application bytes."""
 
 
-def exchange(port,data,tls,row,server_name='localhost',head=False):
+def exchange(port,data,tls,row,server_name='localhost',head=False,timeout=5):
     observed=bytearray()
     try:
-        with socket.create_connection(('127.0.0.1',port),timeout=5) as raw:
+        with socket.create_connection(('127.0.0.1',port),timeout=timeout) as raw:
             with tls.wrap_socket(raw,server_hostname=server_name) as stream:
                 row.update(tls_version=stream.version(),cipher=list(stream.cipher()),
                            server_certificate_sha256=hashlib.sha256(stream.getpeercert(binary_form=True)).hexdigest())

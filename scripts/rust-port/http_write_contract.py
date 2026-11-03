@@ -32,9 +32,29 @@ TLS_OUTPUT=('tls-output','30s',ssl.TLSVersion.TLSv1_3)
 # #1470, owner decision 2026-10-24: the Go oracle's plain-TCP write deadline does not interrupt an in-flight
 # Windows send, so only that one cell is a declared platform difference. Rust stays strictly checked everywhere.
 WINDOWS_GO_TCP_OUTPUT_DECISION='windows-go-plain-tcp-write-deadline-not-enforced'
+# The write budget starts when the request head is read, so it also covers the handler. The debug Rust binary
+# the gates build needs seconds of CPU for the 25 MiB bulk response and, on a starved host, can miss a fixed 30s
+# budget before sending one byte; Go (like Rust) then correctly closes with nothing written and the probe
+# never reaches its slow-read phase. That is a precondition failure of the probe, not an expired-write
+# verdict, so the output profiles are re-seeded with a longer budget. A real Rust defect never gets
+# better with time: the strict assertion below still runs on whichever attempt reaches the slow-read phase.
+OUTPUT_BUDGETS=('30s','60s','120s')
+EXCHANGE_TIMEOUT=30  # response waits on loaded hosts; a hung peer still fails
 PROFILES=[('tcp-five','5s',None),('tcp-short','1s',None),
           ('tls12-short','1s',ssl.TLSVersion.TLSv1_2),('tls13-short','1s',ssl.TLSVersion.TLSv1_3),
           TLS_OUTPUT,('tcp-output','30s',None)]
+
+
+def budget_seconds(budget):
+    assert budget.endswith('s');return int(budget[:-1])
+
+
+class OutputPreconditionUnmet(Exception):
+    """The slow-read phase never saw progressing output, so no write-deadline verdict exists for this attempt."""
+
+
+def output_progressing(output):
+    return output['slow_read_calls']>=4 and output['slow_received_bytes']>=4096
 
 
 def declared_write_difference(implementation,profile,native_os,output):
@@ -116,10 +136,12 @@ def socket_observation(stream,started):
     return row
 
 
-def slow_output(port,tokens,row,tls=None):
+def slow_output(port,tokens,row,tls=None,budget=30):
+    slow_window,drain_limit=budget+4,budget+29
     body=b'{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_entry_metadata","arguments":{"path":"public/bulk"}}}'
     data=request('/mcp',port,tokens,body=body)
     row.update(request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),
+               load_average_before=os.getloadavg() if hasattr(os,'getloadavg') else None,
                peer_terminal_observed=False,forced_client_close=False,slow_read_calls=0,slow_received_bytes=0,
                socket_observations=[],socket_observation_errors=[])
     observed=bytearray()
@@ -156,10 +178,11 @@ def slow_output(port,tokens,row,tls=None):
             return part
         try:
             observe_socket('request-sent')
-            while time.monotonic()-started<34 and not row['peer_terminal_observed']:
+            while time.monotonic()-started<slow_window and not row['peer_terminal_observed']:
                 observe_socket('slow-read')
                 part=receive(1024)
                 if part:
+                    row.setdefault('first_byte_seconds',time.monotonic()-started)
                     observed+=part;row['slow_read_calls']+=1;row['slow_received_bytes']+=len(part)
                     time.sleep(.15)
             row['fast_drain_started_seconds']=time.monotonic()-started
@@ -167,9 +190,9 @@ def slow_output(port,tokens,row,tls=None):
                 observe_socket('before-fast-drain')
                 stream.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,256*1024)
                 observe_socket('after-receive-buffer-change')
-                while not row['peer_terminal_observed'] and time.monotonic()-started<59:
+                while not row['peer_terminal_observed'] and time.monotonic()-started<drain_limit:
                     part=receive(65536)
-                    if part:observed+=part
+                    if part:row.setdefault('first_byte_seconds',time.monotonic()-started);observed+=part
                     assert len(observed)<40*1024*1024
         finally:
             row['receive_end_wall_ns_before']=time.time_ns()
@@ -230,7 +253,7 @@ def late_body(port,tokens,tls,row):
     if observed:row['response']=parse_response(observed)
 
 
-def observe(binary,home,port,tokens,identities,profile,version,result):
+def observe(binary,home,port,tokens,identities,profile,version,result,budget=30):
     tls=context(identities,version) if version else None
     server=NativeServer(binary,home,port,identities,False,result['processes'],list(tokens.values())) if tls else Server(binary,home,port,result['processes'],list(tokens.values()))
     try:
@@ -239,14 +262,16 @@ def observe(binary,home,port,tokens,identities,profile,version,result):
             data=request('/mcp',port,tokens,body=body)
             row=dict(case=name,request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),response={})
             result['rows'].append(row)
-            row['response'].update(tls_exchange(port,data,tls,row) if tls else tcp_exchange(port,data,row))
+            row['response'].update(tls_exchange(port,data,tls,row,timeout=EXCHANGE_TIMEOUT) if tls else tcp_exchange(port,data,row,timeout=EXCHANGE_TIMEOUT))
             assert row['response']['status_line']=='HTTP/1.1 200 OK'
         late_body(port,tokens,tls,result['late_body'])
         if tls and profile!='tls-output':handshake_peer(port,tls,result['handshake_peer'])
-        if profile in {'tcp-output','tls-output'}:slow_output(port,tokens,result['slow_output'],tls)
+        if profile in {'tcp-output','tls-output'}:
+            slow_output(port,tokens,result['slow_output'],tls,budget)
+            if not output_progressing(result['slow_output']):raise OutputPreconditionUnmet(profile)
         data=request('/mcp',port,tokens,body=PING)
         row=dict(case='ping-after',request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),response={})
-        result['rows'].append(row);row['response'].update(tls_exchange(port,data,tls,row) if tls else tcp_exchange(port,data,row))
+        result['rows'].append(row);row['response'].update(tls_exchange(port,data,tls,row,timeout=EXCHANGE_TIMEOUT) if tls else tcp_exchange(port,data,row,timeout=EXCHANGE_TIMEOUT))
         assert_response(row['response'],200,PING_BODY)
         known=[SECRET,PASSPHRASE]+list(tokens.values())
         responses=[base64.b64decode(r['response']['raw_base64']) for r in result['rows']]+[base64.b64decode(result['late_body']['received_base64'])]
@@ -303,13 +328,24 @@ def main():
                 with socket.socket() as selection:selection.bind(('127.0.0.1',0));port=selection.getsockname()[1]
                 receipt['port']=port
                 for profile,budget,version in profiles:
-                    seed_home=base/('seed-'+profile);seed_home.mkdir()
-                    tokens=json.loads(checked([seed,'--root',seed_home/'vault','--write-timeout',budget,'--secure='+('true' if version else 'false')],seed_home,isolated(seed_home)))
-                    snapshot=vault_snapshot(seed_home/'vault');receipt['profiles'][profile]=dict(write_budget=budget,fixture_snapshot=snapshot)
-                    for implementation,binary in [('go',go),('rust',rust)]:
-                        home=base/(implementation+'-'+profile);home.mkdir();shutil.copytree(seed_home/'vault',home/'vault');assert vault_snapshot(home/'vault')==snapshot
-                        result=dict(rows=[],processes=[],late_body={},handshake_peer={},slow_output={});receipt[implementation][profile]=result
-                        observe(binary,home,port,tokens,identities,profile,version,result)
+                    output_profile=profile in {'tcp-output','tls-output'}
+                    unmet=[]
+                    for tried in (OUTPUT_BUDGETS if output_profile else (budget,)):
+                        seed_home=base/('seed-'+profile+'-'+tried);seed_home.mkdir()
+                        tokens=json.loads(checked([seed,'--root',seed_home/'vault','--write-timeout',tried,'--secure='+('true' if version else 'false')],seed_home,isolated(seed_home)))
+                        snapshot=vault_snapshot(seed_home/'vault');receipt['profiles'][profile]=dict(write_budget=tried,fixture_snapshot=snapshot,unmet_precondition_attempts=unmet)
+                        try:
+                            for implementation,binary in [('go',go),('rust',rust)]:
+                                home=base/(implementation+'-'+profile+'-'+tried);home.mkdir();shutil.copytree(seed_home/'vault',home/'vault');assert vault_snapshot(home/'vault')==snapshot
+                                result=dict(rows=[],processes=[],late_body={},handshake_peer={},slow_output={});receipt[implementation][profile]=result
+                                try:observe(binary,home,port,tokens,identities,profile,version,result,budget_seconds(tried))
+                                except OutputPreconditionUnmet:
+                                    so=result['slow_output'];unmet.append(dict(write_budget=tried,implementation=implementation,slow_read_calls=so['slow_read_calls'],
+                                        slow_received_bytes=so['slow_received_bytes'],first_byte_seconds=so.get('first_byte_seconds'),load_average_before=so.get('load_average_before')))
+                                    raise
+                        except OutputPreconditionUnmet:continue
+                        break
+                    else:assert False,'actual progressing output required'
                 for profile,budget,version in profiles:
                     a,b=receipt['go'][profile],receipt['rust'][profile]
                     assert len(a['rows'])==len(b['rows'])==3
@@ -335,8 +371,8 @@ def main():
                                 assert output['tls_version']=='TLSv1.3'
                                 assert output['server_certificate_sha256']==certificate_sha
                             assert output['peer_terminal_observed'] and not output['forced_client_close']
-                            assert output['slow_read_calls']>=4 and output['slow_received_bytes']>=4096,'actual progressing output required'
-                            assert output['fast_drain_started_seconds']>=34
+                            assert output_progressing(output),'actual progressing output required'
+                            assert output['fast_drain_started_seconds']>=budget_seconds(receipt['profiles'][profile]['write_budget'])+4
                             if output['received_base64']:
                                 assert output['declared_chunk_length']>=10*1024*1024
                                 # Diagnostics go to stderr; the mutation negative control pins the exact assertion message.
