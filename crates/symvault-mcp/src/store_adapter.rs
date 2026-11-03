@@ -2227,7 +2227,10 @@ impl StoreReadOnlyRuntime {
             ));
         }
 
-        let short_id: String = grant.id.chars().take(8).collect();
+        // Go slices `grant.ID[:8]` by bytes: a multi-byte character cut in half
+        // renders as U+FFFD (a shorter id would panic in Go; Rust shows it whole).
+        let short_id =
+            String::from_utf8_lossy(&grant.id.as_bytes()[..grant.id.len().min(8)]).into_owned();
         let mut details = format!(
             "Share {short_id}: {} → {}, path: {}\nAgent requesting approval: {}",
             grant.from_agent, grant.to_agent, grant.secret_path, self.agent_name

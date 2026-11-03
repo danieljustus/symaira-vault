@@ -881,7 +881,10 @@ fn terminal_safe_text(value: &str) -> String {
 
 /// Builds the approval prompt string with full context display, mirroring
 /// Go's `buildPrompt`.
-fn build_prompt(req: &ApprovalRequest) -> String {
+///
+/// Public so contract tests can compare the exact bytes a handler asks the
+/// human to confirm against Go-recorded prompts.
+pub fn build_prompt(req: &ApprovalRequest) -> String {
     let mut out = String::new();
 
     out.push('\n');

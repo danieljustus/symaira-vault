@@ -2039,15 +2039,7 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
     }
 
     pub(crate) fn scope_allows(&self, path: &str) -> bool {
-        if self.config.allowed_paths.is_empty() {
-            return false;
-        }
-        let path = normalize_scope_path(path);
-        self.config.allowed_paths.iter().any(|allowed| {
-            allowed == "*"
-                || path == normalize_scope_path(allowed)
-                || path.starts_with(&format!("{}/", normalize_scope_path(allowed)))
-        })
+        scope_allows(&self.config.allowed_paths, path)
     }
 }
 
@@ -2272,6 +2264,65 @@ fn is_redacted_field(field: &str, patterns: &[String]) -> bool {
     })
 }
 
+/// Go's `normalizeScopePath` (`path.Clean(strings.TrimSpace(filepath.ToSlash(p)))`,
+/// with `.` mapped to the empty string), used for the allowed-path boundary.
+///
+/// Unlike [`normalize_scope_path`], which builds store-relative entry paths, this
+/// keeps a leading `/` and a `..` that climbs above a relative path, so
+/// `/prod/a` and `../prod/a` stay outside an allowed `prod`, as in Go. Only
+/// Windows turns `\` into `/` (`filepath.ToSlash` is the identity elsewhere).
+/// The allowed-path boundary shared by every tool.
+///
+/// A path is admitted only when BOTH boundaries admit it: Go's `pathAllowed`
+/// over [`go_scope_path`] (so `/prod/a` and `../prod/a` stay outside an allowed
+/// `prod`, as in Go) and the earlier Rust boundary over
+/// [`normalize_scope_path`] (so an allowed `..`, `\\` or a path that cleans to
+/// nothing never widens the scope). Rust is therefore never more permissive than
+/// Go or than its own earlier behaviour; every case where the two disagree is a
+/// deliberate, stricter deviation (docs/rust-port/upstream-go-bugs.md, 14).
+pub(crate) fn scope_allows(allowed_paths: &[String], path: &str) -> bool {
+    let go_path = go_scope_path(path);
+    let legacy_path = normalize_scope_path(path);
+    allowed_paths.iter().any(|allowed| {
+        if allowed == "*" {
+            return true;
+        }
+        let go_allowed = go_scope_path(allowed);
+        let legacy_allowed = normalize_scope_path(allowed);
+        let go = !go_allowed.is_empty()
+            && (go_path == go_allowed || go_path.starts_with(&format!("{go_allowed}/")));
+        let legacy =
+            legacy_path == legacy_allowed || legacy_path.starts_with(&format!("{legacy_allowed}/"));
+        go && legacy
+    })
+}
+
+pub(crate) fn go_scope_path(path: &str) -> String {
+    let trimmed = path.trim();
+    let slashed = if cfg!(windows) {
+        trimmed.replace('\\', "/")
+    } else {
+        trimmed.to_owned()
+    };
+    let rooted = slashed.starts_with('/');
+    let mut components: Vec<&str> = Vec::new();
+    for component in slashed.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                if components.last().is_some_and(|last| *last != "..") {
+                    components.pop();
+                } else if !rooted {
+                    components.push("..");
+                }
+            }
+            value => components.push(value),
+        }
+    }
+    let joined = components.join("/");
+    if rooted { format!("/{joined}") } else { joined }
+}
+
 pub(crate) fn normalize_scope_path(path: &str) -> String {
     let mut components = Vec::new();
     let normalized = path.trim().replace('\\', "/");
@@ -2388,5 +2439,58 @@ mod semantic_injection_tests {
         assert!(warning.contains("pattern=\"ignore previous instructions\""));
         assert!(warning.contains("agent=\"fixture\""));
         assert!(!warning.contains("synthetic-secret-value"));
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::scope_allows;
+
+    fn allows(allowed: &[&str], path: &str) -> bool {
+        let allowed: Vec<String> = allowed.iter().map(|value| (*value).to_owned()).collect();
+        scope_allows(&allowed, path)
+    }
+
+    #[test]
+    fn allowed_paths_that_clean_to_nothing_grant_nothing() {
+        for allowed in ["", " ", ".", "./", "a/..", "./a/../"] {
+            for path in ["/secret", "secret", "", "/", "prod/a", "../x"] {
+                assert!(
+                    !allows(&[allowed], path),
+                    "allowed {allowed:?} must not admit {path:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_boundary_follows_go_path_clean() {
+        assert!(allows(&["prod"], "prod"));
+        assert!(allows(&["prod"], "prod/a"));
+        assert!(allows(&["prod/"], "./prod/a/../b"));
+        assert!(!allows(&["prod"], "prod2/a"));
+        assert!(!allows(&["prod"], "/prod/a"));
+        assert!(!allows(&["prod"], "../prod/a"));
+        assert!(!allows(&["prod"], "prod/../other"));
+        assert!(allows(&["/"], "/"));
+        assert!(!allows(&["/"], "/x"));
+        assert!(allows(&["*"], "/anything"));
+        assert!(!allows(&[], "prod"));
+    }
+
+    #[test]
+    fn forms_the_earlier_rust_boundary_denied_stay_denied() {
+        // Go admits these; the earlier Rust boundary did not (security review).
+        for (allowed, path) in [
+            ("..", "../prod"),
+            ("\\\\", "\\\\/child"),
+            ("../é/../", "../x"),
+            ("/\\\\", "/\\\\/x"),
+        ] {
+            assert!(
+                !allows(&[allowed], path),
+                "allowed {allowed:?} must not admit {path:?}"
+            );
+        }
     }
 }

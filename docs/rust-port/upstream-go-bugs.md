@@ -183,3 +183,52 @@ Go oracle, never a reading of the source alone.
   upstream in Go (set `ToolName` in the call sites); once Go changes, regenerate
   `testdata/port/mcp/policy-build-context.json` and pass the name through the helper. Pinned by
   `policy_build_context_contract.rs` (Go-recorded `eval_cases`) and `policy_context_authorize.rs`.
+
+## 13. The sharing tools are unusable in production Go and `approve_share` panics on short ids
+
+Found while recording the MCP-003 sharing corpus (`testdata/port/mcp/tools-sharing.json`, generator
+`internal/mcp/server/mcp_sharing_fixture_generator_test.go`, `make mcp-sharing-fixtures-check`). Four Go
+defects and one Rust fix that came out of the same recording.
+
+- **13a. The share store is never attached.** `Server.shareStore` is declared in `server.go` and read by
+  `checkShareAccess` (which guards `nil`), but no production constructor assigns it. `request_share`,
+  `approve_share`, `revoke_share` and `list_shares` therefore dereference a nil `*ShareStore` and the Go
+  dispatcher panics (`runtime error: invalid memory address or nil pointer dereference`; `authz-matrix.json` already pins
+  this for `list_shares`). The corpus records the four panics as `go_defect` cases and records the intended
+  behaviour with a store attached the way the in-package handler tests do. **Rust:** always has a store, so
+  the tools work; the replay asserts only that the recorded Go panic is unchanged.
+- **13b. `approve_share` panics for a grant id shorter than 8 bytes.** `grant.ID[:8]` in the prompt text has no
+  length guard (`runtime error: slice bounds out of range [:8] with length 7`; recorded case
+  `go_defect_approve_short_grant_id_panics`). Ids from `request_share` are 32 hex characters or `nonce:mac`, so
+  only a hand-edited `mcp-shares.json` reaches it, but the panic escapes the dispatcher. **Rust:** shows the
+  whole short id and answers normally.
+- **13c. The same slice cuts a multi-byte id by bytes.** `ünï-grant-1` becomes `ünï-gr` (8 bytes). A cut in the
+  middle of a rune puts an invalid UTF-8 byte into the terminal prompt. **Rust (fixed here):** it took 8
+  *characters*; it now takes the first 8 *bytes* like Go (`ünï-gr`), matching the recorded prompt. Where the cut
+  falls inside a rune Rust renders U+FFFD (a `String` cannot hold the invalid byte), so the `Details:` row of
+  that prompt is a few bytes shorter than Go's before truncation; no recorded case sits on that boundary,
+  so this stays an accepted difference.
+- **13d. `list_shares` order is unspecified.** `ListForAgent` ranges a `map`, and `Save` writes the map in
+  iteration order, so both the tool result and `mcp-shares.json` are shuffled between runs. The corpus sorts
+  by id (keeping each element's exact bytes); **Rust** sorts by id, a valid refinement.
+- **Rust fix in the same recording: the allowed-path boundary.** Go's `normalizeScopePath` is
+  `path.Clean(strings.TrimSpace(filepath.ToSlash(p)))`. Rust's allowed-path check stripped a leading `/`,
+  treated `\` as a separator and let `..` climb above a relative path, so `/prod/a`, `prod\a` and
+  `../prod/a` were inside an allowed `prod` in Rust but outside in Go (recorded: `request_share` for
+  `/prod/a` -> `access denied: path "/prod/a" outside allowed scope`). `go_scope_path` now follows
+  `path.Clean` for `scope_allows` (every tool, since Go's `checkScope` is shared); `\` is a separator only on
+  Windows like `filepath.ToSlash`. Store-relative entry paths keep `normalize_scope_path`.
+
+## 14. An allowed path that cleans to nothing admits every absolute path
+
+Go's `pathAllowed` compares `path.Clean` forms with `strings.HasPrefix(path, allowed+"/")`.
+An agent `allowed_paths` entry of `""`, `"."` or `"a/.."` cleans to the empty string, so
+`"/"` becomes the prefix and every absolute request path (`/secret`) is admitted.
+
+Rust (`symvault_mcp::call::scope_allows`) admits a path only when both Go's `path.Clean`
+boundary and the earlier Rust boundary (`normalize_scope_path`) admit it, and grants nothing
+for an allowed path that cleans to empty. Go also admits `../prod` under an allowed `..` and
+backslash forms the earlier Rust boundary denied (86 of 59,467 reviewed pairs); Rust keeps them denied. This is a
+deliberate, stricter deviation (Rust must never be more permissive than Go or than its
+own earlier behaviour); regression tests: `call::scope_tests`. Upstream fix: reject such
+entries at profile load.
