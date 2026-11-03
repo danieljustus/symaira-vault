@@ -12,6 +12,8 @@ use symvault_store::Entry;
 use symvault_store::Store;
 use url::Url;
 
+use crate::vault_commands::{self, GetError, GetResult};
+
 #[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct SearchMatch {
     pub path: String,
@@ -103,6 +105,31 @@ pub fn find(
             .then_with(|| left.path.cmp(&right.path))
     });
     Ok(result)
+}
+
+/// `get <query>` as Go resolves it: an exact `path.field`, an exact path, and
+/// only when no entry has that path the `find` substring search over paths and
+/// decrypted fields. One hit is read as if its path had been given; several hits
+/// are returned as [`GetError::Ambiguous`] in `find`'s order.
+pub fn get_or_search(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, GetError> {
+    match vault_commands::get(root, identity, query) {
+        Err(GetError::NotFound(_)) => {}
+        other => return other,
+    }
+    let matches = find(root, identity, query, None)
+        .map_err(|error| GetError::Other(format!("search entry: {error}")))?;
+    match matches.as_slice() {
+        [] => Err(GetError::NotFound(query.to_owned())),
+        [single] => match vault_commands::get_exact(root, identity, &single.path) {
+            // The hit vanished between the search and the read.
+            Err(GetError::NotFound(_)) => Err(GetError::NotFound(single.path.clone())),
+            other => other,
+        },
+        _ => Err(GetError::Ambiguous {
+            query: query.to_owned(),
+            paths: matches.into_iter().map(|found| found.path).collect(),
+        }),
+    }
 }
 
 fn collect_field_matches(
@@ -237,6 +264,81 @@ mod tests {
                 fields: vec!["note".into()],
             }]
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn seeded_vault(name: &str) -> (std::path::PathBuf, Identity) {
+        let root =
+            std::env::temp_dir().join(format!("symvault-get-search-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("entries")).unwrap();
+        let identity = crate::vault_commands::initialize(
+            &root,
+            &symvault_crypto::SecretBytes::new(b"synthetic get search passphrase"),
+        )
+        .unwrap();
+        let store = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        )
+        .unwrap();
+        for (path, field, value) in [
+            ("a/first", "password", "Val-Alpha-000"),
+            ("work/example", "url", "https://example.test"),
+            ("work/two", "username", "bob"),
+        ] {
+            let mut entry = Entry::default();
+            entry.data.insert(field.into(), value.into());
+            store.write_entry(path, &entry, &identity).unwrap();
+        }
+        (root, identity)
+    }
+
+    fn resolved_path(result: Result<GetResult, GetError>) -> String {
+        match result.expect("one hit") {
+            GetResult::Entry { path, .. } | GetResult::Field { path, .. } => path,
+        }
+    }
+
+    #[test]
+    fn get_falls_back_to_the_substring_search_like_go() {
+        let (root, identity) = seeded_vault("fallback");
+        // Path substring, field value, and case-insensitivity each reach one entry.
+        assert_eq!(
+            resolved_path(get_or_search(&root, &identity, "first")),
+            "a/first"
+        );
+        assert_eq!(
+            resolved_path(get_or_search(&root, &identity, "HTTPS:")),
+            "work/example"
+        );
+        // An exact path wins over a search even when it is also a substring.
+        assert_eq!(
+            resolved_path(get_or_search(&root, &identity, "work/two")),
+            "work/two"
+        );
+        // Several hits: path matches first, then field matches, as `find` orders them.
+        assert_eq!(
+            get_or_search(&root, &identity, "t"),
+            Err(GetError::Ambiguous {
+                query: "t".into(),
+                paths: vec!["a/first".into(), "work/two".into(), "work/example".into()],
+            })
+        );
+        // The lone `-` is a plain query: only one value here contains a dash.
+        assert_eq!(
+            resolved_path(get_or_search(&root, &identity, "-")),
+            "a/first"
+        );
+        assert_eq!(
+            get_or_search(&root, &identity, "zzz"),
+            Err(GetError::NotFound("zzz".into()))
+        );
+        // The search never replaces a path the store rejects.
+        assert!(matches!(
+            get_or_search(&root, &identity, ""),
+            Err(GetError::InvalidPath(_))
+        ));
         std::fs::remove_dir_all(root).unwrap();
     }
 }

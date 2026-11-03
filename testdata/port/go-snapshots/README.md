@@ -25,3 +25,7 @@ change's working tree and its `MANIFEST.json` sha256/bytes are updated; the
   cases (`010`, `017`, `0b11`, `0b101`, `1_000`; ADR 0034 item 4) added to the
   output-modes corpus, so the snapshot no longer equals
   `git show <commit>:scripts/rust-port/cmd/outputmodegen/cases.go`.
+- `scripts/rust-port/cmd/outputmodegen/cases.go` (again): eighteen `get <query>`
+  search-fallback scenarios (CLI-002/CLI-006: single and multiple hits, path and
+  field matches, the lone `-`, no match, invalid paths, `--print` and `--length`)
+  added to the output-modes corpus (90 cases, 549 -> 639).

@@ -100,6 +100,33 @@ func allCaseSpecs() []caseSpec {
 	add(caseSpec{id: "get-field-print", path: "get", desc: "get one field with --print (the audit record names the field)", seed: "entries", argv: flags("get", "work/example.username", "--print")})
 	add(caseSpec{id: "get-minimal", path: "get", desc: "get an entry with only a password", seed: "entries", argv: flags("get", "a/first", "--print")})
 	add(caseSpec{id: "get-missing", path: "get", desc: "get a missing entry", seed: "entries", argv: flags("get", "nope/missing")})
+	// `get <query>` falls back to the `find` substring search (paths first, then
+	// decrypted fields) when no entry has exactly that path: one hit is shown as
+	// if its path had been given, several hits are listed on stderr and refused.
+	for _, search := range []struct{ id, query, desc string }{
+		{"path-one", "first", "a query that is a substring of exactly one path"},
+		// No upper-case spelling of a whole path: on a case-insensitive file system
+		// (macOS) Go reads the entry directly, on Linux it searches.
+		{"field-case", "ALICE", "an upper-case query (the search is case-insensitive)"},
+		{"multi-case", "WORK", "an upper-case query that is a substring of two paths"},
+		{"field-one", "alice", "a query that matches one entry only by a field value"},
+		{"field-url", "example.test", "a query inside the url field of one entry"},
+		{"field-comma", "a,b", "a query that matches one entry only by its notes field"},
+		{"multi-path", "work", "a query that is a substring of two paths"},
+		{"multi-dash", "-", "the lone - argument (matches field values of every entry)"},
+		{"multi-mixed", "t", "path matches (a/first, work/two) listed before the field match (work/example)"},
+		{"none", "zzz-no-match", "a query that matches nothing"},
+		{"dotted-none", "work/example.pass", "path.field whose field does not exist and that matches nothing"},
+		{"trailing-dot", "a/first.", "an exact path with an empty field after the dot (the whole entry)"},
+		{"empty", "", "an empty query"},
+		{"parent", "../x", "a path with a .. segment"},
+	} {
+		add(caseSpec{id: "get-search-" + search.id, path: "get", desc: "get with " + search.desc, seed: "entries", argv: flags("get", search.query)})
+	}
+	add(caseSpec{id: "get-search-field-print", path: "get", desc: "get --print of a single field match (the audit record names the resolved path)", seed: "entries", argv: flags("get", "alice", "--print")})
+	add(caseSpec{id: "get-search-multi-print", path: "get", desc: "get --print of an ambiguous query (no audit record)", seed: "entries", argv: flags("get", "work", "--print")})
+	add(caseSpec{id: "get-search-length", path: "get", desc: "get --length of a query that is not an exact path.field (refused before any search)", seed: "entries", argv: flags("get", "work", "--length")})
+	add(caseSpec{id: "get-search-length-none", path: "get", desc: "get --digest of a query that matches nothing", seed: "entries", argv: flags("get", "zzz-no-match", "--digest")})
 	add(caseSpec{id: "find", path: "find", desc: "find by username", seed: "entries", argv: flags("find", "alice")})
 	add(caseSpec{id: "find-none", path: "find", desc: "find without a match", seed: "entries", argv: flags("find", "zzz-no-match")})
 	add(caseSpec{id: "find-url", path: "find", desc: "find by url", seed: "entries", argv: flags("find", "--url", "example.test")})

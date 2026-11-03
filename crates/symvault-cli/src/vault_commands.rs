@@ -188,58 +188,120 @@ fn has_value(entry: &Entry) -> bool {
         .any(|field| entry.data.get(field).is_some_and(|value| !value.is_null()))
 }
 
-/// Resolves an exact path or `path.field` query.
-pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, String> {
-    let store = open_vault(root, identity)?;
-    let reader = store.read_session(identity);
-    if let Some((path, field)) = query
-        .rsplit_once('.')
-        .filter(|(_, field)| !field.is_empty())
-    {
-        match reader.get(path) {
-            Ok(entry) => {
-                if let Some(value) = entry.data.get(field).cloned() {
-                    return Ok(GetResult::Field {
-                        path: path.to_owned(),
-                        field: field.to_owned(),
-                        value,
-                    });
-                }
-            }
-            Err(error) if error.is_resource_failure() => return Err(error.to_string()),
-            Err(_) => {}
+/// Why `get` could not resolve a query to one entry or field.
+#[derive(Debug, Eq, PartialEq)]
+pub enum GetError {
+    /// No entry has this path and the search fallback found nothing.
+    NotFound(String),
+    /// The search fallback found several entries; `paths` is Go's match order.
+    Ambiguous { query: String, paths: Vec<String> },
+    /// The store refused the path itself (empty, `..`, absolute, ...).
+    InvalidPath(String),
+    /// Any other failure, already worded for the user.
+    Other(String),
+}
+
+impl std::fmt::Display for GetError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound(path) => write!(formatter, "entry not found: {path}"),
+            Self::Ambiguous { query, .. } => write!(formatter, "ambiguous path: {query}"),
+            Self::InvalidPath(path) => write!(formatter, "entry path {path:?} is not valid"),
+            Self::Other(message) => formatter.write_str(message),
         }
     }
-    let exact_error = match reader.get(query) {
-        Ok(entry) => {
-            return Ok(GetResult::Entry {
-                path: query.to_owned(),
-                entry: Box::new(entry),
-            });
-        }
-        Err(error) if error.is_resource_failure() => return Err(error.to_string()),
-        Err(error) => error,
-    };
+}
 
-    let needle = query.to_ascii_lowercase();
-    let matches: Vec<_> = reader
-        .list()
-        .map_err(|error| format!("cannot read entry: {error}"))?
-        .into_iter()
-        .filter(|path| path.to_ascii_lowercase().contains(&needle))
-        .collect();
-    match matches.as_slice() {
-        [path] => {
-            let entry = reader
-                .get(path)
-                .map_err(|error| format!("cannot read entry: {error}"))?;
-            Ok(GetResult::Entry {
-                path: path.clone(),
-                entry: Box::new(entry),
-            })
+impl From<GetError> for String {
+    fn from(error: GetError) -> Self {
+        error.to_string()
+    }
+}
+
+/// Go's `GetField(candidatePath, candidateField)` probe of `get`: the query is
+/// split at its last dot (not at the first byte) and only counts as
+/// `path.field` when that entry exists and holds the field (an empty field
+/// names the whole entry). `None` means the query is not an exact
+/// `path.field`; the caller then treats it as a path.
+pub fn exact_field_with(
+    reader: &symvault_store::ReadSession<'_>,
+    query: &str,
+) -> Result<Option<GetResult>, String> {
+    let Some(index) = query.rfind('.').filter(|index| *index > 0) else {
+        return Ok(None);
+    };
+    let (path, field) = (&query[..index], &query[index + 1..]);
+    match reader.get(path) {
+        Ok(entry) => {
+            if field.is_empty() {
+                return Ok(Some(GetResult::Entry {
+                    path: path.to_owned(),
+                    entry: Box::new(entry),
+                }));
+            }
+            Ok(entry
+                .data
+                .get(field)
+                .cloned()
+                .map(|value| GetResult::Field {
+                    path: path.to_owned(),
+                    field: field.to_owned(),
+                    value,
+                }))
         }
-        [] => Err(format!("cannot read entry: {exact_error}")),
-        _ => Err(format!("ambiguous path: {query}")),
+        Err(error) if error.is_resource_failure() => Err(error.to_string()),
+        Err(_) => Ok(None),
+    }
+}
+
+/// [`exact_field_with`] on a freshly opened vault.
+// The integration tests include this file without the binary that calls it.
+#[allow(dead_code)]
+pub fn exact_field(
+    root: &Path,
+    identity: &Identity,
+    query: &str,
+) -> Result<Option<GetResult>, String> {
+    let store = open_vault(root, identity)?;
+    let reader = store.read_session(identity);
+    exact_field_with(&reader, query)
+}
+
+/// Resolves a `path.field` query or an exact entry path. A miss is
+/// [`GetError::NotFound`]; `search_commands::get_or_search` adds Go's substring
+/// search fallback on top of it.
+pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, GetError> {
+    let store = open_vault(root, identity).map_err(GetError::Other)?;
+    let reader = store.read_session(identity);
+    if let Some(result) = exact_field_with(&reader, query).map_err(GetError::Other)? {
+        return Ok(result);
+    }
+    read_exact(&reader, query)
+}
+
+/// Reads the entry stored at exactly `path`, without the `path.field` split.
+// The integration tests include this file without the binary that calls it.
+#[allow(dead_code)]
+pub fn get_exact(root: &Path, identity: &Identity, path: &str) -> Result<GetResult, GetError> {
+    let store = open_vault(root, identity).map_err(GetError::Other)?;
+    let reader = store.read_session(identity);
+    read_exact(&reader, path)
+}
+
+fn read_exact(reader: &symvault_store::ReadSession<'_>, path: &str) -> Result<GetResult, GetError> {
+    match reader.get(path) {
+        Ok(entry) => Ok(GetResult::Entry {
+            path: path.to_owned(),
+            entry: Box::new(entry),
+        }),
+        Err(error) if error.is_resource_failure() => Err(GetError::Other(error.to_string())),
+        Err(symvault_store::StoreError::EntryNotFound(_)) => {
+            Err(GetError::NotFound(path.to_owned()))
+        }
+        Err(symvault_store::StoreError::InvalidEntryPath(invalid)) => {
+            Err(GetError::InvalidPath(invalid))
+        }
+        Err(error) => Err(GetError::Other(format!("cannot read entry: {error}"))),
     }
 }
 

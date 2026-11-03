@@ -92,9 +92,15 @@ fn initialize_round_trip_and_read_only_commands() {
 
     let result = vault_commands::get(&root, &identity, "work/github.missing");
     assert!(result.is_err());
-    assert!(matches!(
+    // The substring search fallback lives in `search_commands::get_or_search`;
+    // the exact resolver reports a plain miss.
+    assert_eq!(
         vault_commands::get(&root, &identity, "github"),
-        Ok(vault_commands::GetResult::Entry { path, .. }) if path == "work/github"
+        Err(vault_commands::GetError::NotFound("github".to_owned()))
+    );
+    assert!(matches!(
+        vault_commands::get(&root, &identity, ""),
+        Err(vault_commands::GetError::InvalidPath(_))
     ));
 
     let dotted_path = "work/dotted.name";
