@@ -1243,6 +1243,13 @@ fn status_parts(status: &std::process::ExitStatus) -> (Option<i32>, Option<i32>)
     }
 }
 
+/// True when `program` is the Go oracle of the running test (the recorded or
+/// captured side). Lets a test harden only the Rust side of a pair without
+/// changing the recorded Go request keys.
+pub fn is_oracle_binary(program: &Path) -> bool {
+    current().is_some_and(|state| state.borrow().go_path == program)
+}
+
 fn current() -> Option<Rc<RefCell<State>>> {
     CURRENT.with(|c| c.borrow().clone())
 }

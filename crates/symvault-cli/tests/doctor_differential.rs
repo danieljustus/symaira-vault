@@ -43,9 +43,20 @@ impl Drop for TempFixture {
     }
 }
 
+/// Search path of the Rust side: the doctor tooling checks probe `osascript`,
+/// `pbcopy`, ... on PATH, so the Rust run must not depend on the host PATH.
+const HERMETIC_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
+    let mut command = Command::new(binary);
+    // Applied to the Rust side only: the Go request (and its recorded key)
+    // stays as captured. `tooling.precommit` reads the working directory, so
+    // Rust runs in the scratch home instead of the repository checkout.
+    if !go_oracle::is_oracle_binary(binary) {
+        command.env("PATH", HERMETIC_PATH).current_dir(home);
+    }
     go_oracle::output(
-        Command::new(binary)
+        command
             .args(args)
             .env("HOME", home)
             .env("USERPROFILE", home)
