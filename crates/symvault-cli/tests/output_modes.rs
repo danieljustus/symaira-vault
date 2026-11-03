@@ -1386,8 +1386,8 @@ fn digest_of(root: &Path, names: &[String]) -> String {
     // provenance.Digest format: sha256 over name/NUL/content/NUL in order.
     let mut hasher = Sha256::new();
     for name in names {
-        let content =
-            std::fs::read(root.join(name)).unwrap_or_else(|error| panic!("read {name}: {error}"));
+        let content = std::fs::read(root.join(format!("{name}.txt")))
+            .unwrap_or_else(|error| panic!("read {name}: {error}"));
         hasher.update(name.as_bytes());
         hasher.update([0u8]);
         hasher.update(&content);
@@ -1410,7 +1410,7 @@ fn fixture_provenance_matches_checkout() {
         sorted.sort();
         assert_eq!(&sorted, files, "file lists are stored sorted");
     }
-    let root = manifest_path("../..");
+    let root = manifest_path("../../testdata/port/go-snapshots");
     assert_eq!(
         digest_of(&root, &oracle.source_files),
         oracle.source_digest,
@@ -1850,7 +1850,7 @@ fn normalization_rules_are_listed_once_and_consistently() {
         "tests/output_modes.rs header"
     );
     let generator = std::fs::read_to_string(manifest_path(
-        "../../scripts/rust-port/cmd/outputmodegen/main.go",
+        "../../testdata/port/go-snapshots/scripts/rust-port/cmd/outputmodegen/main.go.txt",
     ))
     .expect("read generator");
     assert_eq!(

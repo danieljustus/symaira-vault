@@ -1,0 +1,852 @@
+{
+  "commit": "ca0f2300ab397fadb8825d97b2cc15f95bd81bc6",
+  "note": "Frozen byte-for-byte copies of Go sources read by Rust provenance tests. snapshot path = <path>.txt. Source: git show <commit>:<path>.",
+  "files": [
+    {
+      "path": "cmd/admin/audit.go",
+      "snapshot": "cmd/admin/audit.go.txt",
+      "sha256": "ff34f49209e8d3ea45640b1eebba36fe9c960c76ec82ea8abdade95fc9fed3f2",
+      "bytes": 7395
+    },
+    {
+      "path": "cmd/admin/audit_export.go",
+      "snapshot": "cmd/admin/audit_export.go.txt",
+      "sha256": "32c9090075772c34fab057e0ead45cb3d2e533585bfb65bac064bdaf8e72ce73",
+      "bytes": 4265
+    },
+    {
+      "path": "cmd/admin/backup.go",
+      "snapshot": "cmd/admin/backup.go.txt",
+      "sha256": "f73b30d74414a40d99bee61e3341ba7f4ae82ee747ea5420355717d79ac8bdb3",
+      "bytes": 9466
+    },
+    {
+      "path": "cmd/admin/commands.go",
+      "snapshot": "cmd/admin/commands.go.txt",
+      "sha256": "ab9b56e80aaec9bd3461157793def9eecbe2fcfb18a26aebbd988bba3f53124f",
+      "bytes": 548
+    },
+    {
+      "path": "cmd/admin/config.go",
+      "snapshot": "cmd/admin/config.go.txt",
+      "sha256": "d85d545fee2da5e7bbb14ed17dce7768c7086e98394ae68d09ac8404eb810a3e",
+      "bytes": 10851
+    },
+    {
+      "path": "cmd/admin/doctor.go",
+      "snapshot": "cmd/admin/doctor.go.txt",
+      "sha256": "4240afbf76eb6235c5548bd1ec21dd14538419200d94f4d3d160f9de45555945",
+      "bytes": 6271
+    },
+    {
+      "path": "cmd/admin/export.go",
+      "snapshot": "cmd/admin/export.go.txt",
+      "sha256": "e64f27e50769ba1cfcf32979c11d86faa5abc551103bd214b855a55222b15093",
+      "bytes": 8022
+    },
+    {
+      "path": "cmd/admin/import.go",
+      "snapshot": "cmd/admin/import.go.txt",
+      "sha256": "c6097e6439802b2cfdeaade4b0791cc9dbdb3fa1f083d5b1ea2b485ebc855d27",
+      "bytes": 16846
+    },
+    {
+      "path": "cmd/admin/init.go",
+      "snapshot": "cmd/admin/init.go.txt",
+      "sha256": "882f4d03649c24e1df8021316c6b0a7c088aa7287350682b594fe40818679ed2",
+      "bytes": 6396
+    },
+    {
+      "path": "cmd/admin/migrate.go",
+      "snapshot": "cmd/admin/migrate.go.txt",
+      "sha256": "3dad0962a4d09ae4b6c538fe61b2313c6fa9a1e444fa603d4538f6be91a9cf06",
+      "bytes": 16606
+    },
+    {
+      "path": "cmd/admin/migrate_session.go",
+      "snapshot": "cmd/admin/migrate_session.go.txt",
+      "sha256": "97b0c6462f5a82bae2944a2f6038c119c3e8aa755c2c32aff9ecf43dcc6b4543",
+      "bytes": 2137
+    },
+    {
+      "path": "cmd/admin/setup.go",
+      "snapshot": "cmd/admin/setup.go.txt",
+      "sha256": "b87ba1a32da7fdb03dffe4ce9419cce1ecab78c759e91f1d16d2307d384e5a20",
+      "bytes": 1843
+    },
+    {
+      "path": "cmd/admin/startup_profile.go",
+      "snapshot": "cmd/admin/startup_profile.go.txt",
+      "sha256": "f438de78a8e884a78cb476ab9cf8c92e6f72e765ce13dc63649fb52d75fbdfe2",
+      "bytes": 6947
+    },
+    {
+      "path": "cmd/admin/update.go",
+      "snapshot": "cmd/admin/update.go.txt",
+      "sha256": "a302a805ec18577f60577943b00f407c90ad1d72f362b1d3be6925c9c1a22500",
+      "bytes": 11200
+    },
+    {
+      "path": "cmd/admin/verify.go",
+      "snapshot": "cmd/admin/verify.go.txt",
+      "sha256": "1580f8345b2ed78e1b235b4ebbc60b49a8c09634606cbc583132b3c079f533a2",
+      "bytes": 3195
+    },
+    {
+      "path": "cmd/approval.go",
+      "snapshot": "cmd/approval.go.txt",
+      "sha256": "0525572ceeb05e1ac1ab2d0bbf675a5a90f6dbcda97ec510fa5be954e357ed17",
+      "bytes": 10115
+    },
+    {
+      "path": "cmd/auth/auth.go",
+      "snapshot": "cmd/auth/auth.go.txt",
+      "sha256": "5b9f432e15269da50bb6cfe4a4ec59e9ac3e1183f0ea5eac9b51467224e1a79e",
+      "bytes": 6027
+    },
+    {
+      "path": "cmd/auth/auth_rotate.go",
+      "snapshot": "cmd/auth/auth_rotate.go.txt",
+      "sha256": "420398f0974052e8c1ee8884749512202caa431df7dc4539934c3458c786cbba",
+      "bytes": 5154
+    },
+    {
+      "path": "cmd/auth/commands.go",
+      "snapshot": "cmd/auth/commands.go.txt",
+      "sha256": "baa0baca10d5bcb2589e98413837afa574a52829130b43c0c5e30d2dd2ae6e46",
+      "bytes": 361
+    },
+    {
+      "path": "cmd/auth/lock.go",
+      "snapshot": "cmd/auth/lock.go.txt",
+      "sha256": "a03ef87b22e07475b762507918cd93c0f2cefa30fa6e817e5758ee5de47738a6",
+      "bytes": 1054
+    },
+    {
+      "path": "cmd/auth/unlock.go",
+      "snapshot": "cmd/auth/unlock.go.txt",
+      "sha256": "bc1bab93939907d9622fab5ef5e7ba9feebfdc8e18bf8f82a4427480e7b201e4",
+      "bytes": 3236
+    },
+    {
+      "path": "cmd/broker.go",
+      "snapshot": "cmd/broker.go.txt",
+      "sha256": "afdab3c98ba3348283f973b48d79b9fb9960ad08e5b1ee9d792c299f8cb70262",
+      "bytes": 6510
+    },
+    {
+      "path": "cmd/crud/add.go",
+      "snapshot": "cmd/crud/add.go.txt",
+      "sha256": "ffd9cc71554f4067b8c41a2805a28d1967738aa5cd906012a85872e11db15ccf",
+      "bytes": 11696
+    },
+    {
+      "path": "cmd/crud/commands.go",
+      "snapshot": "cmd/crud/commands.go.txt",
+      "sha256": "6f2c49aa98c1cdfd896c465b271c88d3d8597e8d87b032f66f3ad4046716ded9",
+      "bytes": 300
+    },
+    {
+      "path": "cmd/crud/delete.go",
+      "snapshot": "cmd/crud/delete.go.txt",
+      "sha256": "da8ac3e2e30fb95c6a0bd6023d6ecdde170bce6e7a7719d93f39cf4335653a61",
+      "bytes": 2068
+    },
+    {
+      "path": "cmd/crud/edit.go",
+      "snapshot": "cmd/crud/edit.go.txt",
+      "sha256": "692bd8d3b967d6aea6bffeb810f06b0bf1ab62c03616a7f3a602794c9297b6cc",
+      "bytes": 2476
+    },
+    {
+      "path": "cmd/crud/find.go",
+      "snapshot": "cmd/crud/find.go.txt",
+      "sha256": "2ef1c7719de6d6dfc85c44d6bcb2cb82016be1ffb276a8b7295013cd3d7d0e03",
+      "bytes": 3617
+    },
+    {
+      "path": "cmd/crud/get.go",
+      "snapshot": "cmd/crud/get.go.txt",
+      "sha256": "77dd8996d443cfabb244f7e0d71393b392d954de5d3effc6fb9fca0dc0335011",
+      "bytes": 12985
+    },
+    {
+      "path": "cmd/crud/list.go",
+      "snapshot": "cmd/crud/list.go.txt",
+      "sha256": "32b290cde8002a4888a36d42acc411c29ddbdbc4fa33e1e7fc07da62a2f98199",
+      "bytes": 1871
+    },
+    {
+      "path": "cmd/crud/set.go",
+      "snapshot": "cmd/crud/set.go.txt",
+      "sha256": "0b58ad9b4214e5993ee9cb703bbdb0ec623dec73232bfaaa19a58a2a713d5af3",
+      "bytes": 6428
+    },
+    {
+      "path": "cmd/device.go",
+      "snapshot": "cmd/device.go.txt",
+      "sha256": "958fb60ca116d0eca4ad72c2a9c86154dcf26270ed9d7a61bfc78601de7edbaa",
+      "bytes": 29530
+    },
+    {
+      "path": "cmd/device_approval.go",
+      "snapshot": "cmd/device_approval.go.txt",
+      "sha256": "aeb97225d336e9874b1b6cda5f1a663d38b68cde7cddd85387058f7a60f64096",
+      "bytes": 10638
+    },
+    {
+      "path": "cmd/diag.go",
+      "snapshot": "cmd/diag.go.txt",
+      "sha256": "b971c8ea27d508aa56541a5cb31c2927385e5e0e195dc69985ded74d3ad3dc45",
+      "bytes": 1829
+    },
+    {
+      "path": "cmd/dynamic.go",
+      "snapshot": "cmd/dynamic.go.txt",
+      "sha256": "f9cf8a730a7bc7621728ea6406180bc77e928615cfc97e2ab03378d86d6de443",
+      "bytes": 2683
+    },
+    {
+      "path": "cmd/file/add.go",
+      "snapshot": "cmd/file/add.go.txt",
+      "sha256": "3b974a3809f94ddb3acb74695114962b36d54b29116e4e768d6da2e7fa753693",
+      "bytes": 4850
+    },
+    {
+      "path": "cmd/file/commands.go",
+      "snapshot": "cmd/file/commands.go.txt",
+      "sha256": "eaab31a6bd2144e2463fd7a6fea8994252a2ba3bd4a0f8bd94c3d4c06d261e76",
+      "bytes": 324
+    },
+    {
+      "path": "cmd/file/field.go",
+      "snapshot": "cmd/file/field.go.txt",
+      "sha256": "90e1d27bcd9f093a6cb4aa58a2b6b9fd1f41232fe41a4ff4df6d7719875afd14",
+      "bytes": 4906
+    },
+    {
+      "path": "cmd/file/file.go",
+      "snapshot": "cmd/file/file.go.txt",
+      "sha256": "b46e3ba8e6ffced6d87a6c7369e1ad8af91a88ba81275bbdd0eab1c99314a0c8",
+      "bytes": 1173
+    },
+    {
+      "path": "cmd/file/get.go",
+      "snapshot": "cmd/file/get.go.txt",
+      "sha256": "20b7798e0578497f484090328d007ee723a32c8236476f176a28d077c09347ae",
+      "bytes": 2323
+    },
+    {
+      "path": "cmd/file/use.go",
+      "snapshot": "cmd/file/use.go.txt",
+      "sha256": "a23c31c61e057110362858e9e6c2453f085646f8cf42a78ce39b9e93b3157f68",
+      "bytes": 3026
+    },
+    {
+      "path": "cmd/generate.go",
+      "snapshot": "cmd/generate.go.txt",
+      "sha256": "417c2eb01d1f0dbbb643fb464a51ee5de3e6bcbe2e209acd52070e915ddc1199",
+      "bytes": 3497
+    },
+    {
+      "path": "cmd/git.go",
+      "snapshot": "cmd/git.go.txt",
+      "sha256": "975af48df1ffb36cf55a98352ac3a9fb32b921205b6c60228e241895f8bcfe26",
+      "bytes": 1877
+    },
+    {
+      "path": "cmd/input.go",
+      "snapshot": "cmd/input.go.txt",
+      "sha256": "ec1b49f49f6d9bc021adf7ff9f6a17f9e58a0e33a4b65dacecbacb91924194bf",
+      "bytes": 802
+    },
+    {
+      "path": "cmd/intake/intake.go",
+      "snapshot": "cmd/intake/intake.go.txt",
+      "sha256": "341137bb23bb84b678abc1448b7ff42baf2034cfe41e3acb87bd68987cc7ff7d",
+      "bytes": 8465
+    },
+    {
+      "path": "cmd/intake/watch.go",
+      "snapshot": "cmd/intake/watch.go.txt",
+      "sha256": "ea85395d0c3492a37313bcb23062b368e9070e684db0e3a34f27bf08d52b1bc8",
+      "bytes": 6892
+    },
+    {
+      "path": "cmd/manpages.go",
+      "snapshot": "cmd/manpages.go.txt",
+      "sha256": "823ad511cf29fe8528aaf31f0418f9c87ccebd37953c31c7f12e04ed7b49254a",
+      "bytes": 1910
+    },
+    {
+      "path": "cmd/mcp/agent.go",
+      "snapshot": "cmd/mcp/agent.go.txt",
+      "sha256": "56bd0ff88b28b46c90534f10b2f6ddd6a4a91f53e7e5e2e8a5235a71f9b7967e",
+      "bytes": 5319
+    },
+    {
+      "path": "cmd/mcp/agent_audit.go",
+      "snapshot": "cmd/mcp/agent_audit.go.txt",
+      "sha256": "d6e39c078906be87095899d810f101ca7c3a2935c19d6053b38ee178ad655dc2",
+      "bytes": 4492
+    },
+    {
+      "path": "cmd/mcp/agent_doctor.go",
+      "snapshot": "cmd/mcp/agent_doctor.go.txt",
+      "sha256": "630d832520c473ce9b03cce87e15ccfafd08c81a46c78090f81a513cb9799f44",
+      "bytes": 4005
+    },
+    {
+      "path": "cmd/mcp/agent_install.go",
+      "snapshot": "cmd/mcp/agent_install.go.txt",
+      "sha256": "2538edf20c49dc5ffbb9f6fb10f7fe0f4eb061b02df71cef29c3b3998394188f",
+      "bytes": 13838
+    },
+    {
+      "path": "cmd/mcp/agent_list.go",
+      "snapshot": "cmd/mcp/agent_list.go.txt",
+      "sha256": "efc1592e2c79c2427bb50fc17bd094e0f88ffbbf57217bdbbef76cda413226b3",
+      "bytes": 4748
+    },
+    {
+      "path": "cmd/mcp/agent_profile.go",
+      "snapshot": "cmd/mcp/agent_profile.go.txt",
+      "sha256": "be8e2010c4f70550f6d9781fda966895aa2e6d5871c189d4b518e400bdc5fe49",
+      "bytes": 7036
+    },
+    {
+      "path": "cmd/mcp/agent_skill.go",
+      "snapshot": "cmd/mcp/agent_skill.go.txt",
+      "sha256": "7dd5e002aa7bef56e9aaaa3e5e69104c8de68feaac89ef1c3451b5c30db47fc5",
+      "bytes": 3933
+    },
+    {
+      "path": "cmd/mcp/agent_token.go",
+      "snapshot": "cmd/mcp/agent_token.go.txt",
+      "sha256": "3c7d4e9d4cef9d84c8989eb5a9f4770936264b48016efeda2500b8b3d248e32b",
+      "bytes": 8755
+    },
+    {
+      "path": "cmd/mcp/agent_uninstall.go",
+      "snapshot": "cmd/mcp/agent_uninstall.go.txt",
+      "sha256": "6d58edb766a6a1e9d09e7d626b95d29dbf10591d8a72246f760cbca6dcc50e40",
+      "bytes": 5020
+    },
+    {
+      "path": "cmd/mcp/agent_upgrade.go",
+      "snapshot": "cmd/mcp/agent_upgrade.go.txt",
+      "sha256": "888ae65e6645e17e194041a7543816acf0f20038324308a18d1b439f5a791a1a",
+      "bytes": 12800
+    },
+    {
+      "path": "cmd/mcp/agent_whoami.go",
+      "snapshot": "cmd/mcp/agent_whoami.go.txt",
+      "sha256": "879b1dba616d37d987268a221c34675937daa8c33239f9af4306dae7f21276b9",
+      "bytes": 6503
+    },
+    {
+      "path": "cmd/mcp/commands.go",
+      "snapshot": "cmd/mcp/commands.go.txt",
+      "sha256": "947ecc254b69ccc1f6b91dfb04adccafbe563e6dec1c26ff15f4e269492beab3",
+      "bytes": 401
+    },
+    {
+      "path": "cmd/mcp/mcp_config.go",
+      "snapshot": "cmd/mcp/mcp_config.go.txt",
+      "sha256": "f5f94f70f0d873a4c9a9dad7e04ac72096f76e953c8e06114deed9346a0253f1",
+      "bytes": 10643
+    },
+    {
+      "path": "cmd/mcp/mcp_install.go",
+      "snapshot": "cmd/mcp/mcp_install.go.txt",
+      "sha256": "ce62adc39bc22ebe8aebc4400791d7c966cca8c13a93aa853dd50320ebde01f3",
+      "bytes": 3341
+    },
+    {
+      "path": "cmd/mcp/mcp_token.go",
+      "snapshot": "cmd/mcp/mcp_token.go.txt",
+      "sha256": "b17680f7015ff5d216d6d6cdef0626279f9115f69634237b1fcb03baab9e524f",
+      "bytes": 4630
+    },
+    {
+      "path": "cmd/mcp/serve.go",
+      "snapshot": "cmd/mcp/serve.go.txt",
+      "sha256": "b03f66c9bb5ab9bdd60efe009b134afe3532e21f27c08063d6f9d88daee800d6",
+      "bytes": 4685
+    },
+    {
+      "path": "cmd/mcp/serve_deps.go",
+      "snapshot": "cmd/mcp/serve_deps.go.txt",
+      "sha256": "8094121d8b381efcc7a3e02fd41fdc87e86e5444e57a2bbee8f3b7763b24aca0",
+      "bytes": 12135
+    },
+    {
+      "path": "cmd/mcp/serve_install.go",
+      "snapshot": "cmd/mcp/serve_install.go.txt",
+      "sha256": "fcedd7a5e411818eee99d5942d42f7b022b200a2034bf1bd5b3b67c039e7852e",
+      "bytes": 4230
+    },
+    {
+      "path": "cmd/passlint/clierror.go",
+      "snapshot": "cmd/passlint/clierror.go.txt",
+      "sha256": "8762c91b4e1223fda0c65dd727843093f278668b99d799f34966d8d6faebf30a",
+      "bytes": 3234
+    },
+    {
+      "path": "cmd/passlint/mcpcheckscope.go",
+      "snapshot": "cmd/passlint/mcpcheckscope.go.txt",
+      "sha256": "ba1244a81c0b8682fe50983d116a57da1f37b56785a0f92f384f29622bc98ff1",
+      "bytes": 1894
+    },
+    {
+      "path": "cmd/passlint/mcpmarshal.go",
+      "snapshot": "cmd/passlint/mcpmarshal.go.txt",
+      "sha256": "5cecea9f487bb13cc96188502ee7c6b80dda317945cb8f504a83c24b53fecf3b",
+      "bytes": 928
+    },
+    {
+      "path": "cmd/passlint/mcpstringsafely.go",
+      "snapshot": "cmd/passlint/mcpstringsafely.go.txt",
+      "sha256": "d052f23bdde25ac35298f568ac883e212bc9fdc4cb3335bc5ce2d7a2dcc28fe0",
+      "bytes": 1068
+    },
+    {
+      "path": "cmd/passlint/passlint.go",
+      "snapshot": "cmd/passlint/passlint.go.txt",
+      "sha256": "294595ba7d4361de13c977f20259240d573e3714905e5c7bd7d00bf65230cbc2",
+      "bytes": 4510
+    },
+    {
+      "path": "cmd/policy.go",
+      "snapshot": "cmd/policy.go.txt",
+      "sha256": "a818dcf5495a24243ef142185a5e5b4fc6f03242011900a5fa18fda6f18f4cda",
+      "bytes": 7303
+    },
+    {
+      "path": "cmd/profile.go",
+      "snapshot": "cmd/profile.go.txt",
+      "sha256": "d2288547777ced6cc5d3b65c8340f823387806bb9496e17d9f51b1084f105c4d",
+      "bytes": 5225
+    },
+    {
+      "path": "cmd/recipients.go",
+      "snapshot": "cmd/recipients.go.txt",
+      "sha256": "f6fb5c838790f6c756dbb1f1868bc0d3d3449fda998e629936d12383d5b88524",
+      "bytes": 7383
+    },
+    {
+      "path": "cmd/remote.go",
+      "snapshot": "cmd/remote.go.txt",
+      "sha256": "b1f19d80b0e5d611a8689ec6ac0cf140082ad6d749665f91494d41bacf7ec04a",
+      "bytes": 8689
+    },
+    {
+      "path": "cmd/root.go",
+      "snapshot": "cmd/root.go.txt",
+      "sha256": "1e53eedb1006b5862e7c725a6c726e272365b03c09e12ac19ec92d77d2ac3237",
+      "bytes": 2522
+    },
+    {
+      "path": "cmd/run.go",
+      "snapshot": "cmd/run.go.txt",
+      "sha256": "84dabccbb7c1204c622f460c5b716c182c76e90402713e9717f467ada64cf30a",
+      "bytes": 7179
+    },
+    {
+      "path": "cmd/share.go",
+      "snapshot": "cmd/share.go.txt",
+      "sha256": "05ec1e0dc8cf12dcc9755c6a3212bdeee07e6199a0573b5d2169d35dc395b00a",
+      "bytes": 4590
+    },
+    {
+      "path": "cmd/sync.go",
+      "snapshot": "cmd/sync.go.txt",
+      "sha256": "638f3c00f18ab7f16c885c4be0f1adca4be67863efe84ae1b5301a44edc1eae1",
+      "bytes": 3397
+    },
+    {
+      "path": "cmd/template.go",
+      "snapshot": "cmd/template.go.txt",
+      "sha256": "a052b647920f0a150ef80f79585e38c9a3312513b456f7b01a4e36e259b59431",
+      "bytes": 5342
+    },
+    {
+      "path": "cmd/ui.go",
+      "snapshot": "cmd/ui.go.txt",
+      "sha256": "b009d64f6d6d037d0113099b230dc2240ff11091d19cdda859fb389a884e2c72",
+      "bytes": 1763
+    },
+    {
+      "path": "go.mod",
+      "snapshot": "go.mod.txt",
+      "sha256": "4aca694eae35c22ba56775b59bb6d571504eaed525e17354c71c6716860f5b2d",
+      "bytes": 7699
+    },
+    {
+      "path": "go.sum",
+      "snapshot": "go.sum.txt",
+      "sha256": "16b33d8a602518f8060b4db95e5db906e1e859cb263ad601212bcfc042067ecb",
+      "bytes": 29015
+    },
+    {
+      "path": "internal/approval/local.go",
+      "snapshot": "internal/approval/local.go.txt",
+      "sha256": "3462aff4dfa2704b320a74a0e92991b1d1d06a68f500e3a18027fd1229601a8a",
+      "bytes": 2572
+    },
+    {
+      "path": "internal/cli/cli.go",
+      "snapshot": "internal/cli/cli.go.txt",
+      "sha256": "94b10c3c3b6ac708d2d3dd181cf6f6a963b581cddf79f756cbca3de42a237d10",
+      "bytes": 16460
+    },
+    {
+      "path": "internal/cli/completion.go",
+      "snapshot": "internal/cli/completion.go.txt",
+      "sha256": "d1928a112b5db003b16d2f177f6486dbcc15d8b3635b0daad4d7976e3ffd82e9",
+      "bytes": 2906
+    },
+    {
+      "path": "internal/cli/completion_cache.go",
+      "snapshot": "internal/cli/completion_cache.go.txt",
+      "sha256": "a31d616ae9ee7e2bc88f60a68856f384b7c2154d32b1d3883c8a00f8803f4a75",
+      "bytes": 2206
+    },
+    {
+      "path": "internal/cli/configfix.go",
+      "snapshot": "internal/cli/configfix.go.txt",
+      "sha256": "e771a35362fb0b5c4f57c1e0027b8e369f111b57b4522ebf563996bc632e6d89",
+      "bytes": 8390
+    },
+    {
+      "path": "internal/cli/generate.go",
+      "snapshot": "internal/cli/generate.go.txt",
+      "sha256": "7c4cf9415e5d6e4acd27aa18a4987dff74027c5da7eac80fb6186cba43988f43",
+      "bytes": 442
+    },
+    {
+      "path": "internal/cli/input.go",
+      "snapshot": "internal/cli/input.go.txt",
+      "sha256": "60df2e1c48081dbf33597b9e9efb5f25e4125c0e5e754100a64f40d8a5626438",
+      "bytes": 692
+    },
+    {
+      "path": "internal/cli/input/input.go",
+      "snapshot": "internal/cli/input/input.go.txt",
+      "sha256": "a224f861ded7829043d29f31b4bc770644cbc6f0b8fd420f7452a6c7030cb24e",
+      "bytes": 6885
+    },
+    {
+      "path": "internal/cli/output.go",
+      "snapshot": "internal/cli/output.go.txt",
+      "sha256": "528fed66562617a0637644159f52ba67d18aa5eec1cfe7794f4ee3a5edf2f77f",
+      "bytes": 621
+    },
+    {
+      "path": "internal/cli/output/output.go",
+      "snapshot": "internal/cli/output/output.go.txt",
+      "sha256": "de43c018b69e26e5aca3494a7a29893c838dcd10dbfd3f4deabd199f51c8230e",
+      "bytes": 2783
+    },
+    {
+      "path": "internal/cli/passphrase_env.go",
+      "snapshot": "internal/cli/passphrase_env.go.txt",
+      "sha256": "bdfcf2230951e091a0f2ec4bada2f005da43db0c44b6e867a8836fe2327d76ab",
+      "bytes": 1851
+    },
+    {
+      "path": "internal/cli/port_utils.go",
+      "snapshot": "internal/cli/port_utils.go.txt",
+      "sha256": "54703c4b24d4f165d164f3093f26c4ccb9bde949d4887c6e29bbfcaf44b7af2d",
+      "bytes": 7479
+    },
+    {
+      "path": "internal/cli/sync.go",
+      "snapshot": "internal/cli/sync.go.txt",
+      "sha256": "6bbb6d3a4b044a869b7c7b7d5d6f2a94eb246d0aeffeb39ba1e0cb0e04ab2a91",
+      "bytes": 2085
+    },
+    {
+      "path": "internal/cli/terminal.go",
+      "snapshot": "internal/cli/terminal.go.txt",
+      "sha256": "d09c8e904a9ab158f2b3678a6f85e614d6efd709e27b60123290aaa656b515cd",
+      "bytes": 3099
+    },
+    {
+      "path": "internal/cli/unlock.go",
+      "snapshot": "internal/cli/unlock.go.txt",
+      "sha256": "532fd7e7a8cb3e4135366b3ef853f14eff8dd6aee53586125d99a7674c41d8fd",
+      "bytes": 11654
+    },
+    {
+      "path": "internal/cli/vault.go",
+      "snapshot": "internal/cli/vault.go.txt",
+      "sha256": "f56887fa23432c29ff56180c0ec6a8c3b0e9915b61c6eecfbdc4728cc6519b3c",
+      "bytes": 2380
+    },
+    {
+      "path": "internal/cli/vaultpath.go",
+      "snapshot": "internal/cli/vaultpath.go.txt",
+      "sha256": "e43ce15283cdbdd54f93eb3b6f77086e50ec90d087ffa5907e03d87c2edeca7d",
+      "bytes": 3061
+    },
+    {
+      "path": "internal/cli/version.go",
+      "snapshot": "internal/cli/version.go.txt",
+      "sha256": "28a2af4c863f774bf18368e3c6232fcf3fe5df2553e5648cbcd0023637ee2f78",
+      "bytes": 1299
+    },
+    {
+      "path": "internal/config/schema.go",
+      "snapshot": "internal/config/schema.go.txt",
+      "sha256": "2cc29f9b9d770a31e1cff1b100d728e4ad332eb12c2624a8fe7c5afb9ea9ca78",
+      "bytes": 16229
+    },
+    {
+      "path": "internal/errors/errors.go",
+      "snapshot": "internal/errors/errors.go.txt",
+      "sha256": "3c9f9f67c959f53f8ec429cfef62603d872adedb8839da27640dcf98be901524",
+      "bytes": 11310
+    },
+    {
+      "path": "internal/exporter/csv.go",
+      "snapshot": "internal/exporter/csv.go.txt",
+      "sha256": "ee49ac679db1029ee997cf5477114e2130d093f4d57d965d5df610a6328a4aa1",
+      "bytes": 2631
+    },
+    {
+      "path": "internal/exporter/exporter.go",
+      "snapshot": "internal/exporter/exporter.go.txt",
+      "sha256": "a4a5c313d51310126673dcd81d426556db2ea8c12ba241e78736eb3c02d6f647",
+      "bytes": 841
+    },
+    {
+      "path": "internal/exporter/json.go",
+      "snapshot": "internal/exporter/json.go.txt",
+      "sha256": "8c0483b42c43992b6e11db671eb0c862c8c6a925b690a37ca0b36c69291eb0db",
+      "bytes": 2950
+    },
+    {
+      "path": "internal/fsutil/createsensitiveoutput.go",
+      "snapshot": "internal/fsutil/createsensitiveoutput.go.txt",
+      "sha256": "2be85e078f408c7b44552b5fc86053c41389f84aa54fab0b1258b60a26445efa",
+      "bytes": 985
+    },
+    {
+      "path": "internal/fsutil/doc.go",
+      "snapshot": "internal/fsutil/doc.go.txt",
+      "sha256": "29ed6e2a9677bda56b64a3f20e795780e8c11beeeedced14a1cf72d45c15eacc",
+      "bytes": 99
+    },
+    {
+      "path": "internal/fsutil/reexport.go",
+      "snapshot": "internal/fsutil/reexport.go.txt",
+      "sha256": "36f8d0a3c6e855655f74803974b97a7a6eb7038f4d2af266b331e7fab664bc13",
+      "bytes": 2412
+    },
+    {
+      "path": "internal/fsutil/safepath/doc.go",
+      "snapshot": "internal/fsutil/safepath/doc.go.txt",
+      "sha256": "ce75c11f266e2cfa587df59ada0916a330b2efc98b3c576903775d951031d8c3",
+      "bytes": 984
+    },
+    {
+      "path": "internal/fsutil/safepath/manager_unix.go",
+      "snapshot": "internal/fsutil/safepath/manager_unix.go.txt",
+      "sha256": "957ca8fc7bbb7d0f928deb67647e56107f095eda0c4af93910c882994023f3c1",
+      "bytes": 656
+    },
+    {
+      "path": "internal/fsutil/safepath/manager_windows.go",
+      "snapshot": "internal/fsutil/safepath/manager_windows.go.txt",
+      "sha256": "f25065459d8feec9d92787f783522b1400720b4de37fdd9d487b075afde36adc",
+      "bytes": 532
+    },
+    {
+      "path": "internal/fsutil/safepath/safepath.go",
+      "snapshot": "internal/fsutil/safepath/safepath.go.txt",
+      "sha256": "bd5f406f82ca4f9a2e01e6a4f82bb758ccdb38cc4d28d3fc713b02d9dcd8d214",
+      "bytes": 930
+    },
+    {
+      "path": "internal/fsutil/safewrite_windows.go",
+      "snapshot": "internal/fsutil/safewrite_windows.go.txt",
+      "sha256": "ba3b8631a7a1fc9f5bfc5f0148eebe4e28f6a248d2319f00e2ab35a2be43ee5d",
+      "bytes": 415
+    },
+    {
+      "path": "internal/importer/bitwarden.go",
+      "snapshot": "internal/importer/bitwarden.go.txt",
+      "sha256": "ccf4eb859b6a297789254dcc26ff58b76fcaef1f1cf845dd47933c58a46796f1",
+      "bytes": 4855
+    },
+    {
+      "path": "internal/importer/csv.go",
+      "snapshot": "internal/importer/csv.go.txt",
+      "sha256": "04a12614128838e6125f6c0e8e493581f86a10bd6743c6f4d7021cd48d698002",
+      "bytes": 3469
+    },
+    {
+      "path": "internal/importer/csv_profiles.go",
+      "snapshot": "internal/importer/csv_profiles.go.txt",
+      "sha256": "7dad871b9f1b63fd13f43c46fec03fb9c27ae57ed5637757089b54908732f6af",
+      "bytes": 7029
+    },
+    {
+      "path": "internal/importer/cxf.go",
+      "snapshot": "internal/importer/cxf.go.txt",
+      "sha256": "1cc62d71f0d44b90faf72c42d018d0d32e228b5a40ddc20851ff825794b3207c",
+      "bytes": 17959
+    },
+    {
+      "path": "internal/importer/importer.go",
+      "snapshot": "internal/importer/importer.go.txt",
+      "sha256": "a0b0a5a822bd6cae4c5d05fd84282aae0ecda5dcf786e85b1967099e4cc59b9d",
+      "bytes": 4713
+    },
+    {
+      "path": "internal/importer/onepux.go",
+      "snapshot": "internal/importer/onepux.go.txt",
+      "sha256": "b9c197e0cf091167324aebb155874aaa49b8101a6ddeb37817546ad47188c947",
+      "bytes": 5950
+    },
+    {
+      "path": "internal/importer/pass.go",
+      "snapshot": "internal/importer/pass.go.txt",
+      "sha256": "a9e01ad7d61655cebfe0a8c68cd572f3c5503caa7eaf48f176df68f0e9de2432",
+      "bytes": 3526
+    },
+    {
+      "path": "internal/importer/totp.go",
+      "snapshot": "internal/importer/totp.go.txt",
+      "sha256": "d49a7ea8db392c2de0cddc3186b3bf378f7b24a6972837d775649416ea42175b",
+      "bytes": 3400
+    },
+    {
+      "path": "internal/mcp/serverbootstrap/http.go",
+      "snapshot": "internal/mcp/serverbootstrap/http.go.txt",
+      "sha256": "ff83f7c73d3caa9c7dcabba4a8878f9f2a083a96cc7665caac67bd9d4d001891",
+      "bytes": 17825
+    },
+    {
+      "path": "internal/ui/cliout/cliout.go",
+      "snapshot": "internal/ui/cliout/cliout.go.txt",
+      "sha256": "faa0608fb215074fa78bdd5d1f709671f3d03c8f4e9b08151792eb3645c35323",
+      "bytes": 3696
+    },
+    {
+      "path": "internal/update/apply.go",
+      "snapshot": "internal/update/apply.go.txt",
+      "sha256": "290303930be20d25c54a3228bfe68bcd268dd34b46d9e33595ea14b6096bbf22",
+      "bytes": 5884
+    },
+    {
+      "path": "internal/update/checker.go",
+      "snapshot": "internal/update/checker.go.txt",
+      "sha256": "2148d6704db680a64369b0667b54ae50a92b874f28cee896e9993cc77dfa503c",
+      "bytes": 5152
+    },
+    {
+      "path": "internal/update/checker_test.go",
+      "snapshot": "internal/update/checker_test.go.txt",
+      "sha256": "f7bb493aa43cdf5886809aa2c41d3282cb1f9071099c03a5a423caf5ebb54883",
+      "bytes": 20852
+    },
+    {
+      "path": "internal/update/installmethod/detect.go",
+      "snapshot": "internal/update/installmethod/detect.go.txt",
+      "sha256": "0a665d1191ff708da8370092f9e364d117f9b84b9470a626a74e47218adee9ef",
+      "bytes": 3169
+    },
+    {
+      "path": "main.go",
+      "snapshot": "main.go.txt",
+      "sha256": "1778977fef73cd4da0de74a5bfe4674e23b84586085aa6a0dbfc9f8ec7127e91",
+      "bytes": 684
+    },
+    {
+      "path": "scripts/rust-port/check_import_cli.sh",
+      "snapshot": "scripts/rust-port/check_import_cli.sh.txt",
+      "sha256": "3d2e0a3a070a6118efb3c130bb0d830dbe24269dc7eaa3df62b776415819962d",
+      "bytes": 1946
+    },
+    {
+      "path": "scripts/rust-port/check_output_modes_cli.sh",
+      "snapshot": "scripts/rust-port/check_output_modes_cli.sh.txt",
+      "sha256": "179c40f8efa19a641419c5677e916fca0250157f578ae13fe93c1ab022d0279f",
+      "bytes": 3403
+    },
+    {
+      "path": "scripts/rust-port/cmd/entrypolicygen/main.go",
+      "snapshot": "scripts/rust-port/cmd/entrypolicygen/main.go.txt",
+      "sha256": "a0a98eedc17d17ea88944e3fa80bfda289655705e4d0fa86447b8264f81ef860",
+      "bytes": 6117
+    },
+    {
+      "path": "scripts/rust-port/cmd/exportcligen/cases.go",
+      "snapshot": "scripts/rust-port/cmd/exportcligen/cases.go.txt",
+      "sha256": "1a07dfbdb2b94f4ab58fd8c6f09f48011ce9f98196e9d0ea4599e79d6f7d3e2b",
+      "bytes": 37330
+    },
+    {
+      "path": "scripts/rust-port/cmd/exportcligen/main.go",
+      "snapshot": "scripts/rust-port/cmd/exportcligen/main.go.txt",
+      "sha256": "86a7e382fd657371a4efeeffcac5e09312de755b2c26a642dedcaba245a87a6d",
+      "bytes": 17019
+    },
+    {
+      "path": "scripts/rust-port/cmd/exportcligen/run.go",
+      "snapshot": "scripts/rust-port/cmd/exportcligen/run.go.txt",
+      "sha256": "65bcb10aad839b210991a4022b56922f67cf83d21a43a35667e83fc7ee447159",
+      "bytes": 18608
+    },
+    {
+      "path": "scripts/rust-port/cmd/exportcligen/seeds.go",
+      "snapshot": "scripts/rust-port/cmd/exportcligen/seeds.go.txt",
+      "sha256": "97c0ee9fc33c81922993c99197a63e465bc4f2382d596971521454439b8ee67d",
+      "bytes": 6131
+    },
+    {
+      "path": "scripts/rust-port/cmd/importcligen/cases.go",
+      "snapshot": "scripts/rust-port/cmd/importcligen/cases.go.txt",
+      "sha256": "34996359e836cd8e4205f288ac3752a032a18f4fd85ce687690208cec3763dac",
+      "bytes": 66752
+    },
+    {
+      "path": "scripts/rust-port/cmd/importcligen/main.go",
+      "snapshot": "scripts/rust-port/cmd/importcligen/main.go.txt",
+      "sha256": "36487c668ae39db3826c5f7282356cc44d682827d8d561f1265525ae04f16c80",
+      "bytes": 22447
+    },
+    {
+      "path": "scripts/rust-port/cmd/manifestkeygen/main.go",
+      "snapshot": "scripts/rust-port/cmd/manifestkeygen/main.go.txt",
+      "sha256": "9d69503c9e668042cb6cc55e6c995af283fe5ab92c197cfdd6379cd672a2ba3c",
+      "bytes": 10200
+    },
+    {
+      "path": "scripts/rust-port/cmd/outputmodegen/cases.go",
+      "snapshot": "scripts/rust-port/cmd/outputmodegen/cases.go.txt",
+      "sha256": "393612ac35fe2c2812d41335fe8edfa86f00240884ca8d62de92d078a3635533",
+      "bytes": 31922
+    },
+    {
+      "path": "scripts/rust-port/cmd/outputmodegen/main.go",
+      "snapshot": "scripts/rust-port/cmd/outputmodegen/main.go.txt",
+      "sha256": "49186010d75244aca5ba3bf44169c6fa2822549b57c78157df95361c1dc354ec",
+      "bytes": 54986
+    },
+    {
+      "path": "scripts/rust-port/refresh-read-policy-fixtures.py",
+      "snapshot": "scripts/rust-port/refresh-read-policy-fixtures.py.txt",
+      "sha256": "7570ce75d45e733aa8e36a13c3046f2c3e101a565198b3d87709b3a4f868d16a",
+      "bytes": 10409
+    },
+    {
+      "path": "scripts/rust-port/refresh-update-fixtures.py",
+      "snapshot": "scripts/rust-port/refresh-update-fixtures.py.txt",
+      "sha256": "00acb93f2669bdb0f7111cd53e6723f6ad6f54198e09766ed554100bb13cf8bf",
+      "bytes": 12095
+    }
+  ]
+}

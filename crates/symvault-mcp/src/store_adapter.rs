@@ -116,25 +116,25 @@ pub fn load_api_template_definition(
 }
 
 fn load_builtin_api_template(name: &str) -> Result<ApiTemplateDefinition, String> {
-    // Share the authoritative Go assets; custom files always take precedence.
+    // Crate-local copies of the built-in templates; custom files always take precedence.
     let yaml = match name {
-        "anthropic" => include_str!("../../../internal/mcp/apitemplates/builtin/anthropic.yaml"),
-        "cloudflare" => include_str!("../../../internal/mcp/apitemplates/builtin/cloudflare.yaml"),
-        "gemini" => include_str!("../../../internal/mcp/apitemplates/builtin/gemini.yaml"),
-        "github" => include_str!("../../../internal/mcp/apitemplates/builtin/github.yaml"),
-        "gitlab" => include_str!("../../../internal/mcp/apitemplates/builtin/gitlab.yaml"),
-        "linear" => include_str!("../../../internal/mcp/apitemplates/builtin/linear.yaml"),
-        "notion" => include_str!("../../../internal/mcp/apitemplates/builtin/notion.yaml"),
-        "npm" => include_str!("../../../internal/mcp/apitemplates/builtin/npm.yaml"),
-        "openai" => include_str!("../../../internal/mcp/apitemplates/builtin/openai.yaml"),
-        "openrouter" => include_str!("../../../internal/mcp/apitemplates/builtin/openrouter.yaml"),
-        "perplexity" => include_str!("../../../internal/mcp/apitemplates/builtin/perplexity.yaml"),
-        "resend" => include_str!("../../../internal/mcp/apitemplates/builtin/resend.yaml"),
-        "sentry" => include_str!("../../../internal/mcp/apitemplates/builtin/sentry.yaml"),
-        "slack" => include_str!("../../../internal/mcp/apitemplates/builtin/slack.yaml"),
-        "stripe" => include_str!("../../../internal/mcp/apitemplates/builtin/stripe.yaml"),
-        "telegram" => include_str!("../../../internal/mcp/apitemplates/builtin/telegram.yaml"),
-        "vercel" => include_str!("../../../internal/mcp/apitemplates/builtin/vercel.yaml"),
+        "anthropic" => include_str!("../assets/apitemplates/anthropic.yaml"),
+        "cloudflare" => include_str!("../assets/apitemplates/cloudflare.yaml"),
+        "gemini" => include_str!("../assets/apitemplates/gemini.yaml"),
+        "github" => include_str!("../assets/apitemplates/github.yaml"),
+        "gitlab" => include_str!("../assets/apitemplates/gitlab.yaml"),
+        "linear" => include_str!("../assets/apitemplates/linear.yaml"),
+        "notion" => include_str!("../assets/apitemplates/notion.yaml"),
+        "npm" => include_str!("../assets/apitemplates/npm.yaml"),
+        "openai" => include_str!("../assets/apitemplates/openai.yaml"),
+        "openrouter" => include_str!("../assets/apitemplates/openrouter.yaml"),
+        "perplexity" => include_str!("../assets/apitemplates/perplexity.yaml"),
+        "resend" => include_str!("../assets/apitemplates/resend.yaml"),
+        "sentry" => include_str!("../assets/apitemplates/sentry.yaml"),
+        "slack" => include_str!("../assets/apitemplates/slack.yaml"),
+        "stripe" => include_str!("../assets/apitemplates/stripe.yaml"),
+        "telegram" => include_str!("../assets/apitemplates/telegram.yaml"),
+        "vercel" => include_str!("../assets/apitemplates/vercel.yaml"),
         _ => return Err(format!("template {name:?} not found")),
     };
     serde_yaml_ng::from_str(yaml).map_err(|error| format!("parse template: {error}"))

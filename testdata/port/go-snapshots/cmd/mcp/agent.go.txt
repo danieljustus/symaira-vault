@@ -1,0 +1,187 @@
+// Package mcp provides MCP server and agent management commands.
+package mcp
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+
+	"github.com/spf13/cobra"
+
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
+)
+
+func newAgentCmd() *cobra.Command {
+	agentCmd := &cobra.Command{
+		Use:   "agent",
+		Short: "Manage agent profiles",
+		Long: `Configure AI agent profiles with scoped permissions, tokens, and MCP integration.
+
+Use 'symvault agent install <name>' to create a security profile, scoped token,
+MCP configuration, and agent skill package.`,
+		Example: `  # Install and configure an agent
+  symvault agent install claude-code
+
+  # List configured agents
+  symvault agent list
+
+  # Issue a token for an agent
+  symvault agent token new claude-code`,
+	}
+	agentCmd.AddCommand(newAgentSetupCmd())
+	agentCmd.AddCommand(newAgentAuditCmd())
+	agentCmd.AddCommand(newAgentDoctorCmd())
+	agentCmd.AddCommand(newAgentInstallCmd())
+	agentCmd.AddCommand(newAgentListCmd())
+	agentCmd.AddCommand(newAgentProfileCmd())
+	agentCmd.AddCommand(newAgentSkillCmd())
+	agentCmd.AddCommand(newAgentTokenCmd())
+	agentCmd.AddCommand(newAgentUninstallCmd())
+	agentCmd.AddCommand(newAgentUpgradeCmd())
+	agentCmd.AddCommand(newAgentWhoamiCmd())
+	agentCmd.GroupID = cli.GroupIDAgentsMCP
+	return agentCmd
+}
+
+func newAgentSetupCmd() *cobra.Command {
+	agentSetupCmd := &cobra.Command{
+		Use:   "setup <name>",
+		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install <name>'",
+		Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
+
+Use 'symvault agent install <name>' instead to create and configure
+agent profiles interactively.`,
+		Hidden: true,
+		Args:   cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent install <name>")
+			return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+				"This command is deprecated in v4.0. Use: symvault agent install <name>", nil)
+		},
+	}
+	return agentSetupCmd
+}
+
+func promptApprovalMode(reader *bufio.Reader) string {
+	for {
+		fmt.Fprint(os.Stderr, "\nApproval mode:\n")
+		fmt.Fprint(os.Stderr, "1) prompt — ask for each sensitive operation\n")
+		fmt.Fprint(os.Stderr, "2) deny — block all sensitive operations\n")
+		fmt.Fprint(os.Stderr, "Choice [1-2] (default: 1): ")
+
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			cliout.Errorf("Error reading input: %v", err)
+			continue
+		}
+		input = strings.TrimSpace(input)
+		if input == "" {
+			return "prompt"
+		}
+
+		switch input {
+		case "1":
+			return "prompt"
+		case "2":
+			return "deny"
+		default:
+			fmt.Fprint(os.Stderr, "Invalid choice. Please enter 1 or 2.\n")
+		}
+	}
+}
+
+func validateAgentName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("agent name must not be empty")
+	}
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") || name == "." || strings.Contains(name, "..") {
+		return fmt.Errorf("invalid agent name")
+	}
+	return nil
+}
+
+func buildProfile(name, tier, glob, approvalMode string, requireApproval bool) configpkg.AgentProfile {
+	profile := configpkg.AgentProfile{
+		Name:         name,
+		AllowedPaths: []string{glob},
+	}
+
+	configpkg.ApplyTierPreset(&profile, tier)
+
+	profile.AllowedPaths = []string{glob}
+	profile.ApprovalMode = configpkg.StrPtr(approvalMode)
+	profile.RequireApproval = configpkg.BoolPtr(requireApproval)
+
+	return profile
+}
+
+func saveAgentConfig(vaultDir, name string, profile configpkg.AgentProfile) error {
+	if err := validateAgentName(name); err != nil {
+		return err
+	}
+	configPath := filepath.Join(vaultDir, "config.yaml")
+	cfg, err := configpkg.Load(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			cfg = &configpkg.Config{
+				VaultDir: vaultDir,
+				Agents:   make(map[string]configpkg.AgentProfile),
+			}
+		} else {
+			return fmt.Errorf("load config: %w", err)
+		}
+	}
+
+	if cfg.Agents == nil {
+		cfg.Agents = make(map[string]configpkg.AgentProfile)
+	}
+	cfg.Agents[name] = profile
+	return cfg.SaveTo(configPath)
+}
+
+func writeAgentTokenFile(vaultDir, name, rawToken string) (string, error) {
+	if err := validateAgentName(name); err != nil {
+		return "", err
+	}
+	tokenDir := filepath.Join(vaultDir, "mcp-tokens")
+	if err := os.MkdirAll(tokenDir, 0o700); err != nil {
+		return "", fmt.Errorf("create token directory: %w", err)
+	}
+
+	tokenPath := filepath.Join(tokenDir, name+".token")
+	if err := os.WriteFile(tokenPath, []byte(rawToken+"\n"), 0o600); err != nil {
+		return "", fmt.Errorf("write token file: %w", err)
+	}
+
+	return tokenPath, nil
+}
+
+func outputAgentMCPSnippet(name, rawToken string) {
+	args := []string{"mcp", "--stdio", "--agent", name}
+
+	config := map[string]any{
+		"mcpServers": map[string]any{
+			"symvault": map[string]any{
+				"command": "symvault",
+				"args":    args,
+				"env": map[string]string{
+					"SYMVAULT_MCP_TOKEN": rawToken,
+				},
+			},
+		},
+	}
+
+	cliout.Hintf("MCP config (generic stdio):")
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(config); err != nil {
+		cliout.Errorf("Error encoding config: %v", err)
+	}
+}

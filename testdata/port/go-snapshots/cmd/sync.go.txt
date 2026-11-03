@@ -1,0 +1,131 @@
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/spf13/cobra"
+
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/git"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+var syncPush bool
+var syncForce bool
+
+func newSyncCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "sync",
+		Short: "Sync vault with remote (pull + optional push)",
+		Long:  "Pulls changes from the remote git repository and optionally pushes local changes.",
+		Example: `  # Pull only
+  symvault sync
+
+  # Pull and push
+  symvault sync --push
+
+  # Force pull (reset local changes)
+  symvault sync --force`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
+			}
+
+			if !vaultpkg.IsInitialized(vaultDir) {
+				return errorspkg.NewVaultNotInitialized()
+			}
+
+			hasRemote, _ := git.HasRemote(vaultDir, "origin")
+			if !hasRemote {
+				printlnQuietAware("No remote configured. Skipping sync.")
+				return nil
+			}
+
+			result := git.Sync(vaultDir, syncPush, syncForce)
+
+			if result.Skipped {
+				printlnQuietAware("No remote configured. Skipping sync.")
+				return nil
+			}
+
+			if result.Error != nil {
+				if git.IsOfflineError(result.Error) {
+					printlnQuietAware("Warning: could not reach remote — offline")
+					return nil
+				}
+				return fmt.Errorf("sync failed: %w", result.Error)
+			}
+
+			if result.Success {
+				if err := git.SetLastSyncTime(vaultDir); err != nil {
+					cliout.Warnf("Warning: could not record sync time: %v", err)
+				}
+			}
+
+			if result.Updated {
+				printlnQuietAware("Pulled from remote")
+				if err := git.ResolveConflicts(vaultDir, git.DeviceIdentity(vaultDir)); err != nil {
+					cliout.Warnf("Warning: conflict resolution failed: %v", err)
+				}
+			} else {
+				printlnQuietAware("Already up to date")
+			}
+
+			if result.PushDone {
+				if result.PushSuccess {
+					printlnQuietAware("Pushed to remote")
+				} else {
+					printlnQuietAware("Push skipped or failed")
+				}
+			}
+
+			conflictFiles := findConflictFiles(vaultDir)
+			if len(conflictFiles) > 0 {
+				cliout.Warnf("Warning: %d conflict file(s) created:", len(conflictFiles))
+				for _, f := range conflictFiles {
+					cliout.Warnf("  %s", f)
+				}
+			}
+
+			return nil
+		},
+	}
+	c.Flags().BoolVarP(&syncPush, "push", "p", false, "also push after pull")
+	c.Flags().BoolVarP(&syncForce, "force", "f", false, "force pull (reset local changes)")
+	c.GroupID = cli.GroupIDSharingSync
+	return c
+}
+
+func findConflictFiles(vaultDir string) []string {
+	var conflicts []string
+	entries, err := os.ReadDir(vaultDir)
+	if err != nil {
+		return nil
+	}
+	for _, e := range entries {
+		if !e.IsDir() && containsConflict(e.Name()) {
+			conflicts = append(conflicts, e.Name())
+		}
+	}
+	entriesDir := filepath.Join(vaultDir, "entries")
+	entriesList, err := os.ReadDir(entriesDir)
+	if err == nil {
+		for _, e := range entriesList {
+			if containsConflict(e.Name()) {
+				conflicts = append(conflicts, filepath.Join("entries", e.Name()))
+			}
+		}
+	}
+	return conflicts
+}
+
+func containsConflict(name string) bool {
+	return len(name) > 11 && filepath.Base(name)[0:9] == ".conflict" ||
+		(len(name) > 14 && name[0:14] == "config.conflict")
+}

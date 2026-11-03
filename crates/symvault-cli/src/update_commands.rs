@@ -1117,10 +1117,11 @@ mod check_tests {
     #[test]
     fn cache_fixture_is_bound_to_go_source() {
         let fixture = fixture();
-        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let repo_root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/go-snapshots");
         let mut hasher = Sha256::new();
         for name in &fixture.oracle.source_files {
-            let data = fs::read(repo_root.join(name))
+            let data = fs::read(repo_root.join(format!("{name}.txt")))
                 .unwrap_or_else(|error| panic!("read pinned Go source {name}: {error}"));
             hasher.update(name.as_bytes());
             hasher.update([0]);
@@ -1228,10 +1229,11 @@ mod apply_tests {
     #[test]
     fn fixture_source_digest_matches_pinned_go_sources() {
         let fixture = fixture();
-        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let repo_root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/go-snapshots");
         let mut hasher = Sha256::new();
         for name in &fixture.oracle.source_files {
-            let data = fs::read(repo_root.join(name))
+            let data = fs::read(repo_root.join(format!("{name}.txt")))
                 .unwrap_or_else(|error| panic!("read pinned Go source {name}: {error}"));
             hasher.update(name.as_bytes());
             hasher.update([0]);
@@ -1323,10 +1325,11 @@ mod http_tests {
             fixture.oracle.corekit_pin,
             "github.com/danieljustus/symaira-corekit v0.18.2"
         );
-        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let repo_root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/go-snapshots");
         let mut hasher = Sha256::new();
         for name in &fixture.oracle.source_files {
-            let data = fs::read(repo_root.join(name))
+            let data = fs::read(repo_root.join(format!("{name}.txt")))
                 .unwrap_or_else(|error| panic!("read pinned Go source {name}: {error}"));
             hasher.update(name.as_bytes());
             hasher.update([0]);

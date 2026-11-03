@@ -1,0 +1,19 @@
+# Telegram Bot API template.
+# Auth shape: the bot token lives in the URL path — /bot<token>/<method> —
+# https://core.telegram.org/bots/api#making-requests
+# The token is injected via a path substitution, so it never appears in a
+# header or query string. Fill the vault entry referenced by entry_ref with a
+# "credential" field.
+base_url: https://api.telegram.org/bot__TELEGRAM_BOT_TOKEN__
+auth_type: none
+entry_ref: op:///telegram
+substitutions:
+  - placeholder: __TELEGRAM_BOT_TOKEN__
+    field: credential
+    in: [path]
+allowed_endpoints:
+  - /getMe
+  - /sendMessage
+allowed_methods:
+  - GET
+  - POST

@@ -135,7 +135,8 @@ fn load_fixture() -> Fixture {
 }
 
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    // Frozen Go sources (testdata/port/go-snapshots/MANIFEST.json), `<path>.txt`.
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/go-snapshots")
 }
 
 fn decode_base64(value: &str) -> Vec<u8> {
@@ -555,8 +556,8 @@ fn digest_of(root: &Path, names: &[String]) -> String {
     // provenance.Digest format: sha256 over name/NUL/content/NUL in order.
     let mut hasher = Sha256::new();
     for name in names {
-        let content =
-            std::fs::read(root.join(name)).unwrap_or_else(|error| panic!("read {name}: {error}"));
+        let content = std::fs::read(root.join(format!("{name}.txt")))
+            .unwrap_or_else(|error| panic!("read {name}: {error}"));
         hasher.update(name.as_bytes());
         hasher.update([0u8]);
         hasher.update(&content);

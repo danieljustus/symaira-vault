@@ -168,8 +168,8 @@ fn digest(bytes: &[u8]) -> String {
 fn provenance_digest(root: &Path, names: &[String]) -> String {
     let mut hasher = Sha256::new();
     for name in names {
-        let content =
-            std::fs::read(root.join(name)).unwrap_or_else(|error| panic!("read {name}: {error}"));
+        let content = std::fs::read(root.join(format!("{name}.txt")))
+            .unwrap_or_else(|error| panic!("read {name}: {error}"));
         hasher.update(name.as_bytes());
         hasher.update([0u8]);
         hasher.update(&content);
@@ -204,7 +204,7 @@ fn fixture_is_bound_to_the_pinned_oracle_and_checkout() {
     sorted.sort();
     assert_eq!(sorted, oracle.source_files, "source_files stored sorted");
 
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/go-snapshots");
     // Dependency manifests are recorded but never enforced (provenance.EnforcedSources).
     let enforced: Vec<String> = oracle
         .source_files

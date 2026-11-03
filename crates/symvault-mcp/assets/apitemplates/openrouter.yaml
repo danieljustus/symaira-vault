@@ -1,0 +1,12 @@
+# OpenRouter API template.
+# Auth shape: Authorization: Bearer <api-key> — https://openrouter.ai/docs/quickstart#authentication
+# Fill the vault entry referenced by entry_ref with a "credential" field.
+base_url: https://openrouter.ai/api/v1
+auth_type: bearer
+entry_ref: op:///openrouter
+allowed_endpoints:
+  - /chat/completions
+  - /models
+allowed_methods:
+  - GET
+  - POST

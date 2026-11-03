@@ -1,0 +1,12 @@
+# npm registry API template.
+# Auth shape: Authorization: Bearer <token> — https://docs.npmjs.com/cli/v10/using-npm/config#token
+# Read-only registry endpoints; publishing stays out of the built-in grant.
+# Fill the vault entry referenced by entry_ref with a "credential" field.
+base_url: https://registry.npmjs.org
+auth_type: bearer
+entry_ref: op:///npm
+allowed_endpoints:
+  - /-/whoami
+  - /-/v1/search
+allowed_methods:
+  - GET

@@ -1,0 +1,18 @@
+# Vercel REST API template.
+# Auth shape: Authorization: Bearer <token> — https://vercel.com/docs/rest-api/authentication
+# Fill the vault entry referenced by entry_ref with a "credential" field.
+base_url: https://api.vercel.com
+auth_type: bearer
+entry_ref: op:///vercel
+allowed_endpoints:
+  - /v9/*
+  - /v10/*
+  - /v11/*
+  - /v12/*
+  - /v13/*
+  - /v14/*
+  - /v15/*
+  - /v16/*
+allowed_methods:
+  - GET
+  - POST

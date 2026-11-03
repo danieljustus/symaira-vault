@@ -125,6 +125,12 @@ fn approval_queue_cli_uses_go_handler_hmac_mtls_and_decision_contract() {
         .parent()
         .and_then(Path::parent)
         .expect("repository root");
+    // The Go handler seam builds from the Go module; once the Go tree is
+    // removed there is no oracle to compare against.
+    if !repo.join("go.mod").exists() {
+        eprintln!("skipping Go handler differential: the Go module is not present");
+        return;
+    }
     build_go_server(&go_root, repo);
     let _server = GoApprovalServer::start(&go_root, &vault);
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
