@@ -1,0 +1,969 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "8d2e5e156cd95f04e608182ab8179fdd49f1884a",
+    "release": "unreleased",
+    "source_files": [
+      {
+        "path": "cmd/approval.go",
+        "sha256": "0525572ceeb05e1ac1ab2d0bbf675a5a90f6dbcda97ec510fa5be954e357ed17"
+      },
+      {
+        "path": "internal/approval/enroll.go",
+        "sha256": "e47aa03226873c361f9a059ba71444fcdf38777533397e403dfab1a903d4c32c"
+      },
+      {
+        "path": "internal/approval/http.go",
+        "sha256": "1f6af0d06afd3fedcd20a1f11f44e8caacd900959ac6b534f36441a1123a2e52"
+      },
+      {
+        "path": "internal/approval/local.go",
+        "sha256": "3462aff4dfa2704b320a74a0e92991b1d1d06a68f500e3a18027fd1229601a8a"
+      },
+      {
+        "path": "internal/approval/queue.go",
+        "sha256": "d1424666ff2382abdfe56698edee13811d95940ada4a5267bc9f8c1276fd907e"
+      },
+      {
+        "path": "internal/cli/port_utils.go",
+        "sha256": "54703c4b24d4f165d164f3093f26c4ccb9bde949d4887c6e29bbfcaf44b7af2d"
+      },
+      {
+        "path": "internal/mcp/serverbootstrap/tls.go",
+        "sha256": "3c41644a50bdea14a09ba89c73398701c91e442c152b4887df6b74337b304263"
+      }
+    ],
+    "source_digest": "2b15e21e4500f527788e3759808b263595d3b5d2c8a4938da417ebc83593c2dd",
+    "generator_files": [
+      "scripts/rust-port/cmd/approvalgen/main.go"
+    ],
+    "generator_digest": "f2ebb2af5e8ea83d37bff564edc127b0ca1f8a2951000a6c5325b901b4fd9f8f"
+  },
+  "secret_hex": {
+    "valid": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "wrong": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
+  },
+  "certs": [
+    {
+      "path": "testdata/port/approval/certs/server.pem",
+      "sha256": "6ad0f92fba262ef6fd47555fa298c8b39f421f9086b277534177ee447a91f380"
+    },
+    {
+      "path": "testdata/port/approval/certs/server.key",
+      "sha256": "6ce87ed570c190cd374d3da0474057cf40f5246e51375ace3e9d6d4f662c15b0"
+    },
+    {
+      "path": "testdata/port/approval/certs/other-server.pem",
+      "sha256": "8175c9747b66e919c8dc88995598800c46c8faa04bab7e8de57e1700010f3652"
+    },
+    {
+      "path": "testdata/port/approval/certs/other-server.key",
+      "sha256": "ddb9fefdca96886116d1666dd1368e4292f8f1aff8afc6fc429dd6413d1541d4"
+    },
+    {
+      "path": "testdata/port/approval/certs/client-ca.pem",
+      "sha256": "2faa505af3d6a3f1b9f9ddffa98701214a7385cfa88d25be1da97e2b86b97866"
+    },
+    {
+      "path": "testdata/port/approval/certs/client.pem",
+      "sha256": "8afc01a3bffef4e2f34b35eaf172ed185b569501b30ef63dd475162ffb07665f"
+    },
+    {
+      "path": "testdata/port/approval/certs/client.key",
+      "sha256": "bc3f9f8eb570adad54991d163f37950aa21e7fc9f5916d31414947142dd304a7"
+    }
+  ],
+  "canonical": {
+    "created_at": "2026-01-02T03:04:05.123456789Z",
+    "decided_at": "2026-01-02T03:04:07.25Z (deliberately a trimmed-nanosecond form; the undecided zero time 0001-01-01T00:00:00Z is kept)",
+    "expires_at": "2026-01-02T03:09:05.123456789Z",
+    "paths": "temp vault and certificate directories are {vault} and {certs}",
+    "port": "the listener port is the literal {port} in recorded Host headers and Go error text",
+    "queue_ids": "request ids are replaced by apr-a0000000000N (apr-ffffffffffff for the unknown id); Go draws 6 random bytes",
+    "x_enroll_proof": "<hmac-sha256-hex>: validated as HMAC-SHA256(secret, timestamp) with the secret named by proof_secret",
+    "x_enroll_timestamp": "<rfc3339-utc-seconds>: validated within +-30s of the server clock, never frozen"
+  },
+  "scope": {
+    "cert_expiry": "the fixture certificates are valid until 2126; the generator verifies this and fails closed",
+    "cli_outcomes": "stdout/stderr/exit are the real Go CLI's rendering of the canonical recorded responses (second Go run against a stub), not a textual substitution of the first run",
+    "clock": "the Go CLI reads the wall clock; no clock injection exists in Go, so the timestamp is checked against the +-30s proof window instead of frozen",
+    "not_covered": "stale-timestamp rejection and non-loopback peers (the handler rejects them but the CLI cannot be made to send them without clock/peer injection) remain covered by internal/approval unit tests and crates/symvault-mcp",
+    "queue_semantics": "Pending() ordering is newest-first by CreatedAt; ids are random so ordering is frozen only through the canonical timestamps' recorded order",
+    "server_side": "the Rust listener/queue are covered by crates/symvault-mcp tests; this fixture freezes the client side of the local approval wire contract",
+    "tls_text": "Go/Rust TLS handshake and certificate-verification error text is a library message; those cases compare the CLI's own prefix only",
+    "transport": "User-Agent, Accept, Accept-Encoding, Content-Length and Connection are HTTP-library artefacts; Rust is held to the contract headers (Host, X-Enroll-Timestamp, X-Enroll-Proof), a forbidden-header list, method and path",
+    "windows_replay": "the replay uses only std sockets and rustls and is OS independent; recorded Go outcomes were captured on one OS and contain no path separators or OS-specific text"
+  },
+  "cases": [
+    {
+      "id": "list_json",
+      "args": [
+        "approval",
+        "list",
+        "--json"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 200,
+            "content_type": "application/json",
+            "body": "{\"requests\":[{\"agent_name\":\"agent-e2e\",\"path\":\"notes/quiet.md\",\"write\":false,\"reason\":\"quiet fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000003\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-e2e\",\"path\":\"notes/deny.md\",\"write\":false,\"reason\":\"deny fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000002\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-e2e\",\"path\":\"notes/approve.md\",\"write\":true,\"reason\":\"approve fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 0,
+        "stdout": "{\"requests\":[{\"agent_name\":\"agent-e2e\",\"path\":\"notes/quiet.md\",\"write\":false,\"reason\":\"quiet fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000003\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-e2e\",\"path\":\"notes/deny.md\",\"write\":false,\"reason\":\"deny fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000002\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-e2e\",\"path\":\"notes/approve.md\",\"write\":true,\"reason\":\"approve fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n",
+        "stderr": "",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "list_text",
+      "args": [
+        "approval",
+        "list"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 200,
+            "content_type": "application/json",
+            "body": "{\"requests\":[{\"agent_name\":\"agent-e2e\",\"path\":\"notes/quiet.md\",\"write\":false,\"reason\":\"quiet fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000003\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-e2e\",\"path\":\"notes/deny.md\",\"write\":false,\"reason\":\"deny fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000002\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-e2e\",\"path\":\"notes/approve.md\",\"write\":true,\"reason\":\"approve fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 0,
+        "stdout": "REQUEST ID         AGENT                PATH                             WRITE  STATUS     EXPIRES\napr-a00000000003   agent-e2e            notes/quiet.md                   false  pending    2026-01-02T03:09:05Z\napr-a00000000002   agent-e2e            notes/deny.md                    false  pending    2026-01-02T03:09:05Z\napr-a00000000001   agent-e2e            notes/approve.md                 true   pending    2026-01-02T03:09:05Z\n",
+        "stderr": "",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "list_yaml",
+      "args": [
+        "approval",
+        "list",
+        "--output",
+        "yaml"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 200,
+            "content_type": "application/json",
+            "body": "{\"requests\":[{\"agent_name\":\"agent-e2e\",\"path\":\"notes/quiet.md\",\"write\":false,\"reason\":\"quiet fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000003\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-e2e\",\"path\":\"notes/deny.md\",\"write\":false,\"reason\":\"deny fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000002\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-e2e\",\"path\":\"notes/approve.md\",\"write\":true,\"reason\":\"approve fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 0,
+        "stdout": "requests:\n    - request:\n        agentname: agent-e2e\n        path: notes/quiet.md\n        write: false\n        reason: quiet fixture\n        createdat: 2026-01-02T03:04:05.123456789Z\n        expiresat: 2026-01-02T03:09:05.123456789Z\n      id: apr-a00000000003\n      status: pending\n      decidedat: 0001-01-01T00:00:00Z\n      decidedby: \"\"\n    - request:\n        agentname: agent-e2e\n        path: notes/deny.md\n        write: false\n        reason: deny fixture\n        createdat: 2026-01-02T03:04:05.123456789Z\n        expiresat: 2026-01-02T03:09:05.123456789Z\n      id: apr-a00000000002\n      status: pending\n      decidedat: 0001-01-01T00:00:00Z\n      decidedby: \"\"\n    - request:\n        agentname: agent-e2e\n        path: notes/approve.md\n        write: true\n        reason: approve fixture\n        createdat: 2026-01-02T03:04:05.123456789Z\n        expiresat: 2026-01-02T03:09:05.123456789Z\n      id: apr-a00000000001\n      status: pending\n      decidedat: 0001-01-01T00:00:00Z\n      decidedby: \"\"\n",
+        "stderr": "",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "list_quiet",
+      "args": [
+        "approval",
+        "list",
+        "--quiet"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 200,
+            "content_type": "application/json",
+            "body": "{\"requests\":[{\"agent_name\":\"agent-e2e\",\"path\":\"notes/quiet.md\",\"write\":false,\"reason\":\"quiet fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000003\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-e2e\",\"path\":\"notes/deny.md\",\"write\":false,\"reason\":\"deny fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000002\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-e2e\",\"path\":\"notes/approve.md\",\"write\":true,\"reason\":\"approve fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "approve_json",
+      "args": [
+        "approval",
+        "decide",
+        "apr-a00000000001",
+        "--approve",
+        "--json"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/local/approvals/apr-a00000000001/approve",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Content-Length": "0",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 200,
+            "content_type": "application/json",
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000001\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"local-cli\"}}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 0,
+        "stdout": "{\"outcome\":{\"id\":\"apr-a00000000001\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"local-cli\"}}\n",
+        "stderr": "",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "deny_text",
+      "args": [
+        "approval",
+        "decide",
+        "apr-a00000000002",
+        "--deny"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/local/approvals/apr-a00000000002/deny",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Content-Length": "0",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 200,
+            "content_type": "application/json",
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000002\",\"status\":\"denied\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"local-cli\"}}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 0,
+        "stdout": "Approval request \"apr-a00000000002\" denied.\n",
+        "stderr": "",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "deny_quiet",
+      "args": [
+        "approval",
+        "decide",
+        "apr-a00000000003",
+        "--deny",
+        "--quiet"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/local/approvals/apr-a00000000003/deny",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Content-Length": "0",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 200,
+            "content_type": "application/json",
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000003\",\"status\":\"denied\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"local-cli\"}}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "decide_repeat_conflict",
+      "args": [
+        "approval",
+        "decide",
+        "apr-a00000000001",
+        "--approve"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/local/approvals/apr-a00000000001/approve",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Content-Length": "0",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 409,
+            "content_type": "application/json",
+            "body": "{\"error\":\"approval request apr-a00000000001 already approved\"}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: approval server: approval request apr-a00000000001 already approved\nError: approval server: approval request apr-a00000000001 already approved\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "decide_unknown_id",
+      "args": [
+        "approval",
+        "decide",
+        "apr-ffffffffffff",
+        "--deny"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/local/approvals/apr-ffffffffffff/deny",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Content-Length": "0",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 404,
+            "content_type": "application/json",
+            "body": "{\"error\":\"approval request not found\"}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: approval server: approval request not found\nError: approval server: approval request not found\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "list_empty",
+      "args": [
+        "approval",
+        "list"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 200,
+            "content_type": "application/json",
+            "body": "{\"requests\":[]}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 0,
+        "stdout": "No pending approval requests.\n",
+        "stderr": "",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "decide_expired",
+      "args": [
+        "approval",
+        "decide",
+        "apr-a00000000005",
+        "--approve"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/local/approvals/apr-a00000000005/approve",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Content-Length": "0",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 409,
+            "content_type": "application/json",
+            "body": "{\"error\":\"approval request apr-a00000000005 already expired\"}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: approval server: approval request apr-a00000000005 already expired\nError: approval server: approval request apr-a00000000005 already expired\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "tls_only_list",
+      "args": [
+        "approval",
+        "list",
+        "--json"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "tls_only"
+      },
+      "server_tls": "tls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 200,
+            "content_type": "application/json",
+            "body": "{\"requests\":[{\"agent_name\":\"agent-e2e\",\"path\":\"notes/tls.md\",\"write\":true,\"reason\":\"tls fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000004\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 0,
+        "stdout": "{\"requests\":[{\"agent_name\":\"agent-e2e\",\"path\":\"notes/tls.md\",\"write\":true,\"reason\":\"tls fixture\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000004\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n",
+        "stderr": "",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "tls_only_decide_yaml",
+      "args": [
+        "approval",
+        "decide",
+        "apr-a00000000004",
+        "--approve",
+        "--output",
+        "yaml"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "tls_only"
+      },
+      "server_tls": "tls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/local/approvals/apr-a00000000004/approve",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Content-Length": "0",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "valid",
+            "client_certificate_cn": "",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 200,
+            "content_type": "application/json",
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000004\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"local-cli\"}}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 0,
+        "stdout": "outcome:\n    id: apr-a00000000004\n    status: approved\n    decidedat: 2026-01-02T03:04:07.25Z\n    decidedby: local-cli\n",
+        "stderr": "",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "bad_hmac_list",
+      "args": [
+        "approval",
+        "list",
+        "--json"
+      ],
+      "secret": "wrong",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "wrong",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 401,
+            "content_type": "application/json",
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: approval server: missing or invalid proof of vault-directory ownership\nError: approval server: missing or invalid proof of vault-directory ownership\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "bad_hmac_decide",
+      "args": [
+        "approval",
+        "decide",
+        "apr-a00000000001",
+        "--approve"
+      ],
+      "secret": "wrong",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/local/approvals/apr-a00000000001/approve",
+            "headers": {
+              "Accept-Encoding": "gzip",
+              "Content-Length": "0",
+              "Host": "127.0.0.1:{port}",
+              "User-Agent": "Go-http-client/1.1",
+              "X-Enroll-Proof": "<hmac-sha256-hex>",
+              "X-Enroll-Timestamp": "<rfc3339-utc-seconds>"
+            },
+            "proof_secret": "wrong",
+            "client_certificate_cn": "dedicated approval client",
+            "body_bytes": 0
+          },
+          "response": {
+            "status": 401,
+            "content_type": "application/json",
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        }
+      ],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: approval server: missing or invalid proof of vault-directory ownership\nError: approval server: missing or invalid proof of vault-directory ownership\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "runtime_absent",
+      "args": [
+        "approval",
+        "list"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "absent",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: could not find the running server — is 'symvault serve' running?\nError: could not find the running server — is 'symvault serve' running?\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "non_loopback_bind",
+      "args": [
+        "approval",
+        "list"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "non_loopback_bind",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: approval CLI requires a server bound to loopback; running server is bound to \"0.0.0.0\"\nError: approval CLI requires a server bound to loopback; running server is bound to \"0.0.0.0\"\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "decide_no_flag",
+      "args": [
+        "approval",
+        "decide",
+        "apr-test"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: exactly one of --approve or --deny is required\nError: exactly one of --approve or --deny is required\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "decide_both_flags",
+      "args": [
+        "approval",
+        "decide",
+        "apr-test",
+        "--approve",
+        "--deny"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_full"
+      },
+      "server_tls": "mtls",
+      "exchanges": [],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: exactly one of --approve or --deny is required\nError: exactly one of --approve or --deny is required\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "mtls_missing_identity",
+      "args": [
+        "approval",
+        "list"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_missing_identity"
+      },
+      "server_tls": "mtls",
+      "exchanges": [],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: approval CLI cannot connect while the running MCP server requires mTLS because the dedicated local approval client certificate, key, and CA must both be configured\nError: approval CLI cannot connect while the running MCP server requires mTLS because the dedicated local approval client certificate, key, and CA must both be configured\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "mtls_reused_server_identity",
+      "args": [
+        "approval",
+        "list"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_reused_server_identity"
+      },
+      "server_tls": "mtls",
+      "exchanges": [],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: approval CLI refuses to reuse the MCP server certificate identity as the approval client identity\nError: approval CLI refuses to reuse the MCP server certificate identity as the approval client identity\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "mtls_wrong_ca",
+      "args": [
+        "approval",
+        "list"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_wrong_ca"
+      },
+      "server_tls": "mtls",
+      "exchanges": [],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: verify local approval client identity\nError: verify local approval client identity\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "mtls_wrong_key",
+      "args": [
+        "approval",
+        "list"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "mtls_wrong_key"
+      },
+      "server_tls": "mtls",
+      "exchanges": [],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load local approval client identity failed\nError: load local approval client identity failed\n",
+        "stderr_compare": "exact"
+      }
+    },
+    {
+      "id": "mtls_handshake_rejected",
+      "args": [
+        "approval",
+        "list"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "tls_only"
+      },
+      "server_tls": "mtls",
+      "exchanges": [],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: connect to local approval server: Get \"https://127.0.0.1:{port}/api/v1/local/approvals\": remote error: tls: certificate required\nError: connect to local approval server: Get \"https://127.0.0.1:{port}/api/v1/local/approvals\": remote error: tls: certificate required\n",
+        "stderr_compare": "prefix",
+        "stderr_prefix": "Error: connect to local approval server:"
+      }
+    },
+    {
+      "id": "untrusted_server_certificate",
+      "args": [
+        "approval",
+        "list"
+      ],
+      "secret": "valid",
+      "runtime": {
+        "port": "listener",
+        "tls": "tls_unrelated_server"
+      },
+      "server_tls": "tls",
+      "exchanges": [],
+      "outcome": {
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: connect to local approval server: Get \"https://127.0.0.1:{port}/api/v1/local/approvals\": tls: failed to verify certificate: x509: certificate signed by unknown authority\nError: connect to local approval server: Get \"https://127.0.0.1:{port}/api/v1/local/approvals\": tls: failed to verify certificate: x509: certificate signed by unknown authority\n",
+        "stderr_compare": "prefix",
+        "stderr_prefix": "Error: connect to local approval server:"
+      }
+    }
+  ]
+}

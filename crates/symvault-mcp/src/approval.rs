@@ -461,4 +461,30 @@ mod tests {
         .expect("local API route");
         assert_eq!(bad_proof.status, 401);
     }
+
+    #[test]
+    fn local_api_rejects_a_correctly_signed_proof_outside_the_window() {
+        let queue = ApprovalQueue::default();
+        let secret = b"test vault secret";
+        let now = OffsetDateTime::now_utc();
+        let window = time::Duration::try_from(PROOF_WINDOW).expect("window");
+        for (at, expected) in [
+            (now - window - time::Duration::seconds(5), 401),
+            (now + window + time::Duration::seconds(5), 401),
+            (now - time::Duration::seconds(5), 200),
+        ] {
+            let (timestamp, proof) = proof(secret, at);
+            let response = handle_local_request(
+                &queue,
+                secret,
+                "127.0.0.1".parse().unwrap(),
+                "GET",
+                LOCAL_APPROVALS,
+                &timestamp,
+                &proof,
+            )
+            .expect("local API route");
+            assert_eq!(response.status, expected, "timestamp {timestamp}");
+        }
+    }
 }

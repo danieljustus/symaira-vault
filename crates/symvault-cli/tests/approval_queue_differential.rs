@@ -1,3 +1,8 @@
+//! Live Go-handler differential (pre-removal cross-check). It needs `go build` of
+//! `approval_queue_server`, so it skips once `go.mod` is gone. The Go-free
+//! post-removal evidence is `approval_queue_replay.rs`, which replays the
+//! frozen recording `testdata/port/approval/queue.json` (`make approval-replay`).
+
 use std::{
     fs,
     path::{Path, PathBuf},
