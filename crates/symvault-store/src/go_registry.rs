@@ -4,12 +4,10 @@
 //! here are the ones where a looser reading would make the Rust side more
 //! permissive than Go (an ignored revocation, a forgiven type error).
 //!
-//! Declared divergences, all in the *stricter* direction (Rust rejects a
-//! document Go adopts): a repeated `allowed_tools` array that carries a `null`
-//! element. Because a live reload keeps the last good registry when a document
-//! is rejected, a stricter rejection is not harmless: Go adopts the new
-//! document while Rust keeps serving the previous one. Every divergence is
-//! therefore listed in `docs/rust-port/cli-gap-inventory.md`.
+//! A repeated `allowed_tools` array is decoded the way Go does it, onto the
+//! slice the earlier occurrence left (a `null` element keeps what was there;
+//! see `GoStringSlice`), so a document Go adopts is adopted here too and a
+//! revocation or expiry in it applies. No divergence is declared.
 
 use serde::Deserialize;
 use time::{Date, Month, OffsetDateTime, Time, UtcOffset};
@@ -384,10 +382,9 @@ fn fold_members(
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
     };
     let mut folded = serde_json::Map::new();
-    // Go overlays a repeated `allowed_tools` array on the previous slice, so a
-    // `null` element can keep or re-expose an earlier element. That is not
-    // modelled: the combination is rejected, which is stricter than Go.
-    let mut tools_may_overlay = false;
+    // Go decodes a repeated `allowed_tools` array onto the slice it already
+    // holds (see `GoStringSlice`).
+    let mut tools = GoStringSlice::default();
     for (key, raw) in members.0 {
         let name = go_field_name(&key, fields).to_owned();
         if !fields.contains(&name.as_str()) {
@@ -429,27 +426,73 @@ fn fold_members(
             continue;
         }
         if name == "allowed_tools" {
-            match value.as_array_mut() {
-                Some(tools) => {
-                    let has_null = tools.iter().any(serde_json::Value::is_null);
-                    if has_null && tools_may_overlay {
-                        return Err(registry_invalid(
-                            "duplicate allowed_tools with null element is unsupported",
-                        ));
-                    }
-                    tools_may_overlay = !tools.is_empty();
-                    // A null element decodes into a Go string as the empty string.
-                    for tool in tools.iter_mut().filter(|tool| tool.is_null()) {
-                        *tool = serde_json::Value::String(String::new());
-                    }
+            match value.as_array() {
+                Some(items) => {
+                    tools.decode_array(items);
+                    value = tools.to_value();
                 }
-                None => tools_may_overlay = false,
+                None => tools.set_nil(),
             }
         }
         // Later members override earlier ones, as repeated Go assignments do.
         folded.insert(name, value);
     }
     Ok(folded)
+}
+
+/// What Go's `encoding/json` does to a `[]string` field that is decoded more
+/// than once (a repeated `allowed_tools` member). `decode.go` `array()` does
+/// not start from an empty slice: element `i` is decoded *onto* the existing
+/// element, a JSON `null` therefore leaves it as it was (a fresh position is
+/// `""`), the length is then set to the new array's length, and the backing
+/// array keeps the old elements past that length, so a later longer array
+/// whose elements are `null` exposes them again. `[]` allocates a new empty
+/// slice (`MakeSlice(0, 0)`) and `null` sets the slice to nil, both dropping the
+/// old backing array. The capacity growth policy never shows: growing copies
+/// the whole old capacity, so only `len` and the retained elements matter.
+#[derive(Default)]
+struct GoStringSlice {
+    backing: Vec<String>,
+    len: usize,
+}
+
+impl GoStringSlice {
+    /// `allowed_tools: null`.
+    fn set_nil(&mut self) {
+        self.backing.clear();
+        self.len = 0;
+    }
+
+    /// `allowed_tools: [...]`; every element is `null` or a string (anything
+    /// else already failed the document).
+    fn decode_array(&mut self, items: &[serde_json::Value]) {
+        if items.is_empty() {
+            self.set_nil();
+            return;
+        }
+        for (index, item) in items.iter().enumerate() {
+            if index >= self.backing.len() {
+                self.backing.resize(index + 1, String::new());
+            }
+            if index >= self.len {
+                self.len = index + 1;
+            }
+            if let Some(text) = item.as_str() {
+                self.backing[index] = text.to_owned();
+            }
+        }
+        self.len = items.len();
+    }
+
+    fn to_value(&self) -> serde_json::Value {
+        serde_json::Value::Array(
+            self.backing[..self.len]
+                .iter()
+                .cloned()
+                .map(serde_json::Value::String)
+                .collect(),
+        )
+    }
 }
 
 /// Folds each entry of one `tokens` object. Ids are case-sensitive map keys;
@@ -579,6 +622,104 @@ mod tests {
             assert!(decode(bad).is_err(), "{bad}");
         }
         assert!(decode(r#"{"tokens":{"a":{"zzz":1,"zzz":"x"}}}"#).is_ok());
+    }
+
+    /// Replays the Go-recorded `documents` of `token-lookup.json`
+    /// (`TestTokenPortFixture`): what `json.Unmarshal` produced for repeated
+    /// `allowed_tools` members, `null` elements included (ADR 0034 item 19).
+    #[test]
+    fn repeated_allowed_tools_overlay_matches_go_recorded_documents() {
+        #[derive(Deserialize)]
+        struct Fixture {
+            documents: Vec<Document>,
+        }
+        #[derive(Deserialize)]
+        struct Document {
+            name: String,
+            document: String,
+            error: bool,
+            #[serde(default)]
+            tokens: std::collections::BTreeMap<String, Decoded>,
+        }
+        #[derive(Deserialize)]
+        struct Decoded {
+            allowed_tools: Option<Vec<String>>,
+            revoked: bool,
+        }
+        let fixture: Fixture = serde_json::from_str(include_str!(
+            "../../../testdata/port/auth/token-lookup.json"
+        ))
+        .expect("Go token fixture");
+        assert!(fixture.documents.len() >= 70, "recorded overlay documents");
+        let mut overlaid = 0;
+        for case in &fixture.documents {
+            let decoded = decode(&case.document);
+            if case.error {
+                assert!(decoded.is_err(), "{}: Go rejects the document", case.name);
+                continue;
+            }
+            let value = decoded.unwrap_or_else(|error| panic!("{}: {error}", case.name));
+            for (id, expected) in &case.tokens {
+                let entry = &value["tokens"][id];
+                let tools: Option<Vec<String>> = entry.get("allowed_tools").and_then(|tools| {
+                    tools.as_array().map(|items| {
+                        items
+                            .iter()
+                            .map(|item| item.as_str().expect("string element").to_owned())
+                            .collect()
+                    })
+                });
+                assert_eq!(
+                    tools, expected.allowed_tools,
+                    "{}: allowed_tools",
+                    case.name
+                );
+                let revoked = entry.get("revoked").and_then(serde_json::Value::as_bool);
+                assert_eq!(
+                    revoked.unwrap_or(false),
+                    expected.revoked,
+                    "{}: revoked",
+                    case.name
+                );
+                overlaid += usize::from(case.document.matches("allowed_tools").count() > 1);
+            }
+        }
+        assert!(
+            overlaid >= 60,
+            "repeated allowed_tools documents: {overlaid}"
+        );
+    }
+
+    #[test]
+    fn repeated_allowed_tools_with_null_keeps_and_reexposes_like_go() {
+        let tools = |members: &str| {
+            let text = format!(r#"{{"tokens":{{"a":{{{members}}}}}}}"#);
+            decode(&text).expect("Go adopts the document")["tokens"]["a"]["allowed_tools"].clone()
+        };
+        assert_eq!(
+            tools(r#""allowed_tools":["a"],"allowed_tools":[null]"#),
+            serde_json::json!(["a"])
+        );
+        assert_eq!(
+            tools(r#""allowed_tools":[],"allowed_tools":[null]"#),
+            serde_json::json!([""])
+        );
+        assert_eq!(
+            tools(
+                r#""allowed_tools":["a","b","c"],"allowed_tools":["x"],"allowed_tools":[null,null,null]"#
+            ),
+            serde_json::json!(["x", "b", "c"])
+        );
+        assert_eq!(
+            tools(r#""allowed_tools":["a","b"],"allowed_tools":null,"allowed_tools":[null,null]"#),
+            serde_json::json!(["", ""])
+        );
+        // A revocation in such a document is applied, not dropped with the document.
+        let revoked = decode(
+            r#"{"tokens":{"a":{"allowed_tools":["a"],"allowed_tools":[null],"revoked":true}}}"#,
+        )
+        .expect("adopted");
+        assert_eq!(revoked["tokens"]["a"]["revoked"], true);
     }
 
     #[test]

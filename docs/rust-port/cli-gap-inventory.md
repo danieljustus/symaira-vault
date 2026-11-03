@@ -1164,17 +1164,25 @@ root `tokens` merge), per-byte invalid-UTF-8 replacement, lone `\u` surrogates
 (U+FFFD), nesting up to 10000, root `null` (empty registry) and RFC3339
 timestamps on the raw bytes (953 recorded Go 1.26.6 outcomes).
 
-Reload caveat that applies to every row below: when Rust rejects a document the
+Reload caveat that applies to any divergence declared here: when Rust rejects a document the
 live registry keeps its **last good state**, while Go (which accepts the same
 document) adopts it. A Rust-stricter rejection is therefore a real behavioural
 difference on reload (for example an un-applied revocation or an un-applied new
 token), not only a startup refusal.
 
-| Divergence | Go | Rust | Direction | Status |
-| --- | --- | --- | --- | --- |
-| Repeated `allowed_tools` array containing a `null` element (`"allowed_tools":["a"],"allowed_tools":[null]`) | decodes the second array onto the first slice, so a `null` element keeps or re-exposes the earlier element | document rejected | stricter | declared; Go's slice overlay is not modelled |
+No divergence is declared. A repeated `allowed_tools` array (including one with
+`null` elements) is decoded the way Go's `array()` does it: element `i` is
+decoded onto the slice the earlier occurrence left, `null` keeps it (a new
+position is `""`), the backing array survives truncation so a later longer
+`null` array re-exposes old elements, and `[]` / `null` drop the backing array
+(`GoStringSlice`). Pinned by 72 Go-recorded `documents` in
+`testdata/port/auth/token-lookup.json` (`TestTokenPortFixture`, replayed by
+`go_registry::tests::repeated_allowed_tools_overlay_matches_go_recorded_documents`,
+incl. 12 capacity-boundary sequences up to 600 elements and 48 seeded random
+ones) and by live Go/Rust cases `dup-allowed-tools-null-*` plus two reload steps
+in `http_token_contract.py`.
 
-No other divergence is declared: lone surrogates, depth (10000), root `null` and
+Lone surrogates, depth (10000), root `null` and
 timestamp leftovers (one-digit hour, `,` fraction, `+24:00`, `+00:60`, years
 `0000`-`9999`, fraction digits beyond nine) are matched, not documented away.
 Residual risk: the matched timestamp grammar is a port of `time.Parse`
