@@ -6,32 +6,36 @@ For download verification, use [the distribution guide](distribution.md#cosign-s
 
 ## Current Build Inputs
 
-Use the patched `toolchain` declared in [`go.mod`](../go.mod) (currently
-`go1.26.10`), matching `BUILD_GO_TOOLCHAIN` in [`Makefile`](../Makefile).
-The `go 1.26.6` directive retains the minimum for frozen oracle checks.
-The executable package is the repository
-root (`.`); the linker metadata variables are `main.version`, `main.commit` and
-`main.date`. To compare builds, keep the source revision, toolchain, platform,
-CGO setting, build tags, flags and all three metadata values identical. Release
-reproduction must match the values and flags from the actual release build;
-a source commit timestamp is not necessarily the release's `.Date` value.
+The shipped binary is the Rust CLI (`crates/symvault-cli`, binary `symvault`).
+Use the toolchain pinned in [`rust-toolchain.toml`](../rust-toolchain.toml)
+(currently Rust 1.98.0) and the committed [`Cargo.lock`](../Cargo.lock); every
+build uses `--locked`. The only build stamp the CLI reads is the
+`SYMVAULT_VERSION` environment variable (compile-time `option_env!`); no commit
+hash or build timestamp is embedded. To compare builds, keep the source
+revision, toolchain, platform, target triple, cargo flags and `SYMVAULT_VERSION`
+identical. Release reproduction must match the values and flags of the actual
+release build (see [`.goreleaser.yml`](../.goreleaser.yml), which builds through
+`scripts/cargo-auditable.sh`).
 
 For a local repeatability comparison from the repository root:
 
 ```bash
-BUILD_VERSION=$(git describe --tags --always)
-BUILD_COMMIT=$(git rev-parse HEAD)
-BUILD_DATE=$(git log -1 --format=%cI)
-BUILD_LDFLAGS="-s -w -X main.version=$BUILD_VERSION -X main.commit=$BUILD_COMMIT -X main.date=$BUILD_DATE -buildid="
-CGO_ENABLED=0 go build -trimpath -ldflags "$BUILD_LDFLAGS" -o symvault-first .
-CGO_ENABLED=0 go build -trimpath -ldflags "$BUILD_LDFLAGS" -o symvault-second .
+export SYMVAULT_VERSION=$(git describe --tags --always)
+cargo build --release --locked -p symvault-cli --bin symvault
+cp target/release/symvault symvault-first
+cargo clean -p symvault-cli --release
+cargo build --release --locked -p symvault-cli --bin symvault
+cp target/release/symvault symvault-second
 shasum -a 256 symvault-first symvault-second
 ```
 
 This is a comparison procedure, not evidence that all release artifacts are
-reproducible. Match `.goreleaser.yml` for release/platform-specific flags.
+reproducible: cargo embeds build-host paths and the zig and Apple linkers are
+not verified deterministic here (see the comments in `.goreleaser.yml`).
 
 ## Obsolete Examples (Retained for Historical Context)
+
+> **Historical (Go era):** everything from here to the end of this document was written for the Go implementation (`go build`, `-ldflags`, `main.version`) and is not a current procedure.
 
 Everything below through Security Considerations is a superseded proposal,
 not current build, signing, verification or publishing instructions. In
@@ -48,7 +52,7 @@ Reproducible builds ensure that anyone can independently verify that the distrib
 
 ## Prerequisites
 
-- Go 1.26 or later
+- Rust (the toolchain pinned in `rust-toolchain.toml`; historically Go 1.26)
 - Git
 - GnuPG (for release signing)
 - `shasum` or `sha256sum`

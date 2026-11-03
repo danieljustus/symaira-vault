@@ -5,7 +5,6 @@
 [![CI](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/danieljustus/symaira-vault)](https://github.com/danieljustus/symaira-vault/releases/latest)
 [![License](https://img.shields.io/github/license/danieljustus/symaira-vault)](https://opensource.org/licenses/Apache-2.0)
-[![Go Reference](https://pkg.go.dev/badge/github.com/danieljustus/symaira-vault.svg)](https://pkg.go.dev/github.com/danieljustus/symaira-vault)
 
 ![Symaira Vault hero](docs/assets/symvault-hero.png)
 
@@ -41,8 +40,7 @@ A modern, secure command-line password manager (`symvault`) written in Rust. Use
 
 Supported native targets are **macOS on Apple Silicon (arm64)** and **Linux CLI/server**.
 iOS and Web are supported where applicable. Windows and Intel Macs are unsupported
-and receive no CI or release artifacts. Existing FreeBSD CLI artifacts remain
-unchanged. Windows source paths remain for now; their removal is a follow-up to
+and receive no CI or release artifacts; FreeBSD has been dropped. See
 [#1550](https://github.com/danieljustus/symaira-vault/issues/1550).
 
 ### Quick install
@@ -93,7 +91,6 @@ For manual downloads, Linux packages, release verification (including Cosign sig
 | macOS | Unsupported | ✓ | Quick install, Homebrew, Cargo, Manual |
 | Linux | ✓ | ✓ | Quick install, Homebrew, Cargo, Manual, deb/rpm/apk |
 | Windows | Unsupported | Unsupported | None |
-| FreeBSD | ✓ | ✓ | Cargo, Manual |
 | NixOS / Nix | ✓ | ✓ | Nix flake (`nix run github:danieljustus/symaira-vault`) |
 
 ### Native macOS app (from source)
@@ -106,7 +103,7 @@ the replacement and security/migration gates in [PB-2026-09-09](docs/product-bou
 pass. No account or hosted service is required.
 
 ```bash
-make build
+make rust-cli && cp target/release/symvault symvault   # the app embeds ../symvault
 bash scripts/build-vaultcore.sh  # Rust SymvaultFFI XCFramework; needs full Xcode with the iOS SDK
 cd client
 xcodegen generate
@@ -390,10 +387,10 @@ vault clears the in-memory index; the persisted index remains encrypted.
 
 ## Dependencies
 
-- Go: use the version declared in [`go.mod`](go.mod)
-- [filippo.io/age](https://pkg.go.dev/filippo.io/age) — encryption
-- [spf13/cobra](https://github.com/spf13/cobra) — CLI framework
-- [zalando/go-keyring](https://github.com/zalando/go-keyring) — OS keyring
+- Rust: the toolchain pinned in [`rust-toolchain.toml`](rust-toolchain.toml); crate versions are locked in [`Cargo.lock`](Cargo.lock)
+- [age](https://crates.io/crates/age) — encryption
+- [clap](https://crates.io/crates/clap) — CLI framework
+- [keyring](https://crates.io/crates/keyring) — OS keyring
 
 ## Contributing
 
@@ -402,21 +399,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and PR process.
 ### Testing
 
 ```bash
-# Run all tests with race detector (recommended for local validation)
-make test
+# Format check + Clippy (-D warnings)
+make rust-lint
 
-# Run tests without race detector (faster, for quick iteration)
-make test-fast
+# Run all tests (nextest + doctests)
+make rust-test
 
-# Run specific package tests
-go test ./internal/vault/... -v
+# Run one crate's tests
+cargo test -p symvault-store
 ```
-
-Tests include the Go race detector by default via `make test` to catch concurrency issues early. Use `make test-fast` when iterating quickly and you want a faster feedback loop without the race detector penalty.
 
 Some tests are skipped automatically:
 
-- **Slow tests** (`-short` flag): Flow and binary e2e tests skip in short mode. Run without `-short` to execute them.
 - **Headless CI**: Tests requiring the OS keyring (session caching) skip when no keyring backend is available (e.g., containerized or headless CI). These are environment-dependent and not failures.
 
 ## License
@@ -426,7 +420,7 @@ Apache-2.0 License
 ## Acknowledgments
 
 - Inspired by [pass](https://www.passwordstore.org/) from zx2c4
-- MCP support via [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go)
+- MCP support via the [Model Context Protocol](https://modelcontextprotocol.io)
 - Former name: OpenPass
 
 ## Disclaimer

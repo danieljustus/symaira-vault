@@ -6,18 +6,14 @@ Symaira Vault is distributed through multiple channels to support different plat
 
 The product targets Apple Silicon macOS, iOS and Web where applicable. Linux
 remains a supported CLI/server and CI platform. Windows and Intel Macs are
-unsupported and receive no new CI or release artifacts. Existing FreeBSD CLI
-artifacts remain unchanged. See [#1550](https://github.com/danieljustus/symaira-vault/issues/1550).
+unsupported and receive no new CI or release artifacts, and FreeBSD has been
+dropped. See [#1550](https://github.com/danieljustus/symaira-vault/issues/1550).
 
 | OS | Arch | Formats |
 |----|------|---------|
 | Linux | amd64, arm64 | tar.gz, deb, rpm, apk, mcpb |
 | macOS | arm64 | tar.gz, Homebrew, mcpb |
-| FreeBSD | amd64, arm64 | tar.gz |
 | NixOS / Nix | amd64, arm64 | Nix flake |
-
-**Notes:**
-- **FreeBSD**: Prebuilt binaries are built with `CGO_ENABLED=0`, which disables OS keyring integration. Instead, Symaira Vault uses an in-memory encrypted session cache (AES-256-GCM) with a 15-minute TTL. See [docs/troubleshooting.md](troubleshooting.md#freebsd) for details.
 
 ## First-Class Channels
 
@@ -146,8 +142,8 @@ for you. On macOS, `git` comes with the Xcode Command Line Tools
 ```bash
 git clone https://github.com/danieljustus/symaira-vault
 cd symaira-vault
-make build
-sudo mv symvault /usr/local/bin/
+make rust-cli   # cargo build --release --locked -p symvault-cli --bin symvault
+sudo install -m 0755 target/release/symvault /usr/local/bin/symvault
 ```
 
 ## Code Signing and Notarization Policy
@@ -170,12 +166,12 @@ To protect users against supply-chain attacks and avoid operating system warning
 
 ## Build Pipeline
 
-All artifacts are built by [GoReleaser](https://goreleaser.com/) via the release workflow (`.github/workflows/release.yml`).
+All artifacts are built by [GoReleaser](https://goreleaser.com/) (Rust builder) via the release workflow (`.github/workflows/release.yml`). No Go toolchain is involved.
 
 The pipeline:
-1. Runs tests and govulncheck
-2. Runs lint and security gates (fmt-check, golangci-lint, gosec)
-3. Builds cross-platform binaries
+1. Runs the Rust gates (rustfmt, Clippy with `-D warnings`, nextest and doctests)
+2. Runs the security gates (`cargo audit`, `cargo deny`) and the release-contract checker self-test
+3. Builds the binaries with cargo (static musl via cargo-zigbuild on Linux, native cargo on macOS arm64)
 4. Creates archives (tar.gz)
 5. Creates Linux packages (deb/rpm/apk) via nfpms
 6. Generates Homebrew formula
@@ -252,8 +248,6 @@ The following matrix shows which distribution channels have automated vs. manual
 | Linux arm64 | All | Manual | Cross-compile target |
 | macOS arm64 | tar.gz | Automated | `smoke-test-macos` job |
 | macOS | Homebrew | Manual | Tap-based install |
-| FreeBSD amd64 | tar.gz | Manual | No GA runner available |
-| FreeBSD arm64 | tar.gz | Manual | No GA runner available |
 
 ### Automated Smoke Tests
 
