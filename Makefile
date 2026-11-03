@@ -1471,7 +1471,11 @@ read-resource-policy-contract:
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/rust-read-template.log" template_resolutions_share_the_operation_allowance
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/rust-read-mcp.log" run_command_secret_refs_share_one_resource_allowance
 
-# mcp-http-shutdown.yml (live Go -race tests of the frozen oracle).
+# mcp-http-shutdown.yml (live Go -race tests of the frozen oracle), plus the
+# Rust leg (MCP-003/HTTP-004/CLI-007): the real Go oracle and the Rust CLI each
+# drain a real `mcp` HTTP server on SIGINT/SIGTERM/SIGQUIT with a request in
+# flight (finishing inside the 5 s window and exceeding it); the unit tests
+# are the HttpShutdown drain controls it relies on.
 mcp-http-shutdown-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(GO) test -race -json \
@@ -1490,6 +1494,15 @@ mcp-http-shutdown-contract:
 		TestAuthorizationCancellationRetiresOwnPendingConsent/late-approval-after-cancel \
 		TestApprovalCancellationDeniesPendingAndLateReply/blocked-read \
 		TestApprovalCancellationDeniesPendingAndLateReply/late-yes
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_drain_contract.py
+	$(CARGO) test -p symvault-mcp --lib --locked http::shutdown::tests::drain $(call AREA_LOGGED,native-http-drain-unit.txt)
+	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-http-drain-unit.txt" \
+		drain_lets_the_request_in_flight_finish_cooperative_io drain_force_closes_at_the_deadline_cooperative_io \
+		drain_without_connections_is_clean_and_immediate --results-ok
+	$(AREA_BUILD_CLI)
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_drain_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-drain.json"
+	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-drain.json" --profile http-drain
 
 # rust-tui.yml. Validation tools (pyte) live in a venv under the evidence dir.
 $(AREA_VENV)/.ready: scripts/rust-port/tui-validation-requirements.txt

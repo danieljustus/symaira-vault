@@ -51,6 +51,8 @@ struct HttpStream {
     transport: HttpTransport,
     head_response: bool,
     http10_response: bool,
+    /// Set for a registered connection of a stoppable server.
+    lifecycle: Option<shutdown::ConnectionLifecycle>,
 }
 
 enum HttpTransport {
@@ -234,6 +236,7 @@ impl HttpStream {
             transport,
             head_response: false,
             http10_response: false,
+            lifecycle: None,
         };
         let timeouts = HttpTimeouts::default();
         stream.set_read_timeout(Some(timeouts.initial_read))?;
@@ -322,6 +325,7 @@ impl From<TcpStream> for HttpStream {
             transport: HttpTransport::Tcp(DeadlineSocket::new(stream), None),
             head_response: false,
             http10_response: false,
+            lifecycle: None,
         }
     }
 }
@@ -711,6 +715,42 @@ where
     C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
     V: Fn(&str) -> bool + Send + Sync + 'static,
 {
+    serve_with_oauth_and_approval_options_until(
+        listener,
+        registry_path,
+        handler_for_agent,
+        oauth_agent_name,
+        consent,
+        verify_passphrase,
+        tls,
+        local_approval_api,
+        options,
+        None,
+    )
+}
+
+/// Like [`serve_with_oauth_and_approval_options`], stoppable through `shutdown`.
+/// `HttpShutdown::drain` stops admission, closes idle transports, lets requests
+/// in flight finish and force-closes what remains at its deadline; the call
+/// returns once every worker has finished.
+#[allow(clippy::too_many_arguments)]
+pub fn serve_with_oauth_and_approval_options_until<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    tls: Option<Arc<ServerConfig>>,
+    local_approval_api: LocalApprovalApi,
+    options: HttpServerOptions,
+    shutdown: Option<HttpShutdown>,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
     let timeouts = options.timeouts()?;
     let root = registry_path
         .as_ref()
@@ -732,7 +772,7 @@ where
         ),
         tls,
         Some(Arc::new(local_approval_api)),
-        None,
+        shutdown,
         timeouts,
     )
 }
@@ -912,6 +952,7 @@ where
     validate_listener_security(listener.local_addr()?, tls.is_some())?;
     load_token_registry(registry_path)?;
     listener.set_nonblocking(shutdown.is_some())?;
+    let cooperative_io = shutdown.as_ref().is_some_and(HttpShutdown::cooperative_io);
     let registry_path = registry_path.to_path_buf();
     let state = Arc::new(Mutex::new(HttpServerState {
         handler_for_agent,
@@ -937,9 +978,12 @@ where
             stop: watcher_stop,
             thread: watcher.thread().clone(),
         };
+        // Owned here so a drain releases the endpoint before it waits for the
+        // in-flight requests: Go's `Shutdown` closes its listeners first.
+        let listener = listener;
         loop {
             if let Some(shutdown) = &shutdown
-                && shutdown.is_cancelled()?
+                && shutdown.is_stopping()?
             {
                 break;
             }
@@ -972,8 +1016,8 @@ where
             let mut stream = HttpStream::new(socket, tls.clone())?;
             stream.set_read_timeout(Some(timeouts.initial_read))?;
             stream.set_write_timeout(Some(timeouts.write))?;
-            if let (HttpTransport::Tcp(socket, cancellation), Some(shutdown)) =
-                (&mut stream.transport, &shutdown)
+            if let (HttpTransport::Tcp(socket, cancellation), Some(shutdown), true) =
+                (&mut stream.transport, &shutdown, cooperative_io)
             {
                 socket.set_nonblocking(true)?;
                 *cancellation = Some(shutdown.clone());
@@ -1017,6 +1061,9 @@ where
                 .as_ref()
                 .map(HttpShutdown::request_context)
                 .unwrap_or_default();
+            stream.lifecycle = connection
+                .as_ref()
+                .map(shutdown::ConnectionGuard::lifecycle);
             if let Err(error) = thread::Builder::new().spawn_scoped(scope, move || {
                 let _connection = connection;
                 let _active = ActiveHttpConnection(active_for_thread);
@@ -1034,6 +1081,7 @@ where
                 return Err(error);
             }
         }
+        drop(listener);
         Ok(())
     })
 }
@@ -1192,6 +1240,13 @@ where
     let mut reader = BufReader::new(stream);
     let mut first_request = true;
     loop {
+        if !first_request
+            && let Some(lifecycle) = &reader.get_ref().lifecycle
+            && !lifecycle.wait_for_next_request()
+        {
+            // Draining: Go closes the idle keep-alive transport.
+            return Ok(());
+        }
         let first_byte_timeout = if first_request {
             timeouts.initial_read
         } else {
@@ -1467,6 +1522,18 @@ where
         write_http_response(stream, response, response_version, keep_alive, false)?;
         return Ok(keep_alive);
     }
+    if let Some(message) = request_context.go_err() {
+        // Go's handlerForAgent checks the serving context first.
+        let response = error(
+            403,
+            decoded.as_ref().and_then(|decoded| decoded.id.clone()),
+            error_code::INTERNAL_ERROR,
+            message,
+        )
+        .map_err(std::io::Error::other)?;
+        write_http_response(stream, response, response_version, keep_alive, false)?;
+        return Ok(keep_alive);
+    }
     let handler = {
         let mut state = state
             .lock()
@@ -1607,6 +1674,9 @@ fn read_wire_request(
         .get_mut()
         .set_read_deadline(waiting_started.checked_add(first_byte_timeout));
     let has_first_byte = !reader.fill_buf()?.is_empty();
+    if has_first_byte && let Some(lifecycle) = &reader.get_ref().lifecycle {
+        lifecycle.request_started();
+    }
     let request_started = if first_request {
         waiting_started
     } else {
@@ -2352,6 +2422,12 @@ fn write_connection_header(
     version: &str,
     keep_alive: bool,
 ) -> Result<(), std::io::Error> {
+    // A response written while the server drains closes the connection.
+    let keep_alive = keep_alive
+        && stream
+            .lifecycle
+            .as_ref()
+            .is_none_or(shutdown::ConnectionLifecycle::keep_alive_allowed);
     match (version, keep_alive) {
         ("HTTP/1.0", true) => stream.write_all(b"Connection: keep-alive\r\n"),
         ("HTTP/1.1", false) => stream.write_all(b"Connection: close\r\n"),

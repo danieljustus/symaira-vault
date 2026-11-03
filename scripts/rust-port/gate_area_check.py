@@ -429,6 +429,25 @@ def signal(r):
         size(rows, 33, f"{impl} signal observations")
 
 
+def http_drain(r):
+    """MCP-003/HTTP-004/CLI-007: Go/Rust graceful drain of `mcp` over HTTP (http_drain_contract.py)."""
+    sys.path.insert(0, str(HERE))
+    from http_drain_contract import GO_EXPECTED, RUNS
+    worktree_clean()
+    eq(r["expect_mismatch"], False, "expect_mismatch")
+    eq(r["mismatch"], "", "mismatch")
+    eq(r["drain_seconds"], 5.0, "drain_seconds")
+    for impl, rows in both(r):
+        size(rows, 15, f"{impl} drain observations")
+        eq([(x["case"], x["signal"]) for x in rows], list(RUNS), f"{impl} drain runs")
+        for x in rows:
+            name = f"{impl} {x['case']}/{x['signal']}"
+            need(x["exit_code"] == 0 and x["stdout"] == "", f"{name}: exit status or stdout")
+            need(x["in_window"] is True and x["listener_closed"] is True, f"{name}: exit window or open listener")
+            eq(x["runtime_records"], [], f"{name} runtime records")
+            eq(x["outcome"], GO_EXPECTED[x["case"]][0], f"{name} peer outcome")
+
+
 # name -> (checker, workflow asserts candidate_worktree_clean_at_end,
 #          workflow asserts an empty `differences`)
 PROFILES = {
@@ -449,6 +468,7 @@ PROFILES = {
     "egress": (egress, True, False),
     "connect": (connect, False, False),
     "signal": (signal, False, False),
+    "http-drain": (http_drain, True, False),
 }
 
 

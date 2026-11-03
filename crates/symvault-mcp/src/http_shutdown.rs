@@ -4,26 +4,42 @@ use std::{
     collections::HashMap,
     io,
     net::{Shutdown, TcpStream},
-    sync::{Arc, Condvar, Mutex},
+    sync::{
+        Arc, Condvar, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
+
+struct Connection {
+    socket: TcpStream,
+    /// True while the connection waits for its next keep-alive request.
+    idle: Arc<AtomicBool>,
+}
 
 #[derive(Default)]
 struct State {
     cancelled: bool,
+    draining: bool,
     next_id: usize,
-    sockets: HashMap<usize, TcpStream>,
+    sockets: HashMap<usize, Connection>,
 }
 
 /// Cancels socket I/O and wakes the HTTP accept loop.
 ///
-/// Cooperative API network callbacks share this cancellation context. Other
-/// callbacks still own their lifecycle; this is not a graceful-drain API.
-/// The server joins its scoped workers.
+/// `cancel` is the forced path: it interrupts every registered transport at
+/// once. `drain` is Go's `http.Server.Shutdown` ordering with a deadline: stop
+/// accepting, cancel the request context, close idle keep-alive transports,
+/// let in-flight requests finish, then force-close what is left.
+/// Cooperative API network callbacks share the request context. Other
+/// callbacks still own their lifecycle. The server joins its scoped workers.
 #[derive(Clone, Default)]
 pub struct HttpShutdown {
     state: Arc<(Mutex<State>, Condvar)>,
     request_context: crate::RequestContext,
+    /// Keeps blocking socket I/O (cancelled by `shutdown(2)` on the registered
+    /// clone) instead of the nonblocking cooperative retry loop.
+    blocking_io: bool,
 }
 
 fn close_transport(socket: &TcpStream) -> io::Result<()> {
@@ -34,6 +50,21 @@ fn close_transport(socket: &TcpStream) -> io::Result<()> {
 }
 
 impl HttpShutdown {
+    /// A handle for the process-owned CLI server. Socket I/O stays blocking,
+    /// as before the server was cancellable; cancellation closes the transport.
+    /// Unix only: other platforms need the cooperative nonblocking I/O.
+    #[must_use]
+    pub fn for_process() -> Self {
+        Self {
+            blocking_io: true,
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn cooperative_io(&self) -> bool {
+        !self.blocking_io
+    }
+
     #[cfg(test)]
     pub(super) fn registered_connection_count(&self) -> usize {
         self.state
@@ -85,14 +116,85 @@ impl HttpShutdown {
         state.cancelled = true;
         changed.notify_all();
         let mut first_error = None;
-        for socket in state.sockets.values() {
-            if let Err(error) = close_transport(socket)
+        for connection in state.sockets.values() {
+            if let Err(error) = close_transport(&connection.socket)
                 && first_error.is_none()
             {
                 first_error = Some(error);
             }
         }
         first_error.map_or(Ok(()), Err)
+    }
+
+    /// Starts a graceful shutdown: no new admission, the request context is
+    /// canceled (Go cancels `BaseContext` at the same point) and idle
+    /// keep-alive transports are closed. In-flight requests keep running; the
+    /// caller owns the deadline and must call `cancel` (or use `drain`).
+    pub fn begin_drain(&self) -> io::Result<()> {
+        self.request_context.cancel();
+        let (lock, changed) = &*self.state;
+        let mut state = lock
+            .lock()
+            .map_err(|_| io::Error::other("HTTP shutdown state poisoned"))?;
+        state.draining = true;
+        changed.notify_all();
+        let mut first_error = None;
+        for connection in state.sockets.values() {
+            if connection.idle.load(Ordering::SeqCst)
+                && let Err(error) = close_transport(&connection.socket)
+                && first_error.is_none()
+            {
+                first_error = Some(error);
+            }
+        }
+        first_error.map_or(Ok(()), Err)
+    }
+
+    /// Drains for at most `timeout`, then force-closes what is still open.
+    /// Returns true when every transport finished by itself.
+    pub fn drain(&self, timeout: Duration) -> io::Result<bool> {
+        let deadline = Instant::now().checked_add(timeout);
+        self.begin_drain()?;
+        let (lock, changed) = &*self.state;
+        let mut state = lock
+            .lock()
+            .map_err(|_| io::Error::other("HTTP shutdown state poisoned"))?;
+        while !state.sockets.is_empty() {
+            let remaining = deadline.map_or(Duration::from_secs(3600), |deadline| {
+                deadline.saturating_duration_since(Instant::now())
+            });
+            if remaining.is_zero() {
+                break;
+            }
+            state = changed
+                .wait_timeout(state, remaining)
+                .map_err(|_| io::Error::other("HTTP shutdown state poisoned"))?
+                .0;
+        }
+        let drained = state.sockets.is_empty();
+        drop(state);
+        if !drained {
+            self.cancel()?;
+        }
+        Ok(drained)
+    }
+
+    /// True once `begin_drain` or `cancel` ran.
+    pub(crate) fn is_stopping(&self) -> io::Result<bool> {
+        self.state
+            .0
+            .lock()
+            .map(|state| state.cancelled || state.draining)
+            .map_err(|_| io::Error::other("HTTP shutdown state poisoned"))
+    }
+
+    /// True after `begin_drain` and before a forced `cancel`.
+    pub(crate) fn is_draining_only(&self) -> bool {
+        self.state
+            .0
+            .lock()
+            .map(|state| state.draining && !state.cancelled)
+            .unwrap_or(false)
     }
 
     pub(crate) fn request_context(&self) -> crate::RequestContext {
@@ -126,7 +228,7 @@ impl HttpShutdown {
             .0
             .lock()
             .map_err(|_| io::Error::other("HTTP shutdown state poisoned"))?;
-        if state.cancelled {
+        if state.cancelled || state.draining {
             close_transport(socket)?;
             return Ok(None);
         }
@@ -135,10 +237,18 @@ impl HttpShutdown {
             .next_id
             .checked_add(1)
             .ok_or_else(|| io::Error::other("HTTP connection identity exhausted"))?;
-        state.sockets.insert(id, socket.try_clone()?);
+        let idle = Arc::new(AtomicBool::new(false));
+        state.sockets.insert(
+            id,
+            Connection {
+                socket: socket.try_clone()?,
+                idle: Arc::clone(&idle),
+            },
+        );
         Ok(Some(ConnectionGuard {
             shutdown: self.clone(),
             id,
+            idle,
         }))
     }
 }
@@ -146,26 +256,66 @@ impl HttpShutdown {
 pub(crate) struct ConnectionGuard {
     shutdown: HttpShutdown,
     id: usize,
+    idle: Arc<AtomicBool>,
 }
 
+impl ConnectionGuard {
+    pub(crate) fn lifecycle(&self) -> ConnectionLifecycle {
+        ConnectionLifecycle {
+            shutdown: self.shutdown.clone(),
+            idle: Arc::clone(&self.idle),
+        }
+    }
+}
+
+/// A connection's view of the drain: Go closes idle keep-alive transports at
+/// once, lets active requests finish and answers them with `Connection: close`.
+#[derive(Clone)]
+pub(crate) struct ConnectionLifecycle {
+    shutdown: HttpShutdown,
+    idle: Arc<AtomicBool>,
+}
+
+impl ConnectionLifecycle {
+    /// Marks the connection idle. False means the server is stopping and the
+    /// connection must close instead of waiting for another request. The flag
+    /// is stored before the state is read, so either this call or
+    /// `begin_drain` closes the transport.
+    pub(crate) fn wait_for_next_request(&self) -> bool {
+        self.idle.store(true, Ordering::SeqCst);
+        !self.shutdown.is_stopping().unwrap_or(true)
+    }
+
+    pub(crate) fn request_started(&self) {
+        self.idle.store(false, Ordering::SeqCst);
+    }
+
+    pub(crate) fn keep_alive_allowed(&self) -> bool {
+        !self.shutdown.is_stopping().unwrap_or(true)
+    }
+}
+
+/// Cancels the transports when the serving scope ends. A graceful drain keeps
+/// them: its caller force-closes at the deadline.
 pub(super) struct CancelOnDrop(pub(super) HttpShutdown);
 
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {
-        let _ = self.0.cancel();
+        if !self.0.is_draining_only() {
+            let _ = self.0.cancel();
+        }
     }
 }
 
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
         // Cleanup must also release sockets after a worker panic poisons state.
-        let mut state = self
-            .shutdown
-            .state
-            .0
+        let (lock, changed) = &*self.shutdown.state;
+        let mut state = lock
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         state.sockets.remove(&self.id);
+        changed.notify_all();
     }
 }
 
@@ -207,7 +357,15 @@ mod tests {
         registry: std::path::PathBuf,
         timeouts: super::super::HttpTimeouts,
     ) -> ServerProbe {
-        let shutdown = HttpShutdown::default();
+        start_with_shutdown(listener, registry, timeouts, HttpShutdown::default())
+    }
+
+    fn start_with_shutdown(
+        listener: TcpListener,
+        registry: std::path::PathBuf,
+        timeouts: super::super::HttpTimeouts,
+        shutdown: HttpShutdown,
+    ) -> ServerProbe {
         let worker_shutdown = shutdown.clone();
         let worker = thread::spawn(move || {
             super::super::serve_loopback_inner_with_shutdown(
@@ -356,6 +514,196 @@ mod tests {
     #[test]
     fn cancellation_joins_incomplete_request_and_rebinds_real_endpoint() {
         socket_cancellation_case(false);
+    }
+
+    fn discovery_request(address: std::net::SocketAddr, terminator: &str) -> String {
+        format!(
+            "GET /.well-known/oauth-protected-resource HTTP/1.1\r\nHost: {address}\r\n{terminator}"
+        )
+    }
+
+    fn read_to_end(client: &mut TcpStream) -> Vec<u8> {
+        client
+            .set_read_timeout(Some(HANG_BOUND))
+            .expect("bounded response read");
+        let mut received = Vec::new();
+        match client.read_to_end(&mut received) {
+            Ok(_) => {}
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::ConnectionReset | io::ErrorKind::ConnectionAborted
+                ) => {}
+            Err(error) => panic!("expected the server to close, not {error:?}"),
+        }
+        received
+    }
+
+    fn registered(shutdown: &HttpShutdown) -> usize {
+        shutdown.registered_connection_count()
+    }
+
+    fn wait_for_connections(shutdown: &HttpShutdown, count: usize) {
+        let deadline = Instant::now() + HANG_BOUND;
+        while registered(shutdown) != count {
+            assert!(
+                Instant::now() < deadline,
+                "server never held {count} connections"
+            );
+            thread::yield_now();
+        }
+    }
+
+    // Go's Shutdown ordering: the endpoint is released first, the idle
+    // keep-alive transport closes at once, the request in flight finishes and
+    // is answered with `Connection: close`, and nothing is force-closed.
+    fn drain_lets_in_flight_finish_case(shutdown: HttpShutdown) {
+        let root = tempfile::tempdir().expect("registry root");
+        let registry = root.path().join("tokens.json");
+        std::fs::write(&registry, br#"{"tokens":{}}"#).expect("registry");
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind server");
+        let address = listener.local_addr().expect("listener address");
+        let mut server = start_with_shutdown(
+            listener,
+            registry,
+            super::super::HttpTimeouts {
+                initial_read: HANG_BOUND,
+                request_read: HANG_BOUND,
+                ..Default::default()
+            },
+            shutdown,
+        );
+        let mut idle = TcpStream::connect(address).expect("idle client");
+        discovery(&mut idle);
+        let mut in_flight = TcpStream::connect(address).expect("in-flight client");
+        in_flight
+            .write_all(discovery_request(address, "").as_bytes())
+            .expect("partial request");
+        wait_for_connections(&server.shutdown, 2);
+        // Wait until the server read the request line, so the connection is active.
+        thread::sleep(Duration::from_millis(100));
+
+        server.shutdown.begin_drain().expect("begin drain");
+        assert!(
+            read_to_end(&mut idle).is_empty(),
+            "an idle keep-alive transport closes without another byte"
+        );
+        let deadline = Instant::now() + HANG_BOUND;
+        while TcpStream::connect(address).is_ok() {
+            assert!(Instant::now() < deadline, "endpoint never released");
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !server.worker.as_ref().expect("worker").is_finished(),
+            "the server must wait for the request in flight"
+        );
+
+        in_flight.write_all(b"\r\n").expect("finish the request");
+        let reply = String::from_utf8(read_to_end(&mut in_flight)).expect("UTF-8 reply");
+        assert!(reply.starts_with("HTTP/1.1 200 OK\r\n"), "{reply}");
+        assert!(
+            reply.contains("\r\nConnection: close\r\n"),
+            "a reply written while draining closes the connection: {reply}"
+        );
+        let deadline = Instant::now() + HANG_BOUND;
+        while !server.worker.as_ref().expect("worker").is_finished() {
+            assert!(Instant::now() < deadline, "server never finished the drain");
+            thread::yield_now();
+        }
+        server
+            .worker
+            .take()
+            .expect("worker")
+            .join()
+            .expect("server join")
+            .expect("clean drain");
+        assert_eq!(registered(&server.shutdown), 0);
+    }
+
+    #[test]
+    fn drain_lets_the_request_in_flight_finish_cooperative_io() {
+        drain_lets_in_flight_finish_case(HttpShutdown::default());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn drain_lets_the_request_in_flight_finish_blocking_io() {
+        drain_lets_in_flight_finish_case(HttpShutdown::for_process());
+    }
+
+    // At the deadline whatever is still open is force-closed and `drain`
+    // reports that it did not finish by itself.
+    fn drain_force_closes_at_the_deadline_case(shutdown: HttpShutdown) {
+        let root = tempfile::tempdir().expect("registry root");
+        let registry = root.path().join("tokens.json");
+        std::fs::write(&registry, br#"{"tokens":{}}"#).expect("registry");
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind server");
+        let address = listener.local_addr().expect("listener address");
+        let mut server = start_with_shutdown(
+            listener,
+            registry,
+            super::super::HttpTimeouts {
+                initial_read: HANG_BOUND,
+                request_read: HANG_BOUND,
+                ..Default::default()
+            },
+            shutdown,
+        );
+        let mut stuck = TcpStream::connect(address).expect("stuck client");
+        stuck
+            .write_all(discovery_request(address, "").as_bytes())
+            .expect("partial request");
+        wait_for_connections(&server.shutdown, 1);
+        thread::sleep(Duration::from_millis(100));
+
+        let started = Instant::now();
+        let drained = server
+            .shutdown
+            .drain(Duration::from_millis(400))
+            .expect("drain");
+        assert!(
+            !drained,
+            "a request that never completes is not a clean drain"
+        );
+        assert!(started.elapsed() >= Duration::from_millis(400));
+        assert!(
+            read_to_end(&mut stuck).is_empty(),
+            "the stuck transport is closed without a reply"
+        );
+        server
+            .worker
+            .take()
+            .expect("worker")
+            .join()
+            .expect("server join")
+            .expect("server result");
+        assert_eq!(registered(&server.shutdown), 0);
+        let _rebound = TcpListener::bind(address).expect("endpoint released");
+    }
+
+    #[test]
+    fn drain_force_closes_at_the_deadline_cooperative_io() {
+        drain_force_closes_at_the_deadline_case(HttpShutdown::default());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn drain_force_closes_at_the_deadline_blocking_io() {
+        drain_force_closes_at_the_deadline_case(HttpShutdown::for_process());
+    }
+
+    #[test]
+    fn drain_without_connections_is_clean_and_immediate() {
+        let shutdown = HttpShutdown::default();
+        let started = Instant::now();
+        assert!(shutdown.drain(HANG_BOUND).expect("drain"));
+        assert!(started.elapsed() < Duration::from_secs(5));
+        // A drained handle stays stopped: later registrations are refused.
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let _client = TcpStream::connect(listener.local_addr().expect("address")).expect("connect");
+        let (socket, _) = listener.accept().expect("accept");
+        assert!(shutdown.register(&socket).expect("register").is_none());
+        assert!(shutdown.request_context().go_err().is_some());
     }
 
     #[test]
