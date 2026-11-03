@@ -2345,18 +2345,14 @@ pub(crate) fn normalize_scope_path(path: &str) -> String {
     components.join("/")
 }
 
+/// `handleToolsCall`'s `struct{Name string; Arguments json.RawMessage}`:
+/// `arguments` stays the exact source text (empty when absent) and is decoded
+/// separately, by [`decode_arguments`], the way `executeTool` does after the
+/// params decode succeeded.
+#[derive(Default)]
 struct CallParams {
     name: String,
-    arguments: Value,
-}
-
-impl Default for CallParams {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            arguments: Value::Object(Map::new()),
-        }
-    }
+    arguments: String,
 }
 
 struct CallParamsVisitor;
@@ -2369,21 +2365,15 @@ impl<'de> Visitor<'de> for CallParamsVisitor {
     }
 
     fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
-        Ok(CallParams {
-            name: String::new(),
-            arguments: Value::Object(Map::new()),
-        })
+        Ok(CallParams::default())
     }
 
     fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
-        let mut result = CallParams {
-            name: String::new(),
-            arguments: Value::Object(Map::new()),
-        };
+        let mut result = CallParams::default();
         // Members are read as raw text first: an unknown member is skipped
         // without building a `Value` (so it may nest as deeply as the frame
-        // guard allows, like `encoding/json`'s skip), and only `name` and
-        // `arguments` are parsed.
+        // guard allows, like `encoding/json`'s skip), and only `name` is
+        // parsed; `arguments` is a `json.RawMessage` in Go and stays text.
         while let Some((key, raw)) = map.next_entry::<String, Box<serde_json::value::RawValue>>()? {
             // encoding/json's field matching is case-insensitive and folds
             // the two non-ASCII runes that share ASCII simple-fold classes.
@@ -2391,6 +2381,12 @@ impl<'de> Visitor<'de> for CallParamsVisitor {
             let selected =
                 key.eq_ignore_ascii_case("name") || key.eq_ignore_ascii_case("arguments");
             if !selected {
+                continue;
+            }
+            if key.eq_ignore_ascii_case("arguments") {
+                // A repeated `arguments` member overwrites the earlier one
+                // (RawMessage assignment), `null` included.
+                result.arguments = raw.get().to_owned();
                 continue;
             }
             let value: Value = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
@@ -2405,11 +2401,6 @@ impl<'de> Visitor<'de> for CallParamsVisitor {
                         )));
                     }
                 }
-            } else if key.eq_ignore_ascii_case("arguments") {
-                result.arguments = match value {
-                    Value::Null => Value::Object(Map::new()),
-                    other => other,
-                };
             }
         }
         Ok(result)
@@ -2422,7 +2413,7 @@ impl<'de> Deserialize<'de> for CallParams {
     }
 }
 
-pub(crate) fn parse_params(raw: Option<&str>) -> Result<(String, Value), String> {
+pub(crate) fn parse_params(raw: Option<&str>) -> Result<(String, String), String> {
     // `encoding/json` decodes a lone surrogate escape to U+FFFD; serde rejects it.
     let params = raw
         .map_or_else(
@@ -2431,6 +2422,47 @@ pub(crate) fn parse_params(raw: Option<&str>) -> Result<(String, Value), String>
         )
         .map_err(|err| err.to_string())?;
     Ok((params.name, params.arguments))
+}
+
+/// Why `arguments` could not be turned into the map a tool receives.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ArgumentsError {
+    /// `executeTool`'s `decodeToolRequest` failed: JSON-RPC `-32603` with the
+    /// message `parse arguments: <encoding/json text>`.
+    Decode(String),
+    /// Rust-stricter, declared in ADR 0034 item 15: the `serde_json::Value`
+    /// recursion limit (128 levels) where Go accepts up to the 10000-level
+    /// frame limit. Reported as `-32602 Invalid params` with serde's text.
+    TooDeep(String),
+}
+
+/// `decodeToolRequest`: `json.Unmarshal(args, &map[string]any)` for the
+/// `arguments` text of a `tools/call` whose params already decoded.
+///
+/// Absent, empty and `null` arguments are an empty map. Any other value that
+/// is not an object is an `UnmarshalTypeError` naming its kind, without
+/// looking inside it (Go skips the value). An object is decoded into a
+/// `serde_json::Value` (a repeated key is last-wins and keys are
+/// case-sensitive, as in a Go map) after one iterative scan for a number that
+/// overflows `float64`: Go converts every number with `strconv.ParseFloat`,
+/// saves the first range error and reports it, naming the number as spelled.
+pub(crate) fn decode_arguments(raw: &str) -> Result<Value, ArgumentsError> {
+    let kind = crate::go_params::kind(raw);
+    if raw.trim().is_empty() || kind == crate::go_params::Kind::Null {
+        return Ok(Value::Object(Map::new()));
+    }
+    if kind != crate::go_params::Kind::Object {
+        return Err(ArgumentsError::Decode(format!(
+            "parse arguments: json: cannot unmarshal {} into Go value of type map[string]interface {{}}",
+            kind.go_name()
+        )));
+    }
+    if let Some(number) = crate::envelope::overflowing_number(raw) {
+        return Err(ArgumentsError::Decode(format!(
+            "parse arguments: json: cannot unmarshal number {number} into Go value of type float64"
+        )));
+    }
+    serde_json::from_str(raw).map_err(|error| ArgumentsError::TooDeep(error.to_string()))
 }
 
 pub(crate) fn payload(result: ToolCallResult) -> Value {
@@ -2518,7 +2550,12 @@ mod scope_tests {
 
 #[cfg(test)]
 mod params_duplicate_tests {
-    use super::parse_params;
+    use super::{ArgumentsError, decode_arguments, parse_params};
+
+    fn arguments_of(params: &str) -> serde_json::Value {
+        let (_, arguments) = parse_params(Some(params)).expect("params decode");
+        decode_arguments(&arguments).expect("arguments decode")
+    }
 
     /// Expected values were measured against Go's `encoding/json` decoding of
     /// `struct{Name string; Arguments json.RawMessage}` (the oracle's tools/call
@@ -2537,26 +2574,59 @@ mod params_duplicate_tests {
             parse_params(Some(r#"{"name":"a","NAME":"b"}"#)).expect("case variants decode");
         assert_eq!(name, "b");
 
-        let (_, arguments) = parse_params(Some(
-            r#"{"name":"x","arguments":{"a":1},"arguments":{"b":2}}"#,
-        ))
-        .expect("duplicate arguments decode");
-        assert_eq!(arguments, serde_json::json!({"b": 2}));
+        assert_eq!(
+            arguments_of(r#"{"name":"x","arguments":{"a":1},"arguments":{"b":2}}"#),
+            serde_json::json!({"b": 2})
+        );
+        assert_eq!(
+            arguments_of(r#"{"name":"x","arguments":{"a":1},"ARGUMENTS":null}"#),
+            serde_json::json!({}),
+            "a later null replaces the earlier RawMessage, which Go treats as no arguments"
+        );
+    }
+
+    /// Recorded from the oracle (`tools_call_arguments` probes of
+    /// `stdio-hygiene.json`): inside `arguments` a repeated key is last-wins at
+    /// every depth, keys are case-sensitive, `null` replaces.
+    #[test]
+    fn arguments_keys_follow_a_go_map() {
+        let args = |text: &str| decode_arguments(text).expect("arguments decode");
+        assert_eq!(
+            args(r#"{"k":"first","k":"second","K":"upper"}"#),
+            serde_json::json!({"k": "second", "K": "upper"})
+        );
+        assert_eq!(
+            args(r#"{"o":{"a":1,"a":5,"b":2},"o":{"c":3}}"#),
+            serde_json::json!({"o": {"c": 3}}),
+            "a repeated object member replaces the earlier object, it is not merged"
+        );
+        assert_eq!(
+            args(r#"{"a":"x","a":null}"#),
+            serde_json::json!({"a": null}),
+            "unlike a struct field, null replaces in a map"
+        );
+        assert_eq!(
+            args(r#"{"t\u0079pe":"nope","type":"ok"}"#),
+            serde_json::json!({"type": "ok"}),
+            "an escaped key is the same key once unquoted"
+        );
     }
 
     /// `encoding/json` decodes a lone surrogate escape to U+FFFD and skips an
     /// unknown member however deeply it nests (up to the 10000-level frame
-    /// limit); neither may fail the `tools/call` decode. Source-read against
-    /// `handleToolsCall`, not recorded: the oracle answers "vault locked"
-    /// before it decodes params when no tool runtime is attached.
+    /// limit); neither may fail the `tools/call` decode. The recorded oracle
+    /// probes `args_lone_surrogate_*` confirm the `arguments` half.
     #[test]
     fn lone_surrogates_decode_and_unknown_members_skip_without_recursion() {
-        let (name, arguments) = parse_params(Some(
+        let (name, raw) = parse_params(Some(
             r#"{"name":"a\uD800b","arguments":{"k\uDC00":"\uD800"}}"#,
         ))
         .expect("lone surrogates decode");
         assert_eq!(name, "a\u{FFFD}b");
-        assert_eq!(arguments, serde_json::json!({"k\u{FFFD}": "\u{FFFD}"}));
+        assert_eq!(
+            decode_arguments(&raw).expect("arguments decode"),
+            serde_json::json!({"k\u{FFFD}": "\u{FFFD}"})
+        );
 
         let deep = format!("{}{}", "[".repeat(9_000), "]".repeat(9_000));
         let (name, _) = parse_params(Some(&format!(
@@ -2566,12 +2636,79 @@ mod params_duplicate_tests {
         assert_eq!(name, "x");
     }
 
-    /// Declared difference (ADR 0034 item 15): `arguments` is parsed into a
-    /// `serde_json::Value`, whose nesting is capped at 128 levels, where Go
-    /// keeps it raw and accepts up to 10000.
+    /// Recorded from the oracle: absent and `null` arguments are an empty map;
+    /// any other non-object is an `UnmarshalTypeError` naming its kind, and the
+    /// value is skipped, so an overflowing number or deep nesting inside an
+    /// array is irrelevant.
+    #[test]
+    fn non_object_arguments_are_type_errors_that_never_look_inside() {
+        assert_eq!(decode_arguments(""), Ok(serde_json::json!({})));
+        assert_eq!(decode_arguments("null"), Ok(serde_json::json!({})));
+        for (text, kind) in [
+            ("1e400", "number"),
+            ("[1e400]", "array"),
+            ("\"text\"", "string"),
+            ("true", "bool"),
+        ] {
+            assert_eq!(
+                decode_arguments(text),
+                Err(ArgumentsError::Decode(format!(
+                    "parse arguments: json: cannot unmarshal {kind} into Go value of type map[string]interface {{}}"
+                ))),
+                "{text}"
+            );
+        }
+        let deep = format!("{}{}", "[".repeat(5_000), "]".repeat(5_000));
+        assert_eq!(
+            decode_arguments(&deep),
+            Err(ArgumentsError::Decode(
+                "parse arguments: json: cannot unmarshal array into Go value of type map[string]interface {}"
+                    .to_string()
+            ))
+        );
+    }
+
+    /// Recorded from the oracle: a number that overflows `float64` anywhere
+    /// inside an object fails the decode, naming the first one as spelled;
+    /// underflow, the largest finite value, big integers and number-looking
+    /// strings or keys decode.
+    #[test]
+    fn number_overflow_fails_the_decode_like_encoding_json() {
+        let overflow = |text: &str| match decode_arguments(text) {
+            Err(ArgumentsError::Decode(message)) => message,
+            other => panic!("{text}: expected a decode error, got {other:?}"),
+        };
+        assert_eq!(
+            overflow(r#"{"n":1e400}"#),
+            "parse arguments: json: cannot unmarshal number 1e400 into Go value of type float64"
+        );
+        assert!(overflow(r#"{"x":[1,{"y":-1e400}]}"#).contains("number -1e400 "));
+        assert!(overflow(r#"{"x":[1e500,1e400]}"#).contains("number 1e500 "));
+        assert!(overflow(r#"{"n":1E+400}"#).contains("number 1E+400 "));
+        assert!(
+            overflow(r#"{"n":1.7976931348623159e308}"#).contains("number 1.7976931348623159e308 ")
+        );
+        for accepted in [
+            r#"{"n":1.7976931348623157e308}"#,
+            r#"{"a":1e-400,"b":5e-324,"c":-1e-999}"#,
+            r#"{"n":"1e400","1e400":1}"#,
+            r#"{"n":123456789012345678901234567890}"#,
+        ] {
+            assert!(decode_arguments(accepted).is_ok(), "{accepted}");
+        }
+    }
+
+    /// Declared difference (ADR 0034 item 15, ratified): a non-null object
+    /// `arguments` becomes a `serde_json::Value`, capped at 128 levels, where
+    /// Go accepts up to the 10000-level frame limit.
     #[test]
     fn arguments_nested_beyond_the_value_recursion_limit_are_rejected() {
-        let deep = format!("{}{}", "[".repeat(200), "]".repeat(200));
-        assert!(parse_params(Some(&format!(r#"{{"name":"x","arguments":{deep}}}"#))).is_err());
+        let deep =
+            |levels: usize| format!(r#"{{"x":{}{}}}"#, "[".repeat(levels), "]".repeat(levels));
+        assert!(decode_arguments(&deep(100)).is_ok());
+        assert!(matches!(
+            decode_arguments(&deep(200)),
+            Err(ArgumentsError::TooDeep(_))
+        ));
     }
 }

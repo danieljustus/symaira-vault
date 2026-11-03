@@ -3,7 +3,11 @@
 //! ADR 0016 adds an explicitly adjudicated eight-megabyte frame bound.
 
 use serde::Deserialize;
-use symvault_mcp::{ProtocolHandler, handle_line_bytes, run_stream};
+use std::sync::Arc;
+use symvault_mcp::{
+    ProtocolHandler, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore,
+    handle_line_bytes, read_only_tool_names, run_stream,
+};
 
 #[derive(Debug, Deserialize)]
 struct Fixture {
@@ -16,7 +20,43 @@ struct Fixture {
     cases: Vec<Case>,
     bounds: Vec<Bounds>,
     duplicate_envelope_probes: Vec<DuplicateProbe>,
+    tools_call_arguments: ArgumentsSection,
     divergences: Vec<Divergence>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ArgumentsSection {
+    handshake: String,
+    oracle_commit_sha: String,
+    nonce_mask: String,
+    probes: Vec<ArgumentsProbe>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ArgumentsProbe {
+    name: String,
+    why: String,
+    frame_prefix: String,
+    fill: String,
+    fill_count: usize,
+    leaf: String,
+    close: String,
+    close_count: usize,
+    frame_suffix: String,
+    stdout_after_initialize: String,
+}
+
+impl ArgumentsProbe {
+    fn input(&self, handshake: &str) -> String {
+        format!(
+            "{handshake}{}{}{}{}{}\n",
+            self.frame_prefix,
+            self.fill.repeat(self.fill_count),
+            self.leaf,
+            self.close.repeat(self.close_count),
+            self.frame_suffix
+        )
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -322,7 +362,7 @@ fn corpus_is_not_empty() {
     let fx = load();
     assert!(fx.cases.len() >= 15, "corpus shrank unexpectedly");
     assert_eq!(fx.bounds.len(), 9);
-    assert_eq!(fx.divergences.len(), 2);
+    assert_eq!(fx.divergences.len(), 3);
     assert_eq!(fx.duplicate_envelope_probes.len(), 8);
 }
 
@@ -974,4 +1014,251 @@ fn http_envelope_duplicates_resolve_last_wins_like_go() {
         replayed, 7,
         "the single-line duplicate probes were not all replayed"
     );
+}
+
+// ---------------------------------------------------------------------------
+// tools/call `arguments` (ADR 0034 item 15). The probes are recorded by running
+// the oracle commit's own code with a real tool Server (`mcpstdiogen`
+// `tools_call_arguments`), because a Server-less handler answers "vault locked"
+// before it decodes params.
+// ---------------------------------------------------------------------------
+
+#[derive(Clone)]
+struct EmptyStore;
+
+impl ReadOnlyStore for EmptyStore {
+    fn list(&self) -> Result<Vec<ReadOnlyEntry>, String> {
+        Ok(Vec::new())
+    }
+
+    fn get(&self, _path: &str) -> Result<Option<ReadOnlyEntry>, String> {
+        Ok(None)
+    }
+}
+
+fn tool_runtime() -> Arc<ReadOnlyRuntime<EmptyStore>> {
+    let mut available_tools = read_only_tool_names();
+    available_tools.push("generate_template".into());
+    Arc::new(ReadOnlyRuntime::new(
+        EmptyStore,
+        ReadOnlyRuntimeConfig {
+            server_name: "symvault".into(),
+            server_version: "0.0.0-fixture".into(),
+            transport: "stdio".into(),
+            agent_name: "fixture".into(),
+            approval_mode: "none".into(),
+            allowed_paths: vec!["*".into()],
+            available_tools,
+            vault_dir: "<fixture-vault>".into(),
+            vault_unlocked: true,
+            ..ReadOnlyRuntimeConfig::default()
+        },
+    ))
+}
+
+/// Replaces the random 16-hex data-fence id with the fixture's mask.
+fn mask_nonce(text: &str, mask: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("DATA_") {
+        out.push_str(&rest[..at]);
+        let id = rest.get(at + 5..at + 21);
+        if id.is_some_and(|id| id.bytes().all(|b| b.is_ascii_hexdigit())) {
+            out.push_str(mask);
+            rest = &rest[at + 21..];
+        } else {
+            out.push_str("DATA_");
+            rest = &rest[at + 5..];
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn mask_value(value: &mut serde_json::Value, nonce_mask: &str) {
+    match value {
+        serde_json::Value::String(text) => *text = mask_nonce(text, nonce_mask),
+        serde_json::Value::Array(items) => items.iter_mut().for_each(|v| mask_value(v, nonce_mask)),
+        serde_json::Value::Object(map) => map.values_mut().for_each(|v| mask_value(v, nonce_mask)),
+        _ => {}
+    }
+}
+
+fn expected_frames(
+    probe: &ArgumentsProbe,
+    nonce_mask: &str,
+    sentinel: &str,
+) -> Vec<serde_json::Value> {
+    probe
+        .stdout_after_initialize
+        .lines()
+        .map(|line| {
+            let mut value = mask(line, sentinel);
+            mask_value(&mut value, nonce_mask);
+            value
+        })
+        .collect()
+}
+
+/// The Rust frames for one probe (the initialize answer dropped).
+fn rust_frames(fx: &Fixture, probe: &ArgumentsProbe) -> Vec<serde_json::Value> {
+    let mut handler = ProtocolHandler::with_tool_call_runtime(
+        &fx.server_name,
+        &fx.server_version,
+        tool_runtime(),
+    );
+    let section = &fx.tools_call_arguments;
+    let lines = run_stream(&probe.input(&section.handshake), &mut handler)
+        .unwrap_or_else(|e| panic!("probe {}: rust transport: {e}", probe.name));
+    lines
+        .iter()
+        .skip(1)
+        .map(|line| {
+            let mut value = mask(line, &fx.runtime_text_sentinel);
+            mask_value(&mut value, &section.nonce_mask);
+            value
+        })
+        .collect()
+}
+
+/// Probes where Rust is stricter than the oracle and says so (ADR 0034 item 15,
+/// "Not ported (Rust stricter)"): every one of them nests an object `arguments`
+/// past what a `serde_json::Value` holds (the arguments object plus 126 array
+/// levels is the deepest Rust accepts; 127 levels in a member is the first
+/// rejected). The set is asserted exactly, in both
+/// directions, by the two tests below.
+const DEPTH_STRICTER: [&str; 6] = [
+    "args_nested_arrays_127_levels_in_a_member",
+    "args_nested_arrays_128_levels_in_a_member",
+    "args_nested_arrays_129_levels_in_a_member",
+    "args_nested_arrays_1000_levels_in_a_member",
+    "args_nested_objects_129_levels_in_a_member",
+    "args_total_depth_10000_is_accepted",
+];
+
+#[test]
+fn tools_call_arguments_fixture_is_the_pinned_oracle_and_covers_the_boundaries() {
+    let fx = load();
+    let section = &fx.tools_call_arguments;
+    assert_eq!(
+        section.oracle_commit_sha,
+        "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
+    );
+    assert_eq!(fx.oracle.commit_sha, section.oracle_commit_sha);
+    assert_eq!(section.probes.len(), 47, "the probe corpus changed size");
+    let names: Vec<&str> = section.probes.iter().map(|p| p.name.as_str()).collect();
+    for needed in [
+        "args_duplicate_top_level_last_wins",
+        "args_duplicate_nested_last_wins_drops_wrong_typed_alias",
+        "args_keys_are_case_sensitive_nested",
+        "args_lone_surrogate_in_nested_key_and_value",
+        "args_number_overflow_top_level_member",
+        "args_nested_arrays_129_levels_in_a_member",
+        "args_nested_arrays_1000_levels_in_a_member",
+        "args_total_depth_10000_is_accepted",
+        "args_total_depth_10001_is_rejected_by_the_frame",
+    ] {
+        assert!(names.contains(&needed), "missing probe {needed}");
+    }
+    for name in DEPTH_STRICTER {
+        assert!(names.contains(&name), "missing depth probe {name}");
+    }
+    // The recorded oracle really executed the tool for every accepted shape and
+    // really failed the decode for the overflow shapes (not a vacuous corpus).
+    let by_name = |n: &str| {
+        section
+            .probes
+            .iter()
+            .find(|p| p.name == n)
+            .unwrap_or_else(|| panic!("missing probe {n}"))
+    };
+    assert!(
+        by_name("args_total_depth_10000_is_accepted")
+            .stdout_after_initialize
+            .contains("\"isError\":false")
+    );
+    assert!(
+        by_name("args_number_overflow_top_level_member")
+            .stdout_after_initialize
+            .contains(
+                "parse arguments: json: cannot unmarshal number 1e400 into Go value of type float64"
+            )
+    );
+    assert!(
+        !by_name("args_baseline").why.is_empty(),
+        "every probe carries its reason"
+    );
+}
+
+/// Every recorded probe outside the declared depth difference is answered with
+/// exactly the oracle's frames: duplicate members (top level and nested),
+/// case-sensitive keys, lone surrogates, float64 overflow and its precedence
+/// over the tool lookup, non-object kinds, and nesting up to 127 levels.
+#[test]
+fn tools_call_arguments_match_the_oracle_outside_the_declared_depth_difference() {
+    let fx = load();
+    let mut compared = 0;
+    for probe in &fx.tools_call_arguments.probes {
+        if DEPTH_STRICTER.contains(&probe.name.as_str()) {
+            continue;
+        }
+        let expected = expected_frames(
+            probe,
+            &fx.tools_call_arguments.nonce_mask,
+            &fx.runtime_text_sentinel,
+        );
+        assert_eq!(
+            rust_frames(&fx, probe),
+            expected,
+            "probe {} ({}) differs from the oracle",
+            probe.name,
+            probe.why
+        );
+        compared += 1;
+    }
+    assert_eq!(
+        compared,
+        fx.tools_call_arguments.probes.len() - DEPTH_STRICTER.len()
+    );
+}
+
+/// ADR 0034 item 15 (ratified): an object `arguments` nested beyond serde_json's
+/// 128-level `Value` limit is `-32602` in Rust where the oracle executes the
+/// tool. Pinned from both sides: the oracle's acceptance is recorded in the
+/// fixture, Rust's rejection (and its exact set) is asserted here, and a
+/// frame past the 10000-level total is `-32700` in both.
+#[test]
+fn tools_call_arguments_nesting_beyond_the_value_limit_is_rust_stricter() {
+    let fx = load();
+    let recorded = fx
+        .divergences
+        .iter()
+        .find(|d| d.name == "tools_call_arguments_nesting_beyond_serde_value_limit")
+        .expect("the fixture must still record this divergence");
+    assert!(recorded.oracle_stdout_note.contains("tools_call_arguments"));
+
+    let mut stricter = Vec::new();
+    for probe in &fx.tools_call_arguments.probes {
+        let expected = expected_frames(
+            probe,
+            &fx.tools_call_arguments.nonce_mask,
+            &fx.runtime_text_sentinel,
+        );
+        let actual = rust_frames(&fx, probe);
+        if actual != expected {
+            stricter.push(probe.name.as_str());
+            assert_eq!(actual.len(), 1, "probe {}", probe.name);
+            assert_eq!(actual[0]["error"]["code"], -32602, "probe {}", probe.name);
+            assert_eq!(actual[0]["error"]["message"], "Invalid params");
+            assert!(
+                expected[0].get("result").is_some(),
+                "probe {}: the oracle must have executed the tool",
+                probe.name
+            );
+        }
+    }
+    let mut want: Vec<&str> = DEPTH_STRICTER.to_vec();
+    want.sort_unstable();
+    stricter.sort_unstable();
+    assert_eq!(stricter, want, "the Rust-stricter set moved");
 }

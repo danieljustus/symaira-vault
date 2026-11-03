@@ -144,7 +144,13 @@ type fixture struct {
 	Cases                   []hygieneCase    `json:"cases"`
 	Bounds                  []boundsProbe    `json:"bounds"`
 	DuplicateEnvelopeProbes []duplicateProbe `json:"duplicate_envelope_probes"`
-	Divergences             []divergence     `json:"divergences"`
+	// ToolsCallArguments records how the oracle decodes tools/call `arguments`
+	// (a json.RawMessage in the frame, then json.Unmarshal into a
+	// map[string]any in executeTool). That needs a real tool Server, so it is
+	// produced by running the pinned oracle commit's own code (see
+	// runArgsProbe), not the working tree.
+	ToolsCallArguments argsSection  `json:"tools_call_arguments"`
+	Divergences        []divergence `json:"divergences"`
 }
 
 func runStream(input string) (string, error) {
@@ -863,7 +869,11 @@ func main() {
 	if err != nil {
 		fatal("%v", err)
 	}
-	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/mcpstdiogen/main.go"})
+	generatorDigest, err := provenance.Digest(root, []string{
+		"scripts/rust-port/cmd/mcpstdiogen/args.go",
+		"scripts/rust-port/cmd/mcpstdiogen/argsprobe/main.go",
+		"scripts/rust-port/cmd/mcpstdiogen/main.go",
+	})
 	if err != nil {
 		fatal("hash generator: %v", err)
 	}
@@ -884,6 +894,14 @@ func main() {
 	duplicateProbes, err := buildDuplicateProbes()
 	if err != nil {
 		fatal("build duplicate envelope probes: %v", err)
+	}
+
+	argsSection, err := buildArgsSection(root, resolved)
+	if err != nil {
+		fatal("build tools/call arguments probes: %v", err)
+	}
+	if err := checkArgsDepthBoundary(argsSection); err != nil {
+		fatal("%v", err)
 	}
 
 	// Both divergences are recorded by executing the oracle, not by reading it.
@@ -919,12 +937,19 @@ func main() {
 		Cases:                   cases,
 		Bounds:                  bounds,
 		DuplicateEnvelopeProbes: duplicateProbes,
+		ToolsCallArguments:      argsSection,
 		Divergences: []divergence{{
 			Name:                "duplicate_object_keys_last_wins",
-			OracleBehavior:      "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A plain duplicate key INSIDE params is last-wins in both the oracle and the port (cases duplicate_key_inside_params and duplicate_params_*), and a wrong-typed earlier duplicate there fails the decode with -32602 in both, as encoding/json does; neither is a divergence. A duplicate inside an id or an unknown top-level key is also accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. NOT covered here: tools/call. Go keeps arguments as a json.RawMessage; Rust re-parses them as a serde_json::Value (last-wins per object like encoding/json into a map, but duplicate-key fidelity INSIDE arguments is untested), and a Value nests at most 128 levels where Go accepts up to 10000, so deeper arguments are -32602 in Rust (declared in ADR 0034 item 15). tools/call is not exercised by this fixture at all: the oracle answers 'vault locked' before it decodes params when no tool runtime is attached.",
+			OracleBehavior:      "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A plain duplicate key INSIDE params is last-wins in both the oracle and the port (cases duplicate_key_inside_params and duplicate_params_*), and a wrong-typed earlier duplicate there fails the decode with -32602 in both, as encoding/json does; neither is a divergence. A duplicate inside an id or an unknown top-level key is also accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. tools/call `arguments` are recorded in tools_call_arguments (run against the oracle commit's own code with a real tool Server, because a Server-less handler answers 'vault locked' before it decodes params): duplicates inside arguments are last-wins at every depth, keys are case-sensitive, lone surrogates decode to U+FFFD and a number that overflows float64 fails the decode with -32603 'parse arguments' in both implementations. The one difference left there is nesting: see tools_call_arguments_nesting_beyond_serde_value_limit.",
 			OracleStdoutB64Note: strings.TrimSuffix(dupOut, "\n"),
 			RustBehavior:        "Rust answers -32700 and does not dispatch the frame.",
 			Rationale:           "serde rejects duplicate struct fields and the adjudication keeps that rather than relaxing it to match. Last-wins is the classic duplicate-key smuggling shape: an intermediary that logs, audits or applies policy to a frame reads the first occurrence while the server acts on the last, so the two disagree about what was requested. SymVault has exactly such a policy and audit layer, which makes this security-relevant rather than cosmetic. Rejecting is the stricter side, and the migration contract names duplicate keys as a case to decide deliberately rather than inherit. Recorded, not silent; reversing it is a coordinator decision.",
+		}, {
+			Name:                "tools_call_arguments_nesting_beyond_serde_value_limit",
+			OracleBehavior:      "The oracle decodes tools/call arguments with json.Unmarshal into a map[string]any, which accepts nesting up to the 10000-level limit that the frame as a whole already obeys (9997 array levels inside a member of arguments is total depth 10000, accepted and executed; 9998 is -32700 'exceeded max depth' for the frame). Verified by executing it in this generator (tools_call_arguments probes args_nested_arrays_* and args_total_depth_*), which fails if the boundary moves.",
+			OracleStdoutB64Note: "see tools_call_arguments.probes",
+			RustBehavior:        "Rust parses a non-null object `arguments` into a serde_json::Value, whose recursion limit is 128 levels: an arguments object holding 127 or more nested array levels (126 is the deepest accepted, measured by the args_nested_arrays_* probes replayed in tools_call_arguments_nesting_beyond_the_value_limit_is_rust_stricter) is -32602 Invalid params with serde_json's 'recursion limit exceeded' text, where the oracle executes the tool. Everything else about arguments (duplicates, case, lone surrogates, float64 overflow, non-object kinds, depth up to the limit) matches the oracle.",
+			Rationale:           "ADR 0034 item 15 declares this difference ('Not ported (Rust stricter)') and the maintainer ratified the item. Building a 10000-level Value would need an unbounded recursive parse and drop/serialise path in Rust, while no tool reads arguments beyond a few levels, so the cap is a bounded-resource choice rather than a behaviour users rely on. The boundary is pinned on both sides: the oracle's acceptance is recorded in this fixture, and tools_call_arguments_nesting_beyond_the_value_limit_is_rust_stricter asserts Rust's -32602 so that any change in either direction fails a test. Reversing it is a new ADR.",
 		}, {
 			Name:                "invalid_utf8_id_echoed_verbatim",
 			OracleBehavior:      "The oracle accepts a frame whose id contains invalid UTF-8 and echoes those bytes back on stdout unchanged, because json.RawMessage is []byte and Go strings are not required to be valid UTF-8. Verified by executing it in this generator, which fails if it stops reproducing.",
@@ -997,4 +1022,32 @@ func marshalJSON(value any) ([]byte, error) {
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "FAIL "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// checkArgsDepthBoundary refuses to write a fixture whose depth probes do not
+// show the boundary the divergence text claims: total depth 10000 reaches the
+// tool, 10001 is rejected by the frame, and the 126..129 and 1000 level probes
+// are all accepted by the oracle.
+func checkArgsDepthBoundary(section argsSection) error {
+	outcome := map[string]string{}
+	for _, probe := range section.Probes {
+		outcome[probe.Name] = probe.StdoutAfterInitialize
+	}
+	accepted := []string{
+		"args_nested_arrays_126_levels_in_a_member", "args_nested_arrays_127_levels_in_a_member",
+		"args_nested_arrays_128_levels_in_a_member", "args_nested_arrays_129_levels_in_a_member",
+		"args_nested_arrays_1000_levels_in_a_member", "args_nested_objects_129_levels_in_a_member",
+		"args_total_depth_10000_is_accepted",
+	}
+	for _, name := range accepted {
+		out, ok := outcome[name]
+		if !ok || !strings.Contains(out, `"isError":false`) || strings.Contains(out, `"error"`) {
+			return fmt.Errorf("depth probe %s was not executed by the oracle: %q", name, out)
+		}
+	}
+	rejected := outcome["args_total_depth_10001_is_rejected_by_the_frame"]
+	if !strings.Contains(rejected, `"code":-32700`) || !strings.Contains(rejected, "max depth") {
+		return fmt.Errorf("total depth 10001 is not rejected by the frame: %q", rejected)
+	}
+	return nil
 }

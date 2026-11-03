@@ -367,7 +367,7 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
   is what `encoding/json` does into a `map[string]any`, but no case records
   it against Go), and (b) `arguments` nested deeper than serde_json's
   128-level `Value` recursion limit is `-32602` in Rust where Go accepts up
-  to the 10000-level frame limit (`parse_params`, unit test
+  to the 10000-level frame limit (`decode_arguments`, unit test
   `arguments_nested_beyond_the_value_recursion_limit_are_rejected`). The
   stdio fixture cannot record `tools/call`: the oracle answers
   "vault locked" before it decodes params when no tool runtime is attached,
@@ -393,9 +393,24 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
   `lone_surrogates_and_deep_params_are_accepted_like_go`), by
   `include_all_tools_tests` (values measured against Go's `includeAllTools`)
   and by `call::params_duplicate_tests` for `tools/call`.
-- Not covered: `tools/call` `arguments` (see the declared difference above);
-  the envelope `error` member and other non-selected members are not
-  surrogate-normalised.
+- Not covered: the envelope `error` member and other non-selected members are
+  not surrogate-normalised.
+- **Update (`local/args-raw`):** the `tools/call` `arguments` half of the
+  declared difference is now measured and mostly closed. `arguments` is kept
+  as raw text and decoded after the params like Go (`call::decode_arguments`).
+  The oracle's behaviour is recorded in `stdio-hygiene.json` section
+  `tools_call_arguments` (47 probes, produced by running the pinned commit's
+  own code, see `local-first.md`): (a) duplicate keys inside `arguments` are
+  last-wins at every depth, keys are case-sensitive, `null` replaces, lone
+  surrogates decode to U+FFFD, and Rust now matches all of it frame for frame;
+  a number overflowing `float64` is `-32603 parse arguments: json: cannot
+  unmarshal number 1e400 into Go value of type float64` in the oracle, which
+  Rust previously answered `-32602`, and now matches. (b) is unchanged and
+  pinned: an `arguments` object holding 127 or more nested array levels is
+  `-32602` in Rust (the `serde_json::Value` limit) where the oracle executes
+  the tool, up to the 10000-level frame limit; this remains the ratified
+  Rust-stricter difference, asserted by
+  `tools_call_arguments_nesting_beyond_the_value_limit_is_rust_stricter`.
 - Recommendation: **no ratification needed**; this is parity. The only
   divergence on duplicate keys is the envelope one (ADR 0032 item 4).
 
