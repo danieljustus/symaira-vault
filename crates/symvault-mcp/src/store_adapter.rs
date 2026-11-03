@@ -486,6 +486,8 @@ pub struct StoreReadOnlyRuntime {
     policy: Option<Engine>,
     audit: Option<SharedAuditLogger>,
     rate_limiter: Mutex<Option<MinuteRateLimiter>>,
+    /// Go `Server.sessionID`: minted once per runtime and stamped on every row.
+    session_id: String,
     agent_name: String,
     transport: String,
     unavailable_tools: Vec<String>,
@@ -599,6 +601,7 @@ impl StoreReadOnlyRuntime {
             policy,
             audit,
             rate_limiter: Mutex::new(None),
+            session_id: crate::audit_identity::generate_session_id(),
             agent_name,
             transport,
             unavailable_tools,
@@ -680,6 +683,7 @@ impl StoreReadOnlyRuntime {
             policy,
             audit,
             rate_limiter: Mutex::new(None),
+            session_id: crate::audit_identity::generate_session_id(),
             agent_name,
             transport,
             unavailable_tools,
@@ -840,6 +844,7 @@ impl StoreReadOnlyRuntime {
         let timestamp = OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+        let call = crate::audit_identity::current();
         let entry = symvault_store::audit::LogEntry {
             timestamp,
             agent: self.agent_name.clone(),
@@ -848,6 +853,9 @@ impl StoreReadOnlyRuntime {
             transport: self.transport.clone(),
             reason: if !ok { action.into() } else { String::new() },
             ok,
+            session_id: self.session_id.clone(),
+            request_id: call.request_id,
+            token_id: call.token_id,
             ..symvault_store::audit::LogEntry::default()
         };
         if let Ok(mut logger) = audit.lock() {
