@@ -90,6 +90,14 @@ fn oracle_binaries(test: &str) -> (go_oracle::GoOracle, PathBuf, PathBuf) {
         test,
         Some(go_oracle::CONFIG_CLI_ORACLE),
     );
+    // The scrypt benchmark's verdict depends on machine load.
+    oracle.stable_under(|bytes| {
+        if String::from_utf8_lossy(bytes).contains("crypto.scrypt.benchmark") {
+            b"<benchmark>".to_vec()
+        } else {
+            bytes.to_vec()
+        }
+    });
     let go = oracle.binary();
     let rust = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     assert!(rust.is_file(), "Rust binary does not exist at {rust:?}");
@@ -482,7 +490,8 @@ fn differential_doctor_fix_dry_run_and_apply() {
 
 #[test]
 fn differential_doctor_new_checks_initialized_vault_parity() {
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_initialized_vault_parity");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_new_checks_initialized_vault_parity");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -651,7 +660,8 @@ fn differential_doctor_new_checks_corrupt_config() {
 
 #[test]
 fn differential_doctor_multi_document_config_errors_match_go() {
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_multi_document_config_errors_match_go");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_multi_document_config_errors_match_go");
     let home = temporary_root("multi-document-config-home");
     let vault = temporary_root("multi-document-config-vault");
     let _fixture = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -899,25 +909,25 @@ fn start_mcp_health_server(
 fn run_mcp_server_doctor(binary: &Path, vault: &Path, home: &Path) -> Output {
     go_oracle::output(
         Command::new(binary)
-        .args([
-            "--vault",
-            vault.to_str().unwrap(),
-            "doctor",
-            "--only",
-            "mcp.server.reachable",
-            "--json",
-        ])
-        .env_clear()
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", vault)
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .env("NO_PROXY", "127.0.0.1,localhost")
-        .env("no_proxy", "127.0.0.1,localhost"),
+            .args([
+                "--vault",
+                vault.to_str().unwrap(),
+                "doctor",
+                "--only",
+                "mcp.server.reachable",
+                "--json",
+            ])
+            .env_clear()
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", vault)
+            .env("CI", "1")
+            .env("NO_COLOR", "1")
+            .env("NO_PROXY", "127.0.0.1,localhost")
+            .env("no_proxy", "127.0.0.1,localhost"),
     )
     .expect("run local MCP server doctor check")
 }
@@ -1177,33 +1187,32 @@ fn run_mcp_tokens_doctor(
     if let Some(token) = env_token {
         command.env("SYMVAULT_MCP_TOKEN", token);
     }
-    go_oracle::output(&mut command)
-        .expect("run MCP token doctor check in isolated environment")
+    go_oracle::output(&mut command).expect("run MCP token doctor check in isolated environment")
 }
 
 fn run_mcp_approval_tls_doctor(binary: &Path, vault: &Path, home: &Path) -> Output {
     go_oracle::output(
         Command::new(binary)
-        .args([
-            "--vault",
-            vault.to_str().unwrap(),
-            "doctor",
-            "--only",
-            "mcp.approval.tls",
-            "--json",
-            "--no-network",
-        ])
-        .env_clear()
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", vault)
-        .env("SYMVAULT_PASSPHRASE", "synthetic-doctor-fixture")
-        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("CI", "1")
-        .env("NO_COLOR", "1"),
+            .args([
+                "--vault",
+                vault.to_str().unwrap(),
+                "doctor",
+                "--only",
+                "mcp.approval.tls",
+                "--json",
+                "--no-network",
+            ])
+            .env_clear()
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", vault)
+            .env("SYMVAULT_PASSPHRASE", "synthetic-doctor-fixture")
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+            .env("CI", "1")
+            .env("NO_COLOR", "1"),
     )
     .expect("run approval TLS doctor check in isolated environment")
 }
@@ -1281,7 +1290,8 @@ fn normalized_registry_bytes(bytes: &[u8], generated_hash: bool) -> Vec<u8> {
 
 #[test]
 fn differential_doctor_mcp_tokens_existing_registry_is_read_only() {
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_tokens_existing_registry_is_read_only");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_tokens_existing_registry_is_read_only");
     let home = temporary_root("mcp-tokens-readonly-home");
     let go_vault = temporary_root("mcp-tokens-readonly-go-vault");
     let rust_vault = temporary_root("mcp-tokens-readonly-rust-vault");
@@ -1323,7 +1333,8 @@ fn differential_doctor_mcp_tokens_existing_registry_is_read_only() {
 
 #[test]
 fn differential_doctor_mcp_approval_tls_initializes_private_device_sessions() {
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_approval_tls_initializes_private_device_sessions");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_approval_tls_initializes_private_device_sessions");
     let home = temporary_root("mcp-approval-tls-home");
     let go_vault = temporary_root("mcp-approval-tls-go-vault");
     let rust_vault = temporary_root("mcp-approval-tls-rust-vault");
@@ -1357,7 +1368,9 @@ fn differential_doctor_mcp_approval_tls_initializes_private_device_sessions() {
 fn differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_write_access() {
     use std::os::unix::fs::PermissionsExt;
 
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_write_access");
+    let (_oracle, go, rust) = oracle_binaries(
+        "differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_write_access",
+    );
     let home = temporary_root("mcp-approval-tls-readonly-home");
     let go_vault = temporary_root("mcp-approval-tls-readonly-go-vault");
     let rust_vault = temporary_root("mcp-approval-tls-readonly-rust-vault");
@@ -1389,7 +1402,9 @@ fn differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_writ
 
 #[test]
 fn differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_expiry() {
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_expiry");
+    let (_oracle, go, rust) = oracle_binaries(
+        "differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_expiry",
+    );
     let home = temporary_root("mcp-approval-tls-legacy-home");
     let go_vault = temporary_root("mcp-approval-tls-legacy-go-vault");
     let rust_vault = temporary_root("mcp-approval-tls-legacy-rust-vault");
@@ -1466,7 +1481,8 @@ fn differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_exp
 fn doctor_mcp_approval_tls_refuses_symlinked_store_parent() {
     use std::os::unix::fs::symlink;
 
-    let (_oracle, go, rust) = oracle_binaries("doctor_mcp_approval_tls_refuses_symlinked_store_parent");
+    let (_oracle, go, rust) =
+        oracle_binaries("doctor_mcp_approval_tls_refuses_symlinked_store_parent");
     let home = temporary_root("mcp-approval-tls-symlink-home");
     let go_vault = temporary_root("mcp-approval-tls-symlink-go-vault");
     let rust_vault = temporary_root("mcp-approval-tls-symlink-rust-vault");
@@ -1523,7 +1539,8 @@ fn doctor_mcp_approval_tls_refuses_symlinked_store_parent() {
 
 #[test]
 fn differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go() {
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go");
     let home = temporary_root("mcp-approval-tls-malformed-expiry-home");
     let go_vault = temporary_root("mcp-approval-tls-malformed-expiry-go-vault");
     let rust_vault = temporary_root("mcp-approval-tls-malformed-expiry-rust-vault");
@@ -1572,7 +1589,9 @@ fn differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go() {
 
 #[test]
 fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy() {
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy");
+    let (_oracle, go, rust) = oracle_binaries(
+        "differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy",
+    );
     let home = temporary_root("mcp-tokens-corrupt-home");
     let go_vault = temporary_root("mcp-tokens-corrupt-go-vault");
     let rust_vault = temporary_root("mcp-tokens-corrupt-rust-vault");
@@ -1619,7 +1638,8 @@ fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_leg
 
 #[test]
 fn differential_doctor_mcp_tokens_empty_environment_value_creates_registry() {
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_tokens_empty_environment_value_creates_registry");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_tokens_empty_environment_value_creates_registry");
     for (case, env_token, migrated) in [
         ("empty", "", true),
         ("nonempty", "synthetic-environment-token", false),
@@ -1670,7 +1690,8 @@ fn differential_doctor_mcp_tokens_empty_environment_value_creates_registry() {
 fn differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure() {
     use std::os::unix::fs::symlink;
 
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure");
     let home = temporary_root("mcp-tokens-symlink-home");
     let go_vault = temporary_root("mcp-tokens-symlink-go-vault");
     let rust_vault = temporary_root("mcp-tokens-symlink-rust-vault");
@@ -1722,7 +1743,8 @@ fn differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure() {
 
 #[test]
 fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases");
     for (case, legacy, env_token) in [
         (
             "existing-legacy",
@@ -1837,7 +1859,8 @@ fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
 
 #[test]
 fn differential_doctor_auth_method_touchid_availability() {
-    let (_oracle, go, rust) = oracle_binaries("differential_doctor_auth_method_touchid_availability");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_auth_method_touchid_availability");
     let home = temporary_root("touchid-home");
     let vault = temporary_root("touchid-vault");
     let _fixture = TempFixture::new(vec![home.clone(), vault.clone()]);

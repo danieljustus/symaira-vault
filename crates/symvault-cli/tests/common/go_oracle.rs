@@ -36,6 +36,9 @@ use sha2::{Digest, Sha256};
 /// Oracle pinned by `scripts/rust-port/check_config_cli.sh` and the Makefile.
 pub const CONFIG_CLI_ORACLE: &str = "fca3f89401833b5e14ec4ec74ef736b0f63bca74";
 
+/// A test-supplied output normalization (see [`GoOracle::stable_under`]).
+pub type Normalizer = fn(&[u8]) -> Vec<u8>;
+
 const SENTINEL: &str = "/nonexistent/symvault-go-oracle-replay";
 const MAX_CAPTURED_FILE: u64 = 8 * 1024 * 1024;
 static TRANSCRIPT_LOCK: Mutex<()> = Mutex::new(());
@@ -169,7 +172,7 @@ struct State {
     seeds_captured: Vec<Seed>,
     /// The test's own output normalization (timestamps, key previews, ...),
     /// used only to decide whether a recapture changed anything meaningful.
-    stable: Option<fn(&[u8]) -> Vec<u8>>,
+    stable: Option<Normalizer>,
     apply_effects: bool,
 }
 
@@ -184,10 +187,12 @@ pub struct GoOracle {
 
 fn transcript_path(file: &str) -> PathBuf {
     // SYMVAULT_ORACLE_DIR redirects transcripts (capture determinism checks).
-    let dir = env::var_os("SYMVAULT_ORACLE_DIR").filter(|d| !d.is_empty()).map_or_else(
-        || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/cli-transcripts"),
-        PathBuf::from,
-    );
+    let dir = env::var_os("SYMVAULT_ORACLE_DIR")
+        .filter(|d| !d.is_empty())
+        .map_or_else(
+            || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/cli-transcripts"),
+            PathBuf::from,
+        );
     dir.join(format!("{file}.json"))
 }
 
@@ -285,7 +290,7 @@ impl GoOracle {
 
     /// Declare the test's own output normalization. Recapturing keeps the
     /// committed entry when the new answer is equal under it.
-    pub fn stable_under(&self, normalize: fn(&[u8]) -> Vec<u8>) {
+    pub fn stable_under(&self, normalize: Normalizer) {
         self.state.borrow_mut().stable = Some(normalize);
     }
 
@@ -394,7 +399,10 @@ impl GoOracle {
                 (index, st.roots[index].clone())
             })
             .collect();
-        let before: Vec<_> = tracked.iter().map(|(_, r)| snapshot(r, GitMode::Full)).collect();
+        let before: Vec<_> = tracked
+            .iter()
+            .map(|(_, r)| snapshot(r, GitMode::Full))
+            .collect();
         drop(st);
         let result = setup();
         let mut st = self.state.borrow_mut();
@@ -560,6 +568,39 @@ pub fn mask_volatile(bytes: &[u8]) -> Vec<u8> {
             i += 21;
             continue;
         }
+        // import-20261103-3e2770c7
+        if rest.starts_with(b"import-")
+            && digits(&rest[7..], 8)
+            && rest.get(15) == Some(&b'-')
+            && rest.len() >= 24
+            && rest[16..24].iter().all(u8::is_ascii_hexdigit)
+        {
+            out.extend_from_slice(b"import-<id>");
+            i += 24;
+            continue;
+        }
+        // JSON string values that are fresh on every run.
+        let mut volatile_value = None;
+        for key in [
+            &b"\"Modified\":\""[..],
+            b"\"kid\":\"",
+            b"\"hmac\":\"",
+            b"\"argv_hash\":\"",
+        ] {
+            if rest.starts_with(key) {
+                volatile_value = Some(key.len());
+            }
+        }
+        if let Some(prefix) = volatile_value {
+            let end = rest[prefix..]
+                .iter()
+                .position(|b| *b == b'"')
+                .map_or(rest.len(), |p| prefix + p);
+            out.extend_from_slice(&rest[..prefix]);
+            out.extend_from_slice(b"<v>");
+            i += end;
+            continue;
+        }
         if rest.starts_with(b".tmp-") {
             let run = rest[5..].iter().take_while(|b| b.is_ascii_digit()).count();
             if run > 0 {
@@ -584,7 +625,10 @@ pub fn mask_volatile(bytes: &[u8]) -> Vec<u8> {
             let mut end = 19;
             if rest.get(end) == Some(&b'.') {
                 end += 1;
-                end += rest[end..].iter().take_while(|b| b.is_ascii_digit()).count();
+                end += rest[end..]
+                    .iter()
+                    .take_while(|b| b.is_ascii_digit())
+                    .count();
             }
             if rest.get(end) == Some(&b'Z') {
                 out.extend_from_slice(b"<ts>");
@@ -598,11 +642,7 @@ pub fn mask_volatile(bytes: &[u8]) -> Vec<u8> {
     out
 }
 
-fn volatile_equal(
-    stable: Option<fn(&[u8]) -> Vec<u8>>,
-    old: &[u8],
-    new: &[u8],
-) -> bool {
+fn volatile_equal(stable: Option<Normalizer>, old: &[u8], new: &[u8]) -> bool {
     let masked = |b: &[u8]| {
         let m = mask_volatile(b);
         match stable {
@@ -613,7 +653,7 @@ fn volatile_equal(
     masked(old) == masked(new)
 }
 
-fn equivalent(stable: Option<fn(&[u8]) -> Vec<u8>>, old: &Response, new: &Response) -> bool {
+fn equivalent(stable: Option<Normalizer>, old: &Response, new: &Response) -> bool {
     old == new
         || (old.exit_code == new.exit_code
             && old.signal == new.signal
@@ -740,7 +780,8 @@ impl State {
                         .take_while(|b| b.is_ascii_digit())
                         .count();
                     if digits >= 4 {
-                        let port = String::from_utf8_lossy(&text[start..start + digits]).into_owned();
+                        let port =
+                            String::from_utf8_lossy(&text[start..start + digits]).into_owned();
                         self.register_port(&port);
                     }
                     i = start;
@@ -786,10 +827,10 @@ impl State {
             if known == raw || self.real_roots[index] == raw {
                 return;
             }
-            if let Some(real) = &real {
-                if &self.real_roots[index] == real {
-                    return;
-                }
+            if let Some(real) = &real
+                && &self.real_roots[index] == real
+            {
+                return;
             }
         }
         // A root that does not exist yet is canonicalized through its parent.
@@ -912,9 +953,10 @@ fn snapshot_after(root: &Path, before: &BTreeMap<String, Node>) -> BTreeMap<Stri
     snapshot(root, GitMode::Full)
         .into_iter()
         .filter(|(path, _)| {
-            let Some(at) = path.find(".git/").or_else(|| {
-                path.ends_with(".git").then(|| path.len() - 4)
-            }) else {
+            let Some(at) = path
+                .find(".git/")
+                .or_else(|| path.ends_with(".git").then(|| path.len() - 4))
+            else {
                 return true;
             };
             let prefix = &path[..at];
@@ -971,16 +1013,16 @@ fn walk(root: &Path, dir: &Path, git: GitMode, map: &mut BTreeMap<String, Node>)
                 GitMode::Skip => continue,
                 GitMode::ConfigOnly => {
                     let config = path.join("config");
-                    if let Ok(meta) = fs::symlink_metadata(&config) {
-                        if meta.is_file() {
-                            map.insert(
-                                rel(&config),
-                                Node::File {
-                                    mode: mode_bits(&meta),
-                                    content: fs::read(&config).unwrap_or_default(),
-                                },
-                            );
-                        }
+                    if let Ok(meta) = fs::symlink_metadata(&config)
+                        && meta.is_file()
+                    {
+                        map.insert(
+                            rel(&config),
+                            Node::File {
+                                mode: mode_bits(&meta),
+                                content: fs::read(&config).unwrap_or_default(),
+                            },
+                        );
                     }
                     continue;
                 }
@@ -1217,7 +1259,12 @@ pub fn output_with_input(command: &mut Command, stdin: Option<&[u8]>) -> std::io
             args: command.get_args().map(|a| text_of(&st, a)).collect(),
             env: command
                 .get_envs()
-                .map(|(k, v)| (k.to_string_lossy().into_owned(), v.map(|v| env_value(&st, v))))
+                .map(|(k, v)| {
+                    (
+                        k.to_string_lossy().into_owned(),
+                        v.map(|v| env_value(&st, v)),
+                    )
+                })
                 .collect(),
             cwd: command.get_current_dir().map(|d| {
                 String::from_utf8_lossy(&st.normalize(d.to_string_lossy().as_bytes())).into_owned()
@@ -1235,7 +1282,10 @@ pub fn output_with_input(command: &mut Command, stdin: Option<&[u8]>) -> std::io
         Mode::Capture => {
             let roots: Vec<(usize, PathBuf)> =
                 state.borrow().roots.iter().cloned().enumerate().collect();
-            let before: Vec<_> = roots.iter().map(|(_, r)| snapshot(r, GitMode::ConfigOnly)).collect();
+            let before: Vec<_> = roots
+                .iter()
+                .map(|(_, r)| snapshot(r, GitMode::ConfigOnly))
+                .collect();
             let result = run_real(command, stdin)?;
             let mut st = state.borrow_mut();
             // Roots first mentioned by the Go process output are not tracked.
@@ -1264,16 +1314,15 @@ pub fn output_with_input(command: &mut Command, stdin: Option<&[u8]>) -> std::io
             // still answers identically, so recapturing is byte-stable even
             // though effects such as ciphertext are random.
             let ordinal = st.captured.len();
-            let by_ordinal = st.prior.calls.get(ordinal).is_some_and(|e| {
-                e.request.args.len() == request.args.len()
-                    && e.request
-                        .args
-                        .iter()
-                        .zip(&request.args)
-                        .all(|(a, b)| mask_volatile(a.as_bytes()) == mask_volatile(b.as_bytes()))
-                    && e.request.env == request.env
-                    && equivalent(st.stable, &e.response, &response)
-            });
+            let by_ordinal =
+                st.prior.calls.get(ordinal).is_some_and(|e| {
+                    e.request.args.len() == request.args.len()
+                        && e.request.args.iter().zip(&request.args).all(|(a, b)| {
+                            mask_volatile(a.as_bytes()) == mask_volatile(b.as_bytes())
+                        })
+                        && e.request.env == request.env
+                        && equivalent(st.stable, &e.response, &response)
+                });
             let kept = st
                 .prior
                 .calls

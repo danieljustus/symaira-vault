@@ -330,7 +330,6 @@ mod profile_edit_differential {
             eprintln!("skipping Rust differential: CARGO_BIN_EXE_symvault is not set");
             return;
         };
-        let go_binary = PathBuf::from(go_binary);
         let rust_binary = PathBuf::from(rust_binary);
 
         let cases = [

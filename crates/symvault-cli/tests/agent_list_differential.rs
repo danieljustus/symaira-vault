@@ -126,7 +126,7 @@ fn agent_list_matches_go_text_json_and_yaml() {
 /// Registry documents whose meaning depends on Go's `encoding/json` rules. Each is
 /// `(case, document, Go-accepts, alpha has a valid token)`; the `Go-accepts` and
 /// validity columns were recorded from the Go oracle and are asserted against
-/// the Rust binary even without `SYMVAULT_GO_BINARY`.
+/// the Rust binary.
 const GO_DECODING_CASES: &[(&str, &str, bool, bool)] = &[
     (
         "control",
@@ -239,7 +239,12 @@ fn go_decoding_workspace(document: &str) -> (tempfile::TempDir, tempfile::TempDi
 #[test]
 fn agent_list_registry_decoding_follows_go_encoding_json() {
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
-    let go_binary = env::var_os("SYMVAULT_GO_BINARY").map(PathBuf::from);
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_list_differential",
+        "agent_list_registry_decoding_follows_go_encoding_json",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     for (case, document, go_accepts, token_valid) in GO_DECODING_CASES {
         let (root, home) = go_decoding_workspace(document);
         let args = ["--output", "json", "agent", "list"];
@@ -257,18 +262,16 @@ fn agent_list_registry_decoding_follows_go_encoding_json() {
                 "{case}: {listing}"
             );
         }
-        if let Some(go_binary) = &go_binary {
-            let go = run(go_binary, &args, root.path(), home.path());
-            assert_eq!(
-                go.status.success(),
-                *go_accepts,
-                "{case}: recorded Go outcome"
-            );
-            assert_eq!(rust.status, go.status, "{case}: status differs");
-            assert_eq!(rust.stdout, go.stdout, "{case}: stdout differs");
-            if *go_accepts {
-                assert_eq!(rust.stderr, go.stderr, "{case}: stderr differs");
-            }
+        let go = run(&go_binary, &args, root.path(), home.path());
+        assert_eq!(
+            go.status.success(),
+            *go_accepts,
+            "{case}: recorded Go outcome"
+        );
+        assert_eq!(rust.status, go.status, "{case}: status differs");
+        assert_eq!(rust.stdout, go.stdout, "{case}: stdout differs");
+        if *go_accepts {
+            assert_eq!(rust.stderr, go.stderr, "{case}: stderr differs");
         }
     }
 }

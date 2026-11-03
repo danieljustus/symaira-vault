@@ -433,7 +433,7 @@
           },
           "response": {
             "stdout": {
-              "text": "uRB:c?4WR=A[GqFqpDKFP~2)\n"
+              "text": "wf!a-)-5Z$+gWF~gATgPaR]x\n"
             },
             "stderr": {
               "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
@@ -448,7 +448,7 @@
               "op": "file",
               "mode": 384,
               "content": {
-                "text": "{\"ts\":\"2026-11-03T22:29:53Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/go-explicit\",\"field\":\"password\",\"kid\":\"620fb0a9\",\"hmac\":\"3828615edff3d4a12491e3b445cd6f8290a4a971ce2afa3f8318380c1bc9dfe1\",\"argv_hash\":\"7b80cbe7637e3928\",\"ok\":true}\n{\"ts\":\"2026-11-03T22:29:54Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/rust-explicit\",\"field\":\"password\",\"kid\":\"677a2173\",\"hmac\":\"baef1f0478262e333d0441656917744bae53e7fcc1cb2cfd2dd66cc528bff8f1\",\"argv_hash\":\"228b5c7ed7e6463d\",\"ok\":true}\n{\"ts\":\"2026-11-03T22:29:55Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/go-stdin\",\"field\":\"password\",\"kid\":\"db5899ee\",\"hmac\":\"f26fb630c3e2c86023566b377a9163761c37a1da7e344c540ed5c9d41896606c\",\"argv_hash\":\"82d7e30c5fe0a59a\",\"ok\":true}\n{\"ts\":\"2026-11-03T22:29:56Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/rust-stdin\",\"field\":\"password\",\"kid\":\"23fe240f\",\"hmac\":\"9e1e2efba3caa5d70b49424f61b268cab0c2250642b86589e969fc30854a86ff\",\"argv_hash\":\"26850907dac6674f\",\"ok\":true}\n{\"ts\":\"2026-11-03T22:29:57Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/rust-generated\",\"field\":\"password\",\"kid\":\"18aede5f\",\"hmac\":\"855b73a515cf15f151d37373ae700a293adbc6ba1ce235829c4afb427a99426a\",\"argv_hash\":\"ea5a1d07e55b7b4b\",\"ok\":true}\n"
+                "text": "{\"ts\":\"2026-11-03T22:49:48Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/go-explicit\",\"field\":\"password\",\"kid\":\"65c8e0ce\",\"hmac\":\"4cd12626b252727cff2a0e8aa3420d18187ecc9c4a6377b2dce8dd2861336f05\",\"argv_hash\":\"4651a02c64fee9bf\",\"ok\":true}\n{\"ts\":\"2026-11-03T22:49:50Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/rust-explicit\",\"field\":\"password\",\"kid\":\"e843ab39\",\"hmac\":\"7ac8e0f7bf19878483282a608e77aaa736cd39d74c54f1727c4b1427ce29d218\",\"argv_hash\":\"459e3f51a65a94e7\",\"ok\":true}\n{\"ts\":\"2026-11-03T22:49:50Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/go-stdin\",\"field\":\"password\",\"kid\":\"b8a2a51b\",\"hmac\":\"458ad34b02d295e698a4fcebc3dd55ded7f65d01125db891c2e4214aa6ca57ff\",\"argv_hash\":\"31b8d6112110878b\",\"ok\":true}\n{\"ts\":\"2026-11-03T22:49:51Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/rust-stdin\",\"field\":\"password\",\"kid\":\"38570095\",\"hmac\":\"18eeca59466210a34474a8d5c87b9f2b409f5dae9885867e7a3ceeae31f9345f\",\"argv_hash\":\"e1c0cd74eb610c68\",\"ok\":true}\n{\"ts\":\"2026-11-03T22:49:52Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/rust-generated\",\"field\":\"password\",\"kid\":\"cbd54d6f\",\"hmac\":\"a07fde2800e62538a4acfa4157a7271bafe82a18ca7dd6c026df7e56ff7f8744\",\"argv_hash\":\"12c76fa795238f03\",\"ok\":true}\n"
               }
             }
           ]
@@ -3249,7 +3249,7 @@
           },
           "response": {
             "stdout": {
-              "text": "Quarantine import ID: import-20261103-dee523aa\nImported: quarantine/import-20261103-dee523aa/example\nImport summary: 1 imported, 0 skipped\n"
+              "text": "Quarantine import ID: import-20261103-244f3a33\nImported: quarantine/import-20261103-244f3a33/example\nImport summary: 1 imported, 0 skipped\n"
             },
             "stderr": {
               "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
@@ -3294,18 +3294,18 @@
             },
             {
               "root": 0,
-              "path": "root/entries/quarantine/import-20261103-dee523aa",
+              "path": "root/entries/quarantine/import-20261103-244f3a33",
               "op": "dir",
               "mode": 448,
               "content": null
             },
             {
               "root": 0,
-              "path": "root/entries/quarantine/import-20261103-dee523aa/example.age",
+              "path": "root/entries/quarantine/import-20261103-244f3a33/example.age",
               "op": "file",
               "mode": 384,
               "content": {
-                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBaYXh3eUJxMFFTK3hGYUtyWllST0duYmhhRFJhNDBucGtDWGcrMTZvRFNrCmh6QW9ZblEyNTNRMGRjcGZjZ2k4VFhlZ3Ntbnd6QTNiaXEzM2p0S3F0aGcKLS0tIGI2RWQ3TXFHcDFFTEhROXJiQTI4ZzNGaGRydmhiVDh1V1N2d3VJckZXT28KFmjtHpistsq+6rSIUjv3+XBgkJpOllLVZENF+GK4ysLepL2AORLZM+bTtvi9v+2JHiFWLqmqfLbiXUa9izEkYA+SBBeTyU54gpv/ZMZFAyY1D6KRgoperSpNGWVtzO3MhUKSGBIrKt6i92KgYo1r768OPn58VFgQ9CqH/rsuY6qUDY7/8SmYpF1DksZuQFgiP4Qpx5DNn52wkWK9WZE+rf2AjNo+mopAYXnp0yFiIoEB/aVrx2jnaVb3fT3NIt5MaOyPxA3Pg9LdknAoAA9sOiCjZnsJN0ktGWne8tS8GxsG3iK3thnFQdJ7FxdL5LFaeaB+ZybuKfaqtjS5BFtOFLl9Ll1vHCcUbP4OBRIk/iWnFtgpJGGirdqkwCYJg1TN6zCG/zbRPG3Iqe0naujvTQ=="
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBXcXY4bDUwZGJISVpFQ3NMdm1ZR256RkxKbEVLQUl5UXBLZDU0UjB1eEdvClROS1JyaWZTN0M1QWNiUDVGODlmZnUvZU1KUHplekpEeTlIejhGR1ZqR2cKLS0tIFhseUZNY3EremM5NEVQRXIzdjl1Uko1emx0Zmt3MU4zQmFWbnJBMDN0Q2cK/KptTvyT01jU3uMdHJFZGxfBw0fLM4Fyjf9G5DW+DLErHYJRLOdKbPHihl8p02smOBsSWrtRAt0rjLd1N+2NDe4sWYmYLgRfdJOarC1ZJHVFYN8/y35p2o0L3a4mDI1w2/8n6vcWqL3sac2enKWYKh7h+rJkeN7BKyPnGPQlkCU8ZSuHt5oNbA3FGzvujPBWpHa/TRBOFF+vJOhP6CkTTrlnci3uSg0d/4Wz2aJE7exam4BUcypavCwiMhIT6SBtpSg3ruN9eRozaH30XTa9c8Umb8zVVfsSnz66dESdH1v09shqTASrkwLmm+w4wqlazihIXktApZWBfhaP3pa/F+0AJ5bMVs2FScUtj1u/qTvIxcw6liQUpLOvSwqONvKGytj1zITFSuel0kfQAymQBw=="
               }
             },
             {
@@ -3314,17 +3314,17 @@
               "op": "file",
               "mode": 384,
               "content": {
-                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBMOTdiSC9QenZWa1l5czJZckRnd3hKSVNpalNUS3B1eDNMK2N5bndHakFjCnhRK0hROWxMV1dMUmcwaEFMRHRnUWd2ZDIrQXRTRlcyY2dUUlN4emFFY0UKLS0tIGcwaUdkcE5RQTdoUnV3RVIyd0NEODVzbDZUUWdYR0F5MlEza24xVG5iNW8KZjKrc9/UBFBUru+nNCGvmnp2UBDQpDrPr/yA8wNCxW0YczQsbrlEb2swErNc6Er3Ea2AH7ujeY/Yi6T88FFHkE3WNBkZp03qvwZZb+yzKb12NofmVxCvd24hJxHkaJKp5MM/9ElxWmt411NR1iY85ddvyCZ5Tl6nbqYoQXCCXSaGRZZNLMmAS/rbxZQnAz8dzY/oKOywXwZGaBjrxLDu9SpqqKOf3SKfmt2tjjrmdIeGHgFoNrdbiLiR0TfFjWeuTMb+BetO3OKjlMV71n1D5NnrgLKIGyyvZ7nxHTBZmMYycLkzmHXRCEDY47mX2Rz6H3jGPDP7Fne2m66v50EYRlZXa7p1YkNhtgEgzsTQHuj7jkq4hwWjLFihYBeSEi1JmyoKfiheZO1nYRNYY+k5SEo9STRBAtAI9cnibnTA6m3XDjH3"
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSArU0ZDdWFOd2pLQ0xHM1poWjhpZENFTG8xWVgwcmNQYm56V21sUWtyZ3dzCk5ZeFY0bHlRK2paZU1FWFB3Tk5BQmV4YzRJMGp5VnBGejFTWjFlakorY1UKLS0tIGt1d1Y0MkN6YTF0WDJHNjZIYXBCUW9FVVNIRjdEYTFvcGFjK0VmZ3BpNFUK+W2YZGLzyfNUH49de/96cDWctVkvRR/FRhRmQrEQxmMZ127PW6R5SakkX9G9xWVERmRIj0nY7DtD2u/3rUU2uY+zRr/arEnB5V9bx2BMG+zY2MWbAkmCgDV1tGzt981vmpD2dxTHzHnKM4pnAY1OmnCkjAY8rTVu704pG15Pv41CeIpGAFNKSvwvOWvuorB8ARFVtjDMKi9JNqHNyuniMljypitj5Zm28Q2DnKuu/vapLFyw1xmkYgs65D6eQUnn4cZmP+oRQn6kAXuWAtPahPvuXMjkWO2A2P6n8RwY9EghDteVNRyiETsIGXSYKvdwvP2ALJwrAYgtcwuXlVHcLTAX9c8D4lmllICuKx8++3Gf1GLuHI3Y6YSWrjy6lGKSLXKyNdj1Opu1PXtv4p3anxn//B0e/kbcyMuOIvAWiwKUVG4="
               }
             }
           ]
         },
         {
-          "key": "3e8f5fa65e7fdbfc5a6983d86b0d2e381f2f2fbcf8495c567a2ecbcd96f366c1",
+          "key": "d4d2e0282396ec531fe8aa210ae58b32a5770dffdb0213e47908acb3dcbf0d4c",
           "request": {
             "args": [
               "get",
-              "quarantine/import-20261103-dee523aa/example.password",
+              "quarantine/import-20261103-244f3a33/example.password",
               "--print"
             ],
             "env": {
@@ -3357,7 +3357,7 @@
               "op": "file",
               "mode": 384,
               "content": {
-                "text": "{\"ts\":\"2026-11-03T22:30:00Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"quarantine/import-20261103-dee523aa/example\",\"field\":\"password\",\"kid\":\"5c20e115\",\"hmac\":\"36d6b92d28f1b495ae667d75bc69e292512ff9ebe91a21feaee57198d35dff5c\",\"argv_hash\":\"4f75411363fc9673\",\"ok\":true}\n"
+                "text": "{\"ts\":\"2026-11-03T22:49:54Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"quarantine/import-20261103-244f3a33/example\",\"field\":\"password\",\"kid\":\"a0cbce38\",\"hmac\":\"27c340bbba14087d041a619ce574e465c18a57f607650e55d0926a57f69406db\",\"argv_hash\":\"d7fd48597cc497c8\",\"ok\":true}\n"
               }
             }
           ]
@@ -4560,7 +4560,7 @@
           },
           "response": {
             "stdout": {
-              "text": "{\"Fields\":{\"locale\":\"İSTANBUL ΟΣ\",\"note\":\"ÄPFEL\",\"password\":\"secret\",\"url\":\"https://github.com/login\"},\"TOTP\":null,\"Path\":\"work/github\",\"Modified\":\"2026-11-03 22:30\"}\n"
+              "text": "{\"Fields\":{\"locale\":\"İSTANBUL ΟΣ\",\"note\":\"ÄPFEL\",\"password\":\"secret\",\"url\":\"https://github.com/login\"},\"TOTP\":null,\"Path\":\"work/github\",\"Modified\":\"2026-11-03 22:49\"}\n"
             },
             "stderr": {
               "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
@@ -4597,7 +4597,7 @@
           },
           "response": {
             "stdout": {
-              "text": "{\"Fields\":{\"locale\":\"İSTANBUL ΟΣ\",\"note\":\"ÄPFEL\",\"password\":\"secret\",\"url\":\"https://github.com/login\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/github\",\"Modified\":\"2026-11-03 22:30\"}\n"
+              "text": "{\"Fields\":{\"locale\":\"İSTANBUL ΟΣ\",\"note\":\"ÄPFEL\",\"password\":\"secret\",\"url\":\"https://github.com/login\",\"username\":\"alice\"},\"TOTP\":null,\"Path\":\"work/github\",\"Modified\":\"2026-11-03 22:50\"}\n"
             },
             "stderr": {
               "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
@@ -4723,7 +4723,7 @@
           },
           "response": {
             "stdout": {
-              "text": "{\"Fields\":{\"password\":\"import-secret\",\"username\":\"import-user\"},\"TOTP\":null,\"Path\":\"Imported\",\"Modified\":\"2026-11-03 22:30\"}\n"
+              "text": "{\"Fields\":{\"password\":\"import-secret\",\"username\":\"import-user\"},\"TOTP\":null,\"Path\":\"Imported\",\"Modified\":\"2026-11-03 22:50\"}\n"
             },
             "stderr": {
               "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
@@ -5757,7 +5757,7 @@
           },
           "response": {
             "stdout": {
-              "text": "{\"Fields\":{\"password\":\"StrongPassword123!\",\"totp\":{\"account_name\":\"alice@corp.test\",\"issuer\":\"SymairaCorp\",\"secret\":\"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\"}},\"TOTP\":{\"code\":\"094178\",\"period\":30,\"remaining\":26},\"Path\":\"work/totp-entry\",\"Modified\":\"2026-11-03 22:30\"}\n"
+              "text": "{\"Fields\":{\"password\":\"StrongPassword123!\",\"totp\":{\"account_name\":\"alice@corp.test\",\"issuer\":\"SymairaCorp\",\"secret\":\"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\"}},\"TOTP\":{\"code\":\"704024\",\"period\":30,\"remaining\":3},\"Path\":\"work/totp-entry\",\"Modified\":\"2026-11-03 22:49\"}\n"
             },
             "stderr": {
               "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"

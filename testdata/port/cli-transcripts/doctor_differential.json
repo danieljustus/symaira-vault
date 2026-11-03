@@ -3102,7 +3102,7 @@
           },
           "response": {
             "stdout": {
-              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"crypto.scrypt.benchmark\",\n      \"name\": \"Scrypt KDF performance\",\n      \"status\": \"warn\",\n      \"message\": \"default work factor 18 is below this machine's recommended 19 (252ms to reach the 250ms target)\",\n      \"hint\": \"set vault.scrypt_work_factor: 19 in config.yaml, then run `symvault migrate kdf` — changing the config value alone does not re-encrypt the existing identity.age\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 0,\n    \"warn\": 1,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"crypto.scrypt.benchmark\",\n      \"name\": \"Scrypt KDF performance\",\n      \"status\": \"ok\",\n      \"message\": \"config work factor 18 matches recommendation (18, 275ms)\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 0,\n    \"fail\": 0,\n    \"total\": 1\n  }\n}\n"
             },
             "stderr": {
               "text": ""

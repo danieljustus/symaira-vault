@@ -10,6 +10,22 @@ use std::{
     time::Instant,
 };
 
+/// Starts an oracle session. A recapture keeps the committed entry when only
+/// intrinsically random output changed (generated passwords).
+fn begin_oracle(file: &str, test: &str, commit: Option<&str>) -> go_oracle::GoOracle {
+    let oracle = go_oracle::GoOracle::begin(file, test, commit);
+    oracle.stable_under(|bytes| {
+        let text = String::from_utf8_lossy(bytes);
+        let token = text.trim();
+        if token.len() >= 12 && token.bytes().all(|b| b.is_ascii_graphic()) {
+            b"<token>".to_vec()
+        } else {
+            bytes.to_vec()
+        }
+    });
+    oracle
+}
+
 fn temporary_root(name: &str) -> test_temp_root::TempRoot {
     test_temp_root::TempRoot::missing(&format!("symvault-cli-differential-{name}-"))
 }
@@ -103,6 +119,23 @@ fn first_json(stdout: &[u8], command: &str) -> serde_json::Value {
         .unwrap_or_else(|error| panic!("{command} JSON: {error}; stdout={stdout:?}"))
 }
 
+/// Drops the entry mtime (`Modified`, minute resolution) everywhere in a JSON
+/// document. Live Go and Rust used to agree on it only because both ran within
+/// the same minute; a replayed Go answer carries the capture-time minute.
+fn strip_modified(mut value: serde_json::Value) -> serde_json::Value {
+    match &mut value {
+        serde_json::Value::Object(map) => {
+            map.remove("Modified");
+            map.values_mut().for_each(|v| *v = strip_modified(v.take()));
+        }
+        serde_json::Value::Array(items) => {
+            items.iter_mut().for_each(|v| *v = strip_modified(v.take()));
+        }
+        _ => {}
+    }
+    value
+}
+
 fn first_json_output(output: &Output, command: &str) -> serde_json::Value {
     if output.stdout.is_empty() {
         panic!(
@@ -142,7 +175,7 @@ fn assert_initialized(root: &Path) {
 
 #[test]
 fn init_list_get_match_go_cli_on_a_disposable_vault() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "init_list_get_match_go_cli_on_a_disposable_vault",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -157,14 +190,14 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     // `init` generates random keys: frozen as a seed for replay.
     if let Some(rust_init) = oracle.seed("init", &[&rust_root, &home], || {
         run(
-        &rust_binary,
-        &[
-            "--vault",
-            rust_root.to_str().unwrap(),
-            "init",
-            "--auth",
-            "passphrase",
-        ],
+            &rust_binary,
+            &[
+                "--vault",
+                rust_root.to_str().unwrap(),
+                "init",
+                "--auth",
+                "passphrase",
+            ],
             &rust_root,
             &home,
         )
@@ -357,8 +390,8 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_find_url, "Go find URL");
     assert_success(&rust_find_url, "Rust find URL");
     assert_eq!(
-        first_json_output(&rust_find_url, "Rust find URL"),
-        first_json_output(&go_find_url, "Go find URL")
+        strip_modified(first_json_output(&rust_find_url, "Rust find URL")),
+        strip_modified(first_json_output(&go_find_url, "Go find URL"))
     );
     let go_find_scoped = run_search(
         &go_binary,
@@ -393,8 +426,8 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_find_scoped, "Go scoped find");
     assert_success(&rust_find_scoped, "Rust scoped find");
     assert_eq!(
-        first_json_output(&rust_find_scoped, "Rust scoped find"),
-        first_json_output(&go_find_scoped, "Go scoped find")
+        strip_modified(first_json_output(&rust_find_scoped, "Rust scoped find")),
+        strip_modified(first_json_output(&go_find_scoped, "Go scoped find"))
     );
     let go_set_unicode = run(
         &go_binary,
@@ -564,8 +597,12 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_json, "Go get JSON");
     assert_success(&rust_json, "Rust get JSON");
     assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&rust_json.stdout).expect("Rust JSON"),
-        serde_json::from_slice::<serde_json::Value>(&go_json.stdout).expect("Go JSON")
+        strip_modified(
+            serde_json::from_slice::<serde_json::Value>(&rust_json.stdout).expect("Rust JSON")
+        ),
+        strip_modified(
+            serde_json::from_slice::<serde_json::Value>(&go_json.stdout).expect("Go JSON")
+        )
     );
     // The frozen Go v0.22.1 oracle prints secrets in JSON; #1106 masks them
     // unless --print is given, so the unmasked read is checked Rust-only.
@@ -631,9 +668,14 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_updated, "Go get after Rust set");
     assert_success(&rust_updated, "Rust get after Rust set");
     assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&rust_updated.stdout)
-            .expect("Rust updated JSON"),
-        serde_json::from_slice::<serde_json::Value>(&go_updated.stdout).expect("Go updated JSON")
+        strip_modified(
+            serde_json::from_slice::<serde_json::Value>(&rust_updated.stdout)
+                .expect("Rust updated JSON")
+        ),
+        strip_modified(
+            serde_json::from_slice::<serde_json::Value>(&go_updated.stdout)
+                .expect("Go updated JSON")
+        )
     );
 
     let go_create = run(
@@ -749,8 +791,8 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_export, "Go export");
     assert_success(&rust_export, "Rust export");
     assert_eq!(
-        first_json_output(&rust_export, "Rust export"),
-        first_json_output(&go_export, "Go export")
+        strip_modified(first_json_output(&rust_export, "Rust export")),
+        strip_modified(first_json_output(&go_export, "Go export"))
     );
 
     let initialize = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"probe","version":"1.0"},"capabilities":{}}}
@@ -1003,7 +1045,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
 
 #[test]
 fn import_quarantine_matches_pinned_go_cli_batch_contract() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "import_quarantine_matches_pinned_go_cli_batch_contract",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -1021,14 +1063,14 @@ fn import_quarantine_matches_pinned_go_cli_batch_contract() {
         // `init` generates random keys: frozen as a seed for replay.
         if let Some(output) = oracle.seed("init", &[root, &home], || {
             run(
-            &rust_binary,
-            &[
-                "--vault",
-                root.to_str().unwrap(),
-                "init",
-                "--auth",
-                "passphrase",
-            ],
+                &rust_binary,
+                &[
+                    "--vault",
+                    root.to_str().unwrap(),
+                    "init",
+                    "--auth",
+                    "passphrase",
+                ],
                 root,
                 &home,
             )
@@ -1124,7 +1166,7 @@ fn quarantine_id(stdout: &[u8]) -> String {
 
 #[test]
 fn export_cancel_happens_before_vault_open() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "export_cancel_happens_before_vault_open",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -1182,7 +1224,7 @@ fn export_cancel_happens_before_vault_open() {
 
 #[test]
 fn add_noninteractive_matches_go_and_preserves_existing_entries() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "add_noninteractive_matches_go_and_preserves_existing_entries",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -1197,14 +1239,14 @@ fn add_noninteractive_matches_go_and_preserves_existing_entries() {
     // `init` generates random keys: frozen as a seed for replay.
     if let Some(init) = oracle.seed("init", &[&root, &home], || {
         run(
-        &rust_binary,
-        &[
-            "--vault",
-            root.to_str().unwrap(),
-            "init",
-            "--auth",
-            "passphrase",
-        ],
+            &rust_binary,
+            &[
+                "--vault",
+                root.to_str().unwrap(),
+                "init",
+                "--auth",
+                "passphrase",
+            ],
             &root,
             &home,
         )
@@ -1573,7 +1615,7 @@ fn add_noninteractive_matches_go_and_preserves_existing_entries() {
 
 #[test]
 fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "verify_matches_go_for_missing_rebuild_and_tampered_manifest",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -1587,14 +1629,14 @@ fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
     // `init` generates random keys: frozen as a seed for replay.
     if let Some(init) = oracle.seed("init", &[&root, &home], || {
         run(
-        &rust_binary,
-        &[
-            "--vault",
-            root.to_str().unwrap(),
-            "init",
-            "--auth",
-            "passphrase",
-        ],
+            &rust_binary,
+            &[
+                "--vault",
+                root.to_str().unwrap(),
+                "init",
+                "--auth",
+                "passphrase",
+            ],
             &root,
             &home,
         )
@@ -1723,7 +1765,7 @@ fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
 
 #[test]
 fn file_add_get_roundtrip_matches_go_cli() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "file_add_get_roundtrip_matches_go_cli",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -1747,14 +1789,14 @@ fn file_add_get_roundtrip_matches_go_cli() {
     // `init` generates random keys: frozen as a seed for replay.
     if let Some(init) = oracle.seed("init", &[&root, &home], || {
         run(
-        &rust_binary,
-        &[
-            "--vault",
-            root.to_str().unwrap(),
-            "init",
-            "--auth",
-            "passphrase",
-        ],
+            &rust_binary,
+            &[
+                "--vault",
+                root.to_str().unwrap(),
+                "init",
+                "--auth",
+                "passphrase",
+            ],
             &root,
             &home,
         )
@@ -1982,7 +2024,7 @@ fn file_add_get_roundtrip_matches_go_cli() {
 
 #[test]
 fn file_use_materializes_and_cleans_attachment_like_go_cli() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "file_use_materializes_and_cleans_attachment_like_go_cli",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -2004,14 +2046,14 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     // `init` generates random keys: frozen as a seed for replay.
     if let Some(init) = oracle.seed("init", &[&root, &home], || {
         run(
-        &rust_binary,
-        &[
-            "--vault",
-            root.to_str().unwrap(),
-            "init",
-            "--auth",
-            "passphrase",
-        ],
+            &rust_binary,
+            &[
+                "--vault",
+                root.to_str().unwrap(),
+                "init",
+                "--auth",
+                "passphrase",
+            ],
             &root,
             &home,
         )
@@ -2269,7 +2311,7 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
 
 #[test]
 fn builtin_templates_match_go_cli() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "builtin_templates_match_go_cli",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -2349,7 +2391,7 @@ fn builtin_templates_match_go_cli() {
 
 #[test]
 fn get_flags_parity_matches_go() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "get_flags_parity_matches_go",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -2364,8 +2406,8 @@ fn get_flags_parity_matches_go() {
     // `init` generates random keys: frozen as a seed for replay.
     if let Some(init) = oracle.seed("init", &[&root, &home], || {
         run(
-        &rust_binary,
-        &["init", "--auth", "passphrase"],
+            &rust_binary,
+            &["init", "--auth", "passphrase"],
             &root,
             &home,
         )
@@ -2516,7 +2558,7 @@ fn get_flags_parity_matches_go() {
 
 #[test]
 fn set_totp_flags_parity_matches_go() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "set_totp_flags_parity_matches_go",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -2597,7 +2639,7 @@ fn set_totp_flags_parity_matches_go() {
 
 #[test]
 fn template_name_and_prefix_parity_matches_go() {
-    let oracle = go_oracle::GoOracle::begin(
+    let oracle = begin_oracle(
         "cli_differential",
         "template_name_and_prefix_parity_matches_go",
         Some(go_oracle::CONFIG_CLI_ORACLE),
@@ -2612,8 +2654,8 @@ fn template_name_and_prefix_parity_matches_go() {
     // `init` generates random keys: frozen as a seed for replay.
     if let Some(init) = oracle.seed("init", &[&root, &home], || {
         run(
-        &rust_binary,
-        &["init", "--auth", "passphrase"],
+            &rust_binary,
+            &["init", "--auth", "passphrase"],
             &root,
             &home,
         )

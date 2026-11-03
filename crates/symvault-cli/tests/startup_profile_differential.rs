@@ -50,7 +50,8 @@ fn stable_report(bytes: &[u8]) -> Vec<u8> {
 
 /// Returns `(oracle session, go_binary, rust_binary)`.
 fn oracle_binaries(test: &str) -> (go_oracle::GoOracle, PathBuf, PathBuf) {
-    let oracle = go_oracle::GoOracle::begin("startup_profile_differential", test, Some(ORACLE_COMMIT));
+    let oracle =
+        go_oracle::GoOracle::begin("startup_profile_differential", test, Some(ORACLE_COMMIT));
     oracle.stable_under(stable_report);
     let go = oracle.binary();
     (oracle, go, PathBuf::from(BINARY))
@@ -168,7 +169,8 @@ fn stderr_text(output: &Output) -> String {
 
 #[test]
 fn differential_report_matches_after_normalizing_runtime_specific_lines() {
-    let (_oracle, go, rust) = oracle_binaries("differential_report_matches_after_normalizing_runtime_specific_lines");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_report_matches_after_normalizing_runtime_specific_lines");
     let fixture = TempFixture::new("report");
     let args = ["startup-profile", "--count", "1"];
 
@@ -215,7 +217,8 @@ fn differential_report_matches_after_normalizing_runtime_specific_lines() {
 
 #[test]
 fn differential_unsupported_json_error_is_byte_identical() {
-    let (_oracle, go, rust) = oracle_binaries("differential_unsupported_json_error_is_byte_identical");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_unsupported_json_error_is_byte_identical");
     let fixture = TempFixture::new("json");
     let cases: &[&[&str]] = &[
         &["startup-profile", "--json"],
@@ -280,7 +283,8 @@ fn differential_count_clamping_matches() {
 
 #[test]
 fn differential_positional_and_empty_trace_are_accepted_on_both() {
-    let (_oracle, go, rust) = oracle_binaries("differential_positional_and_empty_trace_are_accepted_on_both");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_positional_and_empty_trace_are_accepted_on_both");
     let fixture = TempFixture::new("accepted");
     let cases: &[&[&str]] = &[
         &["startup-profile", "extra-positional", "-n", "1"],
@@ -305,7 +309,8 @@ fn differential_positional_and_empty_trace_are_accepted_on_both() {
 
 #[test]
 fn differential_missing_and_broken_config_still_benchmark() {
-    let (_oracle, go, rust) = oracle_binaries("differential_missing_and_broken_config_still_benchmark");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_missing_and_broken_config_still_benchmark");
     // Missing config: fresh HOME with no ~/.symvault at all.
     let missing = TempFixture::new("missing-config");
     let args = ["startup-profile", "--count", "1"];
@@ -333,7 +338,8 @@ fn differential_missing_and_broken_config_still_benchmark() {
 
 #[test]
 fn differential_trace_with_unusable_path_exits_one_on_both() {
-    let (_oracle, go, rust) = oracle_binaries("differential_trace_with_unusable_path_exits_one_on_both");
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_trace_with_unusable_path_exits_one_on_both");
     let fixture = TempFixture::new("trace");
     // A directory: Go cannot create the trace file, Rust refuses outright.
     // Message text differs by design (capability gap); exit code and doubled
