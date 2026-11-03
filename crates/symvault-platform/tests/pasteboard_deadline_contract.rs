@@ -331,7 +331,9 @@ fn normal_paths_keep_go_texts_under_a_deadline() {
     clipboard.set(SECRET.as_bytes()).unwrap();
     clipboard.clear().unwrap();
 
-    sandbox.tool("pbcopy", "kill -TERM $$");
+    // Read stdin first: a tool that dies before reading races the write
+    // (EPIPE vs exit status), in Go's atotto as in Rust.
+    sandbox.tool("pbcopy", "cat > /dev/null\nkill -TERM $$");
     assert_eq!(
         clipboard.set(b"x").unwrap_err().message,
         "signal: terminated"
