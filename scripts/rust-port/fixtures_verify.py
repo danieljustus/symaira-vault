@@ -19,8 +19,8 @@ Three checks, each fails closed:
    ``commit_sha``, ``oracle_commit``, ``oracle_commit_sha``, ``base_commit``,
    ``source_commit``, ``revision`` when hex) must resolve with
    ``git cat-file -e <sha>^{commit}`` AND be contained in a branch or tag
-   (``git for-each-ref --contains``).  A loose object that no ref holds is one
-   ``git gc`` away from vanishing and fails.  ``candidate_commit`` is CI
+   (``git for-each-ref --contains``).  A loose object that no ref holds is
+   one object-store cleanup away from vanishing and fails.  ``candidate_commit`` is CI
    evidence about a candidate, not an oracle pin, and ``corekit_revision`` names
    an external module; both are ignored.
 3. Digests.  Every digest a fixture records is classified at ``--write`` time
@@ -395,7 +395,7 @@ def check_pins(git: Git, scan: Scan, selected: list[str], failures: Failures) ->
         elif status[sha] == "unheld":
             failures.add(
                 f"{where}: oracle commit {sha} resolves but no branch or tag contains it "
-                "(tag it before any gc/prune, e.g. oracle/<name>)"
+                "(tag it before the object store is cleaned, e.g. oracle/<name>)"
             )
     return count
 

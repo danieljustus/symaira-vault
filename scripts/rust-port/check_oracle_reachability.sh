@@ -4,7 +4,7 @@
 # The frozen fixtures name the Go oracle revision they were recorded from, and
 # their source digests are recomputed from that revision's git blobs
 # (scripts/rust-port/fixtures_verify.py). A commit that no branch or tag
-# contains is one `git gc` away from vanishing: the gate still passes on a clone
+# contains is one object-store cleanup away from vanishing: the gate still passes on a clone
 # that holds the loose object and fails on a fresh one. That is how STORE-002's
 # oracle fe098b91 broke, which is why oracle commits carry oracle/* tags.
 #
@@ -64,7 +64,7 @@ for sha in $pins; do
     refs=$(git for-each-ref --contains "$full" --format='%(refname)' refs/heads refs/remotes refs/tags)
     if [ -z "$refs" ]; then
         echo "FAIL ${sha}: resolves, but no branch or tag contains it."
-        echo "     Tag it (git tag oracle/<name> ${full:0:12}) before any gc/prune."
+        echo "     Tag it (git tag oracle/<name> ${full:0:12}) before the object store is cleaned."
         status=1
         continue
     fi

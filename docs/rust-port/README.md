@@ -112,7 +112,10 @@ Generator sources remain hashed, and update transaction checks retain the
 CoreKit source digest plus actual rollback/traversal tests.
 
 Regeneration must preserve all case payloads and security controls or receive a
-separate semantic review. Update metadata records the real capture platform;
+separate semantic review. The checks no longer re-run any Go generator: `make fixtures-verify` replays
+byte, pin and source-digest checks without a Go toolchain, and regeneration needs
+the generators archived at tag `legacy/go-oracle`
+([go-oracle-archive.md](go-oracle-archive.md)). Update metadata records the real capture platform;
 check mode retains that historical label while reporting the current replay
 platform. This does not change the immutable native-process oracle or exempt
 its known anomaly-ordering errors from the strict stderr gate.
