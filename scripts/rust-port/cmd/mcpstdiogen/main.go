@@ -597,6 +597,31 @@ func caseInputs() []struct{ name, why, input string } {
 			`{"jsonrpc":"2.0","id":1,"method":"ping","error":{"MESSAGE":5}}` + "\n",
 		},
 		{
+			"envelope_error_data_number_overflow",
+			"RPCError.Data is an `any`, so encoding/json decodes it and stores every number as a float64: 1e400 overflows (strconv.ErrRange) and is an UnmarshalTypeError (-32700) although the member is otherwise never used",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":{"data":1e400}}` + "\n",
+		},
+		{
+			"envelope_error_data_number_overflow_negative",
+			"the overflow is signed: -1e400 is rejected the same way (-32700)",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":{"data":-1e400}}` + "\n",
+		},
+		{
+			"envelope_error_data_number_overflow_nested_array",
+			"the overflowing number is found at any depth: inside nested arrays it is still -32700",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":{"data":[1,[2,[1e400]]]}}` + "\n",
+		},
+		{
+			"envelope_error_data_number_overflow_nested_object",
+			"inside nested objects (and through a case-variant DATA key) it is still -32700",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":{"DATA":{"a":{"b":[-1e999]}}}}` + "\n",
+		},
+		{
+			"envelope_error_data_large_finite_number_is_accepted",
+			"1e308 fits a float64 (and so does an underflow like 1e-400, which ParseFloat returns as zero without error): the frame is a response, answered Internal error (-32603) by the transport, then the normal ping answer",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","error":{"data":[1e308,1e-400,"1e400"]}}` + "\n" + ping + "\n",
+		},
+		{
 			"envelope_lone_surrogate_in_uppercase_method_key_value",
 			"a lone surrogate in the value of a case-folded method key is U+FFFD, exactly as for the exact key",
 			`{"jsonrpc":"2.0","id":1,"METHOD":"a\uD800b"}` + "\n",

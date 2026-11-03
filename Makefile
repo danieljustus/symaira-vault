@@ -1195,7 +1195,10 @@ AREA_KDF_MIGRATION_TESTS := 10
 # 438 from local/mcp-envelope (+9: 5 envelope.rs unit tests, 4 stdio_hygiene_contract
 # tests for the Go-recorded envelope members, the duplicate probes and the HTTP
 # replay; measured: 438 passed, 0 failed over 55 result lines).
-AREA_MCP_TEST_COUNT := 438
+# 441 from local/envelope-data (+2 of the +3 measured: 1 envelope.rs unit test, 1
+# stdio_hygiene_contract test for the error.data float64 overflow; measured: 441
+# passed, 0 failed over 56 result lines).
+AREA_MCP_TEST_COUNT := 441
 
 .PHONY: area-oracle-runner
 area-oracle-runner:

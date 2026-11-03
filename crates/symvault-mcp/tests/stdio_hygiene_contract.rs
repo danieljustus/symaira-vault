@@ -625,6 +625,54 @@ fn initialize_decode_error_text_matches_go_exactly() {
     );
 }
 
+/// MCP-004-ENV-DATA: `RPCError.Data` is an `any`, so `encoding/json` decodes
+/// it and rejects a number overflowing float64 wherever it sits (top level,
+/// nested array, nested object). The Go frame is compared EXACTLY (no mask)
+/// through stdio, answered 400 over HTTP, and a large-but-finite number (and
+/// an underflow) is still a response.
+#[test]
+fn error_data_number_overflow_matches_go_exactly() {
+    let fx = load();
+    let find = |name: &str| {
+        fx.cases
+            .iter()
+            .find(|c| c.name == name)
+            .unwrap_or_else(|| panic!("corpus lost case {name}"))
+    };
+    for (name, number) in [
+        ("envelope_error_data_number_overflow", "1e400"),
+        ("envelope_error_data_number_overflow_negative", "-1e400"),
+        ("envelope_error_data_number_overflow_nested_array", "1e400"),
+        (
+            "envelope_error_data_number_overflow_nested_object",
+            "-1e999",
+        ),
+    ] {
+        let case = find(name);
+        assert!(
+            case.stdout_raw.contains(&format!(
+                "json: cannot unmarshal number {number} into Go struct field RPCError.error.data of type float64"
+            )) && case.stdout_raw.contains("\"code\":-32700"),
+            "{name}: the recorded Go frame changed: {}",
+            case.stdout_raw
+        );
+        let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+        let written = run_stream(&case.input, &mut handler).expect("rust transport ran");
+        assert_eq!(as_stdout(&written), case.stdout_raw, "{name}: stdio");
+        let body = single_frame(&case.input).expect("single frame");
+        assert_eq!(http_post(&fx, body).status, 400, "{name}: HTTP");
+    }
+    let accepted = find("envelope_error_data_large_finite_number_is_accepted");
+    assert!(
+        accepted
+            .stdout_raw
+            .starts_with("{\"error\":{\"message\":\"Internal error\"")
+    );
+    let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+    let written = run_stream(&accepted.input, &mut handler).expect("rust transport ran");
+    assert_eq!(as_stdout(&written), accepted.stdout_raw, "accepted: stdio");
+}
+
 /// PIN-LOW: `encoding/json` accepts a lone surrogate escape in `params`
 /// (decoded to U+FFFD) and nesting up to the 10000-level frame limit, inside
 /// `capabilities` (a `json.RawMessage`), unknown members, keys and
