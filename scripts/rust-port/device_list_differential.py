@@ -145,8 +145,12 @@ def main():
     for key, default in [("CARGO_HOME", Path.home() / ".cargo"),
                          ("RUSTUP_HOME", Path.home() / ".rustup")]:
         env.setdefault(key, str(default))
-    caches = json.loads(checked(["go", "env", "-json", "GOCACHE", "GOMODCACHE"], ROOT, env))
+    # Resolve the compiler while the real HOME is still set: GOTOOLCHAIN=go1.26.6
+    # would otherwise make cmd/go exec the ~/go/bin/go1.26.6 wrapper, which needs
+    # $HOME/sdk, once HOME points at the disposable root below.
+    caches = json.loads(checked(["go", "env", "-json", "GOCACHE", "GOMODCACHE", "GOPATH", "GOROOT"], ROOT, env))
     env.update(caches)
+    env["PATH"] = str(Path(caches["GOROOT"]) / "bin") + os.pathsep + env.get("PATH", os.defpath)
     metadata = json.loads(checked(["cargo", "metadata", "--manifest-path", ROOT / "Cargo.toml",
                                   "--no-deps", "--format-version", "1"], ROOT, env))
     assert Path(metadata["workspace_root"]).resolve() == ROOT
@@ -179,7 +183,7 @@ def main():
             env.update(HOME=str(home), USERPROFILE=str(home),
                        XDG_CONFIG_HOME=str(home / "config"), XDG_DATA_HOME=str(home / "data"),
                        XDG_CACHE_HOME=str(home / "cache"), XDG_STATE_HOME=str(home / "state"),
-                       GOTOOLCHAIN="go1.26.6", GOWORK="off", NO_COLOR="1", TERM="dumb", TZ="UTC")
+                       GOTOOLCHAIN="local", GOWORK="off", NO_COLOR="1", TERM="dumb", TZ="UTC")
             env.update(TMPDIR=str(temp), TMP=str(temp), TEMP=str(temp))
             assert "go1.26.6" in checked(["go", "version"], ROOT, env).decode()
             oracle_dir = temp / "oracle"

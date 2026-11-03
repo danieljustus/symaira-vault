@@ -197,5 +197,71 @@ time.sleep(30)
         self.assertEqual(CONTRACT.group_members(child.pid), [])
 
 
+class DiagnosticEvidenceControls(unittest.TestCase):
+    """The narrow anomaly-diagnostic stderr allowance (rust-mcp-process.yml)."""
+
+    PLAIN = ('2026/10/05 01:24:19 WARN anomaly detected type=off_hours severity=low agent=fixture '
+             'description="Entry access during off-hours by agent fixture"')
+    CONTEXTUAL = PLAIN.replace(' description=', ' path=public/fixture request_id=0000000000000001 description=')
+
+    @staticmethod
+    def check(line, implementation='go'):
+        CONTRACT.protocol_bytes(SimpleNamespace(stdout=b'', stderr=(line + '\n').encode()), Path('__HOME__'),
+                                'diagnostic-unit-control', implementation, 'fixture')
+
+    def test_accepted_diagnostics(self):
+        for line in [self.PLAIN, self.CONTEXTUAL, self.CONTEXTUAL.replace('public/fixture', 'public/missing')]:
+            with self.subTest(line=line):
+                self.check(line)
+
+    def test_rejected_diagnostics(self):
+        rejected = [
+            (self.CONTEXTUAL.replace('severity=low', 'severity=high'), 'go'),
+            (self.CONTEXTUAL.replace('type=off_hours', 'type=tool_chain'), 'go'),
+            (self.CONTEXTUAL.replace('agent=fixture', 'agent=other'), 'go'),
+            (self.CONTEXTUAL.replace('public/fixture', 'private/other'), 'go'),
+            (self.CONTEXTUAL.replace('0000000000000001', 'invalid'), 'go'),
+            (self.PLAIN + '\naudit log write failed err="audit logger is closed"', 'go'),
+            (self.CONTEXTUAL, 'rust'),
+        ]
+        for line, implementation in rejected:
+            with self.subTest(line=line, implementation=implementation):
+                with self.assertRaises(AssertionError):
+                    self.check(line, implementation)
+
+
+class ReceiptFinalizationControls(unittest.TestCase):
+    """The post-output receipt finalization of the actual main() (rust-mcp-process.yml)."""
+
+    def test_finalization_records_a_dirty_tree_after_output(self):
+        import ast
+        tree = ast.parse(CONTRACT_PATH.read_text())
+        main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'main')
+        final = next(n for n in main.body if isinstance(n, ast.Try)).finalbody
+        code = compile(ast.Module(body=final, type_ignores=[]), '<actual receipt finalization>', 'exec')
+        env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+        for location, expected_clean in [('target/control.json', True), ('root-control.json', False)]:
+            with self.subTest(location=location), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                subprocess.run(['git', 'init', '-q', str(root)], env=env, check=True)
+                (root / '.git/info/exclude').write_text('target/\n')
+                receipt_path = root / location
+                receipt_path.parent.mkdir(parents=True, exist_ok=True)
+                # Algorithm unit state only, never native process observations.
+                receipt = {'passed': True, 'candidate_worktree_clean': True}
+                scope = {'args': SimpleNamespace(receipt=receipt_path, allow_dirty_for_development=False),
+                         'json': json, 'receipt': receipt,
+                         'checked': lambda args: subprocess.check_output(args, cwd=root, env=env)}
+                rejected = False
+                try:
+                    exec(code, scope)
+                except AssertionError:
+                    rejected = True
+                result = json.loads(receipt_path.read_text())
+                self.assertEqual(result['candidate_worktree_clean_at_end'], expected_clean)
+                self.assertEqual(result['passed'], expected_clean)
+                self.assertNotEqual(rejected, expected_clean)
+
+
 if __name__ == '__main__':
     unittest.main()
