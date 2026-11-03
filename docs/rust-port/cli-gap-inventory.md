@@ -1087,7 +1087,8 @@ Residuals (probed, not fixed):
 ## CLI-007: residual packet (`--allow-locked`, `ui`, armed clipboard), 2026-11-03
 
 Measured on the real Go oracle (`45b8577e`, same as `signal_process_contract.py`), fixed in Rust, and
-pinned by `make signal-process-contract` (41 compared observations per implementation, 7 Go-only).
+pinned by `make signal-process-contract` (41 compared observations per implementation, 13 Go-only: 7 from this packet plus 6 HTTP `mcp` records,
+see "HTTP SIGHUP" below).
 
 | Surface | Go (real process) | Rust before | Rust now |
 | --- | --- | --- | --- |
@@ -1121,9 +1122,33 @@ to `serve`'s shutdown. Rust only registered stdio runtimes with the signal route
 again after the drain (a request still in flight may copy meanwhile); SIGQUIT is cleared too (declared
 Rust-safer, as in stdio). Pinned by `mcp_shutdown::tests::http_signal_shutdown_clears_an_armed_clipboard`
 (real signals, injected clipboard) and `clipboard_http_signal_clear` (real `copy_to_clipboard`). Not covered
-by a Go observation (the Go oracle legs are stdio/`ui` only). Remaining difference: SIGHUP in HTTP mode is
-not subscribed by `install_http`, so an armed copy dies with the process by SIGHUP (default action) while Go
-clears and keeps serving.
+by a Go observation at that time (superseded by "HTTP SIGHUP" below).
+
+**HTTP SIGHUP (packet HTTP-SIGHUP, 2026-11-03).** Measured on the real Go oracle `45b8577e` with fake
+pasteboard tools on `PATH` (receipt `go_only`, cases `mcp-http-clipboard-*`; the Rust CLI would touch the
+real pasteboard, so its leg is the injected-clipboard process tests):
+
+| HTTP `mcp`, copy over HTTP | Go (real process) | Rust now |
+|---|---|---|
+| armed copy, SIGHUP | clears, keeps serving (a ping is answered); the next SIGHUP finds no timer and kills by SIGHUP | same (`http_sighup_follows_the_armed_clipboard_timer`, case `armed`) |
+| nothing armed, SIGHUP | dies by SIGHUP, runtime records untouched, nothing touches the clipboard | same (case `idle`) |
+| SIGHUP inherited as `SIG_IGN`, armed | the timer's `Notify` overrides the ignore: clears, keeps serving; the ignore is back afterwards (second SIGHUP survives, SIGTERM exits 0) | same (case `armed-ignored`) |
+| SIGHUP inherited as `SIG_IGN`, nothing armed | ignored, no clipboard activity, SIGTERM exits 0 | same (case `idle-ignored`) |
+| armed copy, SIGINT/SIGTERM | exits 0, but in 13 of 14 measured runs **before** its timer's clear reached the tool (the secret stayed); one run cleared | clears at receipt and again after the drain, exits 0 (declared Rust-safer difference) |
+
+`install_http` gets a separate SIGHUP listener, so a SIGHUP during the drain is not queued behind it (Go's
+default death applies immediately when nothing is armed). Because SIGHUP is registered unconditionally, the
+listener restores the unarmed behavior itself (default action via `emulate_default_handler`, or nothing when
+the disposition was inherited ignored, queried before the handler replaces it). The earlier claim that Go
+"clears at receipt" for SIGINT/SIGTERM over HTTP holds in code, not reliably in a real process.
+
+Review LOW (shutdown-path clears): `install_http` (receipt, post-drain and SIGHUP) and the stdio SIGQUIT
+clear now run on a short-lived thread joined for at most 2 s (`CLIPBOARD_CLEAR_BOUND`), so a clipboard
+backend that never returns neither blocks the drain, the exit nor later signals. Pinned by
+`http_shutdown_bounds_a_hung_clipboard_backend` and `sigquit_shutdown_bounds_a_hung_clipboard_backend`
+(a backend that sleeps 60 s; both fail when the bound is removed). Not covered: the stdio router's own
+SIGINT/SIGTERM clear (`approval.rs` `clear_and_cancel_auto_clear`) still runs on its listener thread
+unbounded.
 
 The task description called the clipboard row "only clears and the server keeps running"; the
 real Go process shows that this is true for SIGHUP only. Ordinary approval prompts under an armed

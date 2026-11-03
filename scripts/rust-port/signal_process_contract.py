@@ -16,18 +16,21 @@ difference is Go's persistent <vault>/broker-ca.pem, which Rust replaces with a
 per-instance temporary CA directory that must not survive any catchable signal.
 
 Go-only oracle records (`go_only`, not compared against Rust): a stdio `mcp` server and the
-`ui` terminal UI (PTY, Enter copies the selected entry) with an armed clipboard auto-clear
-timer. The Rust leg would need the real macOS pasteboard (`/usr/bin/pbcopy` is the only
+`ui` terminal UI (PTY, Enter copies the selected entry) and an HTTP `mcp` server (copy over
+HTTP; also with SIGHUP inherited as SIG_IGN) with an armed clipboard auto-clear timer. The Rust leg would need the real macOS pasteboard (`/usr/bin/pbcopy` is the only
 lookup), so the Rust side is carried by injected-clipboard process tests:
 `approval::tests::stdio_armed_clipboard_signal_clears_and_requests_shutdown` (mcp) and
-`tui::tests::ui_signal_with_held_copy_process_contract` (ui; Makefile target
-`signal-process-contract` runs both). Go runs against fake pasteboard tools on a PATH that
+`tui::tests::ui_signal_with_held_copy_process_contract` (ui) and
+`mcp_shutdown::tests::http_sighup_follows_the_armed_clipboard_timer` plus
+`http_signal_shutdown_clears_an_armed_clipboard` (HTTP; Makefile target
+`signal-process-contract` runs them). Go runs against fake pasteboard tools on a PATH that
 cannot reach the real ones. Declared Rust-safer differences: SIGQUIT clears an armed
 clipboard (Go has no SIGQUIT in its auto-clear subscription and leaves the secret), in `ui`
 and in stdio `mcp`; a `ui` copy kept until quit (duration 0) is cleared before a SIGHUP death.
 """
 import argparse
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -48,6 +51,7 @@ import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
+SEED = ROOT / "scripts/rust-port/http_process_seed.go.txt"
 ORACLE = "45b8577e01ce1826e312ed970d0fc01a3a9b6e17"
 PASSPHRASE = "correct horse battery staple"
 CA_NAME = "broker-ca.pem"
@@ -602,9 +606,115 @@ def ui_clipboard_case(go, base, template, sig):
     return record
 
 
-def exercise_go_only(go, base, template):
+HTTP_BINDING_MARKER = b"without TLS; bearer tokens travel in cleartext"
+HTTP_CLIPBOARD_CASES = (  # (armed copy, signal, SIGHUP inherited as SIG_IGN)
+    (True, "SIGINT", False), (True, "SIGTERM", False), (True, "SIGHUP", False),
+    (False, "SIGHUP", False), (True, "SIGHUP", True), (False, "SIGHUP", True),
+)
+
+
+def free_loopback_port():
+    with socket.socket() as selection:
+        selection.bind(("127.0.0.1", 0))
+        return selection.getsockname()[1]
+
+
+def http_post(port, token, body):
+    """One JSON-RPC POST to /mcp; returns (status, body bytes)."""
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
+    try:
+        connection.request("POST", "/mcp", body=body, headers={
+            "Authorization": f"Bearer {token}", "X-Symaira-Agent": "fixture", "Origin": f"http://127.0.0.1:{port}",
+            "Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
+        response = connection.getresponse()
+        return response.status, response.read()
+    finally:
+        connection.close()
+
+
+def http_clipboard_case(go, base, seed_home, token, armed, sig, ignored=False):
+    """Go only: HTTP `mcp` receives `sig`, with or without an armed clipboard auto-clear timer.
+
+    Go arms `StartAutoClear` for `copy_to_clipboard` over HTTP too, and that timer (not `serve`)
+    is the only subscriber of SIGHUP. Fake pasteboard tools sit first on a PATH that cannot reach
+    the real ones, so the real pasteboard is never touched. `ignored` starts the server with SIGHUP
+    inherited as SIG_IGN (`nohup`). The record notes whether the server kept serving after the
+    signal (answered a ping), how each further signal ended it, and what the fake tool saw.
+    """
+    name = f"mcp-http-clipboard-{'armed' if armed else 'idle'}-{'ignored-' if ignored else ''}{sig.lower()}"
+    home = new_home(base, seed_home, name)
+    fake = home / "fakebin"
+    fake.mkdir()
+    for tool in FAKE_CLIPBOARD_TOOLS:
+        (fake / tool).write_text(FAKE_CLIPBOARD)
+        (fake / tool).chmod(0o755)
+    config = home / "vault" / "config.yaml"
+    text = config.read_text()
+    patched = text.replace("        canReadValues: true\n", "        canReadValues: true\n        canUseClipboard: true\n", 2)
+    assert patched.count("canUseClipboard: true") == 2, ("the fixture config changed", text)
+    config.write_text(patched)
+    port = free_loopback_port()
+    env = isolated(home)
+    env["PATH"] = f"{fake}:/bin"
+    proc = Proc([go, "--quiet", "mcp", "--bind", "127.0.0.1", "--port", str(port)], home, stdin=subprocess.PIPE,
+                env=env, ignore=("SIGHUP",) if ignored else ())
+    events = fake / "events"
+
+    def logged():
+        return events.read_text().split() if events.exists() else []
+
+    def ping_answered():
+        status, body = http_post(port, token, '{"jsonrpc":"2.0","id":9,"method":"ping"}')
+        return status == 200 and b'"id":9' in body
+
+    try:
+        proc.popen.stdin.write(b"y\n")  # the cleartext-bind confirmation is part of the CLI contract
+        proc.popen.stdin.close()
+        deadline = time.monotonic() + 30
+        while HTTP_BINDING_MARKER not in bytes(proc.err) or not listener_open(port):
+            assert proc.popen.poll() is None, ("server exited before serving", bytes(proc.err)[-500:])
+            assert time.monotonic() < deadline, "server never listened"
+            time.sleep(0.02)
+        initialize = INITIALIZE.decode().strip()
+        assert http_post(port, token, initialize)[0] == 200, "initialize must succeed"
+        if armed:
+            status, body = http_post(port, token, '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":'
+                                     '{"name":"copy_to_clipboard","arguments":{"path":"public/fixture"}}}')
+            assert status == 200 and b'"isError":false' in body, ("copy_to_clipboard failed", status, body[-300:])
+            assert logged() == ["secret"], ("control: the fake tool must hold the secret before the signal", logged())
+        else:
+            assert logged() == [], ("control: nothing may touch the clipboard before the signal", logged())
+        proc.popen.send_signal(getattr(signal, sig))
+        try:
+            proc.popen.wait(timeout=SURVIVE_WINDOW if sig == "SIGHUP" else DIE_WINDOW)
+            serving = False
+        except subprocess.TimeoutExpired:
+            serving = ping_answered()
+        record = dict(case=name, command="mcp-http-clipboard", armed=armed, signal=sig, ignored=ignored,
+                      serving_after_signal=serving, ending=None if serving else ending(proc.popen.returncode),
+                      second_ending=None, final_ending=None)
+        if serving:
+            # A second SIGHUP finds no armed timer. Inherited SIG_IGN is then back in force.
+            if not survived_signal(proc, proc.popen.send_signal, signal.SIGHUP, should_die=not ignored):
+                record["second_ending"] = ending(proc.popen.returncode)
+            else:
+                proc.popen.send_signal(signal.SIGTERM)
+                record["final_ending"] = ending(proc.finish())
+        # The fake tool is a child of the server and may finish after the server exited.
+        deadline = time.monotonic() + 3
+        while armed and logged() != ["secret", "clear"] and time.monotonic() < deadline:
+            time.sleep(0.02)
+        record["clipboard_events"] = logged()
+    finally:
+        proc.kill()
+    return record
+
+
+def exercise_go_only(go, base, template, seed_home, token):
     return ([clipboard_case(go, base, template, sig) for sig in ("SIGINT", "SIGTERM", "SIGHUP")]
-            + [ui_clipboard_case(go, base, template, sig) for sig in ("SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT")])
+            + [ui_clipboard_case(go, base, template, sig) for sig in ("SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT")]
+            + [http_clipboard_case(go, base, seed_home, token, armed, sig, ignored)
+               for armed, sig, ignored in HTTP_CLIPBOARD_CASES])
 
 
 GO_EXPECTED_CLIPBOARD = {  # (serving after the signal, ending when it stopped)
@@ -618,13 +728,32 @@ GO_EXPECTED_UI_CLIPBOARD = {
     "SIGHUP": (True, None, ["signal", signal.SIGHUP], ["secret", "clear"]),
     "SIGQUIT": (False, ["exit", 2], None, ["secret"]),
 }
+# HTTP `mcp` (real Go process): (armed copy, signal, SIGHUP inherited as SIG_IGN) ->
+# (serving after the signal, ending when it stopped, ending after a second SIGHUP, ending after the
+# follow-up SIGTERM, fake-tool event logs that are acceptable). Go exits 0 on SIGINT/SIGTERM
+# usually before its timer's clear reaches the tool (13 of 14 measured runs), so both logs are
+# acceptable there; Rust always clears (declared Rust-safer difference). SIGHUP is subscribed by
+# the armed timer only: it clears and the server keeps serving, nothing armed it kills the process
+# by the signal, and an inherited SIG_IGN is overridden while armed and back in force afterwards.
+SECRET, SECRET_CLEAR = ["secret"], ["secret", "clear"]
+GO_EXPECTED_HTTP_CLIPBOARD = {
+    (True, "SIGINT", False): (False, ["exit", 0], None, None, (SECRET, SECRET_CLEAR)),
+    (True, "SIGTERM", False): (False, ["exit", 0], None, None, (SECRET, SECRET_CLEAR)),
+    (True, "SIGHUP", False): (True, None, ["signal", signal.SIGHUP], None, (SECRET_CLEAR,)),
+    (False, "SIGHUP", False): (False, ["signal", signal.SIGHUP], None, None, ([],)),
+    (True, "SIGHUP", True): (True, None, None, ["exit", 0], (SECRET_CLEAR,)),
+    (False, "SIGHUP", True): (True, None, None, ["exit", 0], ([],)),
+}
 
 
 def check_go_only(records):
     """The Go clipboard records must show clear-then-shutdown (SIGINT/SIGTERM) or clear-and-serve (SIGHUP)."""
     mcp = [r for r in records if r["command"] == "mcp-clipboard-armed"]
     ui = [r for r in records if r["command"] == "ui-clipboard-armed"]
-    assert len(mcp) + len(ui) == len(records), ("go_only commands", [r["case"] for r in records])
+    http = [r for r in records if r["command"] == "mcp-http-clipboard"]
+    assert len(mcp) + len(ui) + len(http) == len(records), ("go_only commands", [r["case"] for r in records])
+    assert [(r["armed"], r["signal"], r["ignored"]) for r in http] == list(GO_EXPECTED_HTTP_CLIPBOARD), \
+        ("go_only http cases", [r["case"] for r in http])
     assert [r["signal"] for r in mcp] == list(GO_EXPECTED_CLIPBOARD), ("go_only mcp cases", [r["case"] for r in mcp])
     assert [r["signal"] for r in ui] == list(GO_EXPECTED_UI_CLIPBOARD), ("go_only ui cases", [r["case"] for r in ui])
     for record in mcp:
@@ -638,6 +767,13 @@ def check_go_only(records):
         assert record["ending"] == final, ("oracle drifted: ui clipboard signal", record)
         assert record["second_ending"] == second, ("oracle drifted: ui second SIGHUP", record)
         assert record["clipboard_events"] == events, ("oracle drifted: ui clipboard clear", record)
+    for record in http:
+        serving, final, second, after, events = GO_EXPECTED_HTTP_CLIPBOARD[(record["armed"], record["signal"], record["ignored"])]
+        assert record["serving_after_signal"] is serving, ("oracle drifted: http clipboard signal", record)
+        assert record["ending"] == final, ("oracle drifted: http clipboard signal", record)
+        assert record["second_ending"] == second, ("oracle drifted: http second SIGHUP", record)
+        assert record["final_ending"] == after, ("oracle drifted: http follow-up SIGTERM", record)
+        assert record["clipboard_events"] in events, ("oracle drifted: http clipboard clear", record)
 
 
 def exercise(binary, base, template):
@@ -722,10 +858,14 @@ def build_oracle(destination):
     source.mkdir()
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
         tar.extractall(source, filter="data")
-    binary = destination / "symvault-go"
+    helper = source / "scripts/rust-port/cmd/httpprocessseed"
+    helper.mkdir(parents=True)
+    (helper / "main.go").write_bytes(SEED.read_bytes())
     env = dict(os.environ, GOWORK="off")
-    checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", binary, "."], cwd=source, env=env, timeout=600)
-    return binary
+    binary, seed = destination / "symvault-go", destination / "symvault-seed"
+    for output, package in ((binary, "."), (seed, "./scripts/rust-port/cmd/httpprocessseed")):
+        checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", output, package], cwd=source, env=env, timeout=600)
+    return binary, seed
 
 
 def make_template(go, base):
@@ -740,7 +880,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rust", required=True, type=Path)
     parser.add_argument("--receipt", required=True, type=Path)
-    parser.add_argument("--go", type=Path, help="prebuilt oracle (development only; default builds ORACLE)")
+    parser.add_argument("--go", type=Path, help="prebuilt oracle (development only; default builds ORACLE; needs --go-seed)")
+    parser.add_argument("--go-seed", type=Path, help="prebuilt HTTP fixture seed helper (development only)")
     parser.add_argument("--expect-mismatch", action="store_true",
                         help="negative control: PASS only if the Rust binary differs from Go")
     parser.add_argument("--allow-dirty-for-development", action="store_true")
@@ -756,11 +897,12 @@ def main():
                    candidate_worktree_clean=clean, native_os=platform.system(), architecture=platform.machine(),
                    rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),
                    driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                   seed_sha256=hashlib.sha256(SEED.read_bytes()).hexdigest(),
                    keyring="memory", expect_mismatch=args.expect_mismatch, go=[], rust=[], go_only=[], passed=False)
     args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
     with tempfile.TemporaryDirectory(prefix="symvault-signals-") as raw:
         base = Path(raw)
-        go = args.go.resolve() if args.go else build_oracle(base)
+        go, seed = (args.go.resolve(), args.go_seed.resolve()) if args.go else build_oracle(base)
         receipt["go_binary_sha256"] = hashlib.sha256(go.read_bytes()).hexdigest()
         template = make_template(go, base)
         go_root, rust_root = base / "go", base / "rust"
@@ -768,7 +910,10 @@ def main():
         rust_root.mkdir()
         receipt["go"] = exercise(go, go_root, template)
         check_oracle_expectations(receipt["go"])
-        receipt["go_only"] = exercise_go_only(go, go_root, template)
+        seed_home = base / "http-seed"
+        seed_home.mkdir()
+        tokens = json.loads(checked([seed, "--root", seed_home / "vault"], cwd=seed_home, env=isolated(seed_home)))
+        receipt["go_only"] = exercise_go_only(go, go_root, template, seed_home, tokens["full"])
         check_go_only(receipt["go_only"])
         receipt["rust"] = exercise(rust, rust_root, template)
         try:

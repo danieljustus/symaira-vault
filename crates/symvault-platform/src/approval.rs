@@ -649,27 +649,60 @@ pub fn register_process_clipboard_auto_clear(
     ProcessClipboardAutoClearRegistration { id }
 }
 
+/// Armed process timers taken out of the registry by
+/// [`take_armed_process_clipboards`]. Taking is cheap and never touches a
+/// clipboard backend; [`ArmedProcessClipboards::clear_all`] does, so a caller
+/// that must not wait on a hung backend runs it on a thread it can abandon.
+#[cfg(unix)]
+pub struct ArmedProcessClipboards(Vec<ProcessClipboardTimer>);
+
+#[cfg(unix)]
+impl ArmedProcessClipboards {
+    /// How many timers were armed when they were taken.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Clears every taken clipboard whose timer has not claimed the clear yet
+    /// and cancels the timers. Returns how many it cleared.
+    pub fn clear_all(self) -> usize {
+        let mut cleared = 0;
+        for timer in self.0 {
+            if !timer.clear_claimed.swap(true, Ordering::AcqRel) {
+                let _ = timer.clipboard.clear();
+                cleared += 1;
+            }
+            let _ = timer.cancel.send(());
+        }
+        cleared
+    }
+}
+
+/// Removes every armed process timer from the registry (so the registration
+/// ends, like Go's `signal.Stop` after the clear) without touching a clipboard.
+#[cfg(unix)]
+pub fn take_armed_process_clipboards() -> ArmedProcessClipboards {
+    ArmedProcessClipboards(
+        PROCESS_CLIPBOARD_TIMERS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .drain(..)
+            .map(|(_, timer)| timer)
+            .collect(),
+    )
+}
+
 /// Clears every clipboard whose auto-clear timer is armed outside the stdio
 /// router and cancels those timers. Returns how many it cleared. Called by the
 /// HTTP shutdown at signal receipt and again after the drain (a request that
 /// was still in flight may have copied meanwhile).
 #[cfg(unix)]
 pub fn clear_armed_process_clipboards() -> usize {
-    let timers: Vec<ProcessClipboardTimer> = PROCESS_CLIPBOARD_TIMERS
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .drain(..)
-        .map(|(_, timer)| timer)
-        .collect();
-    let mut cleared = 0;
-    for timer in timers {
-        if !timer.clear_claimed.swap(true, Ordering::AcqRel) {
-            let _ = timer.clipboard.clear();
-            cleared += 1;
-        }
-        let _ = timer.cancel.send(());
-    }
-    cleared
+    take_armed_process_clipboards().clear_all()
 }
 
 #[cfg(unix)]
