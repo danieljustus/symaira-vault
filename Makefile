@@ -1428,7 +1428,7 @@ broker-connect-contract:
 		--contains "4 passed; 0 failed; 0 ignored"
 	$(CARGO) build -p symvault-mcp --example connect_contract_probe --locked
 	mkdir -p "$(AREA_BIN)" && cp -f "$(AREA_PROBES)/connect_contract_probe" "$(AREA_BIN)/"
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/connect_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/connect_contract.py \
 		--rust "$(AREA_BIN)/connect_contract_probe" \
 		--receipt "$(AREA_EVIDENCE)/native-connect.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-connect.json" --profile connect
@@ -1449,11 +1449,11 @@ broker-egress-contract:
 		--contains "5 passed; 0 failed; 0 ignored"
 	$(CARGO) build -p symvault-cli --bin symvault -p symvault-mcp --example egress_contract_probe --locked
 	mkdir -p "$(AREA_BIN)" && cp -f "$(RUST_BINARY)" "$(AREA_CLI)" && cp -f "$(AREA_PROBES)/egress_contract_probe" "$(AREA_BIN)/"
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/egress_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/egress_contract.py \
 		--rust-cli "$(AREA_CLI)" --rust-probe "$(AREA_BIN)/egress_contract_probe" \
 		--receipt "$(AREA_EVIDENCE)/native-egress.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-egress.json" --profile egress
-	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(AREA_CLI)" \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/cligap.py --binary "$(AREA_CLI)" \
 		--output "$(AREA_EVIDENCE)/native-broker-gaps.json"
 	$(AREA_CHECK) gaps "$(AREA_EVIDENCE)/native-broker-gaps.json" \
 		--exact-path "symvault broker" --exact-path "symvault run" --min-paths 134:100
@@ -1486,7 +1486,7 @@ cli-artifacts-contract:
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-cli-artifacts.json" \
 		--captured-output "$(AREA_EVIDENCE)/native-cli-go-artifacts.json" --require-native-shells
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-cli-artifacts.json" --profile cli-artifacts
-	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(AREA_CLI)" \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/cligap.py --binary "$(AREA_CLI)" \
 		--output "$(AREA_EVIDENCE)/native-cli-artifact-gaps.json"
 	$(AREA_CHECK) gaps "$(AREA_EVIDENCE)/native-cli-artifact-gaps.json" --no-missing-paths --min-paths 134:100
 
@@ -1501,7 +1501,7 @@ intake-cli-contract:
 	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(AREA_PYTHON) scripts/rust-port/intake_watch_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-intake-cli.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-intake-cli.json" --profile intake
-	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(AREA_CLI)" \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/cligap.py --binary "$(AREA_CLI)" \
 		--output "$(AREA_EVIDENCE)/native-intake-gaps.json"
 	$(AREA_CHECK) gaps "$(AREA_EVIDENCE)/native-intake-gaps.json" --prefix "symvault intake"
 
@@ -1518,7 +1518,7 @@ serve-cli-contract:
 	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/serve_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-serve-cli.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-serve-cli.json" --profile serve
-	$(AREA_ENV) $(AREA_GO) $(GO) run ./scripts/rust-port/cmd/cligap --binary "$(AREA_CLI)" \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/cligap.py --binary "$(AREA_CLI)" \
 		--output "$(AREA_EVIDENCE)/native-serve-gaps.json"
 	$(AREA_CHECK) gaps "$(AREA_EVIDENCE)/native-serve-gaps.json" --prefix "symvault serve"
 
@@ -2255,3 +2255,17 @@ export-cli-fixtures-check:
 reencrypt-journal-differential:
 	$(CARGO) build -p symvault-cli --locked
 	SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/vault -run '^TestReencryptJournalGoRustIntegration$$' -count=1
+
+# Capture the Go side of the non-HTTP process contracts and live-Go differentials
+# once (needs Go; writes scripts/rust-port/fixtures/go-observations/<contract>.<goos>.json).
+# Every contract target replays these files and runs Rust only. A missing
+# observation fails the target. Both local-gate lanes capture: darwin natively, linux
+# through scripts/rust-port/go-observations-capture-linux.sh (Go-only, gate image).
+.PHONY: go-observations-capture-other go-observations-selftest
+GO_OBS_CAPTURE := $(AREA_ENV) $(AREA_GO) $(AREA_PYTHON)
+go-observations-capture-other:
+	$(GO_OBS_CAPTURE) scripts/rust-port/connect_contract.py --capture-go
+	$(GO_OBS_CAPTURE) scripts/rust-port/egress_contract.py --capture-go
+
+go-observations-selftest:
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_go_observations_common.py

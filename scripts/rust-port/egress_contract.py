@@ -18,7 +18,7 @@ import tempfile
 import threading
 import time
 
-from build_timeout import oracle_build_timeout, remove_worktree
+import go_observations_common as observations
 
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
@@ -228,10 +228,18 @@ def template(root, peer, *, auth="bearer", port=None, scheme=None, substitutions
     (directory / (name+".yaml")).write_text(json.dumps(definition), encoding="utf-8")
 
 
-def runtime_cases(binary, seed, home, records, identities):
+def go_seeder(seed):
+    return lambda root, home: checked([seed, "--root", root, "--seed", home.parent / "entry.json"], cwd=home)
+
+
+def material_seeder(files):
+    return lambda root, home: observations.unpack_tree(files, root)
+
+
+def runtime_cases(binary, seeder, home, records, identities):
     home.mkdir()
     root = home / "vault"
-    checked([seed, "--root", root, "--seed", home.parent / "entry.json"], cwd=home)
+    seeder(root, home)
     for auth in ["bearer", "basic", "header", "query_param", "none"]:
         with Peer(identities) as peer:
             template(root, peer, auth=auth, substitutions=auth == "none", name="github" if auth == "bearer" else "fixture")
@@ -351,7 +359,7 @@ def stop_cli(child):
     return stdout
 
 
-def cli_cases(binary, seed, home, records):
+def cli_cases(binary, seeder, home, records):
     home.mkdir()
     for name, args in [("broker-missing-vault", ["broker"]),
                        ("broker-boolean-forms", ["broker", "--strict=TRUE", "--strict=0"]),
@@ -360,7 +368,7 @@ def cli_cases(binary, seed, home, records):
         assert result.returncode == 3, (name, result.returncode, result.stderr)
         records.append({"case": name, "exit": 3})
     root = home / "vault"
-    checked([seed, "--root", root, "--seed", home.parent / "entry.json"], cwd=home)
+    seeder(root, home)
     script = home / "child.py"
     script.write_text('''import json, os, pathlib, sys, time
 keys = ['HTTPS_PROXY','HTTP_PROXY','SSL_CERT_FILE','NODE_EXTRA_CA_CERTS','REQUESTS_CA_BUNDLE','NO_PROXY']
@@ -470,6 +478,7 @@ sys.exit(7 if sys.argv[2] == 'error' else 0)
         if child.poll() is None: child.kill(); child.communicate(timeout=10)
         reader.join(timeout=5)
         assert not reader.is_alive()
+    return records
 
 
 def concurrent_ca_case(binary, home, records):
@@ -509,18 +518,67 @@ def concurrent_ca_case(binary, home, records):
                     'first_ca_unchanged':unchanged, 'ca_removed_after_stop':all(not row['ca'].exists() for row in started)})
 
 
+def capture(args):
+    """Capture mode: build and drive the pinned Go oracle only (needs Go)."""
+    from build_timeout import oracle_build_timeout, remove_worktree
+    if os.name != "nt": os.umask(0o022)
+    with tempfile.TemporaryDirectory(prefix="symvault-egress-capture-") as raw:
+        base = Path(raw)
+        (base / "entry.json").write_text(json.dumps(DATA), encoding="utf-8")
+        tree = base / "oracle"
+        checked(["git", "worktree", "add", "--detach", tree, ORACLE])
+        try:
+            paths = checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
+            oracle_sources = sorted(x for x in paths if x in {"go.mod", "go.sum"} or x.endswith(".go") and not x.endswith("_test.go"))
+            embedded = sorted(x for x in paths if x.startswith("internal/mcp/apitemplates/builtin/"))
+            assert len(embedded) == 17
+            recorded = dict(oracle_source_files=oracle_sources, oracle_source_digest=inventory(oracle_sources, tree),
+                            oracle_embedded_files=embedded, oracle_embedded_digest=inventory(embedded, tree),
+                            probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest())
+            helper = tree / "scripts/rust-port/cmd/egressprobe"
+            helper.mkdir()
+            (helper / "main.go").write_bytes(PROBE.read_bytes())
+            go = base / "go-probe"
+            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "./scripts/rust-port/cmd/egressprobe"],
+                    cwd=tree, timeout=oracle_build_timeout())
+            recorded["go_binary_sha256"] = hashlib.sha256(go.read_bytes()).hexdigest()
+            go_cli = base / "go-cli"
+            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go_cli, "."], cwd=tree, timeout=oracle_build_timeout())
+            recorded["go_cli_binary_sha256"] = hashlib.sha256(go_cli.read_bytes()).hexdigest()
+            identities = base / "identities"
+            recorded["fixture_identity_files"] = observations.mint_tls_identities(identities, base / "identity-scratch")
+            assert len(recorded["fixture_identity_files"]) == 12
+            recorded["go"] = runtime_cases(go, go_seeder(go), base / "go-home", [], identities)
+            recorded["go_cli"] = cli_cases(go_cli, go_seeder(go), base / "go-cli-home", [])
+            seed_root = base / "seed-vault"
+            (base / "seed-home").mkdir()
+            go_seeder(go)(seed_root, base / "seed-home")
+            material = {"seed_vault": observations.pack_tree(seed_root)}
+        finally:
+            remove_worktree(lambda: checked(["git", "worktree", "remove", "--force", tree]), "oracle worktree")
+    target = observations.save("egress-contract", recorded, oracle_commit=ORACLE, version=observations.go_version(),
+                               args=["egress_contract.py", "--capture-go"], material=material)
+    print(f"captured {target.relative_to(ROOT)}")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rust-probe", type=Path, required=True)
-    parser.add_argument("--rust-cli", type=Path, required=True)
-    parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument("--rust-probe", type=Path)
+    parser.add_argument("--rust-cli", type=Path)
+    parser.add_argument("--receipt", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
+    observations.add_capture_flag(parser)
     args = parser.parse_args()
+    if args.capture_go:
+        return capture(args)
+    assert args.rust_probe and args.rust_cli and args.receipt, "--rust-probe, --rust-cli and --receipt are required"
     rust = args.rust_probe.resolve()
     rust_cli = args.rust_cli.resolve()
     assert rust.is_file()
     assert rust_cli.is_file()
     if os.name != "nt": os.umask(0o022)
+    document = observations.load("egress-contract", oracle_commit=ORACLE)
+    recorded, seed_files = document["observations"], document["material"]["seed_vault"]
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
@@ -531,92 +589,62 @@ def main():
                "candidate_worktree_clean": clean, "native_os": platform.system(), "architecture": platform.machine(),
                "candidate_source_files": sources, "candidate_source_digest": inventory(sources, ROOT),
                "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-               "probe_sha256": hashlib.sha256(PROBE.read_bytes()).hexdigest(),
+               "probe_sha256": recorded["probe_sha256"],
                "identity_probe_sha256": hashlib.sha256(IDENTITY.read_bytes()).hexdigest(),
                "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(), "oracle_commit": ORACLE,
                "rust_cli_binary_sha256": hashlib.sha256(rust_cli.read_bytes()).hexdigest(),
                "fixture_identity_kdf": {"algorithm":"argon2id", "memory_kib":19456, "iterations":2, "lanes":1, "purpose":"explicit supported disposable-fixture settings; production defaults and performance not measured"},
-               "client_tls_verification":"required chain, hostname and VERIFY_X509_STRICT for actual Go and Rust",
-               "transport_seams": "private fixture destinations and fixture CA only in library probes; never CLI flags"}
+               "client_tls_verification":"required chain, hostname and VERIFY_X509_STRICT for recorded Go and live Rust",
+               "transport_seams": "private fixture destinations and fixture CA only in library probes; never CLI flags",
+               "go_observation": "replayed from scripts/rust-port/fixtures/go-observations/egress-contract.%s.json" % observations.host_goos(),
+               "go_binary_sha256": recorded["go_binary_sha256"], "go_cli_binary_sha256": recorded["go_cli_binary_sha256"],
+               "oracle_source_files": recorded["oracle_source_files"], "oracle_source_digest": recorded["oracle_source_digest"],
+               "oracle_embedded_files": recorded["oracle_embedded_files"], "oracle_embedded_digest": recorded["oracle_embedded_digest"]}
     try:
         with tempfile.TemporaryDirectory(prefix="symvault-egress-contract-") as raw:
             base = Path(raw)
             (base / "entry.json").write_text(json.dumps(DATA), encoding="utf-8")
-            tree = base / "oracle"
-            checked(["git", "worktree", "add", "--detach", tree, ORACLE])
-            try:
-                paths = checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
-                oracle_sources = sorted(x for x in paths if x in {"go.mod", "go.sum"} or x.endswith(".go") and not x.endswith("_test.go"))
-                embedded = sorted(x for x in paths if x.startswith("internal/mcp/apitemplates/builtin/"))
-                assert len(embedded) == 17
-                receipt.update(oracle_source_files=oracle_sources, oracle_source_digest=inventory(oracle_sources, tree),
-                               oracle_embedded_files=embedded, oracle_embedded_digest=inventory(embedded, tree))
-                helper = tree / "scripts/rust-port/cmd/egressprobe"
-                helper.mkdir()
-                (helper / "main.go").write_bytes(PROBE.read_bytes())
-                go = base / ("go-probe.exe" if os.name == "nt" else "go-probe")
-                checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "./scripts/rust-port/cmd/egressprobe"],
-                        cwd=tree, timeout=oracle_build_timeout())
-                receipt["go_binary_sha256"] = hashlib.sha256(go.read_bytes()).hexdigest()
-                go_cli = base / ("go-cli.exe" if os.name == "nt" else "go-cli")
-                checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go_cli, "."],
-                        cwd=tree, timeout=oracle_build_timeout())
-                receipt["go_cli_binary_sha256"] = hashlib.sha256(go_cli.read_bytes()).hexdigest()
-                identity_helper = tree / "scripts/rust-port/cmd/egressidentity"
-                identity_helper.mkdir()
-                (identity_helper / "main.go").write_bytes(IDENTITY.read_bytes())
-                identity_binary = base / ("go-identity.exe" if os.name == "nt" else "go-identity")
-                checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", identity_binary, "./scripts/rust-port/cmd/egressidentity"],
-                        cwd=tree, timeout=oracle_build_timeout())
-                identities = base / "identities"
-                checked([identity_binary, "--root", identities], cwd=base)
-                identity_files = sorted(p.name for p in identities.iterdir())
-                assert len(identity_files) == 12
-                receipt.update(identity_binary_sha256=hashlib.sha256(identity_binary.read_bytes()).hexdigest(),
-                               fixture_identity_files=identity_files, fixture_identity_digest=inventory(identity_files, identities))
-                if os.name != "nt":
-                    assert identities.stat().st_mode & 0o777 == 0o700
-                    assert all((identities / name).stat().st_mode & 0o777 == 0o600 for name in identity_files)
-                receipt["go"] = []
-                runtime_cases(go, go, base / "go-home", receipt["go"], identities)
-                receipt["rust"] = []
-                runtime_cases(rust, go, base / "rust-home", receipt["rust"], identities)
-                receipt["go_cli"] = []
-                cli_cases(go_cli, go, base / "go-cli-home", receipt["go_cli"])
-                receipt["rust_cli"] = []
-                cli_cases(rust_cli, go, base / "rust-cli-home", receipt["rust_cli"])
-                for left, right in zip(receipt["go_cli"], receipt["rust_cli"], strict=True):
-                    if left["case"] == "loopback-listener-policy":
-                        assert left["public_listener_accepted"] and not right["public_listener_accepted"]
-                    elif left['case'] == 'concurrent-broker-ca-isolation':
-                        assert not left['ca_paths_distinct'] and not left['first_ca_unchanged'] and not left['ca_removed_after_stop'], left
-                        assert right['ca_paths_distinct'] and right['first_ca_unchanged'] and right['ca_removed_after_stop'], right
-                    else:
-                        if left.get('public_proxy_env_verified'):
-                            assert left['public_ca_retained_after_exit'] and not right['public_ca_retained_after_exit'], (left, right)
-                        assert {k:v for k,v in left.items() if k != 'public_ca_retained_after_exit'} == {k:v for k,v in right.items() if k != 'public_ca_retained_after_exit'}, (left, right)
-                for left, right in zip(receipt["go"], receipt["rust"], strict=True):
-                    if left["case"] in {"template-port-binding", "template-plaintext-binding", "connect-inner-authority-binding"}:
-                        assert left["status"] == 200 and left["credential_received"], left
-                        assert right["status"] == 403 and not right["credential_received"], right
-                    elif left["case"] == "redirect-authority-binding":
-                        assert left["status"] == 200 and left["redirected_credential_received"], left
-                        assert right["status"] == 302 and not right["redirected_credential_received"], right
-                    elif left['case'] == 'dot-segment-policy':
-                        assert all(row['status'] == 200 and row['credential_received'] for row in left['observations']), left
-                        assert all(row['status'] == 403 and not row['credential_received'] for row in right['observations']), right
-                    else:
-                        assert left == right, (left, right)
-                assert inventory(sources, ROOT) == receipt["candidate_source_digest"]
-                assert inventory(identity_files, identities) == receipt["fixture_identity_digest"]
-                assert checked(["git", "rev-parse", "HEAD"]).decode().strip() == receipt["candidate_commit"]
-                for binary, key in [(rust, "rust_binary_sha256"), (rust_cli, "rust_cli_binary_sha256"),
-                                    (go, "go_binary_sha256"), (go_cli, "go_cli_binary_sha256"),
-                                    (identity_binary, "identity_binary_sha256")]:
-                    assert hashlib.sha256(binary.read_bytes()).hexdigest() == receipt[key]
-                receipt["passed"] = True
-            finally:
-                remove_worktree(lambda: checked(["git", "worktree", "remove", "--force", tree]), "oracle worktree")
+            identities = base / "identities"
+            identity_files = observations.mint_tls_identities(identities, base / "identity-scratch")
+            assert identity_files == recorded["fixture_identity_files"] and len(identity_files) == 12
+            receipt.update(fixture_identity_files=identity_files, fixture_identity_digest=inventory(identity_files, identities),
+                           fixture_identity_generator="openssl CLI (go_observations_common.mint_tls_identities)")
+            assert identities.stat().st_mode & 0o777 == 0o700
+            assert all((identities / name).stat().st_mode & 0o777 == 0o600 for name in identity_files)
+            seeder = material_seeder(seed_files)
+            receipt["go"] = recorded["go"]
+            receipt["rust"] = runtime_cases(rust, seeder, base / "rust-home", [], identities)
+            receipt["go_cli"] = recorded["go_cli"]
+            receipt["rust_cli"] = cli_cases(rust_cli, seeder, base / "rust-cli-home", [])
+            assert len(receipt["go"]) == len(receipt["rust"]) and len(receipt["go_cli"]) == len(receipt["rust_cli"])
+            for left, right in zip(receipt["go_cli"], receipt["rust_cli"], strict=True):
+                if left["case"] == "loopback-listener-policy":
+                    assert left["public_listener_accepted"] and not right["public_listener_accepted"]
+                elif left['case'] == 'concurrent-broker-ca-isolation':
+                    assert not left['ca_paths_distinct'] and not left['first_ca_unchanged'] and not left['ca_removed_after_stop'], left
+                    assert right['ca_paths_distinct'] and right['first_ca_unchanged'] and right['ca_removed_after_stop'], right
+                else:
+                    if left.get('public_proxy_env_verified'):
+                        assert left['public_ca_retained_after_exit'] and not right['public_ca_retained_after_exit'], (left, right)
+                    assert {k:v for k,v in left.items() if k != 'public_ca_retained_after_exit'} == {k:v for k,v in right.items() if k != 'public_ca_retained_after_exit'}, (left, right)
+            for left, right in zip(receipt["go"], receipt["rust"], strict=True):
+                if left["case"] in {"template-port-binding", "template-plaintext-binding", "connect-inner-authority-binding"}:
+                    assert left["status"] == 200 and left["credential_received"], left
+                    assert right["status"] == 403 and not right["credential_received"], right
+                elif left["case"] == "redirect-authority-binding":
+                    assert left["status"] == 200 and left["redirected_credential_received"], left
+                    assert right["status"] == 302 and not right["redirected_credential_received"], right
+                elif left['case'] == 'dot-segment-policy':
+                    assert all(row['status'] == 200 and row['credential_received'] for row in left['observations']), left
+                    assert all(row['status'] == 403 and not row['credential_received'] for row in right['observations']), right
+                else:
+                    assert left == right, (left, right)
+            assert inventory(sources, ROOT) == receipt["candidate_source_digest"]
+            assert inventory(identity_files, identities) == receipt["fixture_identity_digest"]
+            assert checked(["git", "rev-parse", "HEAD"]).decode().strip() == receipt["candidate_commit"]
+            for binary, key in [(rust, "rust_binary_sha256"), (rust_cli, "rust_cli_binary_sha256")]:
+                assert hashlib.sha256(binary.read_bytes()).hexdigest() == receipt[key]
+            receipt["passed"] = True
     finally:
         args.receipt.write_text(json.dumps(receipt, indent=2)+"\n", encoding="utf-8")
         receipt["candidate_worktree_clean_at_end"] = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
@@ -624,7 +652,7 @@ def main():
             receipt["passed"] = False
         args.receipt.write_text(json.dumps(receipt, indent=2)+"\n", encoding="utf-8")
         assert receipt["candidate_worktree_clean_at_end"] or args.allow_dirty_for_development
-    print(f"PASS: {len(receipt['go'])} runtime and {len(receipt['go_cli'])} CLI cases from actual native Go/Rust on {platform.system()}")
+    print(f"PASS: {len(receipt['go'])} runtime and {len(receipt['go_cli'])} CLI cases, recorded Go vs live Rust on {platform.system()}")
 
 
 if __name__ == "__main__":
