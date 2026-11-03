@@ -461,6 +461,19 @@ device-session-differential: device-session-fixtures-check
 	$(CARGO) test -p symvault-sync --test device_sessions_contract --locked
 	$(CARGO) test -p symvault-sync --lib --locked
 
+# APPROVAL-001 frozen local-approval-CLI contract. approvalgen records the real
+# Go LocalHTTPHandler + Go CLI exchanges (pinned oracle sources, fixed certs);
+# the replay needs no Go and is the evidence that survives Go removal.
+.PHONY: approval-fixtures-generate approval-fixtures-check approval-replay
+approval-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/approvalgen
+
+approval-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/approvalgen --check
+
+approval-replay:
+	$(CARGO) test -p symvault-cli --test approval_queue_replay --locked
+
 .PHONY: device-list-differential
 DEVICE_LIST_REPORT ?= $(CARGO_TARGET_DIR)/device-list-differential-$(shell date -u +%Y%m%dT%H%M%SZ).json
 device-list-differential:

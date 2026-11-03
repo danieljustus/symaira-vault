@@ -462,10 +462,7 @@ fn render_list(
         return Ok(());
     }
     if output_format == "yaml" {
-        print!(
-            "{}",
-            serde_yaml_ng::to_string(&result).map_err(|error| error.to_string())?
-        );
+        print!("{}", go_yaml_list(&result));
         return Ok(());
     }
     if result.requests.is_empty() {
@@ -490,6 +487,61 @@ fn render_list(
     Ok(())
 }
 
+/// `yaml.Marshal` of Go's `approvalListOutput`: the structs carry no `yaml`
+/// tags, so keys are the lower-cased field names (`agentname`, `createdat`),
+/// the embedded `approval.Request` becomes a nested `request` mapping, empty
+/// `decided_by` is still written (`""`), timestamps are plain scalars, and
+/// indentation is yaml.v3's four columns. Frozen by
+/// `testdata/port/approval/queue.json` (`list_yaml`).
+fn go_yaml_list(result: &ApprovalList) -> String {
+    if result.requests.is_empty() {
+        return "requests: []\n".to_owned();
+    }
+    let mut out = String::from("requests:\n");
+    for entry in &result.requests {
+        out.push_str("    - request:\n");
+        yaml_field(&mut out, 8, "agentname", &yaml_string(&entry.agent_name, 8));
+        yaml_field(&mut out, 8, "path", &yaml_string(&entry.path, 8));
+        yaml_field(&mut out, 8, "write", &entry.write.to_string());
+        yaml_field(&mut out, 8, "reason", &yaml_string(&entry.reason, 8));
+        yaml_field(&mut out, 8, "createdat", &entry.created_at);
+        yaml_field(&mut out, 8, "expiresat", &entry.expires_at);
+        yaml_field(&mut out, 6, "id", &yaml_string(&entry.id, 6));
+        yaml_field(&mut out, 6, "status", &yaml_string(&entry.status, 6));
+        yaml_field(&mut out, 6, "decidedat", &entry.decided_at);
+        yaml_field(&mut out, 6, "decidedby", &yaml_string(&entry.decided_by, 6));
+    }
+    out
+}
+
+/// `yaml.Marshal` of Go's `approvalOutcomeOutput` (see [`go_yaml_list`]).
+fn go_yaml_decision(result: &ApprovalDecision) -> String {
+    let outcome = &result.outcome;
+    let mut out = String::from("outcome:\n");
+    yaml_field(&mut out, 4, "id", &yaml_string(&outcome.id, 4));
+    yaml_field(&mut out, 4, "status", &yaml_string(&outcome.status, 4));
+    yaml_field(&mut out, 4, "decidedat", &outcome.decided_at);
+    yaml_field(
+        &mut out,
+        4,
+        "decidedby",
+        &yaml_string(&outcome.decided_by, 4),
+    );
+    out
+}
+
+fn yaml_string(text: &str, mapping_indent: i32) -> String {
+    symvault_gojson::yaml::string_in_mapping(text, mapping_indent)
+}
+
+fn yaml_field(out: &mut String, indent: usize, key: &str, value: &str) {
+    out.push_str(&" ".repeat(indent));
+    out.push_str(key);
+    out.push_str(": ");
+    out.push_str(value);
+    out.push('\n');
+}
+
 fn render_decision(
     result: ApprovalDecision,
     output_format: &str,
@@ -507,10 +559,7 @@ fn render_decision(
         return Ok(());
     }
     if output_format == "yaml" {
-        print!(
-            "{}",
-            serde_yaml_ng::to_string(&result).map_err(|error| error.to_string())?
-        );
+        print!("{}", go_yaml_decision(&result));
         return Ok(());
     }
     println!(
