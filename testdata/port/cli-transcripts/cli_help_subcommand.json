@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "help_command_reaches_root_and_nested_help_like_go": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "416f63c9f690a76aac81d08ce8f14ef26d6dabe8a2915634590383d166248d1b",
+          "request": {
+            "args": [
+              "help"
+            ],
+            "env": {
+              "CI": "1",
+              "NO_COLOR": "1"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "76f1dfedddd446a1110fd04c19a10b3b271ceb8dd6280ef065d36091971defa5",
+          "request": {
+            "args": [
+              "help",
+              "config",
+              "validate"
+            ],
+            "env": {
+              "CI": "1",
+              "NO_COLOR": "1"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Validate the Symaira Vault configuration file for schema errors.\n\nIf no path is given, validates the default config at ~/.symvault/config.yaml.\n\nWhen --fix is supplied, validation failures and recoverable load errors trigger\nan interactive repair flow: deterministic defaults are offered for fields that\nhave safe replacements, and a manual $EDITOR session is offered as a fall-back.\n\nUsage:\n  symvault config validate [path] [flags]\n\nFlags:\n      --fix    interactively repair validation errors (requires a TTY)\n  -h, --help   help for validate\n      --json   output validation result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

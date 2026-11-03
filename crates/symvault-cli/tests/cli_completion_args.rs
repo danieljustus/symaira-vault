@@ -3,9 +3,12 @@
 //! Go (cobra) prints the group help for a first word that names no shell and
 //! refuses any word after a shell with `unknown command "<word>" for "symvault
 //! completion <shell>"`; clap used to answer with its own wording. With
-//! `SYMVAULT_GO_BINARY` set (`make cli-help-differential` builds the oracle from
-//! this checkout) every shape is compared byte for byte with Go; without it the
-//! Rust output is checked against the same Go contract spelled out below.
+//! the recorded Go answers (`testdata/port/cli-transcripts/cli_completion_args.json`)
+//! every shape is compared byte for byte with Go; the Rust output is also
+//! checked against the same Go contract spelled out below.
+
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 
 use std::{
     env,
@@ -30,14 +33,14 @@ const SHAPES: &[&[&str]] = &[
 ];
 
 fn run(binary: &Path, args: &[&str], home: &Path) -> Output {
-    Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .env("HOME", home)
         .env("USERPROFILE", home)
         .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run CLI")
+        .env("NO_COLOR", "1");
+    go_oracle::output(&mut command).expect("run CLI")
 }
 
 fn rust_binary() -> PathBuf {
@@ -77,15 +80,12 @@ fn completion_word_shapes_follow_the_cobra_contract() {
 
 #[test]
 fn completion_word_shapes_match_the_go_binary() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("SKIP completion word shapes vs Go: SYMVAULT_GO_BINARY is not set");
-        assert!(
-            env::var_os("SYMVAULT_HELP_REQUIRE_GO_ORACLE").is_none(),
-            "SYMVAULT_HELP_REQUIRE_GO_ORACLE is set without SYMVAULT_GO_BINARY"
-        );
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_completion_args",
+        "completion_word_shapes_match_the_go_binary",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let home = tempfile::tempdir().expect("temporary home");
     for args in SHAPES {
         let go = run(&go_binary, args, home.path());
@@ -94,4 +94,5 @@ fn completion_word_shapes_match_the_go_binary() {
         assert_eq!(rust.stdout, go.stdout, "stdout for {args:?}");
         assert_eq!(rust.stderr, go.stderr, "stderr for {args:?}");
     }
+    assert_eq!(oracle.calls(), SHAPES.len());
 }

@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "dynamic_and_setup_help_match_pinned_go_bytes": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "2f7b23ae40321586706c033cf41fc7efac7e8318780ca647a5313eacbf398d83",
+          "request": {
+            "args": [
+              "help",
+              "dynamic"
+            ],
+            "env": {},
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Generate dynamic secrets with time-limited leases for various backends.\n\nSupported engines:\n  postgres  - Create temporary PostgreSQL users with GRANT role\n  aws-sts   - Generate temporary AWS STS credentials via AssumeRole\n\nUsage:\n  symvault dynamic [command]\n\nExamples:\n  # Generate temporary PostgreSQL credentials valid for 1h\n  symvault dynamic generate postgres --role analyst --ttl 1h\n\n  # Short-lived AWS STS session\n  symvault dynamic generate aws-sts --role arn:aws:iam::123:role/dev --ttl 15m\n\nAvailable Commands:\n  generate    Generate a dynamic secret\n\nFlags:\n  -h, --help   help for dynamic\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault dynamic [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8ade7bb2fd71ebbfb0bf947fd9a3196ebc0b5e7109b74392459f5203f114a04e",
+          "request": {
+            "args": [
+              "dynamic",
+              "--help"
+            ],
+            "env": {},
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Generate dynamic secrets with time-limited leases for various backends.\n\nSupported engines:\n  postgres  - Create temporary PostgreSQL users with GRANT role\n  aws-sts   - Generate temporary AWS STS credentials via AssumeRole\n\nUsage:\n  symvault dynamic [command]\n\nExamples:\n  # Generate temporary PostgreSQL credentials valid for 1h\n  symvault dynamic generate postgres --role analyst --ttl 1h\n\n  # Short-lived AWS STS session\n  symvault dynamic generate aws-sts --role arn:aws:iam::123:role/dev --ttl 15m\n\nAvailable Commands:\n  generate    Generate a dynamic secret\n\nFlags:\n  -h, --help   help for dynamic\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault dynamic [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "dfb884df551fc92f7c934a79f0d48c2d17e4deb05c66d3fcc8f9ad144c163514",
+          "request": {
+            "args": [
+              "help",
+              "dynamic",
+              "generate"
+            ],
+            "env": {},
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Generate a dynamic secret\n\nUsage:\n  symvault dynamic generate [flags]\n\nExamples:\n  # Generate a PostgreSQL secret with readonly role\n  symvault dynamic generate --engine postgres --role readonly --ttl 1h\n\n  # Generate AWS STS credentials for a specific role\n  symvault dynamic generate --engine aws-sts --role arn:aws:iam::123456789012:role/MyRole --ttl 30m\n\nFlags:\n      --engine string   Secret engine type (postgres, aws-sts)\n  -h, --help            help for generate\n      --role string     Role or permission level\n      --ttl duration    Time-to-live duration (e.g., 1h, 30m) (default 1h0m0s)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6560e633b2b853b3500df1fe28970b6955194deb32b0ec7be0fe274291c736dc",
+          "request": {
+            "args": [
+              "dynamic",
+              "generate",
+              "--help"
+            ],
+            "env": {},
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Generate a dynamic secret\n\nUsage:\n  symvault dynamic generate [flags]\n\nExamples:\n  # Generate a PostgreSQL secret with readonly role\n  symvault dynamic generate --engine postgres --role readonly --ttl 1h\n\n  # Generate AWS STS credentials for a specific role\n  symvault dynamic generate --engine aws-sts --role arn:aws:iam::123456789012:role/MyRole --ttl 30m\n\nFlags:\n      --engine string   Secret engine type (postgres, aws-sts)\n  -h, --help            help for generate\n      --role string     Role or permission level\n      --ttl duration    Time-to-live duration (e.g., 1h, 30m) (default 1h0m0s)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "10c46eb4a5b901795ac1bb32a5e7b4dcd7e634495293cda0531c247707b77d3f",
+          "request": {
+            "args": [
+              "help",
+              "setup"
+            ],
+            "env": {},
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Launch the interactive setup wizard to initialize or re-configure your vault.\n\nThe wizard guides you through:\n  • Vault directory and passphrase\n  • Authentication method (Touch ID or passphrase)\n  • Sync strategy (local or git remote)\n  • Multi-device setup hints\n  • Additional recipients for shared access\n  • AI agent (MCP) configuration\n  • Backup recommendations\n  • Profile name\n\nFor non-interactive environments (CI, scripts), use 'symvault init' instead.\n\nUsage:\n  symvault setup [flags]\n\nExamples:\n  # Run the wizard (resumes from saved state if available)\n  symvault setup\n\n  # Restart from scratch\n  symvault setup --no-resume\n\n  # Keep partial vault artifacts on error for debugging\n  symvault setup --keep-on-error\n\nFlags:\n  -h, --help            help for setup\n      --keep-on-error   do not rollback vault init artifacts when subsequent steps fail\n      --no-resume       disable setup resume after abort\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "333e52471568626ffa231190161dccbaf8846307f8bed7baf137b1fbd0b6833d",
+          "request": {
+            "args": [
+              "setup",
+              "--help"
+            ],
+            "env": {},
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Launch the interactive setup wizard to initialize or re-configure your vault.\n\nThe wizard guides you through:\n  • Vault directory and passphrase\n  • Authentication method (Touch ID or passphrase)\n  • Sync strategy (local or git remote)\n  • Multi-device setup hints\n  • Additional recipients for shared access\n  • AI agent (MCP) configuration\n  • Backup recommendations\n  • Profile name\n\nFor non-interactive environments (CI, scripts), use 'symvault init' instead.\n\nUsage:\n  symvault setup [flags]\n\nExamples:\n  # Run the wizard (resumes from saved state if available)\n  symvault setup\n\n  # Restart from scratch\n  symvault setup --no-resume\n\n  # Keep partial vault artifacts on error for debugging\n  symvault setup --keep-on-error\n\nFlags:\n  -h, --help            help for setup\n      --keep-on-error   do not rollback vault init artifacts when subsequent steps fail\n      --no-resume       disable setup resume after abort\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

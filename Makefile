@@ -313,7 +313,6 @@ PORT_SESSION_FIXTURE := testdata/port/session/contract.json
 PORT_PLATFORM_FIXTURE := testdata/port/platform/contract.json
 PORT_PERSISTENT_QUOTA_FIXTURE := testdata/port/quotas/contract.json
 PORT_GO_BINARY := target/port/symvault-go
-MANPAGES_GO_BINARY := target/port/symvault-manpages-go
 RUST_BINARY := $(CARGO_TARGET_DIR)/debug/symvault
 PORT_CONTRACT_VERSION ?= v0.0.0-port
 
@@ -884,16 +883,15 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-# Build the Go oracle from this checked-out source revision so the page tree is
-# compared against the exact CLI tree under review, never an ambient binary.
+# The Go man pages and the Go help pages are replayed from the committed
+# transcripts in testdata/port/cli-transcripts/ (recorded once from the pinned
+# Go oracle, see scripts/rust-port/capture_cli_b.sh); a missing recording fails.
 manpages-differential:
-	@mkdir -p "$(dir $(MANPAGES_GO_BINARY))"
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=true -o "$(MANPAGES_GO_BINARY)" .
-	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_MANPAGES_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_generate_manpages --locked
+	$(CARGO) test -p symvault-cli --test cli_generate_manpages --locked
 
 .PHONY: cli-help-differential
 cli-help-differential: manpages-differential
-	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_HELP_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_help --test cli_get_list_help_differential --test cli_completion_args --test cli_dynamic_setup_help --test cli_update_help --locked
+	$(CARGO) test -p symvault-cli --test cli_help --test cli_help_subcommand --test cli_get_list_help_differential --test cli_completion_args --test cli_dynamic_setup_help --test cli_update_help --locked
 
 # SETUP-001: `symvault setup` through a real PTY against a no-cgo Go oracle built
 # from this checked-out source (a no-cgo build cannot see Touch ID; see

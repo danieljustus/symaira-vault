@@ -1,8 +1,12 @@
-//! Frozen productive Go output plus a mandatory live comparison in the port gate.
+//! Frozen productive Go output plus the recorded Go answers of the pinned
+//! oracle (`testdata/port/cli-transcripts/cli_update_help.json`); replay is
+//! mandatory, a missing recording fails the test.
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use sha2::{Digest, Sha256};
 
 use std::{
-    env,
     path::Path,
     process::{Command, Output},
 };
@@ -16,7 +20,8 @@ const PAGES: [(&str, &[u8]); 4] = [
 ];
 
 fn run(binary: &Path, args: &[&str], home: &Path) -> Output {
-    Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .env("HOME", home)
         .env("USERPROFILE", home)
@@ -27,19 +32,19 @@ fn run(binary: &Path, args: &[&str], home: &Path) -> Output {
         .env_remove("SYMVAULT_PASSPHRASE")
         .env_remove("SYMVAULT_AGENT")
         .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run update help in disposable root")
+        .env("NO_COLOR", "1");
+    go_oracle::output(&mut command).expect("run update help in disposable root")
 }
 
 #[test]
 fn update_help_matches_frozen_and_actual_go_without_accessing_vault_or_updater() {
     let home = tempfile::tempdir().expect("disposable HOME/XDG root");
-    let go = env::var_os("SYMVAULT_GO_BINARY");
-    assert!(
-        go.is_some() || env::var_os("SYMVAULT_HELP_REQUIRE_GO_ORACLE").is_none(),
-        "live Go oracle required"
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_update_help",
+        "update_help_matches_frozen_and_actual_go_without_accessing_vault_or_updater",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
     );
+    let go = oracle.binary();
     let mut count = 0;
     for ((topic, page), digest) in PAGES.into_iter().zip([
         "6edd6c16551d423a1246f50c721aba5794c1095e2837dfa08e0654096d8d46b3",
@@ -116,21 +121,20 @@ fn update_help_matches_frozen_and_actual_go_without_accessing_vault_or_updater()
             assert_eq!(rust.status.code(), Some(0), "{args:?}: {:?}", rust.stderr);
             assert_eq!(rust.stdout, page, "frozen stdout {args:?}");
             assert!(rust.stderr.is_empty(), "{args:?}: {:?}", rust.stderr);
-            if let Some(go) = &go {
-                let actual = run(Path::new(go), &args, home.path());
-                assert_eq!(
-                    actual.status.code(),
-                    rust.status.code(),
-                    "actual Go status {args:?}: {:?}",
-                    actual.stderr
-                );
-                assert_eq!(actual.stdout, rust.stdout, "actual Go stdout {args:?}");
-                assert_eq!(actual.stderr, rust.stderr, "actual Go stderr {args:?}");
-            }
+            let actual = run(&go, &args, home.path());
+            assert_eq!(
+                actual.status.code(),
+                rust.status.code(),
+                "recorded Go status {args:?}: {:?}",
+                actual.stderr
+            );
+            assert_eq!(actual.stdout, rust.stdout, "recorded Go stdout {args:?}");
+            assert_eq!(actual.stderr, rust.stderr, "recorded Go stderr {args:?}");
             count += 1;
         }
     }
-    assert_eq!(count, 41, "all intended live help cases must execute");
+    assert_eq!(count, 41, "all intended help cases must execute");
+    assert_eq!(oracle.calls(), 41, "every recorded Go answer is replayed");
     assert_eq!(
         std::fs::read_dir(home.path()).unwrap().count(),
         0,

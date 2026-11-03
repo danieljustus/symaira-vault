@@ -1,0 +1,246 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "get_and_list_help_and_extra_argument_errors_match_go": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "83a716a8fc45bcc6b4d14362bff291d182920286541f61358779bd9ddca7c246",
+          "request": {
+            "args": [
+              "get",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Retrieves and displays a password entry. Use path.field syntax to get specific fields.\n\nUsage:\n  symvault get <path[.field]> [flags]\n\nAliases:\n  get, show, cat\n\nExamples:\n  # Get a specific field (auto-copies to clipboard on TTY)\n  symvault get github.password\n\n  # Substring search fallback (when exact path doesn't exist)\n  symvault get git\n\n  # Explicitly print to stdout instead of clipboard\n  symvault get github.password --print\n\n  # Output as JSON\n  symvault get github --output json\n\n  # Use a specific profile\n  symvault get github.password --profile work\n\nFlags:\n      --digest     Print sha256 digest (first 12 hex chars) of the value only\n  -h, --help       help for get\n      --length     Print byte length of the stored string value only\n      --metadata   Print JSON metadata (length and sha256_12) of the value only\n  -p, --print      Print value to stdout instead of copying to clipboard\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0c75041dd5fa42e2768a04b31c789a061219a9579c47de3e4a837f2c061c937d",
+          "request": {
+            "args": [
+              "list",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "List password entries\n\nUsage:\n  symvault list [prefix] [flags]\n\nAliases:\n  list, ls\n\nExamples:\n  # List all entries\n  symvault list\n\n  # List entries under \"work/\" prefix\n  symvault list work/\n\n  # JSON output\n  symvault list --output json\n\nFlags:\n  -h, --help   help for list\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4ee4ed99cfc67085fd4f36e4882f5be82732c8cd4c7ff73d3ad81dc8c742f8b9",
+          "request": {
+            "args": [
+              "help",
+              "get"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Retrieves and displays a password entry. Use path.field syntax to get specific fields.\n\nUsage:\n  symvault get <path[.field]> [flags]\n\nAliases:\n  get, show, cat\n\nExamples:\n  # Get a specific field (auto-copies to clipboard on TTY)\n  symvault get github.password\n\n  # Substring search fallback (when exact path doesn't exist)\n  symvault get git\n\n  # Explicitly print to stdout instead of clipboard\n  symvault get github.password --print\n\n  # Output as JSON\n  symvault get github --output json\n\n  # Use a specific profile\n  symvault get github.password --profile work\n\nFlags:\n      --digest     Print sha256 digest (first 12 hex chars) of the value only\n  -h, --help       help for get\n      --length     Print byte length of the stored string value only\n      --metadata   Print JSON metadata (length and sha256_12) of the value only\n  -p, --print      Print value to stdout instead of copying to clipboard\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "1784bdc95489d0bf39711a5c9103a9f75dc13c9465273772875e1a46c22dda6c",
+          "request": {
+            "args": [
+              "help",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "List password entries\n\nUsage:\n  symvault list [prefix] [flags]\n\nAliases:\n  list, ls\n\nExamples:\n  # List all entries\n  symvault list\n\n  # List entries under \"work/\" prefix\n  symvault list work/\n\n  # JSON output\n  symvault list --output json\n\nFlags:\n  -h, --help   help for list\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f7d06548367f31c87bdd4ecd338b9d6d51440ba795dfb2fbd15473f45738d960",
+          "request": {
+            "args": [
+              "get",
+              "entry",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: accepts 1 arg(s), received 2\nError: accepts 1 arg(s), received 2\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9c334e660ee45eda996944c3081a44142c5724fcc45686223062a35fa3cfcecb",
+          "request": {
+            "args": [
+              "list",
+              "prefix",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: accepts at most 1 arg(s), received 2\nError: accepts at most 1 arg(s), received 2\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "32326c0ea2d071518a1fd93591bc842f9913138933ec6e84219b114ef28fa870",
+          "request": {
+            "args": [
+              "get",
+              "--",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6d7e0473b4ab23e6f23c92b260f6b612174f1af7f5c7c6a2f8345051d375a25e",
+          "request": {
+            "args": [
+              "list",
+              "--",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

@@ -1,7 +1,10 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
     collections::BTreeSet,
-    env, fs,
-    path::Path,
+    fs,
+    path::{Path, PathBuf},
     process::{Command, Output},
 };
 
@@ -138,20 +141,20 @@ fn run_with_env(binary: &Path, root: &Path, args: &[&str], environment: &[(&str,
     for (name, value) in environment {
         command.env(name, value);
     }
-    command.output().expect("run generate manpages")
+    go_oracle::output(&mut command).expect("run generate manpages")
 }
 
-fn go_oracle() -> Option<std::path::PathBuf> {
-    match env::var_os("SYMVAULT_GO_BINARY") {
-        Some(binary) => Some(binary.into()),
-        None if env::var_os("SYMVAULT_MANPAGES_REQUIRE_GO_ORACLE").is_some() => {
-            panic!("SYMVAULT_GO_BINARY is required by the manpages port-contract gate")
-        }
-        None => {
-            eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-            None
-        }
-    }
+/// Starts the replay session of one test: the Go answers (stdout, stderr,
+/// status and the generated man-page tree) come from
+/// `testdata/port/cli-transcripts/cli_generate_manpages.json`.
+fn oracle(test: &str) -> (go_oracle::GoOracle, PathBuf) {
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_generate_manpages",
+        test,
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let binary = oracle.binary();
+    (oracle, binary)
 }
 
 fn page_date(root: &Path) -> Vec<String> {
@@ -164,9 +167,7 @@ fn page_date(root: &Path) -> Vec<String> {
 
 #[test]
 fn empty_source_date_epoch_matches_the_go_default() {
-    let Some(go_binary) = go_oracle() else {
-        return;
-    };
+    let (oracle, go_binary) = oracle("empty_source_date_epoch_matches_the_go_default");
     let go_root = TempDir::new().expect("go temp root");
     let rust_root = TempDir::new().expect("rust temp root");
     let args = ["generate", "manpages", "man"];
@@ -184,14 +185,13 @@ fn empty_source_date_epoch_matches_the_go_default() {
     assert!(go.stderr.is_empty(), "Go stderr: {:?}", go.stderr);
     assert!(rust.stderr.is_empty(), "Rust stderr: {:?}", rust.stderr);
     assert_eq!(page_date(rust_root.path()), page_date(go_root.path()));
+    assert_eq!(oracle.calls(), 1);
 }
 
 #[cfg(unix)]
 #[test]
 fn source_date_epoch_uses_local_timezone_at_month_boundary() {
-    let Some(go_binary) = go_oracle() else {
-        return;
-    };
+    let (oracle, go_binary) = oracle("source_date_epoch_uses_local_timezone_at_month_boundary");
     let go_root = TempDir::new().expect("go temp root");
     let rust_root = TempDir::new().expect("rust temp root");
     let args = ["generate", "manpages", "man"];
@@ -212,6 +212,7 @@ fn source_date_epoch_uses_local_timezone_at_month_boundary() {
     );
     assert_eq!(page_date(go_root.path()), vec!["Oct", "2026"]);
     assert_eq!(page_date(rust_root.path()), page_date(go_root.path()));
+    assert_eq!(oracle.calls(), 1);
 }
 
 /// Strips each run's own root prefix so the two report lines can be compared.
@@ -235,14 +236,12 @@ fn page_names(root: &Path) -> BTreeSet<String> {
         .collect()
 }
 
-/// Differential evidence against the Go oracle. Skipped unless the caller
-/// exports `SYMVAULT_GO_BINARY`; the expectations themselves are checked by
-/// `assert_header_matches_oracle` even when no oracle binary is available.
+/// Differential evidence against the recorded Go oracle (replay-or-fail); the
+/// header expectations are additionally spelled out in
+/// `assert_header_matches_oracle`.
 #[test]
 fn generate_manpages_matches_the_go_oracle() {
-    let Some(go_binary) = go_oracle() else {
-        return;
-    };
+    let (oracle, go_binary) = oracle("generate_manpages_matches_the_go_oracle");
     let go_binary = go_binary.as_path();
 
     let go_root = TempDir::new().expect("go temp root");
@@ -312,4 +311,5 @@ fn generate_manpages_matches_the_go_oracle() {
         &fs::read_to_string(rust_root.path().join("man").join(shared)).expect("port page"),
         "port page",
     );
+    assert_eq!(oracle.calls(), 6);
 }
