@@ -154,7 +154,9 @@ impl HttpShutdown {
     /// Returns true when every transport finished by itself.
     pub fn drain(&self, timeout: Duration) -> io::Result<bool> {
         let deadline = Instant::now().checked_add(timeout);
-        self.begin_drain()?;
+        // Closing idle transports is best-effort, as in Go: a failed close must
+        // not skip the wait for requests in flight or the final force-close.
+        let begin_error = self.begin_drain().err();
         let (lock, changed) = &*self.state;
         let mut state = lock
             .lock()
@@ -176,7 +178,7 @@ impl HttpShutdown {
         if !drained {
             self.cancel()?;
         }
-        Ok(drained)
+        begin_error.map_or(Ok(drained), Err)
     }
 
     /// True once `begin_drain` or `cancel` ran.
