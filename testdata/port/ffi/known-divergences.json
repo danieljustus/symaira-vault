@@ -207,6 +207,7 @@
       "rust_behavior": "a Go-faithful tar.gz (pre-rust-<label>-<stamp>.tar.gz) is written to the backup directory, restored into scratch and compared with the live tree; only then is the marker written and the mutation performed; later mutations take no further backup",
       "pinned_by": [
         "crates/symvault-ffi/tests/backup_dir.rs::the_hosts_backup_directory_receives_the_first_mutation_backup",
+        "crates/symvault-ffi/tests/backup_dir.rs::thread_override_resists_global_directory_interleaving",
         "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testBackupDirectoryIsExcludedFromBackupAndUsedByTheDataSafetyGate"
       ]
     },
@@ -241,13 +242,14 @@
       "category": "data-safety-backup",
       "owner": "symvault-sync data_safety (RUST-014 / DIST-005), decision D1",
       "approval": "decision D1 (maintainer, docs/rust-port/contract-matrix.md DIST-005); mobile bridge application recorded in ADR 0031 (divergence D-BACKUP)",
-      "reason": "The backup holds the same encrypted files as the vault, which already travels with the user's iCloud Drive/device backup. On iOS the host (MobileVaultCore) creates Application Support/symaira-vault-backups (0700), sets isExcludedFromBackup, reads the flag back and only then calls SymvaultFFI.setBackupDir; if any step fails the vault call fails before the core touches the vault. Caches is not used (the system may purge it). A physical-device run is still outstanding (FFI-002).",
+      "reason": "The backup holds the same encrypted files as the vault, which already travels with the user's iCloud Drive/device backup. On iOS the host (MobileVaultCore) creates Application Support/symaira-vault-backups (0700), sets isExcludedFromBackup, reads the flag back and only then runs the vault call with a thread-scoped SymvaultFFI backup directory; if any step fails the vault call fails before the core touches the vault. Caches is not used (the system may purge it). A physical-device run is still outstanding (FFI-002).",
       "go_behavior": "no backup, so nothing to exclude",
       "rust_behavior": "vault calls in MobileVaultCore point the core at the excluded directory first; an unusable directory fails the call",
       "pinned_by": [
         "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testBackupDirectoryIsExcludedFromBackupAndUsedByTheDataSafetyGate",
         "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testDefaultBackupDirectoryIsApplicationSupportNotCaches",
-        "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testUnusableBackupDirectoryFailsTheCallBeforeTheVaultIsTouched"
+        "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testUnusableBackupDirectoryFailsTheCallBeforeTheVaultIsTouched",
+        "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testExistingBackupDirectoryIsMadePrivateAndSymlinkIsRefused"
       ]
     }
   ]

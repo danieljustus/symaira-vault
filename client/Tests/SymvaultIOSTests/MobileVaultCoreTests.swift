@@ -49,9 +49,11 @@ final class MobileVaultCoreTests: XCTestCase {
         let identity = try core.open(passphrase: "correct horse")
         try FileManager.default.removeItem(at: vault.appendingPathComponent(".symvault-rust"))
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: chosen.path), [])
-        try SymvaultFFI.writeEntryJSON(
-            vaultDir: vault.path, entryPath: "site/example",
-            entryJSON: #"{"data":{"user":"alice"}}"#, identity: identity)
+        try SymvaultFFI.withBackupDirectory(chosen.path) {
+            try SymvaultFFI.writeEntryJSON(
+                vaultDir: vault.path, entryPath: "site/example",
+                entryJSON: #"{"data":{"user":"alice"}}"#, identity: identity)
+        }
 
         let archives = try FileManager.default.contentsOfDirectory(atPath: chosen.path)
         XCTAssertEqual(archives.count, 1, "\(archives)")
@@ -62,6 +64,17 @@ final class MobileVaultCoreTests: XCTestCase {
 
     /// With no explicit directory the backup goes to Application Support (never
     /// Caches, which the system purges), under the app's own name.
+    func testExistingBackupDirectoryIsMadePrivateAndSymlinkIsRefused() throws {
+        try FileManager.default.createDirectory(at: backups, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: backups.path)
+        try MobileVaultBackup.prepare(backups)
+        let attrs = try FileManager.default.attributesOfItem(atPath: backups.path)
+        XCTAssertEqual((attrs[.posixPermissions] as? NSNumber)?.intValue, 0o700)
+        let link = directory.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: backups)
+        XCTAssertThrowsError(try MobileVaultBackup.prepare(link))
+    }
+
     func testDefaultBackupDirectoryIsApplicationSupportNotCaches() throws {
         let url = try MobileVaultBackup.defaultDirectory()
         let support = try FileManager.default.url(

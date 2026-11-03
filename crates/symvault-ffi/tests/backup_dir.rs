@@ -281,6 +281,7 @@ fn the_d1_divergence_entries_are_pinned_by_existing_tests() {
             "D1/ios-backup-excluded-from-icloud",
         ]
     );
+    validate_pins(entries).expect("exact divergence pins");
     let mut pinned_here = Vec::new();
     for entry in entries {
         assert_eq!(entry["category"], "data-safety-backup");
@@ -313,6 +314,14 @@ fn the_d1_divergence_entries_are_pinned_by_existing_tests() {
                 format!("fn {name}(")
             };
             assert!(source.contains(&declaration), "{pin}: no such test");
+            if file.ends_with(".rs") {
+                assert!(
+                    source.contains(&format!("#[test]\n{declaration}")),
+                    "{pin}: not a test"
+                );
+            } else {
+                assert!(name.starts_with("test"), "{pin}: not a Swift test");
+            }
             if file == "crates/symvault-ffi/tests/backup_dir.rs" {
                 pinned_here.push(name.to_owned());
             }
@@ -321,11 +330,143 @@ fn the_d1_divergence_entries_are_pinned_by_existing_tests() {
     let own = include_str!("backup_dir.rs");
     for chunk in own.split("#[test]\nfn ").skip(1) {
         let name = chunk.split('(').next().expect("name");
-        if name != "the_d1_divergence_entries_are_pinned_by_existing_tests" {
+        if ![
+            "the_d1_divergence_entries_are_pinned_by_existing_tests",
+            "pin_validator_rejects_missing_extra_and_duplicate",
+        ]
+        .contains(&name)
+        {
             assert!(
                 pinned_here.iter().any(|pinned| pinned == name),
                 "{name} has no side_effects entry"
             );
         }
     }
+}
+
+fn validate_pins(entries: &[serde_json::Value]) -> Result<(), String> {
+    let expected: &[(&str, &[&str])] = &[
+        (
+            "D1/first-mutation-backup",
+            &[
+                "crates/symvault-ffi/tests/backup_dir.rs::the_hosts_backup_directory_receives_the_first_mutation_backup",
+                "crates/symvault-ffi/tests/backup_dir.rs::thread_override_resists_global_directory_interleaving",
+                "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testBackupDirectoryIsExcludedFromBackupAndUsedByTheDataSafetyGate",
+            ][..],
+        ),
+        (
+            "D1/refused-without-backup-directory",
+            &[
+                "crates/symvault-ffi/tests/backup_dir.rs::without_any_directory_the_first_mutation_is_refused_and_nothing_is_written",
+            ][..],
+        ),
+        (
+            "D1/set-backup-dir-fallback",
+            &[
+                "crates/symvault-ffi/tests/backup_dir.rs::an_unset_directory_falls_back_to_xdg_state_home_then_home",
+                "crates/symvault-ffi/tests/backup_dir.rs::a_relative_directory_is_refused_and_keeps_the_previous_choice",
+                "crates/symvault-ffi/tests/abi.rs::the_host_chooses_the_backup_directory",
+            ][..],
+        ),
+        (
+            "D1/ios-backup-excluded-from-icloud",
+            &[
+                "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testBackupDirectoryIsExcludedFromBackupAndUsedByTheDataSafetyGate",
+                "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testDefaultBackupDirectoryIsApplicationSupportNotCaches",
+                "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testUnusableBackupDirectoryFailsTheCallBeforeTheVaultIsTouched",
+                "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testExistingBackupDirectoryIsMadePrivateAndSymlinkIsRefused",
+            ][..],
+        ),
+    ];
+    if entries.len() != expected.len() {
+        return Err("entry count".into());
+    }
+    for (entry, (id, pins)) in entries.iter().zip(expected) {
+        if entry["id"].as_str() != Some(id) {
+            return Err("entry id".into());
+        }
+        let actual = entry["pinned_by"].as_array().ok_or("pins")?;
+        let mut set = std::collections::BTreeSet::new();
+        for pin in actual {
+            if !set.insert(pin.as_str().ok_or("pin type")?) {
+                return Err("duplicate pin".into());
+            }
+        }
+        let expected_set: std::collections::BTreeSet<_> = pins.iter().copied().collect();
+        if set != expected_set {
+            return Err("pin set".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn pin_validator_rejects_missing_extra_and_duplicate() {
+    let doc: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../testdata/port/ffi/known-divergences.json"
+    ))
+    .unwrap();
+    let entries = doc["side_effects"].as_array().unwrap();
+    assert!(validate_pins(entries).is_ok());
+    for mode in 0..3 {
+        let mut altered = entries.clone();
+        let pins = altered[0]["pinned_by"].as_array_mut().unwrap();
+        match mode {
+            0 => {
+                pins.pop();
+            }
+            1 => pins.push(serde_json::json!("extra::test")),
+            _ => pins.push(pins[0].clone()),
+        }
+        assert!(validate_pins(&altered).is_err(), "mode {mode}");
+    }
+}
+
+#[test]
+fn thread_override_resists_global_directory_interleaving() {
+    let _guard = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let temp = tempfile::tempdir().unwrap();
+    let (vault, identity) = unmarked_vault(temp.path());
+    let chosen = temp.path().join("chosen");
+    let wrong = temp.path().join("wrong");
+    let start = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let worker_start = start.clone();
+    let worker_stop = stop.clone();
+    let wrong_text = wrong.to_str().unwrap().to_owned();
+    let worker = std::thread::spawn(move || {
+        assert_eq!(set_backup_dir(&wrong_text).0, 0);
+        worker_start.wait();
+        while !worker_stop.load(std::sync::atomic::Ordering::SeqCst) {
+            assert_eq!(set_backup_dir(&wrong_text).0, 0);
+            assert_eq!(set_backup_dir("").0, 0);
+        }
+    });
+    let chosen_text = chosen.to_str().unwrap();
+    let mut err = empty();
+    // SAFETY: bytes and error pointer are valid for this call.
+    assert_eq!(
+        unsafe {
+            abi::symvault_set_thread_backup_dir(chosen_text.as_ptr(), chosen_text.len(), &mut err)
+        },
+        0
+    );
+    let xdg = temp.path().join("xdg");
+    with_env(&[("XDG_STATE_HOME", Some(&xdg))], || {
+        start.wait();
+        write(&vault, &identity, "site/example").unwrap();
+    });
+    assert!(archives(&xdg.join("symvault/backups")).is_empty());
+    // SAFETY: a null, zero-length path clears the calling thread's override.
+    assert_eq!(
+        unsafe { abi::symvault_set_thread_backup_dir(ptr::null(), 0, &mut err) },
+        0
+    );
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    worker.join().unwrap();
+    assert_one_archive(&chosen);
+    assert!(archives(&wrong).is_empty());
+    assert_eq!(set_backup_dir("").0, 0);
 }

@@ -32,11 +32,6 @@ public struct MobileVaultCore: Sendable {
     /// from iCloud backup).
     public let backupDirectory: URL?
 
-    /// The core keeps one process-wide backup directory. Setting it and the
-    /// call that may need it happen under this lock, so two cores with
-    /// different backup directories cannot swap it between the two.
-    private static let vaultCallLock = NSLock()
-
     public init(vaultDirectory: URL, backupDirectory: URL? = nil) {
         self.vaultDirectory = vaultDirectory
         self.backupDirectory = backupDirectory
@@ -61,12 +56,11 @@ public struct MobileVaultCore: Sendable {
     /// directory cannot be prepared the call fails and nothing touches the
     /// vault.
     private func vaultCore<T>(_ body: () throws -> T) throws -> T {
-        Self.vaultCallLock.lock()
-        defer { Self.vaultCallLock.unlock() }
         try core {
-            try MobileVaultBackup.prepare(try backupDirectory ?? MobileVaultBackup.defaultDirectory())
+            let directory = try backupDirectory ?? MobileVaultBackup.defaultDirectory()
+            try MobileVaultBackup.prepare(directory)
+            return try SymvaultFFI.withBackupDirectory(directory.standardizedFileURL.path, body)
         }
-        return try core(body)
     }
 
     public func generateIdentity() throws -> String {

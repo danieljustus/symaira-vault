@@ -354,6 +354,31 @@ pub unsafe extern "C" fn symvault_set_backup_dir(
     }
 }
 
+/// Sets a calling-thread override for synchronous vault operations. Empty clears it.
+/// The caller must clear the override on every exit path.
+///
+/// # Safety
+/// Pointer/length pair must be valid; `err` null or writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_set_thread_backup_dir(
+    dir: *const u8,
+    dir_len: usize,
+    err: *mut SvBuf,
+) -> i32 {
+    // SAFETY: forwarded contract.
+    unsafe {
+        run(std::ptr::null_mut(), err, std::ptr::null_mut(), || {
+            let dir = text(dir, dir_len, "backupDir")?;
+            let path = (!dir.is_empty()).then(|| std::path::PathBuf::from(dir));
+            if path.as_ref().is_some_and(|p| !p.is_absolute()) {
+                return Ok(Err("backup directory must be an absolute path".to_owned()));
+            }
+            symvault_sync::data_safety::set_thread_backup_dir(path);
+            Ok(Ok(Payload::Nothing))
+        })
+    }
+}
+
 /// `OpenVaultWithPassphrase(vaultDir, passphrase) (string, error)`.
 ///
 /// # Safety

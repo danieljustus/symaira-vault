@@ -64,6 +64,16 @@ impl PreMutationGuard for BackupGuard {
     }
 }
 
+thread_local! {
+    static THREAD_BACKUP_DIR: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Override the process setting for synchronous operations on the calling thread.
+/// The host must clear this after the operation, including on failure.
+pub fn set_thread_backup_dir(dir: Option<PathBuf>) {
+    THREAD_BACKUP_DIR.with(|slot| *slot.borrow_mut() = dir);
+}
+
 static EXPLICIT_BACKUP_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 /// Sets the backup directory for this process, taking precedence over
@@ -84,10 +94,14 @@ pub fn set_backup_dir(dir: Option<PathBuf>) {
 /// # Errors
 /// No usable base directory.
 pub fn backup_dir() -> Result<PathBuf, String> {
-    let explicit = EXPLICIT_BACKUP_DIR
-        .lock()
-        .ok()
-        .and_then(|slot| slot.clone());
+    let explicit = THREAD_BACKUP_DIR
+        .with(|slot| slot.borrow().clone())
+        .or_else(|| {
+            EXPLICIT_BACKUP_DIR
+                .lock()
+                .ok()
+                .and_then(|slot| slot.clone())
+        });
     resolve_backup_dir(explicit, |name| {
         std::env::var_os(name).filter(|value| !value.is_empty())
     })

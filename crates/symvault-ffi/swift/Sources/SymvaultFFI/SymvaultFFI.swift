@@ -78,6 +78,29 @@ public enum SymvaultFFI {
         }
     }
 
+    /// Applies a thread-local backup directory for the synchronous body, even
+    /// when another caller changes the process-wide default. Do not suspend.
+    public static func withBackupDirectory<T>(_ dir: String, _ body: () throws -> T) throws -> T {
+        guard !dir.isEmpty else { throw SymvaultFFIError.badArguments("backup directory is empty") }
+        let key = "org.symaira.symvault.backup-scope"
+        guard Thread.current.threadDictionary[key] == nil else {
+            throw SymvaultFFIError.badArguments("nested backup directory scope")
+        }
+        try setThreadBackupDir(dir)
+        Thread.current.threadDictionary[key] = true
+        defer {
+            try? setThreadBackupDir("")
+            Thread.current.threadDictionary.removeObject(forKey: key)
+        }
+        return try body()
+    }
+
+    private static func setThreadBackupDir(_ dir: String) throws {
+        _ = try call([.text(dir)]) { a, _, err in
+            symvault_set_thread_backup_dir(a[0].0, a[0].1, err)
+        }
+    }
+
     public static func openVaultWithPassphrase(vaultDir: String, passphrase: String) throws
         -> String
     {
