@@ -27,9 +27,14 @@ public struct MobileVaultEntry: Sendable, Identifiable, Hashable {
 
 public struct MobileVaultCore: Sendable {
     public let vaultDirectory: URL
+    /// Where the core's D1 pre-migration backup goes; `nil` means
+    /// `MobileVaultBackup.defaultDirectory()` (Application Support, excluded
+    /// from iCloud backup).
+    public let backupDirectory: URL?
 
-    public init(vaultDirectory: URL) {
+    public init(vaultDirectory: URL, backupDirectory: URL? = nil) {
         self.vaultDirectory = vaultDirectory
+        self.backupDirectory = backupDirectory
     }
 
     /// Runs one core call and reports every failure as `.frameworkError` with
@@ -42,6 +47,19 @@ public struct MobileVaultCore: Sendable {
             return try body()
         } catch let error as SymvaultFFIError {
             throw MobileVaultCoreError.frameworkError(error.description)
+        }
+    }
+
+    /// A core call that opens or writes the vault: first points the Rust core
+    /// at the backup-excluded directory (the data-safety gate may back up a
+    /// Go-created vault before its first write), then runs `body`. When the
+    /// directory cannot be prepared the call fails and nothing touches the
+    /// vault.
+    private func vaultCore<T>(_ body: () throws -> T) throws -> T {
+        try core {
+            let directory = try backupDirectory ?? MobileVaultBackup.defaultDirectory()
+            try MobileVaultBackup.prepare(directory)
+            return try SymvaultFFI.withBackupDirectory(directory.standardizedFileURL.path, body)
         }
     }
 
@@ -61,19 +79,19 @@ public struct MobileVaultCore: Sendable {
     }
 
     public func initVault(passphrase: String) throws {
-        try core { try SymvaultFFI.initVault(vaultDir: vaultDirectory.path, passphrase: passphrase) }
+        try vaultCore { try SymvaultFFI.initVault(vaultDir: vaultDirectory.path, passphrase: passphrase) }
     }
 
     /// Unlocks the vault and returns the decrypted master identity string.
     public func open(passphrase: String) throws -> String {
-        try core {
+        try vaultCore {
             try SymvaultFFI.openVaultWithPassphrase(
                 vaultDir: vaultDirectory.path, passphrase: passphrase)
         }
     }
 
     public func readEntry(path: String, identity: String) throws -> MobileVaultEntry {
-        let json = try core {
+        let json = try vaultCore {
             try SymvaultFFI.readEntryJSON(
                 vaultDir: vaultDirectory.path, entryPath: path, identity: identity)
         }
@@ -93,7 +111,7 @@ public struct MobileVaultCore: Sendable {
     }
 
     public func listEntries(prefix: String = "", identity: String) throws -> [String] {
-        let json = try core {
+        let json = try vaultCore {
             try SymvaultFFI.listEntriesJSON(
                 vaultDir: vaultDirectory.path, prefix: prefix, identity: identity)
         }
@@ -104,7 +122,7 @@ public struct MobileVaultCore: Sendable {
     }
 
     public func verifyManifest(identity: String) throws -> Bool {
-        try core {
+        try vaultCore {
             try SymvaultFFI.verifyManifestIntegrity(
                 vaultDir: vaultDirectory.path, identity: identity)
         }

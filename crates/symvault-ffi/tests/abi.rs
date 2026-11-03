@@ -160,3 +160,193 @@ fn header_declares_every_exported_symbol() {
         );
     }
 }
+
+fn set_thread(dir: &str) -> i32 {
+    let mut err = empty();
+    // SAFETY: the path bytes and `err` are valid for the call.
+    let status = unsafe { abi::symvault_set_thread_backup_dir(dir.as_ptr(), dir.len(), &mut err) };
+    unsafe { abi::symvault_buf_free(err) };
+    status
+}
+
+fn push_thread(dir: &str) -> (i32, u64) {
+    let mut err = empty();
+    let mut token = 77_u64;
+    // SAFETY: the path bytes, `token` and `err` are valid for the call.
+    let status = unsafe {
+        abi::symvault_push_thread_backup_dir(dir.as_ptr(), dir.len(), &mut token, &mut err)
+    };
+    unsafe { abi::symvault_buf_free(err) };
+    (status, token)
+}
+
+fn pop_thread(token: u64) -> (i32, String) {
+    let mut err = empty();
+    // SAFETY: `err` is writable.
+    let status = unsafe { abi::symvault_pop_thread_backup_dir(token, &mut err) };
+    let message = text(&err);
+    // SAFETY: `err` came from the library and is freed once.
+    unsafe { abi::symvault_buf_free(err) };
+    (status, message)
+}
+
+fn unwind_thread(token: u64) -> (i32, String) {
+    let mut err = empty();
+    // SAFETY: `err` is writable.
+    let status = unsafe { abi::symvault_unwind_thread_backup_dir(token, &mut err) };
+    let message = text(&err);
+    // SAFETY: `err` came from the library and is freed once.
+    unsafe { abi::symvault_buf_free(err) };
+    (status, message)
+}
+
+/// FFI-001: a host scope (what `SymvaultFFI.withBackupDirectory` does) must hand
+/// back the override that the C API had set before it, on every exit.
+#[test]
+fn a_pushed_scope_restores_an_override_set_through_the_c_api() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let c_dir = dir.path().join("c-set");
+    let outer = dir.path().join("outer-scope");
+    let inner = dir.path().join("inner-scope");
+    let c_text = c_dir.to_str().expect("utf-8");
+    let outer_text = outer.to_str().expect("utf-8");
+    let inner_text = inner.to_str().expect("utf-8");
+
+    assert_eq!(set_thread(c_text), 0);
+    let (status, first) = push_thread(outer_text);
+    assert_eq!(status, 0);
+    assert_ne!(first, 0);
+    assert_eq!(
+        symvault_sync::data_safety::thread_backup_dir(),
+        Some(outer.clone())
+    );
+    let (status, second) = push_thread(inner_text);
+    assert_eq!(status, 0);
+    assert_ne!(second, first, "tokens are unique, not depths");
+    assert_ne!(second, 0);
+    assert_eq!(symvault_sync::data_safety::thread_backup_dir(), Some(inner));
+
+    // The outer token cannot close the inner scope; nothing changes.
+    let (status, message) = pop_thread(first);
+    assert_eq!(status, 1, "{message}");
+    assert!(
+        message.contains("not the innermost open scope of this thread"),
+        "{message}"
+    );
+    assert_eq!(pop_thread(second).0, 0);
+    assert_eq!(
+        symvault_sync::data_safety::thread_backup_dir(),
+        Some(outer.clone())
+    );
+    assert_eq!(pop_thread(first).0, 0);
+    assert_eq!(
+        symvault_sync::data_safety::thread_backup_dir(),
+        Some(c_dir),
+        "the C-set override survives the scopes"
+    );
+    assert_eq!(pop_thread(first).0, 1, "a closed scope's token is refused");
+
+    // Empty clears; a scope over a cleared thread restores "no override".
+    assert_eq!(set_thread(""), 0);
+    let (status, token) = push_thread(outer_text);
+    assert_eq!(status, 0);
+    assert_eq!(pop_thread(token).0, 0);
+    assert_eq!(symvault_sync::data_safety::thread_backup_dir(), None);
+}
+
+/// FFI-001 review: a token is a process-unique serial. After push/pop/push the
+/// second scope sits at the first one's depth, yet the first token stays dead.
+#[test]
+fn a_closed_scopes_token_is_refused_when_a_later_scope_has_the_same_depth() {
+    assert_eq!(set_thread(""), 0);
+    let (status, a) = push_thread("/tmp/ffi-stale-a");
+    assert_eq!(status, 0);
+    assert_eq!(pop_thread(a).0, 0);
+    let (status, b) = push_thread("/tmp/ffi-stale-b");
+    assert_eq!(status, 0);
+    assert_ne!(a, b);
+    let (status, message) = pop_thread(a);
+    assert_eq!(status, 1, "{message}");
+    assert_eq!(unwind_thread(a).0, 1);
+    assert_eq!(
+        symvault_sync::data_safety::thread_backup_dir(),
+        Some(std::path::PathBuf::from("/tmp/ffi-stale-b")),
+        "the stale token changed nothing"
+    );
+    assert_eq!(pop_thread(b).0, 0);
+    assert_eq!(symvault_sync::data_safety::thread_backup_dir(), None);
+}
+
+/// Both threads hold exactly one open scope; neither can close the other's.
+#[test]
+fn a_token_from_another_thread_is_refused_at_equal_depth() {
+    assert_eq!(set_thread(""), 0);
+    let (status, mine) = push_thread("/tmp/ffi-thread-main");
+    assert_eq!(status, 0);
+    let other = std::thread::spawn(move || {
+        let (status, theirs) = push_thread("/tmp/ffi-thread-other");
+        assert_eq!(status, 0);
+        let refused = (pop_thread(mine).0, unwind_thread(mine).0);
+        let still = symvault_sync::data_safety::thread_backup_dir();
+        assert_eq!(pop_thread(theirs).0, 0);
+        (theirs, refused, still)
+    })
+    .join()
+    .expect("thread");
+    assert_ne!(other.0, mine);
+    assert_eq!(other.1, (1, 1), "the foreign token is refused");
+    assert_eq!(
+        other.2,
+        Some(std::path::PathBuf::from("/tmp/ffi-thread-other"))
+    );
+    assert_eq!(
+        symvault_sync::data_safety::thread_backup_dir(),
+        Some(std::path::PathBuf::from("/tmp/ffi-thread-main"))
+    );
+    assert_eq!(pop_thread(mine).0, 0);
+}
+
+/// The Swift defer's recovery after a refused pop: unwind restores the value
+/// saved by that exact scope and drops the leaked inner scope.
+#[test]
+fn unwind_restores_the_named_scope_and_drops_leaked_inner_scopes() {
+    assert_eq!(set_thread("/tmp/ffi-unwind-base"), 0);
+    let (_, outer) = push_thread("/tmp/ffi-unwind-outer");
+    let (_, leaked) = push_thread("/tmp/ffi-unwind-leaked");
+    assert_eq!(
+        pop_thread(outer).0,
+        1,
+        "the leaked inner scope blocks the pop"
+    );
+    assert_eq!(unwind_thread(outer).0, 0);
+    assert_eq!(
+        symvault_sync::data_safety::thread_backup_dir(),
+        Some(std::path::PathBuf::from("/tmp/ffi-unwind-base"))
+    );
+    assert_eq!(pop_thread(leaked).0, 1, "dropped with the unwound scope");
+    let (status, message) = unwind_thread(outer);
+    assert_eq!(status, 1, "{message}");
+    assert!(
+        message.contains("not an open scope of this thread"),
+        "{message}"
+    );
+    assert_eq!(set_thread(""), 0);
+}
+
+#[test]
+fn a_refused_push_leaves_the_thread_untouched() {
+    assert_eq!(set_thread(""), 0);
+    let (status, token) = push_thread("relative/dir");
+    assert_eq!(status, 1);
+    assert_eq!(token, 0, "no scope was opened");
+    assert_eq!(symvault_sync::data_safety::thread_backup_dir(), None);
+    let mut err = empty();
+    // SAFETY: a null token pointer is the misuse under test; `err` is writable.
+    let status = unsafe {
+        abi::symvault_push_thread_backup_dir(b"/x".as_ptr(), 2, ptr::null_mut(), &mut err)
+    };
+    assert_eq!(status, 3);
+    // SAFETY: `err` came from the library.
+    unsafe { abi::symvault_buf_free(err) };
+    assert_eq!(symvault_sync::data_safety::thread_backup_dir(), None);
+}

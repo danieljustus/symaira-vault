@@ -153,6 +153,36 @@ Use the narrow C ABI.
   4. `symvault-store`'s `prepare_entry` keeps an `Entry.path` that Go's
      `cloneEntry` drops; the bridge clears it before writing so stored and
      returned JSON match Go. The store still differs for other callers.
+  5. **D-BACKUP (decision D1, DIST-005).** Go's `pkg/mobilebind` never took a
+     backup. Rust takes a verified backup of a vault without a `.symvault-rust`
+     marker before the first mutation and then writes the marker. An iOS app has
+     no `$HOME`/`$XDG_STATE_HOME`, so `symvault_set_backup_dir` (Rust-only,
+     additive, ABI revision stays 1) names the directory; an empty path restores
+     the environment default, a relative path is refused, and with no directory
+     at all the first mutation is refused before anything is written. The
+     backup holds the same encrypted files as the vault, so the client
+     (`MobileVaultCore`, `MobileVaultBackup`) creates
+     `Application Support/symaira-vault-backups` (`0700`; not `Caches`, which the
+     system may purge), sets `isExcludedFromBackup`, reads the flag back and
+     only then calls `SymvaultFFI.setBackupDir`, before every call that opens or
+     writes the vault; if any step fails the call fails and the vault is not
+     touched. The thread-scoped form (`withBackupDirectory`) uses three more
+     additive exports, `symvault_push_thread_backup_dir`,
+     `symvault_pop_thread_backup_dir` and `symvault_unwind_thread_backup_dir`
+     (and `symvault_set_thread_backup_dir` to replace a thread's value
+     outright). A push returns a process-unique, never-reused scope token bound
+     to the pushing thread; a pop restores exactly the displaced value and
+     refuses, changing nothing, any token that is not that thread's innermost
+     open scope (already closed, out of order, or from another thread: a bare
+     stack depth would have accepted those whenever depths coincided). If a pop
+     is refused the Swift scope unwinds to the value that scope saved (dropping
+     leaked inner scopes, like the Rust guard) and asserts in debug builds,
+     rather than leaving the scoped directory installed. These are side effects, not error texts, so they are recorded under
+     `side_effects` in `known-divergences.json` (four `data-safety-backup`
+     entries, each naming the tests that pin it; `tests/backup_dir.rs` fails on
+     a missing pin or an unrecorded test). Verified on macOS (`swift test`
+     of the client package, Rust ABI tests); the exclusion flag is honoured by
+     iCloud/iTunes backup on a device, which was not run (FFI-002).
 - Fixed by the FFI-001 review (no longer divergences, each with fixture cases
   recorded from the live Go functions):
   - **Nesting.** `WriteEntryJSON` parses iteratively; Go answers `vault

@@ -448,6 +448,9 @@ final class FixtureReplayTests: XCTestCase {
         if let tree = after["tree"] as? [String] {
             var actual: [String] = []
             collect(base, base, &actual)
+            // Declared D1 difference: Rust vaults carry the `.symvault-rust`
+            // marker (the Rust replay drops it the same way).
+            actual.removeAll { $0 == ".symvault-rust" }
             let byBytes: ([String]) -> [String] = { $0.sorted { Array($0.utf8).lexicographicallyPrecedes(Array($1.utf8)) } }
             if byBytes(actual) != tree { return "tree \(byBytes(actual)), want \(tree)" }
         }
@@ -487,6 +490,18 @@ final class FixtureReplayTests: XCTestCase {
         let seed = try XCTUnwrap(fixture["seed"] as? JSON)
         let files = try XCTUnwrap((seed["vault"] as? JSON)?["files"] as? [JSON])
         let cases = try XCTUnwrap(fixture["cases"] as? [JSON])
+
+        // The seed vaults carry no `.symvault-rust` marker, so the data-safety
+        // gate (decision D1) backs each one up before its first mutation. Send
+        // those backups to a throw-away directory through the host API, never
+        // to the developer's state directory.
+        let backupRoot = FileManager.default.temporaryDirectory.path
+            + "/symvault-ffi-backups-\(UUID().uuidString)"
+        try SymvaultFFI.setBackupDir(backupRoot)
+        defer {
+            try? SymvaultFFI.setBackupDir("")
+            try? FileManager.default.removeItem(atPath: backupRoot)
+        }
 
         var counts: [String: Int] = [:]
         var failures: [String] = []

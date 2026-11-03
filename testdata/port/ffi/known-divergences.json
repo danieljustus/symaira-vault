@@ -194,5 +194,71 @@
       "reason": "Go opens the vault and fails only at the symlinked file with ELOOP (a different, later text); Rust never follows a symlink inside the vault tree: opening, listing and verifying walk the whole vault with O_NOFOLLOW (STORE hardening, crates/symvault-store/src/rooted.rs), so one symlink anywhere refuses the whole operation before any entry is touched.",
       "expected_rust": "vault path is a symlink: $ROOT/vault/entries/top.age"
     }
+  ],
+  "side_effects_comment": "Side-effect differences the byte-comparing replay cannot express (they are not error texts, so they have no expected_rust). The recorded Go bridge never took a backup, so no fixture case triggers them (the replay pre-marks its seed vaults). Each entry names the tests that pin the Rust behavior; crates/symvault-ffi/tests/backup_dir.rs fails when an entry loses its pin, when a pin names a test that does not exist, or when a test of that file has no entry.",
+  "side_effects": [
+    {
+      "id": "D1/first-mutation-backup",
+      "category": "data-safety-backup",
+      "owner": "symvault-sync data_safety (RUST-014 / DIST-005), decision D1",
+      "approval": "decision D1 (maintainer, docs/rust-port/contract-matrix.md DIST-005); mobile bridge application recorded in ADR 0031 (divergence D-BACKUP)",
+      "reason": "Go's pkg/mobilebind wrote the vault in place and kept no copy. Rust takes a verified backup of a vault that carries no .symvault-rust marker before the first mutation (OpenVaultWithPassphrase heal/config rewrite, InitVault over an existing vault, WriteEntryJSON) and then writes the marker into the vault directory.",
+      "go_behavior": "no backup, no marker file",
+      "rust_behavior": "a Go-faithful tar.gz (pre-rust-<label>-<stamp>.tar.gz) is written to the backup directory, restored into scratch and compared with the live tree; only then is the marker written and the mutation performed; later mutations take no further backup",
+      "pinned_by": [
+        "crates/symvault-ffi/tests/backup_dir.rs::the_hosts_backup_directory_receives_the_first_mutation_backup",
+        "crates/symvault-ffi/tests/backup_dir.rs::thread_override_resists_global_directory_interleaving",
+        "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testBackupDirectoryIsExcludedFromBackupAndUsedByTheDataSafetyGate"
+      ]
+    },
+    {
+      "id": "D1/refused-without-backup-directory",
+      "category": "data-safety-backup",
+      "owner": "symvault-sync data_safety (RUST-014 / DIST-005), decision D1",
+      "approval": "decision D1 (maintainer, docs/rust-port/contract-matrix.md DIST-005); mobile bridge application recorded in ADR 0031 (divergence D-BACKUP)",
+      "reason": "Go has no backup directory concept. When the host sets none and neither $XDG_STATE_HOME nor $HOME/$USERPROFILE exists, Rust cannot take the D1 backup and refuses the first mutation instead of writing without one.",
+      "go_behavior": "the write succeeds",
+      "rust_behavior": "the write fails with `cannot determine the backup directory: set HOME or XDG_STATE_HOME` before any vault byte or marker is written",
+      "pinned_by": [
+        "crates/symvault-ffi/tests/backup_dir.rs::without_any_directory_the_first_mutation_is_refused_and_nothing_is_written"
+      ]
+    },
+    {
+      "id": "D1/set-backup-dir-fallback",
+      "category": "data-safety-backup",
+      "owner": "symvault-sync data_safety (RUST-014 / DIST-005), decision D1",
+      "approval": "decision D1 (maintainer, docs/rust-port/contract-matrix.md DIST-005); mobile bridge application recorded in ADR 0031 (divergence D-BACKUP)",
+      "reason": "symvault_set_backup_dir is a Rust-only addition to the C ABI (additive; ABI revision stays 1). An empty path clears the host's choice and restores $XDG_STATE_HOME/symvault/backups, then $HOME/.local/state/symvault/backups; a relative path is refused and keeps the previous choice.",
+      "go_behavior": "no such function",
+      "rust_behavior": "symvault_set_backup_dir(dir): absolute dir honoured and taking precedence over the environment; empty restores the environment default; relative dir returns status 1 `backup directory must be an absolute path`; symvault_push_thread_backup_dir / symvault_pop_thread_backup_dir / symvault_unwind_thread_backup_dir (also additive) scope a calling-thread override: push returns a process-unique, never-reused token bound to the pushing thread, pop restores exactly the displaced value and refuses (status 1, no change) any token that is not that thread's innermost open scope, unwind restores the named scope and drops leaked inner ones",
+      "pinned_by": [
+        "crates/symvault-ffi/tests/backup_dir.rs::an_unset_directory_falls_back_to_xdg_state_home_then_home",
+        "crates/symvault-ffi/tests/backup_dir.rs::a_relative_directory_is_refused_and_keeps_the_previous_choice",
+        "crates/symvault-ffi/tests/abi.rs::the_host_chooses_the_backup_directory",
+        "crates/symvault-ffi/tests/abi.rs::a_pushed_scope_restores_an_override_set_through_the_c_api",
+        "crates/symvault-ffi/tests/abi.rs::a_closed_scopes_token_is_refused_when_a_later_scope_has_the_same_depth",
+        "crates/symvault-ffi/tests/abi.rs::a_token_from_another_thread_is_refused_at_equal_depth",
+        "crates/symvault-ffi/tests/abi.rs::unwind_restores_the_named_scope_and_drops_leaked_inner_scopes",
+        "crates/symvault-sync/src/data_safety.rs::a_stale_token_is_refused_even_when_the_depth_matches_again",
+        "crates/symvault-sync/src/data_safety.rs::a_token_from_another_thread_is_refused_even_at_equal_depth",
+        "crates/symvault-sync/src/data_safety.rs::unwind_closes_the_named_scope_and_everything_inside_it",
+        "crates/symvault-ffi/swift/Tests/SymvaultFFITests/BackupScopeTests.swift::testARefusedPopStillRestoresThroughTheUnwind"
+      ]
+    },
+    {
+      "id": "D1/ios-backup-excluded-from-icloud",
+      "category": "data-safety-backup",
+      "owner": "symvault-sync data_safety (RUST-014 / DIST-005), decision D1",
+      "approval": "decision D1 (maintainer, docs/rust-port/contract-matrix.md DIST-005); mobile bridge application recorded in ADR 0031 (divergence D-BACKUP)",
+      "reason": "The backup holds the same encrypted files as the vault, which already travels with the user's iCloud Drive/device backup. On iOS the host (MobileVaultCore) creates Application Support/symaira-vault-backups (0700), sets isExcludedFromBackup, reads the flag back and only then runs the vault call with a thread-scoped SymvaultFFI backup directory; if any step fails the vault call fails before the core touches the vault. Caches is not used (the system may purge it). A physical-device run is still outstanding (FFI-002).",
+      "go_behavior": "no backup, so nothing to exclude",
+      "rust_behavior": "vault calls in MobileVaultCore point the core at the excluded directory first; an unusable directory fails the call",
+      "pinned_by": [
+        "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testBackupDirectoryIsExcludedFromBackupAndUsedByTheDataSafetyGate",
+        "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testDefaultBackupDirectoryIsApplicationSupportNotCaches",
+        "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testUnusableBackupDirectoryFailsTheCallBeforeTheVaultIsTouched",
+        "client/Tests/SymvaultIOSTests/MobileVaultCoreTests.swift::testExistingBackupDirectoryIsMadePrivateAndSymlinkIsRefused"
+      ]
+    }
   ]
 }

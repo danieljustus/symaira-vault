@@ -78,6 +78,67 @@ public enum SymvaultFFI {
         }
     }
 
+    /// Applies a thread-local backup directory for the synchronous body, even
+    /// when another caller changes the process-wide default. On every exit
+    /// (return or throw) the thread's previous override is restored exactly,
+    /// whether it was set by an enclosing scope, the C ABI or Rust. Scopes nest.
+    /// Do not suspend inside `body`.
+    public static func withBackupDirectory<T>(_ dir: String, _ body: () throws -> T) throws -> T {
+        guard !dir.isEmpty else { throw SymvaultFFIError.badArguments("backup directory is empty") }
+        let token = try pushThreadBackupDir(dir)
+        defer { closeBackupScope(token) }
+        return try body()
+    }
+
+    /// Pops scope `token`. A refused pop would leave the scoped directory
+    /// installed on this thread, so fall back to unwinding to the value that scope
+    /// saved. Every refusal is reported through `failure` (a debug assertion by
+    /// default).
+    static func closeBackupScope(
+        _ token: UInt64, failure: (String) -> Void = { assertionFailure($0) }
+    ) {
+        do {
+            try popThreadBackupDir(token)
+        } catch {
+            failure("backup directory scope pop refused: \(error)")
+            do {
+                try unwindThreadBackupDir(token)
+            } catch {
+                failure("backup directory scope unwind refused: \(error)")
+            }
+        }
+    }
+
+    static func pushThreadBackupDir(_ dir: String) throws -> UInt64 {
+        var token: UInt64 = 0
+        _ = try call([.text(dir)]) { a, _, err in
+            symvault_push_thread_backup_dir(a[0].0, a[0].1, &token, err)
+        }
+        return token
+    }
+
+    private static func popThreadBackupDir(_ token: UInt64) throws {
+        _ = try call { _, err in
+            symvault_pop_thread_backup_dir(token, err)
+        }
+    }
+
+    /// Restores the value saved by scope `token` and closes scopes leaked inside
+    /// it. Recovery after a refused pop.
+    private static func unwindThreadBackupDir(_ token: UInt64) throws {
+        _ = try call { _, err in
+            symvault_unwind_thread_backup_dir(token, err)
+        }
+    }
+
+    /// Replaces the calling thread's override outright (empty clears it). Internal:
+    /// tests use it to set a value that `withBackupDirectory` must preserve.
+    static func setThreadBackupDir(_ dir: String) throws {
+        _ = try call([.text(dir)]) { a, _, err in
+            symvault_set_thread_backup_dir(a[0].0, a[0].1, err)
+        }
+    }
+
     public static func openVaultWithPassphrase(vaultDir: String, passphrase: String) throws
         -> String
     {
