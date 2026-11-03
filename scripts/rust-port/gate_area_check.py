@@ -427,7 +427,9 @@ def signal(r):
     worktree_clean()
     eq(r["expect_mismatch"], False, "expect_mismatch")
     for impl, rows in both(r):
-        size(rows, 33, f"{impl} signal observations")
+        size(rows, 41, f"{impl} signal observations")
+    # Go-only armed-clipboard observations (the Rust leg would need the real pasteboard).
+    size(r["go_only"], 3, "go-only clipboard observations")
 
 
 def http_drain(r):

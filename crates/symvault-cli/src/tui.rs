@@ -131,11 +131,19 @@ pub fn run(root: &Path, identity: &Identity) -> Result<(), String> {
     let clipboard = symvault_platform::native_text_clipboard();
     let mut model = Model::new(root, identity, clipboard, Duration::from_secs(ttl))?;
     let stopping = Arc::new(AtomicBool::new(false));
-    let signal = stopping.clone();
-    ctrlc::set_handler(move || {
-        signal.store(true, Ordering::Release);
-    })
-    .map_err(|_| "install UI signal handler")?;
+    let interrupted = Arc::new(AtomicBool::new(false));
+    // Go's bubbletea program quits cleanly on SIGTERM, fails an external SIGINT
+    // with `program was interrupted` (exit 1), and leaves SIGHUP/SIGQUIT to the
+    // Go runtime (death by SIGHUP, exit 2) without restoring the terminal.
+    // `process_signals` registers exactly that set (CLI-007).
+    let (stop_flag, interrupt_flag) = (stopping.clone(), interrupted.clone());
+    crate::process_signals::install_with_signal(Box::new(move |signal| {
+        if signal == INTERRUPT_SIGNAL {
+            interrupt_flag.store(true, Ordering::Release);
+        }
+        stop_flag.store(true, Ordering::Release);
+    }))
+    .map_err(|error| format!("install UI signal handler: {error}"))?;
     let mut mode = TerminalMode::enter().map_err(|e| format!("enter UI terminal: {e}"))?;
     let mut terminal =
         Terminal::new(CrosstermBackend::new(io::stdout())).map_err(|e| e.to_string())?;
@@ -206,8 +214,20 @@ pub fn run(root: &Path, identity: &Identity) -> Result<(), String> {
     })();
     model.clear_clipboard();
     mode.leave();
+    if result.is_ok() && interrupted.load(Ordering::Acquire) {
+        return Err(INTERRUPTED_MESSAGE.into());
+    }
     result
 }
+
+/// SIGINT; the same number on every Unix and what `process_signals` reports
+/// for the Windows console interrupt.
+const INTERRUPT_SIGNAL: i32 = 2;
+
+/// Go's `ui` failure for an external SIGINT: bubbletea's `ErrInterrupted`
+/// wrapped as `ui failed: %w` (observed against the real oracle).
+pub(crate) const INTERRUPTED_MESSAGE: &str =
+    "ui failed: program was killed: program was interrupted";
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Mode {

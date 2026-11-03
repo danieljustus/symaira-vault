@@ -397,6 +397,20 @@ fn signal_cancel_error(_signal: Option<i32>) -> SecureInputError {
     SecureInputError::Canceled
 }
 
+/// SIGINT/SIGTERM that cleared an armed clipboard timer also request the stdio
+/// shutdown, but only when a terminator is installed. Embedders and tests
+/// without one keep the clear-and-continue behavior.
+#[cfg(unix)]
+fn shutdown_after_clipboard_clear(signal: i32) {
+    use signal_hook::consts::signal::{SIGINT, SIGTERM};
+
+    if matches!(signal, SIGINT | SIGTERM)
+        && let Some(terminator) = STDIO_SIGNAL_TERMINATOR.get()
+    {
+        terminator(signal);
+    }
+}
+
 #[cfg(unix)]
 fn dispatch_stdio_signal(signal: i32) {
     let Some(state) = SECURE_INPUT_SIGNAL_STATE.get() else {
@@ -411,12 +425,11 @@ fn dispatch_stdio_signal(signal: i32) {
         let prompt_active = state.prompt_active;
         let active = state.clipboard_auto_clear.clone();
         if active.is_some() {
-            if prompt_active
-                && state.secure_input_prompt
-                && signal != signal_hook::consts::signal::SIGHUP
-            {
-                // Go's secure-input helper has its own signal subscription, so
-                // it cancels the prompt while the clipboard subscription clears.
+            if prompt_active && signal != signal_hook::consts::signal::SIGHUP {
+                // Go's prompt (secure-input helper subscription or the serve
+                // context the approval read waits on) is canceled by the same
+                // signal that makes the clipboard subscription clear. SIGHUP is
+                // only subscribed by the clipboard timer, so it cancels nothing.
                 state.pending_signal = signal as usize;
             }
         } else {
@@ -442,6 +455,15 @@ fn dispatch_stdio_signal(signal: i32) {
             .is_some_and(|current| current.id == active.id)
         {
             inner.clipboard_auto_clear = None;
+        }
+        drop(inner);
+        // Go's `serve` subscribes SIGINT/SIGTERM next to the clipboard timer:
+        // both subscribers receive the signal, so the timer clears and the
+        // server shuts down (real Go process: armed SIGTERM clears, then exit 0).
+        // SIGHUP is only subscribed by the timer: clear, then keep serving.
+        // A pending prompt performs the shutdown when its scope ends.
+        if !prompt_active {
+            shutdown_after_clipboard_clear(signal);
         }
         return;
     }
@@ -2055,6 +2077,111 @@ mod tests {
                     .contains(&format!("RUST_PROMPT_SIGNAL_RECEIPT signal={signal_name}")),
                 "{signal_name} child produced no receipt: {output:?}"
             );
+        }
+    }
+
+    /// Go's `serve` and the clipboard timer both subscribe SIGINT/SIGTERM, so a
+    /// signal during an armed auto-clear clears the clipboard AND shuts the
+    /// stdio server down (real Go process: armed SIGTERM clears, then exit 0).
+    /// SIGHUP is subscribed by the timer only: clear, then keep serving. With
+    /// the stdio terminator installed, an armed signal outside a prompt must
+    /// therefore request the shutdown exactly once, except SIGHUP; during an
+    /// ordinary approval prompt the prompt is canceled with Go's
+    /// context-canceled error and the shutdown is requested once. The child owns
+    /// the process-wide router.
+    #[cfg(unix)]
+    #[test]
+    fn stdio_armed_clipboard_signal_clears_and_requests_shutdown() {
+        use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGTERM};
+        use std::{
+            env,
+            process::Command,
+            sync::{atomic::AtomicI32, mpsc},
+        };
+
+        static TERMINATED: AtomicUsize = AtomicUsize::new(0);
+        static LAST_SIGNAL: AtomicI32 = AtomicI32::new(0);
+
+        if let Ok(spec) = env::var("SYMVAULT_PLATFORM_ARMED_SIGNAL_CHILD") {
+            let (signal_name, mode) = spec.split_once(':').expect("signal:mode");
+            let signal = match signal_name {
+                "SIGINT" => SIGINT,
+                "SIGTERM" => SIGTERM,
+                _ => SIGHUP,
+            };
+            let clipboard = Arc::new(SignalClipboard::default());
+            install_stdio_clipboard_signal_router(clipboard.clone()).unwrap();
+            assert!(set_stdio_signal_terminator(|signal| {
+                LAST_SIGNAL.store(signal, Ordering::SeqCst);
+                TERMINATED.fetch_add(1, Ordering::SeqCst);
+            }));
+            let (cancel, canceled) = mpsc::channel();
+            let clear_claimed = Arc::new(AtomicBool::new(false));
+            let registration =
+                register_stdio_clipboard_auto_clear(cancel, Arc::clone(&clear_claimed))
+                    .expect("installed process router registers active auto-clear");
+            if mode == "prompt" {
+                let approval = run_approval(&approved_request(), Some(SignalTerminal(signal)));
+                assert!(!approval.approved && !approval.remembered);
+                assert_eq!(
+                    approval.error.expect("signal cancels approval").to_string(),
+                    "failed to read from terminal: context canceled"
+                );
+            } else {
+                signal_hook::low_level::raise(signal).unwrap();
+            }
+            canceled
+                .recv_timeout(Duration::from_secs(30))
+                .expect("armed signal cancels the timer");
+            assert_eq!(clipboard.0.load(Ordering::SeqCst), 1);
+            assert!(clear_claimed.load(Ordering::SeqCst));
+            drop(registration);
+            let expected = usize::from(signal != SIGHUP);
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while TERMINATED.load(Ordering::SeqCst) < expected && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            // Settle: a wrongly requested SIGHUP shutdown or a duplicate request
+            // would land in this window.
+            std::thread::sleep(Duration::from_millis(300));
+            println!(
+                "RUST_ARMED_SIGNAL_RECEIPT {spec} clear={} shutdown_requests={} last={}",
+                clipboard.0.load(Ordering::SeqCst),
+                TERMINATED.load(Ordering::SeqCst),
+                LAST_SIGNAL.load(Ordering::SeqCst)
+            );
+            return;
+        }
+
+        for (signal_name, signal) in [("SIGINT", SIGINT), ("SIGTERM", SIGTERM), ("SIGHUP", SIGHUP)]
+        {
+            for mode in ["idle", "prompt"] {
+                if signal == SIGHUP && mode == "prompt" {
+                    continue;
+                }
+                let output = Command::new(env::current_exe().unwrap())
+                    .arg("--exact")
+                    .arg("approval::tests::stdio_armed_clipboard_signal_clears_and_requests_shutdown")
+                    .arg("--nocapture")
+                    .env(
+                        "SYMVAULT_PLATFORM_ARMED_SIGNAL_CHILD",
+                        format!("{signal_name}:{mode}"),
+                    )
+                    .output()
+                    .expect("run armed clipboard signal child");
+                assert!(
+                    output.status.success(),
+                    "{signal_name}:{mode} child failed: {output:?}"
+                );
+                let requests = usize::from(signal != SIGHUP);
+                let last = if signal == SIGHUP { 0 } else { signal };
+                assert!(
+                    String::from_utf8_lossy(&output.stdout).contains(&format!(
+                        "RUST_ARMED_SIGNAL_RECEIPT {signal_name}:{mode} clear=1 shutdown_requests={requests} last={last}"
+                    )),
+                    "{signal_name}:{mode} child receipt mismatch: {output:?}"
+                );
+            }
         }
     }
 }

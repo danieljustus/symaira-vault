@@ -15,12 +15,19 @@
 //! are cleared unconditionally afterwards and the process exits 0; a second
 //! signal during the drain is swallowed.
 //!
+//! `mcp --stdio --allow-locked` installs the same shutdown (Go subscribes the
+//! signals in `serve` before it branches on the vault; real-process observation
+//! in `signal_process_contract.py`, cases `mcp-locked-*`).
+//!
+//! Armed clipboard auto-clear (real Go process): SIGINT/SIGTERM clear the
+//! clipboard and then shut the server down (`serve` and the timer both
+//! subscribe); SIGHUP is subscribed by the timer only, so it clears and the
+//! server keeps serving. The router in `symvault-platform` `approval.rs`
+//! requests this shutdown through the terminator installed here.
+//!
 //! Known residuals against Go (#1242):
-//! - stdio: a signal while a clipboard auto-clear is armed outside a secure-input
-//!   prompt only clears the clipboard and the server keeps running; Go also shuts down.
-//!   (During a secure-input prompt the signal also ends the process, see
-//!   below.)
-//! - `mcp --stdio --allow-locked` keeps the OS default signal actions.
+//! - Go's SIGQUIT goroutine dump (ADR 0034 item 11) is a maintainer decision and
+//!   is not reproduced here.
 //!
 //! Signal during an in-flight stdio prompt (#1472, Go oracle 0cc78062 under a
 //! controlling PTY): the in-flight request is answered with Go's

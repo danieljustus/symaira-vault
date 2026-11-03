@@ -1081,6 +1081,44 @@ Residuals (probed, not fixed):
 | MCP `execute_with_secret` child (own group, #1242) | receives a terminal Ctrl-C | not forwarded: the MCP server has its own shutdown path (`mcp_shutdown`) |
 | secret file cleanup when the parent dies from the signal | not applicable | `file use` temporary files are not zeroed on death by signal (unchanged) |
 
+## CLI-007: residual packet (`--allow-locked`, `ui`, armed clipboard), 2026-11-03
+
+Measured on the real Go oracle (`45b8577e`, same as `signal_process_contract.py`), fixed in Rust, and
+pinned by `make signal-process-contract` (41 compared observations per implementation, 3 Go-only).
+
+| Surface | Go (real process) | Rust before | Rust now |
+| --- | --- | --- | --- |
+| `mcp --stdio --allow-locked`, SIGINT/SIGTERM | exit 0, `.runtime-port` removed (`serve` subscribes before it branches on the vault) | OS default action (death by signal) | exit 0, records cleared |
+| same, SIGQUIT | one `Received SIGQUIT, shutting down gracefully...`, exit 0 | death by SIGQUIT | same as Go |
+| same, SIGHUP | death by SIGHUP | same | same |
+| stdio `mcp` with an armed clipboard timer, SIGINT/SIGTERM | clipboard cleared, **then the server shuts down** (`serve` and the timer both subscribe), exit 0 | cleared, server kept running | cleared, shutdown requested through the stdio terminator (not when a prompt is active: the prompt's scope ends the process) |
+| same, SIGHUP | cleared, server keeps serving (only the timer subscribes) | same | same |
+| `ui`, SIGTERM | clean quit, exit 0, terminal restored | same | same |
+| `ui`, SIGINT | `Error: ui failed: program was killed: program was interrupted` twice, exit 1, terminal restored | exit 0, silent | same as Go |
+| `ui`, SIGHUP | death by SIGHUP, terminal left raw | exit 0, terminal restored (`ctrlc` `termination`) | same as Go |
+| `ui`, SIGQUIT | exit 2 (goroutine dump), terminal left raw | death by SIGQUIT | exit 2, terminal left raw |
+
+The task description called the clipboard row "only clears and the server keeps running"; the
+real Go process shows that this is true for SIGHUP only. Ordinary approval prompts under an armed
+timer are now canceled by SIGINT/SIGTERM as well (Go cancels them through the serve context); this
+combination is covered by the injected-clipboard process test, not by a Go observation.
+
+The armed-clipboard Go observation (`go_only` in the receipt) uses fake `pbcopy`/`xclip`/... tools on a
+PATH that cannot reach the real ones; the Rust CLI would use `/usr/bin/pbcopy`, so its leg is the
+process test `approval::tests::stdio_armed_clipboard_signal_clears_and_requests_shutdown`.
+
+Bounded claims (no Go-vs-Rust observation, listed so they stay visible):
+
+- `sync` / git push: Go pulls through in-process go-git and pushes through system `git` under
+  `exec.CommandContext(ctx, ...)` with a plain context and no signal hook, so the Go runtime default applies.
+  A hanging remote could not be staged hermetically: a local bare remote with a sleeping `pre-receive` hook
+  made Go fail before the push with `pull failed: reference not found`.
+- Intake spool: the idle `intake watch` spool directory is part of the compared on-disk state (removed on
+  SIGINT/SIGTERM, left on SIGHUP/SIGQUIT in both implementations). A signal during an in-flight processing step is not recorded.
+- `ui` is observed on a macOS pseudo-terminal for SIGINT/SIGTERM/SIGHUP/SIGQUIT only; Linux CI is pending, and
+  a signal while the `$EDITOR` hand-off is running is not observed.
+- Go's SIGQUIT goroutine dump (ADR 0034 item 11) remains a maintainer decision and is not reproduced.
+
 ## APPROVAL-001: frozen `approval list|decide` contract, 2026-11-03
 
 The live differential (`approval_queue_differential.rs`) builds a Go handler seam with `go build`, so it ends with

@@ -1,5 +1,6 @@
 //! Go-compatible signal handling for the long-running non-MCP commands
-//! (`broker`, `run --broker`, `intake watch`), CLI-007 / #1242.
+//! (`broker`, `run --broker`, `intake watch`, and the `ui` terminal UI),
+//! CLI-007 / #1242.
 //!
 //! Go subscribes exactly SIGINT and SIGTERM in these commands (`signal.Notify`
 //! / `signal.NotifyContext`) and treats them as a clean stop that returns
@@ -44,6 +45,13 @@
 //! registered child group: the child never outlives the parent holding the
 //! injected secrets (ADR 0034 item 12, CLI-007).
 //!
+//! `ui` (bubbletea in Go) uses the same set with a signal-aware stop: SIGTERM
+//! quits cleanly (exit 0, terminal restored), an external SIGINT also restores
+//! the terminal but fails with `ui failed: program was killed: program was
+//! interrupted` (exit 1); SIGHUP and SIGQUIT end the process like Go's runtime
+//! and leave the terminal as it is (real-process PTY observation in
+//! `signal_process_contract.py`, cases `ui-*`).
+//!
 //! Windows keeps `ctrlc` (Ctrl-C and Ctrl-Break in a console) unchanged;
 //! its native evidence lives in `egress_contract.py` and
 //! `intake_watch_contract.py`.
@@ -54,9 +62,14 @@ use std::path::PathBuf;
 /// Ctrl-Break on Windows).
 pub(crate) type StopCallback = Box<dyn Fn() + Send + 'static>;
 
+/// Like [`StopCallback`] for commands whose Go counterpart tells SIGINT from
+/// SIGTERM (`ui`: bubbletea fails an interrupt with `program was interrupted`
+/// and quits cleanly on SIGTERM). Receives the signal number.
+pub(crate) type SignalStopCallback = Box<dyn Fn(i32) + Send + 'static>;
+
 #[cfg(unix)]
 mod unix {
-    use super::{PathBuf, StopCallback};
+    use super::{PathBuf, SignalStopCallback};
     use signal_hook::{
         consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM},
         iterator::Signals,
@@ -100,7 +113,7 @@ mod unix {
 
     pub(crate) fn install(
         cleanup_dir: Option<PathBuf>,
-        on_stop: Option<StopCallback>,
+        on_stop: Option<SignalStopCallback>,
     ) -> Result<(), String> {
         let mut signals = Signals::new(registered_signals(on_stop.is_some(), ignored_at_startup))
             .map_err(|error| format!("register process signal listener: {error}"))?;
@@ -111,7 +124,7 @@ mod unix {
                     if matches!(signal, SIGINT | SIGTERM)
                         && let Some(stop) = &on_stop
                     {
-                        stop();
+                        stop(signal);
                         continue;
                     }
                     // Go's child shares the caller's group and gets the same
@@ -145,7 +158,16 @@ pub(crate) fn install(
     cleanup_dir: Option<PathBuf>,
     on_stop: Option<StopCallback>,
 ) -> Result<(), String> {
-    unix::install(cleanup_dir, on_stop)
+    unix::install(
+        cleanup_dir,
+        on_stop.map(|stop| Box::new(move |_| stop()) as SignalStopCallback),
+    )
+}
+
+/// [`install`] for a stop callback that needs the signal number.
+#[cfg(unix)]
+pub(crate) fn install_with_signal(on_stop: SignalStopCallback) -> Result<(), String> {
+    unix::install(None, Some(on_stop))
 }
 
 #[cfg(not(unix))]
@@ -157,6 +179,12 @@ pub(crate) fn install(
         Some(stop) => ctrlc::set_handler(stop).map_err(|error| error.to_string()),
         None => Ok(()),
     }
+}
+
+/// Windows has one console interrupt; report it as SIGINT (2).
+#[cfg(not(unix))]
+pub(crate) fn install_with_signal(on_stop: SignalStopCallback) -> Result<(), String> {
+    ctrlc::set_handler(move || on_stop(2)).map_err(|error| error.to_string())
 }
 
 #[cfg(all(test, unix))]
