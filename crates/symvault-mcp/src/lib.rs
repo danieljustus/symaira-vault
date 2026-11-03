@@ -24,6 +24,7 @@ pub mod authguard;
 pub mod broker;
 mod call;
 pub mod enroll;
+mod go_params;
 pub mod http;
 mod oauth;
 pub mod payment;
@@ -110,8 +111,13 @@ pub const SERVER_INSTRUCTIONS: &str = concat!(
 pub struct Message {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub error: Option<RpcError>,
+    #[serde(deserialize_with = "deserialize_go_string")]
     pub jsonrpc: String,
-    #[serde(skip_serializing_if = "str_is_empty", default)]
+    #[serde(
+        skip_serializing_if = "str_is_empty",
+        default,
+        deserialize_with = "deserialize_go_string"
+    )]
     pub method: String,
     #[serde(
         skip_serializing_if = "Option::is_none",
@@ -131,6 +137,23 @@ pub struct Message {
         deserialize_with = "deserialize_present_raw"
     )]
     pub result: Option<Box<RawValue>>,
+}
+
+/// Decodes an envelope string the way `encoding/json` does: a lone surrogate
+/// escape such as `"\uD800"` becomes U+FFFD instead of failing the frame
+/// (serde rejects it, which would answer `-32700` where the oracle answers
+/// with the replacement character in `Method not found`). Non-strings keep
+/// serde's own type error.
+fn deserialize_go_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = Box::<RawValue>::deserialize(deserializer)?;
+    if go_params::kind(raw.get()) == go_params::Kind::String {
+        Ok(go_params::decode_string(raw.get()))
+    } else {
+        serde_json::from_str::<String>(raw.get()).map_err(serde::de::Error::custom)
+    }
 }
 
 fn str_is_empty(value: &str) -> bool {
@@ -339,65 +362,124 @@ pub fn negotiate_protocol_version(requested: &str) -> &str {
 /// Extracts the requested protocol version from an `initialize` params value,
 /// reproducing `encoding/json`'s decoding of the oracle's `InitializeParams`.
 ///
-/// Three of its behaviors are load-bearing and none of them are serde defaults:
+/// Go walks the object member by member, duplicates included, and every
+/// member that selects a field is stored into it. None of this is a serde
+/// default:
 ///
 ///   - `null` is a no-op against any target, so `"params": null` and
-///     `"protocolVersion": null` both leave the zero value and negotiate to the
-///     latest version. serde would reject both, refusing the handshake to a
-///     client sending entirely legal JSON-RPC.
-///   - Field names match case-insensitively when no exact match exists, so
-///     `PROTOCOLVERSION` selects a real version. serde would ignore the key and
-///     silently negotiate a *different* version than the oracle.
-///   - `clientInfo` is typed `*ClientInfo`, so a non-object there is an error.
-///     Ignoring it would make this port more permissive than the oracle, which
-///     is the wrong direction.
+///     `"protocolVersion": null` both leave the zero value and negotiate to
+///     the latest version, and a `null` that follows a real version leaves
+///     that version in place. serde would reject the former two.
+///   - Field names match per member, exact first and case-insensitively
+///     otherwise, so `PROTOCOLVERSION` selects the field and, when several
+///     spellings are present, the LAST member in document order supplies the
+///     value.
+///   - A plain duplicate is therefore last-wins, but a member of the wrong
+///     type fails the whole decode (`encoding/json` records the first
+///     `UnmarshalTypeError` and still returns it), whatever its position:
+///     `{"protocolVersion":123,"protocolVersion":"2025-03-26"}` is `-32602`.
+///     Collapsing the object into a map first would silently turn that into
+///     a success.
+///   - `clientInfo` is typed `*ClientInfo`, so a non-object there is an error
+///     and so is a wrong-typed `name`/`version` inside it. Ignoring either
+///     would make this port more permissive than the oracle.
 ///
-/// `capabilities` is a `json.RawMessage` in the oracle and accepts anything.
+/// `capabilities` is a `json.RawMessage` in the oracle and accepts anything,
+/// and unknown members are skipped.
+///
+/// Only the members this decode consumes are read ([`go_params`] walks the
+/// object token by token and never builds a `serde_json::Value`), so the
+/// two places where a `Value` differs from `encoding/json` do not apply: a
+/// lone surrogate escape such as `"\uD800"` anywhere in `params` decodes to
+/// U+FFFD instead of failing, and nesting is bounded by the frame-level
+/// 10000-level guard instead of serde's 128-level recursion limit, inside
+/// `capabilities` and unknown members alike.
 fn requested_protocol_version(params: &RawValue) -> Result<String, String> {
-    let value: serde_json::Value =
-        serde_json::from_str(params.get()).map_err(|err| err.to_string())?;
+    use go_params::Kind;
 
-    let object = match &value {
-        serde_json::Value::Null => return Ok(String::new()),
-        serde_json::Value::Object(map) => map,
+    match go_params::kind(params.get()) {
+        Kind::Null => return Ok(String::new()),
+        Kind::Object => {}
         other => {
             return Err(format!(
                 "json: cannot unmarshal {} into Go value of type server.InitializeParams",
-                go_kind(other)
+                other.go_name()
             ));
         }
-    };
+    }
 
-    // Go prefers an exact field match and falls back to a case-insensitive one.
-    let lookup = |name: &str| -> Option<&serde_json::Value> {
-        object.get(name).or_else(|| {
-            object
-                .iter()
-                .find(|(key, _)| key.eq_ignore_ascii_case(name))
-                .map(|(_, v)| v)
-        })
-    };
-
-    if let Some(client_info) = lookup("clientInfo") {
-        match client_info {
-            serde_json::Value::Null | serde_json::Value::Object(_) => {}
-            other => {
-                return Err(format!(
-                    "json: cannot unmarshal {} into Go struct field InitializeParams.clientInfo of type server.ClientInfo",
-                    go_kind(other)
-                ));
+    let mut version = String::new();
+    for (key, raw) in go_params::object_members(params.get())? {
+        if go_field_matches(&key, "clientInfo") {
+            match go_params::kind(raw) {
+                Kind::Null => {}
+                Kind::Object => {
+                    for (inner_key, inner_raw) in go_params::object_members(raw)? {
+                        for field in ["name", "version"] {
+                            if !go_field_matches(&inner_key, field) {
+                                continue;
+                            }
+                            let inner = go_params::kind(inner_raw);
+                            if !matches!(inner, Kind::Null | Kind::String) {
+                                // Go reports the innermost struct and the full
+                                // JSON path from the root value.
+                                return Err(format!(
+                                    "json: cannot unmarshal {} into Go struct field ClientInfo.clientInfo.{field} of type string",
+                                    inner.go_name()
+                                ));
+                            }
+                        }
+                    }
+                }
+                other => {
+                    return Err(format!(
+                        "json: cannot unmarshal {} into Go struct field InitializeParams.clientInfo of type server.ClientInfo",
+                        other.go_name()
+                    ));
+                }
+            }
+        } else if go_field_matches(&key, "protocolVersion") {
+            match go_params::kind(raw) {
+                Kind::Null => {}
+                Kind::String => version = go_params::decode_string(raw),
+                other => {
+                    return Err(format!(
+                        "json: cannot unmarshal {} into Go struct field InitializeParams.protocolVersion of type string",
+                        other.go_name()
+                    ));
+                }
             }
         }
     }
+    Ok(version)
+}
 
-    match lookup("protocolVersion") {
-        None | Some(serde_json::Value::Null) => Ok(String::new()),
-        Some(serde_json::Value::String(version)) => Ok(version.clone()),
-        Some(other) => Err(format!(
-            "json: cannot unmarshal {} into Go struct field InitializeParams.protocolVersion of type string",
-            go_kind(other)
-        )),
-    }
+/// `tools/list`'s `include_all_tools` as `includeAllTools` reads it: the params
+/// are decoded into a `map[string]any`, so a non-object (or `null`) is `false`,
+/// the key matches exactly, the last duplicate wins and only a JSON `true`
+/// counts. Walked token by token for the same reasons as
+/// [`requested_protocol_version`].
+fn include_all_tools(params: Option<&RawValue>) -> bool {
+    let Some(params) = params else {
+        return false;
+    };
+    let Ok(members) = go_params::object_members(params.get()) else {
+        return false;
+    };
+    members
+        .iter()
+        .rev()
+        .find(|(key, _)| key == "include_all_tools")
+        .is_some_and(|(_, raw)| *raw == "true")
+}
+
+/// `encoding/json` field selection for an ASCII field name: case-insensitive,
+/// where the two non-ASCII runes in Go's simple-fold classes for ASCII letters
+/// (U+017F long s, U+212A Kelvin sign) also match.
+fn go_field_matches(key: &str, field: &str) -> bool {
+    key.replace('\u{17F}', "s")
+        .replace('\u{212A}', "k")
+        .eq_ignore_ascii_case(field)
 }
 
 /// Go's name for a JSON value's kind, as it appears in decoder errors. The text
@@ -710,16 +792,7 @@ impl ProtocolHandler {
             ));
         }
 
-        let include_all = msg
-            .params
-            .as_deref()
-            .and_then(|params| serde_json::from_str::<serde_json::Value>(params.get()).ok())
-            .and_then(|params| {
-                params
-                    .get("include_all_tools")
-                    .and_then(serde_json::Value::as_bool)
-            })
-            .unwrap_or(false);
+        let include_all = include_all_tools(msg.params.as_deref());
         let tools =
             tools::list_tools(&self.tool_list_config, include_all).map_err(Error::Catalog)?;
         Message::response(msg.id.clone(), serde_json::json!({"tools": tools}))
@@ -1199,5 +1272,40 @@ mod frame_limit_tests {
         )
         .unwrap();
         assert!(output.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod include_all_tools_tests {
+    use super::include_all_tools;
+    use serde_json::value::RawValue;
+
+    /// Expected values were measured against the oracle's `includeAllTools`
+    /// (`json.Unmarshal` into a `map[string]any`, then `.(bool)`) on Go 1.26.6;
+    /// they are not recorded in the stdio fixture because the Go answer to
+    /// `tools/list` depends on the runtime's tool set.
+    #[test]
+    fn follows_the_oracles_map_decoding() {
+        for (params, want) in [
+            (r#"{"x":"\uD800","include_all_tools":true}"#, true),
+            (
+                r#"{"include_all_tools":true,"include_all_tools":null,"INCLUDE_ALL_TOOLS":true}"#,
+                false,
+            ),
+            (r#"{"INCLUDE_ALL_TOOLS":true}"#, false),
+            (
+                r#"{"include_all_tools":null,"include_all_tools":true}"#,
+                true,
+            ),
+            (r#"{"include_all_tools":"true"}"#, false),
+            (r#"[true]"#, false),
+            (r#"null"#, false),
+            (r#"true"#, false),
+            (r#"{"\u0069nclude_all_tools":true}"#, true),
+        ] {
+            let raw = RawValue::from_string(params.to_string()).expect("valid params");
+            assert_eq!(include_all_tools(Some(&raw)), want, "{params}");
+        }
+        assert!(!include_all_tools(None));
     }
 }

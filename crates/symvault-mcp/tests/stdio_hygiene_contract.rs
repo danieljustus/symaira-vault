@@ -312,7 +312,7 @@ fn byte_entry_point_passes_valid_frames_through() {
 fn corpus_is_not_empty() {
     let fx = load();
     assert!(fx.cases.len() >= 15, "corpus shrank unexpectedly");
-    assert_eq!(fx.bounds.len(), 4);
+    assert_eq!(fx.bounds.len(), 9);
     assert_eq!(fx.divergences.len(), 2);
 }
 
@@ -391,4 +391,311 @@ fn duplicate_keys_are_rejected_fail_closed() {
         parsed["error"]["code"], -32700,
         "a duplicated key must not be silently resolved to the last occurrence"
     );
+}
+
+/// ADR 0034 item 15 (MCP-004), measured: a key duplicated inside `params` is
+/// NOT rejected. The oracle's encoding/json resolves it last-wins (recorded
+/// from the real transport as case `duplicate_key_inside_params`: initialize
+/// negotiates the second `protocolVersion`) and the port does exactly the
+/// same, so this is parity and not a divergence. The ADR's expected `-32602`
+/// for this shape does not hold at the pinned revision.
+#[test]
+fn duplicate_key_inside_params_is_last_wins_like_go_not_invalid_params() {
+    let fx = load();
+    let case = fx
+        .cases
+        .iter()
+        .find(|c| c.name == "duplicate_key_inside_params")
+        .expect("the corpus must carry the Go-recorded duplicate-in-params case");
+    assert_eq!(case.frames.len(), 1);
+    assert!(
+        case.frames[0].get("error").is_none()
+            && case.frames[0]["result"]["protocolVersion"] == "2025-03-26",
+        "Go must still answer with the LAST protocolVersion: {}",
+        case.stdout_raw
+    );
+    assert!(!case.runtime_text_masked);
+
+    let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+    let written = run_stream(&case.input, &mut handler).expect("rust transport ran");
+    assert_eq!(as_stdout(&written), case.stdout_raw);
+    let parsed: serde_json::Value = serde_json::from_str(&written[0]).expect("answer is JSON");
+    assert_eq!(parsed["result"]["protocolVersion"], "2025-03-26");
+    assert!(
+        parsed.get("error").is_none(),
+        "a duplicate inside params is not -32602 here: {parsed}"
+    );
+
+    // The envelope-level duplicate stays rejected, so the two shapes are
+    // distinguished by this pair of tests and not collapsed into one rule.
+    let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+    let envelope = run_stream(
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"id\":2,\"method\":\"ping\"}\n",
+        &mut handler,
+    )
+    .expect("rust transport ran");
+    let envelope: serde_json::Value = serde_json::from_str(&envelope[0]).expect("answer is JSON");
+    assert_eq!(envelope["error"]["code"], -32700);
+}
+
+/// MCP-004-DUP: how `encoding/json` treats duplicated and wrong-typed members
+/// inside `params`, recorded from the real Go transport and replayed here.
+/// A plain duplicate is last-wins (above); a WRONG-TYPED earlier duplicate
+/// fails the whole decode with `-32602`, `null` is a no-op that keeps an
+/// earlier value, and case variants of one name all land in the same field in
+/// document order. Each case is asserted against both the recorded Go frame
+/// and the Rust output, so neither side can drift alone.
+#[test]
+fn duplicate_and_wrong_typed_params_members_follow_encoding_json() {
+    enum Expect {
+        /// The last frame is a result carrying this negotiated version.
+        Version(&'static str),
+        /// The last frame is a JSON-RPC error with this code and message.
+        Error(i64, &'static str),
+    }
+    let expectations = [
+        ("duplicate_key_inside_params", Expect::Version("2025-03-26")),
+        (
+            "duplicate_params_wrong_typed_first",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "duplicate_params_wrong_typed_last",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "duplicate_params_null_after_string_keeps_string",
+            Expect::Version("2024-11-05"),
+        ),
+        (
+            "duplicate_params_case_variants_last_member_wins",
+            Expect::Version("2025-03-26"),
+        ),
+        (
+            "duplicate_params_case_variants_exact_last",
+            Expect::Version("2025-03-26"),
+        ),
+        (
+            "duplicate_params_clientinfo_wrong_typed_then_null",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "clientinfo_inner_member_wrong_typed",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "clientinfo_inner_duplicate_wrong_typed_first",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "clientinfo_inner_duplicate_plain_is_accepted",
+            Expect::Version("2025-03-26"),
+        ),
+        (
+            "prompts_get_duplicate_name_wrong_typed_first",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "prompts_get_duplicate_name_null_keeps_name",
+            Expect::Error(-32602, "Unknown prompt: nope"),
+        ),
+        (
+            "prompts_get_duplicate_arguments_merge",
+            Expect::Error(-32602, "Missing required argument: to_agent"),
+        ),
+        (
+            "prompts_get_duplicate_arguments_wrong_typed_value_first",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "prompts_get_duplicate_arguments_null_clears",
+            Expect::Error(-32602, "Missing required argument: query"),
+        ),
+    ];
+
+    let fx = load();
+    for (name, expect) in expectations {
+        let case = fx
+            .cases
+            .iter()
+            .find(|c| c.name == name)
+            .unwrap_or_else(|| panic!("the corpus must carry the Go-recorded case {name}"));
+
+        let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+        let written = run_stream(&case.input, &mut handler).expect("rust transport ran");
+        let rust_frames: Vec<serde_json::Value> = written
+            .iter()
+            .map(|line| serde_json::from_str(line).expect("answer is JSON"))
+            .collect();
+        assert_eq!(rust_frames.len(), case.frames.len(), "{name}: frame count");
+
+        for (side, last) in [
+            ("Go", case.frames.last().expect("recorded frame")),
+            ("Rust", rust_frames.last().expect("rust frame")),
+        ] {
+            match &expect {
+                Expect::Version(version) => {
+                    assert!(last.get("error").is_none(), "{name}: {side}: {last}");
+                    assert_eq!(
+                        last["result"]["protocolVersion"], *version,
+                        "{name}: {side}"
+                    );
+                }
+                Expect::Error(code, message) => {
+                    assert_eq!(last["error"]["code"], *code, "{name}: {side}: {last}");
+                    assert_eq!(last["error"]["message"], *message, "{name}: {side}");
+                }
+            }
+        }
+    }
+}
+
+/// PIN-LOW: the decoder error text of `initialize` params is compared EXACTLY,
+/// not through the mask. Every recorded case and bounds probe whose Go answer
+/// is an `InitializeParams`/`ClientInfo` decode error must be reproduced byte
+/// for byte by Rust, so the struct and field path in the message
+/// (`ClientInfo.clientInfo.name`, not `ClientInfo.name`) cannot drift behind
+/// the `<runtime-error-text>` sentinel.
+#[test]
+fn initialize_decode_error_text_matches_go_exactly() {
+    let fx = load();
+    let mut inputs: Vec<(String, String, String)> = fx
+        .cases
+        .iter()
+        .map(|c| (c.name.clone(), c.input.clone(), c.stdout_raw.clone()))
+        .collect();
+    for probe in &fx.bounds {
+        let input = format!(
+            "{}{}{}{}",
+            probe.prefix,
+            probe.fill_rune.repeat(probe.fill_count),
+            probe.close_rune.repeat(probe.close_count),
+            probe.suffix
+        );
+        inputs.push((probe.name.clone(), input, probe.stdout_raw.clone()));
+    }
+
+    let mut compared = Vec::new();
+    for (name, input, go_stdout) in &inputs {
+        if !go_stdout.contains("Go struct field InitializeParams.")
+            && !go_stdout.contains("Go struct field ClientInfo.")
+            && !go_stdout.contains("into Go value of type server.InitializeParams")
+        {
+            continue;
+        }
+        let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+        let written = run_stream(input, &mut handler).expect("rust transport ran");
+        assert_eq!(
+            &as_stdout(&written),
+            go_stdout,
+            "{name}: initialize decode error text differs from the recorded Go frame"
+        );
+        compared.push(name.as_str());
+    }
+    for required in [
+        "duplicate_params_wrong_typed_first",
+        "duplicate_params_wrong_typed_last",
+        "duplicate_params_clientinfo_wrong_typed_then_null",
+        "clientinfo_inner_member_wrong_typed",
+        "clientinfo_inner_duplicate_wrong_typed_first",
+        "initialize_deep_unknown_member_then_wrong_typed_version",
+        "initialize_deep_clientinfo_extra_member_then_wrong_typed_name",
+    ] {
+        assert!(
+            compared.contains(&required),
+            "{required} must be among the exactly-compared error texts: {compared:?}"
+        );
+    }
+    assert!(
+        inputs
+            .iter()
+            .any(|(n, _, out)| n == "clientinfo_inner_member_wrong_typed"
+                && out.contains("Go struct field ClientInfo.clientInfo.name of type string")),
+        "the recorded Go frame must carry the ClientInfo.clientInfo.name path"
+    );
+}
+
+/// PIN-LOW: `encoding/json` accepts a lone surrogate escape in `params`
+/// (decoded to U+FFFD) and nesting up to the 10000-level frame limit, inside
+/// `capabilities` (a `json.RawMessage`), unknown members, keys and
+/// `clientInfo`; a `serde_json::Value` parse rejects the former and stops at
+/// 128 levels. The Go frames are asserted first so the expectation is the
+/// oracle's, then Rust must produce the same bytes.
+#[test]
+fn lone_surrogates_and_deep_params_are_accepted_like_go() {
+    let fx = load();
+    let expectations = [
+        (
+            "initialize_lone_surrogate_in_protocol_version",
+            "2025-11-25",
+        ),
+        (
+            "initialize_lone_surrogate_in_unknown_members_and_keys",
+            "2024-11-05",
+        ),
+        (
+            "initialize_lone_surrogate_in_capabilities_and_clientinfo",
+            "2025-03-26",
+        ),
+        (
+            "initialize_escaped_field_name_selects_the_field",
+            "2024-11-05",
+        ),
+        (
+            "initialize_lone_surrogate_pair_halves_are_not_merged",
+            "2024-11-05",
+        ),
+    ];
+    for (name, version) in expectations {
+        let case = fx
+            .cases
+            .iter()
+            .find(|c| c.name == name)
+            .unwrap_or_else(|| panic!("missing Go-recorded case {name}"));
+        assert_eq!(
+            case.frames[0]["result"]["protocolVersion"], version,
+            "{name}: Go"
+        );
+        let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+        let written = run_stream(&case.input, &mut handler).expect("rust transport ran");
+        assert_eq!(
+            as_stdout(&written),
+            case.stdout_raw,
+            "{name}: Rust vs Go bytes"
+        );
+    }
+
+    for (name, version) in [
+        (
+            "initialize_capabilities_nested_to_the_depth_limit",
+            "2024-11-05",
+        ),
+        (
+            "initialize_unknown_member_nested_to_the_depth_limit",
+            "2025-03-26",
+        ),
+    ] {
+        let probe = fx
+            .bounds
+            .iter()
+            .find(|p| p.name == name)
+            .unwrap_or_else(|| panic!("missing Go-recorded probe {name}"));
+        let go: serde_json::Value =
+            serde_json::from_str(probe.stdout_raw.trim_end()).expect("Go frame is JSON");
+        assert_eq!(go["result"]["protocolVersion"], version, "{name}: Go");
+        let input = format!(
+            "{}{}{}{}",
+            probe.prefix,
+            probe.fill_rune.repeat(probe.fill_count),
+            probe.close_rune.repeat(probe.close_count),
+            probe.suffix
+        );
+        let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+        let written = run_stream(&input, &mut handler).expect("rust transport ran");
+        assert_eq!(
+            as_stdout(&written),
+            probe.stdout_raw,
+            "{name}: Rust vs Go bytes"
+        );
+    }
 }

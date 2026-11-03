@@ -404,10 +404,19 @@ impl<'de> Visitor<'de> for ParamsVisitor {
     }
     fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Params, M::Error> {
         let mut result = Params::default();
-        while let Some((key, value)) = map.next_entry::<String, Value>()? {
+        // Members are read as raw text first so an unknown member is skipped
+        // without building a `Value` (no serde recursion limit), as
+        // `encoding/json` skips it; only `name` and `arguments` are parsed.
+        while let Some((key, raw)) = map.next_entry::<String, Box<serde_json::value::RawValue>>()? {
             // These are the two non-ASCII runes in Go's simple-fold classes
             // for ASCII field names (encoding/json foldName).
             let key = key.replace('ſ', "s").replace('K', "k");
+            let selected =
+                key.eq_ignore_ascii_case("name") || key.eq_ignore_ascii_case("arguments");
+            if !selected {
+                continue;
+            }
+            let value: Value = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
             if key.eq_ignore_ascii_case("name") {
                 match value {
                     Value::String(name) => result.name = name,
@@ -458,6 +467,10 @@ impl<'de> Deserialize<'de> for Params {
 pub(crate) fn parse_params(raw: Option<&serde_json::value::RawValue>) -> Result<Params, String> {
     raw.map_or_else(
         || Ok(Params::default()),
-        |raw| serde_json::from_str(raw.get()).map_err(|e| e.to_string()),
+        |raw| {
+            // `encoding/json` decodes a lone surrogate escape to U+FFFD.
+            serde_json::from_str(&crate::go_params::replace_lone_surrogates(raw.get()))
+                .map_err(|e| e.to_string())
+        },
     )
 }

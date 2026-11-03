@@ -278,22 +278,76 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
 - Recommendation: **ratify**.
 
 **15. Duplicate key inside `params` (and the raw-id case).**
-- Rows: MCP-004 (fixture `divergences[0].oracle_behavior` SCOPE note).
-- Go: last occurrence wins everywhere.
-- Rust: a duplicate inside `params` is `-32602`. A duplicate inside a raw `id` or
-  an unknown top-level key is last-wins exactly as Go, so that half is parity,
-  not a divergence. The tool-call payload an auditing intermediary reads is
-  noted in the fixture as "NOT yet covered" (MCP-002/003).
-- Why acceptable: `-32602` is the stricter side (same smuggling argument as
-  ADR 0032 item 4).
-- Pin: **unpinned**; `stdio_hygiene_contract.rs:370` pins only the envelope
-  case. Would be pinned by a case `duplicate_key_inside_params` in
-  `stdio-hygiene.json` asserting Go last-wins and Rust `-32602`.
-- Uncertain: the `-32602` behaviour is read from the fixture note, not from
-  running the binary; whether duplicates nested in `arguments` are rejected
-  was not established.
-- Recommendation: **ratify** the `params` rejection; the open
-  smuggling gap in nested arguments stays on MCP-002/003.
+- Rows: MCP-004 (fixture `divergences[0].oracle_behavior` SCOPE note; cases
+  `duplicate_key_inside_params` and `duplicate_params_*` in
+  `stdio-hygiene.json`).
+- Go: a *plain* duplicate member inside `params` is last-wins (`initialize`
+  negotiates the second `protocolVersion`); a wrong-typed duplicate fails the
+  whole decode wherever it sits (`{"protocolVersion":123,"protocolVersion":"2025-03-26"}`
+  is `-32602`, because `encoding/json` records the first `UnmarshalTypeError`
+  and still returns it), `null` is a no-op that keeps an earlier value, and
+  case variants of one name all land in the same field in document order.
+- Rust: identical for `initialize`, `tools/list` and `prompts/get`;
+  **not identical for `tools/call` `arguments`** (declared below). Plain
+  duplicates inside `params` are last-wins as in Go, **not** `-32602` (an
+  earlier version of this item claimed otherwise; that was read from a fixture
+  note and is wrong). The `initialize` decoder (`go_params.rs`) walks the
+  members token by token in document order like `encoding/json`, parsing only
+  the members it consumes (`protocolVersion`, `clientInfo`, its `name` and
+  `version`) and skipping everything else, `capabilities` included, with an
+  iterative scanner: wrong-typed earlier duplicates (in `protocolVersion`,
+  `clientInfo` and inside `clientInfo`) fail like Go, the error text is
+  Go's (`...Go struct field ClientInfo.clientInfo.name of type string`) and
+  is compared exactly, a lone surrogate escape (`"\uD800"`) anywhere in
+  `params` or the envelope `method`/`jsonrpc` decodes to U+FFFD as in Go, and
+  nesting is bounded by the 10000-level frame guard in `capabilities`,
+  unknown members and keys alike (the earlier `serde_json::Value` parse
+  returned `-32602` for both). `prompts/get` and `tools/call` read their
+  members as raw text, parse only `name`/`arguments`, rewrite lone
+  surrogates, and skip unknown members without recursion;
+  `tools/list`'s `include_all_tools` is read from the walked members with
+  `map[string]any` semantics (exact key, last duplicate wins, only `true`).
+  A duplicate inside a raw `id` or an unknown top-level key is last-wins
+  exactly as Go. So `params` is parity and not a divergence; only duplicated
+  *envelope* members are rejected (ADR 0032, `-32700`).
+- **Declared difference, `tools/call` `arguments`:** Go keeps `arguments` as a
+  `json.RawMessage` and decodes it later. Rust re-parses it as a
+  `serde_json::Value` (`call.rs`), so (a) duplicate-key fidelity inside
+  `arguments` is untested (a repeated key is last-wins in a `Value`, which
+  is what `encoding/json` does into a `map[string]any`, but no case records
+  it against Go), and (b) `arguments` nested deeper than serde_json's
+  128-level `Value` recursion limit is `-32602` in Rust where Go accepts up
+  to the 10000-level frame limit (`parse_params`, unit test
+  `arguments_nested_beyond_the_value_recursion_limit_are_rejected`). The
+  stdio fixture cannot record `tools/call`: the oracle answers
+  "vault locked" before it decodes params when no tool runtime is attached,
+  so the lone-surrogate and unknown-member behaviour of `tools/call` is
+  covered by unit tests derived from reading `handleToolsCall`, not by a
+  recorded Go frame. Not ported (Rust stricter): (b) above.
+- Pin: `stdio-hygiene.json` cases `duplicate_key_inside_params`,
+  `duplicate_params_wrong_typed_first`, `duplicate_params_wrong_typed_last`,
+  `duplicate_params_null_after_string_keeps_string`,
+  `duplicate_params_case_variants_*`, `duplicate_params_clientinfo_*`,
+  `clientinfo_inner_*`, `prompts_get_duplicate_*`,
+  `initialize_lone_surrogate_*`, `initialize_escaped_field_name_*`,
+  `method_lone_surrogate_*`, `prompts_get_lone_surrogate_*` and
+  `prompts_get_unknown_member_*`, plus the bounds probes
+  `initialize_capabilities_nested_to_the_depth_limit`,
+  `initialize_unknown_member_nested_to_the_depth_limit`,
+  `initialize_deep_*` and `initialize_params_one_level_past_the_depth_limit`
+  (recorded from the real Go transport, `mcpstdiogen --check`), asserted for
+  both sides by `stdio_hygiene_contract.rs`
+  (`duplicate_key_inside_params_is_last_wins_like_go_not_invalid_params`,
+  `duplicate_and_wrong_typed_params_members_follow_encoding_json`,
+  `initialize_decode_error_text_matches_go_exactly`,
+  `lone_surrogates_and_deep_params_are_accepted_like_go`), by
+  `include_all_tools_tests` (values measured against Go's `includeAllTools`)
+  and by `call::params_duplicate_tests` for `tools/call`.
+- Not covered: `tools/call` `arguments` (see the declared difference above);
+  the envelope `error` member and other non-selected members are not
+  surrogate-normalised.
+- Recommendation: **no ratification needed**; this is parity. The only
+  divergence on duplicate keys is the envelope one (ADR 0032 item 4).
 
 **16. SIGINT/SIGTERM on HTTP: Go drains for up to 5 s, Rust aborts at once.**
 - Rows: MCP-003, HTTP-001 (shutdown); [ADR 0009](0009-http-shutdown-ownership.md)
@@ -600,7 +654,7 @@ Recommendation key: R = ratify, P = implement parity, M = maintainer decision.
 | 12 `run --timeout` Ctrl-C to child | CLI-007 | P | P: implemented (a6c09463) |
 | 13 `execute_api_request` redirects | MCP-003 | R | R: ratified |
 | 14 invalid UTF-8 request id | MCP-004 | R | R: ratified |
-| 15 duplicate key inside `params` | MCP-004 | R | R: ratified |
+| 15 duplicate key inside `params` | MCP-004 | R | R: ratified (corrected: plain duplicates are last-wins in Go and Rust; wrong-typed earlier duplicates fail like Go; parity, not a divergence) |
 | 16 HTTP SIGINT/SIGTERM drain | MCP-003, HTTP-001 | P | P: implemented (b0ea8ea0) |
 | 17 `Expect: 100-continue` interim line | HTTP-001 | R | R: ratified |
 | 18 request-line / header size limits | HTTP-001, HTTP-004 | R | R: ratified |

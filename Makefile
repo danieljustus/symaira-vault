@@ -1190,7 +1190,9 @@ AREA_KDF_MIGRATION_TESTS := 10
 # 415 after the security review (+7: 5 anomaly.rs unit tests for the stderr
 # write and the poisoned detector lock, 2 anomaly_dispatch sink-ordering tests;
 # measured: 415 passed, 0 failed).
-AREA_MCP_TEST_COUNT := 415
+# +14 from local/pin-tests (302 redirect pin, duplicate/wrong-typed params, go_params
+# walker, exact InitializeParams error text); measured at the integ6 merge.
+AREA_MCP_TEST_COUNT := 429
 
 .PHONY: area-oracle-runner
 area-oracle-runner:
@@ -1362,6 +1364,7 @@ MCP_NAMED_TESTS := \
 	cancelled_dns_releases_the_actual_owned_udp_socket \
 	cancelling_pending_api_headers_closes_upstream_and_joins \
 	progressing_api_body_still_reaches_absolute_deadline \
+	execute_api_request_transport_returns_302_without_following_redirect \
 	actual_dns_https_verifies_chain_hostname_and_redacts_positive_control \
 	protocol_context_cancels_actual_encrypted_api_request
 mcp-named-tests:
@@ -1921,7 +1924,7 @@ mcp-prompts-differential: mcp-ordered-fixtures-check
 .PHONY: zip-errors-differential
 zip-errors-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/zipgen -check
-	$(CARGO) test -p symvault-sync --test zip_errors_contract --test zip_limit_contract --locked
+	$(CARGO) test -p symvault-sync --test zip_errors_contract --test zip_limit_contract --test zip_nonutf8_name_pin --locked
 
 .PHONY: cxf-import-differential
 cxf-import-differential:
