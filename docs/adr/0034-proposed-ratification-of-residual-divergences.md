@@ -112,6 +112,8 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
   in `config.rs:set`, not probed). No data is lost, but the written value is
   wrong against the oracle rather than merely laid out differently.
 - Pin: **unpinned** (as item 3).
+- Resolution: implemented in b808f1e2; pinned by 25 Go-recorded `config-set-int-*`
+  cases in `output-modes.json` and by `config::int_scalar_tests`.
 - Recommendation: **implement parity** (judgement call: a maintainer who
   considers hand-typed octal/binary literals out of scope can ratify instead).
 
@@ -360,6 +362,9 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
   at `:3617-3624`: `["a"],[null]` returns `None`). No Go-recorded case holds
   the Go outcome; `http_token_contract.py:276` covers only the type-error
   duplicate.
+- Resolution: implemented in a0282469 (`GoStringSlice`); pinned by 72 Go-recorded
+  documents in `testdata/port/auth/token-lookup.json`, the `dup-allowed-tools-null-*`
+  cases of `http_token_contract.py` and `http.rs` `duplicate_member_with_a_type_error_fails_the_document_like_go`.
 - Recommendation: **implement parity** (model the slice overlay; small).
 
 **20. ALPN: Go offers `h2` on plain TLS, Rust negotiates HTTP/1.1 only.**
@@ -548,7 +553,7 @@ Recommendation key: R = ratify, P = implement parity, M = maintainer decision.
 | 1 YAML behaviour entries (4) | CLI-005 | R | R: ratified |
 | 2 YAML root-shape/empty wording (10) | CLI-005 | R | R: ratified |
 | 3 `config set` `1e3`, `y`, `2026-10-31`, `<<` | CLI-005/006 | R | R: ratified |
-| 4 `config set` `010`, `0b11` | CLI-005/006 | P | P: implement parity |
+| 4 `config set` `010`, `0b11` | CLI-005/006 | P | P: implemented (b808f1e2) |
 | 5 `config set` re-encode and typed-decode residue | CLI-005/006 | R | R: ratified |
 | 6 YAML nesting depth 256 vs 10000 | CLI-005 | R | R: ratified |
 | 7 `profiles: {x: null}` | CLI-005 | R | R: ratified |
@@ -563,7 +568,7 @@ Recommendation key: R = ratify, P = implement parity, M = maintainer decision.
 | 16 HTTP SIGINT/SIGTERM drain | MCP-003, HTTP-001 | P | P: implemented (b0ea8ea0) |
 | 17 `Expect: 100-continue` interim line | HTTP-001 | R | R: ratified |
 | 18 request-line / header size limits | HTTP-001, HTTP-004 | R | R: ratified |
-| 19 repeated `allowed_tools` with `null` | HTTP-002 | P | P: implement parity |
+| 19 repeated `allowed_tools` with `null` | HTTP-002 | P | P: implemented (a0282469) |
 | 20 ALPN HTTP/1.1 only | HTTP-004 | R | R: ratified |
 | 21 colour on `cliout` lines | PLATFORM-001 | R | R: ratified |
 | 22 non-string field copy (`%v`) | PLATFORM-001 | R | R: ratified |

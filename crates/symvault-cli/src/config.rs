@@ -1098,6 +1098,57 @@ mod tests {
 }
 
 #[cfg(test)]
+mod int_scalar_tests {
+    use super::set;
+    use std::{fs, path::PathBuf};
+
+    fn stored(tag: &str, value: &str) -> String {
+        stored_at(tag, "mcp.port", "mcp:\n  port: 1\n", value)
+    }
+
+    fn stored_at(tag: &str, key: &str, initial: &str, value: &str) -> String {
+        let root: PathBuf =
+            std::env::temp_dir().join(format!("symvault-config-int-{}-{tag}", std::process::id()));
+        fs::create_dir_all(&root).expect("create test directory");
+        let path = root.join("config.yaml");
+        fs::write(&path, initial).expect("write config");
+        set(&path, key, value, true).unwrap_or_else(|_| panic!("set {value}"));
+        let text = fs::read_to_string(&path).expect("read config");
+        let _ = fs::remove_dir_all(root);
+        text
+    }
+
+    /// ADR 0034 item 4: yaml.v3 resolves these plain scalars to ints and
+    /// writes the decimal value; the Go-recorded `config-set-int-*` cases in
+    /// `output-modes.json` pin the same bytes against the oracle.
+    #[test]
+    fn plain_octal_binary_and_underscore_ints_are_written_as_decimals() {
+        for (tag, input, written) in [
+            ("oct8", "010", "8"),
+            ("oct15", "017", "15"),
+            ("bin3", "0b11", "3"),
+            ("bin5", "0b101", "5"),
+            ("sep", "1_000", "1000"),
+        ] {
+            assert_eq!(
+                stored(tag, input),
+                format!("mcp:\n  port: {written}\n"),
+                "{input}"
+            );
+        }
+    }
+
+    /// Negative control: a quoted form is a string for yaml.v3 and stays quoted.
+    #[test]
+    fn quoted_forms_stay_strings() {
+        assert_eq!(
+            stored_at("quoted", "vaultDir", "vaultDir: x\n", "\"010\""),
+            "vaultDir: \"010\"\n"
+        );
+    }
+}
+
+#[cfg(test)]
 mod reindent_tests {
     use super::reindent_two_spaces;
 
