@@ -32,7 +32,8 @@ permissions or breaks a documented workflow gets Go parity.
 | 7 | APPROVAL-001 | enroll: repeated `X-Enroll` headers, bodies over 1 MiB, non-UTF-8 bodies and lone surrogate escapes are refused | ratify (stricter) | device-enroll corpus |
 | 8 | CLI-005 | a redefined YAML anchor resolves to the last definition (YAML 1.2 spec); Go takes the first | ratify (spec) | `config-yaml-syntax.json` `anchor-redefined` |
 | 9 | CLI-005 | Rust prints fewer duplicate `envWhitelist` loader warnings than Go | ratify (cosmetic); Go counts kept as recorded bounds | `config_yaml_syntax.rs` warning-count pin |
-| 10 | CLI-005 | `config validate` accepted 10001 nesting levels where Go rejects | **Go parity** (implemented on `local/nest`) | Go-recorded depth cases in `config-yaml-syntax.json` |
+| 10 | CLI-005 | `config validate` accepted 10001 nesting levels where Go rejects | **Go parity** (implemented on `local/nest`: yaml.v3 `max_flow_level` and `max_indents`, 10000 each, counted separately) | Go-recorded depth cases in `config-yaml-syntax.json` |
+| 11 | CLI-005 | `config get`/`set` refuse flow nesting between 257 and 10000 levels (`yaml_edit` bound 256); Go reads and rewrites them | ratify (stricter: refusal, no data loss); the loader paths accept these documents like Go | open divergences `nest_get_set_flow_sequence_257`, `_10000` |
 
 ADR 0034 items 21 to 23 are now pinned (`local/plat-pins`); their text in ADR
 0034 describes the state before the pins and is superseded by those tests.
