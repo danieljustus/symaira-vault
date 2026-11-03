@@ -43,6 +43,10 @@ def context(identities,version,client=None,ca='server-ca'):
     return result
 
 
+# A debug-build CLI can need many seconds of CPU to start listening on a starved host; the wait ends at the first accepted connection.
+LISTEN_DEADLINE=120
+
+
 class NativeServer:
     def __init__(self,binary,home,port,identities,mtls,records,known):
         self.known,self.record = known,{}
@@ -54,7 +58,7 @@ class NativeServer:
                                     stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         self.capture=ProcessCapture(self.child)
         try:
-            deadline=time.monotonic()+30
+            deadline=time.monotonic()+LISTEN_DEADLINE
             while True:
                 assert self.child.poll() is None,'native TLS CLI exited before listening'
                 try:

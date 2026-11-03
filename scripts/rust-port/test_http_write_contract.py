@@ -678,6 +678,11 @@ class StarvedOutputPrecondition(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(exchanged.call_count, 3)
 
+    def test_listener_wait_tolerates_a_starved_host(self):
+        import http_oauth_contract
+        self.assertGreaterEqual(http_oauth_contract.LISTEN_DEADLINE, 120)
+        self.assertGreaterEqual(http_tls_contract.LISTEN_DEADLINE, 120)
+
     def test_exchanges_use_the_load_tolerant_timeout(self):
         _, _, exchanged, _ = self.observe(dict(slow_read_calls=5, slow_received_bytes=8192, received_base64=''))
         for call in exchanged.call_args_list:
