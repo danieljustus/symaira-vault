@@ -18,6 +18,14 @@ Checks, each against disposable HOME/vault roots only:
      accepted, and the refusal sits after scope denial and before entry policy.
   3. Rust-issued tokens are accepted by the Go server (rollback direction) and
      Go-issued tokens by the Rust server.
+  4. MCP-003: the audit rows each server appends for those calls (tool calls,
+     `tool_denied`, `tool_registry_drift`) are identical field for field, in
+     field order, between Go and Rust once the random ids are masked: `sess_id`
+     (32 hex, one per agent server) and `req_id` (16 hex, one per call) must be
+     present, well formed and, for `sess_id`, constant; `token_id` is the
+     registry's deterministic id and is compared exactly. `--drop-audit-ids`
+     deletes those three fields from the Rust rows before comparing; the
+     comparison must then fail (negative control).
 """
 import argparse
 import json
@@ -115,6 +123,55 @@ def serve(binary, home, port):
             time.sleep(.05)
 
 
+AUDIT_LOG = 'vault/audit-fixture.log'
+MASKED = ('ts', 'hmac', 'kid')
+
+
+def audit_rows(home):
+    path = home / AUDIT_LOG
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def mask_audit(rows, drop_ids=False):
+    """Rows as ordered key/value lists with the random ids masked."""
+    masked = []
+    sessions = set()
+    for row in rows:
+        if row.get('action', '').startswith('anomaly_'):
+            # Go's anomaly detector (off-hours, time-of-day dependent) logs
+            # with context.Background(): sess_id only, no req_id/token_id. The
+            # Rust port has no anomaly detector (open, MCP-003 residual).
+            assert 'req_id' not in row and 'token_id' not in row, row
+            continue
+        out = []
+        for key, value in row.items():
+            if key in MASKED:
+                continue
+            if key == 'sess_id':
+                assert re.fullmatch(r'[0-9a-f]{32}', value), ('sess_id', row)
+                sessions.add(value)
+                if drop_ids:
+                    continue
+                value = '<sess>'
+            elif key == 'req_id':
+                assert re.fullmatch(r'[0-9a-f]{16}', value), ('req_id', row)
+                if drop_ids:
+                    continue
+                value = '<req>'
+            elif key == 'token_id' and drop_ids:
+                continue
+            out.append([key, value])
+        keys = [k for k, _ in out]
+        if not drop_ids:
+            assert 'sess_id' in keys and 'req_id' in keys, ('ids missing', row)
+        masked.append(out)
+    if not drop_ids:
+        assert len(sessions) <= 1, ('one session per agent server', sessions)
+    return masked
+
+
 def call(name, arguments, ident):
     return json.dumps({'jsonrpc': '2.0', 'id': ident, 'method': 'tools/call',
                        'params': {'name': name, 'arguments': arguments}}).encode()
@@ -126,6 +183,8 @@ def main():
     parser.add_argument('--go-seed', type=Path, required=True)
     parser.add_argument('--rust', type=Path, required=True)
     parser.add_argument('--receipt', type=Path)
+    parser.add_argument('--drop-audit-ids', action='store_true',
+                        help='negative control: strip the ids from the Rust audit rows')
     args = parser.parse_args()
     recorded = json.loads(FIXTURE.read_text())['registry']['hash']
     receipt = {'recorded_go_hash': recorded, 'issue': {}, 'http': []}
@@ -167,6 +226,7 @@ def main():
             ('health', 'health', {}, ['go_current', 'go_stale', 'rust_cli_issued']),
         ]
         results = {}
+        audits = {}
         with socket.socket() as selection:
             selection.bind(('127.0.0.1', 0))
             port = selection.getsockname()[1]
@@ -185,8 +245,14 @@ def main():
                         assert token not in body
                         results[(impl, name, token_name)] = (status, body)
             finally:
-                process.kill()
-                process.wait(timeout=15)
+                # SIGTERM lets Go's buffered audit logger flush before exit.
+                process.terminate()
+                try:
+                    process.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=15)
+            audits[impl] = audit_rows(home)
             time.sleep(.3)
 
         failures = []
@@ -197,6 +263,15 @@ def main():
             if go != rust:
                 failures.append((name, token_name, go, rust))
         assert not failures, f'Go/Rust differences: {json.dumps(failures, indent=1)}'
+
+        go_audit = mask_audit(audits['go'])
+        rust_audit = mask_audit(audits['rust'], drop_ids=args.drop_audit_ids)
+        receipt['audit'] = {'go': go_audit, 'rust': rust_audit}
+        actions = {dict(row)['action'] for row in go_audit}
+        assert {'tool_denied', 'tool_registry_drift'} <= actions, ('Go audit lacks denials', actions)
+        assert any(dict(row).get('token_id') for row in go_audit), 'Go rows carry token ids'
+        assert go_audit == rust_audit, (
+            'Go/Rust audit rows differ:\n' + json.dumps({'go': go_audit, 'rust': rust_audit}, indent=1))
 
         def body(impl, scenario, token_name):
             frame = json.loads(results[(impl, scenario, token_name)][1])
@@ -224,7 +299,8 @@ def main():
 
     if args.receipt:
         args.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
-    print(f'PASS: {len(receipt["http"])} Go/Rust HTTP outcomes identical; CLI issuance hash {recorded[:12]} for both binaries')
+    print(f'PASS: {len(receipt["audit"]["go"])} audit rows identical (ids masked); '
+          f'{len(receipt["http"])} Go/Rust HTTP outcomes identical; CLI issuance hash {recorded[:12]} for both binaries')
 
 
 if __name__ == '__main__':

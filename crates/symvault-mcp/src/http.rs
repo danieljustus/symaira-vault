@@ -1607,10 +1607,12 @@ where
             Some(token) => {
                 handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
                 handler.set_token_registry_hash(&token.tool_registry_hash);
+                handler.set_token_id(&token.id);
             }
             None => {
                 handler.set_token_scope(&["*".to_owned()]);
                 handler.set_token_registry_hash("");
+                handler.set_token_id("");
             }
         }
         handler.set_request_context(request_context.clone());

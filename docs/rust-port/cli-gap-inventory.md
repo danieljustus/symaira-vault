@@ -903,6 +903,90 @@ unconditionally like Go (a successor's records are not protected); a drain that 
 does not report Go's `HTTPShutdownError` anywhere (Go drops it too: exit 0); Rust replies carry no
 `Date` header, which the contract excludes from the comparison like the other HTTP contracts.
 
+## MCP-AUDIT-IDS, OAUTH-EXPIRY, API-POLICY-DIAG (`local/mcp-audit`), 2026-11-03
+
+Local evidence only; no matrix status cell changes (HTTP-002, MCP-003, HTTP-003
+and BROKER-002 stay `in_progress`). Oracle is the Go tree at `ae6f8340`.
+
+### MCP audit rows carry Go's three ids (MCP-003 / HTTP-002)
+
+- Go's `logAudit` stamps `sess_id` (`Server.sessionID`, 16 random bytes hex,
+  minted once per server = once per agent handler for HTTP, once per process
+  for stdio), `req_id` (`generateRequestID`, 8 random bytes hex, minted at the
+  top of `executeTool`, so *every* row of a call has it, denials included) and
+  `token_id` (`auth.TokenFromContext`: only a **registry** token puts one in
+  the context; the legacy bearer and stdio have none, so the key is *absent*,
+  never `""`). `req_id` is **not** the JSON-RPC id.
+- Rust: `StoreReadOnlyRuntime.session_id` (per runtime, `audit_identity`);
+  `ProtocolHandler::set_token_id` (set by the HTTP layer from the registry
+  token, cleared for the legacy bearer) and a request id minted per `tools/call`
+  are installed in a thread-local `CallAuditScope` for the synchronous
+  authorize + handler span; `append_audit` reads it. Rows written from another
+  thread (clipboard auto-clear) or outside a protocol call carry only
+  `sess_id`, like Go's `context.Background()` audit calls. The JSON layout is
+  the shared `LogEntry`, so the HMAC chain covers the ids
+  (`tests/audit_identity.rs::rows_with_ids_keep_a_valid_hmac_chain`, which also
+  shows that stripping an id breaks verification).
+- Go-recorded comparison: `scripts/rust-port/toolhash_process_contract.py`
+  (explicit run, prebuilt binaries) now reads the audit log of both servers and
+  compares the 8 rows of its 14 HTTP calls (`tool_registry_drift`,
+  `tool_denied`, `get_metadata` ok and denied) field for field *and in field
+  order* with `ts`/`hmac`/`kid` dropped, `sess_id`/`req_id` masked after
+  asserting 32/16 lower-case hex and a single session per agent server, and
+  `token_id` compared exactly (the registry ids are deterministic).
+  `--drop-audit-ids` is the negative control (fails); a code-level control
+  (blank `token_id` in `append_audit`) also fails it.
+- Residuals: (1) Go's anomaly detector writes `anomaly_*` rows (`off_hours`,
+  time-of-day dependent; `sess_id` only); Rust has no anomaly detector, the
+  comparison skips those rows after asserting they carry no `req_id`/`token_id`;
+  (2) Go's `share_grant` / `share_expired` rows (`logAuditShare`: share id,
+  from/to agent, share action plus the three ids) belong to the share-access
+  scope override, which the Rust `scope_allows` does not implement, so there is
+  no row to stamp; (3) Go's optional `tool_invocation` / `tool_scope_denied`
+  hook rows are not produced by Rust; (4) the stdio transport is covered by
+  `tests/audit_identity.rs` only (no Go stdio audit recording); (5) the
+  thread-local scope assumes the whole call runs on the serving thread, which
+  holds for every current handler (blocking runtime, `block_on`).
+
+### OAuth expiry boundaries (HTTP-003)
+
+Go compares with `time.Now().After(t)` throughout: authorization code
+(`oauth.go:744`), DCR client lookup and sweep (`:354`, `:368`). A value is
+valid at exactly its expiry and expired one nanosecond later. Rust's injected
+`now` makes this testable (`oauth.rs` tests): code TTL (5 min, valid at
+`TTL`, `invalid_grant` at `TTL+1ns`, single-use either way, no token minted),
+browser-consent ticket (same boundary on `confirm`), the 256-ticket cap
+(503 `{"error":"server_error"}\n`, still full at exactly `TTL`, purged at
+`TTL+1ns`) and the DCR client `expires_at` (strict `>` in `get_oauth_client`;
+`ttl_seconds` alone never expires a client, as in Go where it is metadata).
+Negative controls: `>=` in the code check, ticket retention or client lookup
+fails four of these tests. No Go-side unit test was added: Go reads
+`time.Now()` directly, so the exact instant cannot be injected; the operator
+is pinned by source reading above. **The browser ticket table and its 503 cap
+have no Go counterpart** (Go's consent form is stateless and carries the
+request fields), so the 503 bytes are pinned as a Rust-only hardening, not
+compared with Go.
+
+### execute_api_request entry-policy diagnostics (BROKER-002)
+
+`check_api_entry_policy` mirrors Go's `checkPolicy` for the template's
+credential entry: `policy: no matching rule (default deny)`,
+`policy denied by rule %q` (audit `policy_denied`), `policy requires approval
+by rule %q` (audit `policy_prompt`) and `biometric verification required by
+policy by rule %q` (audit `policy_biometry`); all nine Go-recorded
+`execute-api-policy.json` cases now compare the error text (previously prompt
+and biometry were skipped). Every policy evaluation in `symvault-mcp` (the tool gate
+`authorize_policy`, `run_command`, `execute_with_secret`, `execute_api_request`) now builds its
+`EvalContext` through `symvault_mcp::policy_context::build_context`, a field-by-field mirror of
+Go's `ContextProvider.BuildContext`: `ToLogicalPath(path)`, the local wall-clock `now`,
+`working_dir` (`os.Getwd`, `$PWD` first), `home_dir` (`$HOME`), `env_vars` `HOME` and `GIT_BRANCH`
+(git run with Go's `DefaultWhitelist` environment), and **no tool name**. Go never sets
+`EvalContext.ToolName`, so an `allowed_tools` condition matches every tool there and here (see
+`upstream-go-bugs.md` section 12); the tool name still feeds the separate tool-scope and catalog
+checks. Pinned by the Go-recorded `testdata/port/mcp/policy-build-context.json`
+(`make policy-context-differential`) and `policy_context_authorize.rs`.
+Unknown actions are denied (Go proceeds), the existing fail-closed difference.
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate

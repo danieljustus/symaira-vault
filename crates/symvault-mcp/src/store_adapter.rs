@@ -8,6 +8,7 @@ use crate::call::{
     ReadOnlyUnavailableTool, SecureInputPreflightError, ToolCallResult, ToolCallRuntime,
     WriteApprovalDecision, normalize_scope_path, write_approval_decision,
 };
+use crate::policy_context::build_context;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde_json::{Value, json};
 use std::{
@@ -19,7 +20,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use symvault_core::policy::{Action, Engine, EvalContext};
+use symvault_core::policy::{Action, Engine};
 use symvault_core::secret_ref::SecretHandle;
 use symvault_crypto::{Identity, SecretBytes};
 use symvault_platform::approval::{
@@ -486,6 +487,8 @@ pub struct StoreReadOnlyRuntime {
     policy: Option<Engine>,
     audit: Option<SharedAuditLogger>,
     rate_limiter: Mutex<Option<MinuteRateLimiter>>,
+    /// Go `Server.sessionID`: minted once per runtime and stamped on every row.
+    session_id: String,
     agent_name: String,
     transport: String,
     unavailable_tools: Vec<String>,
@@ -599,6 +602,7 @@ impl StoreReadOnlyRuntime {
             policy,
             audit,
             rate_limiter: Mutex::new(None),
+            session_id: crate::audit_identity::generate_session_id(),
             agent_name,
             transport,
             unavailable_tools,
@@ -680,6 +684,7 @@ impl StoreReadOnlyRuntime {
             policy,
             audit,
             rate_limiter: Mutex::new(None),
+            session_id: crate::audit_identity::generate_session_id(),
             agent_name,
             transport,
             unavailable_tools,
@@ -840,6 +845,7 @@ impl StoreReadOnlyRuntime {
         let timestamp = OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+        let call = crate::audit_identity::current();
         let entry = symvault_store::audit::LogEntry {
             timestamp,
             agent: self.agent_name.clone(),
@@ -848,6 +854,9 @@ impl StoreReadOnlyRuntime {
             transport: self.transport.clone(),
             reason: if !ok { action.into() } else { String::new() },
             ok,
+            session_id: self.session_id.clone(),
+            request_id: call.request_id,
+            token_id: call.token_id,
             ..symvault_store::audit::LogEntry::default()
         };
         if let Ok(mut logger) = audit.lock() {
@@ -1068,13 +1077,8 @@ impl StoreReadOnlyRuntime {
                 ));
             }
             if let Some(policy) = &self.policy {
-                let result = policy.evaluate(EvalContext {
-                    agent_id: self.agent_name.clone(),
-                    path: candidate_path.clone(),
-                    action_type: "run".into(),
-                    tool_name: "run_command".into(),
-                    ..EvalContext::default()
-                });
+                let result =
+                    policy.evaluate(build_context(&self.agent_name, &candidate_path, "run"));
                 if !result.matched || result.action != Action::Allow {
                     self.append_audit("policy_denied", &candidate_path, false);
                     return Err(if !result.matched {
@@ -1094,13 +1098,7 @@ impl StoreReadOnlyRuntime {
                 ));
             }
             if let Some(policy) = &self.policy {
-                let result = policy.evaluate(EvalContext {
-                    agent_id: self.agent_name.clone(),
-                    path: path.clone(),
-                    action_type: "run".into(),
-                    tool_name: "run_command".into(),
-                    ..EvalContext::default()
-                });
+                let result = policy.evaluate(build_context(&self.agent_name, &path, "run"));
                 if !result.matched || result.action != Action::Allow {
                     self.append_audit("policy_denied", &path, false);
                     return Err(if !result.matched {
@@ -1409,7 +1407,7 @@ impl StoreReadOnlyRuntime {
                     }
                 };
                 let generated_name = generate_env_var_name(&entry_path, &field);
-                self.authorize_run_secret_path(&entry_path, "execute_with_secret")
+                self.authorize_run_secret_path(&entry_path)
                     .map_err(run_files_error)?;
                 let resolver_ref = if field.is_empty() {
                     entry_path.clone()
@@ -1418,7 +1416,7 @@ impl StoreReadOnlyRuntime {
                 };
                 let resolved_path = StoreReadOnlyAdapter::ref_path(&reader, &resolver_ref)
                     .map_err(|error| format!("cannot resolve secret ref {reference:?}: {error}"))?;
-                self.authorize_run_secret_path(&resolved_path, "execute_with_secret")
+                self.authorize_run_secret_path(&resolved_path)
                     .map_err(run_files_error)?;
                 let value =
                     StoreReadOnlyAdapter::ref_at_path(&reader, &resolver_ref, &resolved_path)
@@ -1690,8 +1688,7 @@ impl StoreReadOnlyRuntime {
 
         // Authorize the template's credential entry for the run action before
         // reading it, matching the retained Go handler's policy boundary.
-        self.authorize_run_secret_path(&entry_path, "execute_api_request")
-            .map_err(run_files_error)?;
+        self.check_api_entry_policy(&entry_path)?;
 
         // Resolve only after scope, policy and approval. The accessor returns
         // the authorized entry projection and response-redaction strings.
@@ -1996,11 +1993,11 @@ impl StoreReadOnlyRuntime {
             let (reference, encoding) = parse_run_file_spec(spec)
                 .map_err(|message| RunFilesError::Tool(format!("files.{name}: {message}")))?;
             let candidate_path = extract_path_from_secret_ref(&reference);
-            self.authorize_run_secret_path(&candidate_path, "run_command")?;
+            self.authorize_run_secret_path(&candidate_path)?;
             let path = StoreReadOnlyAdapter::ref_path(reader, &reference).map_err(|error| {
                 RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
             })?;
-            self.authorize_run_secret_path(&path, "run_command")?;
+            self.authorize_run_secret_path(&path)?;
             let source =
                 StoreReadOnlyAdapter::ref_at_path(reader, &reference, &path).map_err(|error| {
                     RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
@@ -2028,7 +2025,7 @@ impl StoreReadOnlyRuntime {
         Ok(files)
     }
 
-    fn authorize_run_secret_path(&self, path: &str, tool_name: &str) -> Result<(), RunFilesError> {
+    fn authorize_run_secret_path(&self, path: &str) -> Result<(), RunFilesError> {
         if !self.inner.scope_allows(path) {
             self.append_audit("scope_denied", path, false);
             return Err(RunFilesError::Denied(format!(
@@ -2036,13 +2033,7 @@ impl StoreReadOnlyRuntime {
             )));
         }
         if let Some(policy) = &self.policy {
-            let result = policy.evaluate(EvalContext {
-                agent_id: self.agent_name.clone(),
-                path: path.to_owned(),
-                action_type: "run".into(),
-                tool_name: tool_name.into(),
-                ..EvalContext::default()
-            });
+            let result = policy.evaluate(build_context(&self.agent_name, path, "run"));
             if !result.matched || result.action != Action::Allow {
                 self.append_audit("policy_denied", path, false);
                 return Err(RunFilesError::Denied(if !result.matched {
@@ -2053,6 +2044,44 @@ impl StoreReadOnlyRuntime {
             }
         }
         Ok(())
+    }
+
+    /// Go `checkPolicy(ctx, entryPath, "run")` as `execute_api_request` calls
+    /// it for the template's credential entry: scope was checked by the caller;
+    /// the four outcomes carry Go's audit action and error text
+    /// (`policy_denied`, `policy_prompt`, `policy_biometry`). Unlike the tool
+    /// middleware, this helper only reports the biometry requirement, it never
+    /// challenges. The tool name is not part of the evaluation context: Go's
+    /// `BuildContext` leaves it empty, so `allowed_tools` conditions match every
+    /// tool there, and so they do here (see `policy_context`).
+    /// An unrecognised action is denied (Go returns nil and proceeds).
+    fn check_api_entry_policy(&self, path: &str) -> Result<(), String> {
+        let Some(policy) = &self.policy else {
+            return Ok(());
+        };
+        let result = policy.evaluate(build_context(&self.agent_name, path, "run"));
+        let rule = symvault_core::go_quote(&result.rule_name);
+        if !result.matched {
+            self.append_audit("policy_denied", path, false);
+            return Err("policy: no matching rule (default deny)".into());
+        }
+        match result.action {
+            Action::Allow => Ok(()),
+            Action::Prompt => {
+                self.append_audit("policy_prompt", path, false);
+                Err(format!("policy requires approval by rule {rule}"))
+            }
+            Action::RequireBiometry => {
+                self.append_audit("policy_biometry", path, false);
+                Err(format!(
+                    "biometric verification required by policy by rule {rule}"
+                ))
+            }
+            _ => {
+                self.append_audit("policy_denied", path, false);
+                Err(format!("policy denied by rule {rule}"))
+            }
+        }
     }
 
     /// Supplies the caller-owned key without copying it into public runtime config.
@@ -2526,13 +2555,7 @@ impl StoreReadOnlyRuntime {
             "generate_password" | "generate_totp" | "generate_template" => "generate",
             _ => "read",
         };
-        let result = policy.evaluate(EvalContext {
-            agent_id: self.agent_name.clone(),
-            path: path.to_owned(),
-            action_type: action_type.to_owned(),
-            tool_name: name.to_owned(),
-            ..EvalContext::default()
-        });
+        let result = policy.evaluate(build_context(&self.agent_name, path, action_type));
         if result.matched && result.action == Action::Allow {
             return Ok(());
         }

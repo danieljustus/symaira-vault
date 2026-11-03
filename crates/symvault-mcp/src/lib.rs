@@ -18,6 +18,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::value::RawValue;
 
 pub mod approval;
+mod audit_identity;
 pub mod authguard;
 pub mod broker;
 mod call;
@@ -25,6 +26,7 @@ pub mod http;
 mod oauth;
 pub mod payment;
 pub mod perplexity;
+pub mod policy_context;
 mod prompts;
 pub mod render;
 mod request_context;
@@ -417,6 +419,9 @@ pub struct ProtocolHandler {
     initialized: bool,
     token_allowed_tools: Option<Vec<String>>,
     token_registry_hash: Option<String>,
+    /// The authenticated scoped token's id, stamped on audit rows (Go
+    /// `entry.TokenID`). `None` for stdio and the legacy bearer.
+    token_id: Option<String>,
     request_context: RequestContext,
 }
 
@@ -430,6 +435,7 @@ impl ProtocolHandler {
             initialized: false,
             token_allowed_tools: None,
             token_registry_hash: None,
+            token_id: None,
             request_context: RequestContext::default(),
         }
     }
@@ -449,6 +455,7 @@ impl ProtocolHandler {
             initialized: false,
             token_allowed_tools: None,
             token_registry_hash: None,
+            token_id: None,
             request_context: RequestContext::default(),
         }
     }
@@ -469,6 +476,7 @@ impl ProtocolHandler {
             initialized: false,
             token_allowed_tools: None,
             token_registry_hash: None,
+            token_id: None,
             request_context: RequestContext::default(),
         }
     }
@@ -542,6 +550,13 @@ impl ProtocolHandler {
         self.token_registry_hash = Some(hash.to_owned());
     }
 
+    /// Records the scoped token's id for audit rows. An empty id (or never
+    /// calling this) leaves `token_id` out of the row, like Go when no token
+    /// is in the call context (stdio, legacy bearer).
+    pub fn set_token_id(&mut self, id: &str) {
+        self.token_id = (!id.is_empty()).then(|| id.to_owned());
+    }
+
     /// Set context on this session, never on its shared application runtime.
     pub fn set_request_context(&mut self, context: RequestContext) {
         self.request_context = context;
@@ -558,6 +573,7 @@ impl ProtocolHandler {
             initialized: false,
             token_allowed_tools: self.token_allowed_tools.clone(),
             token_registry_hash: self.token_registry_hash.clone(),
+            token_id: self.token_id.clone(),
             request_context: RequestContext::default(),
         }
     }
@@ -777,6 +793,13 @@ impl ProtocolHandler {
             }
             _ => false,
         };
+        // Go mints the request id at the top of `executeTool`; every audit row
+        // of this call (denials included) carries it and the token id.
+        let _audit_scope =
+            audit_identity::CallAuditScope::enter(audit_identity::CallAuditIdentity {
+                token_id: self.token_id.clone().unwrap_or_default(),
+                request_id: audit_identity::generate_request_id(),
+            });
         if let Err(result) =
             runtime.authorize_with_token_scope(&name, &arguments, token_denied, registry_drift)
         {
