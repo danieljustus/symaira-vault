@@ -5009,6 +5009,114 @@ mod tests {
         );
     }
 
+    /// Deterministic twin of the `http-write-contract` TLS output probe: a
+    /// stalled TLS reader holds the response past the absolute write deadline,
+    /// then drains as fast as it can. Like Go's `WriteTimeout`, the expired
+    /// write must fail for good: rustls' buffered plaintext must not flush,
+    /// the next write must fail at once and the drain must see a truncated body.
+    /// No wall-clock race: the reader stays stalled until the server reports
+    /// the expiry, and the payload exceeds every loopback socket buffer.
+    #[test]
+    fn tls_write_deadline_expiry_is_final_even_if_client_drains_fast_afterwards() {
+        let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let tls = load_tls_server_config(
+            fixture_dir.join("tls-server.pem"),
+            fixture_dir.join("tls-server.key"),
+            None,
+        )
+        .expect("load test TLS server identity");
+        let mut roots = RootCertStore::empty();
+        for certificate in CertificateDer::pem_file_iter(fixture_dir.join("tls-ca.pem"))
+            .expect("read TLS test certificate")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("parse TLS test certificate")
+        {
+            roots.add(certificate).expect("trust test certificate");
+        }
+        let client_config = Arc::new(
+            rustls::ClientConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .expect("ring supports safe protocol versions")
+            .with_root_certificates(roots)
+            .with_no_client_auth(),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let payload_len = 64 * 1024 * 1024;
+        let (expired_tx, expired_rx) = std::sync::mpsc::channel::<()>();
+        let server = thread::spawn(move || {
+            let (socket, _) = listener.accept().expect("accept TLS client");
+            let mut stream = HttpStream::new(socket, Some(tls)).expect("create TLS stream");
+            stream
+                .complete_tls_handshake(HttpTimeouts::default())
+                .expect("TLS handshake");
+            stream.set_write_deadline(Some(Instant::now() + Duration::from_millis(400)));
+            let payload = vec![0x5a; payload_len];
+            let started = Instant::now();
+            let first = stream
+                .write_all(&payload)
+                .expect_err("a stalled reader must exhaust the absolute write deadline");
+            let elapsed = started.elapsed();
+            let second = stream
+                .write_all(b"after-expiry")
+                .expect_err("an expired write deadline must not recover");
+            let flushed = stream.flush();
+            expired_tx.send(()).expect("report expiry to the reader");
+            // Closing without a graceful TLS shutdown mirrors Go closing the
+            // connection once its write deadline has passed.
+            drop(stream);
+            (first.kind(), elapsed, second.kind(), flushed.is_err())
+        });
+
+        let server_name = "vault.example.test"
+            .to_owned()
+            .try_into()
+            .expect("valid TLS server name");
+        let connection = rustls::ClientConnection::new(client_config, server_name)
+            .expect("create TLS client connection");
+        let socket = TcpStream::connect(address).expect("connect TLS client");
+        socket
+            .set_read_timeout(Some(Duration::from_secs(60)))
+            .expect("set TLS test read timeout");
+        let mut client = StreamOwned::new(connection, socket);
+        while client.conn.is_handshaking() {
+            client
+                .conn
+                .complete_io(&mut client.sock)
+                .expect("client TLS handshake");
+        }
+        // Stalled reader: not one application byte is consumed until the
+        // server has seen its write deadline expire.
+        expired_rx
+            .recv_timeout(Duration::from_secs(60))
+            .expect("server must report write-deadline expiry");
+        let mut drained = 0_usize;
+        let mut buffer = vec![0; 256 * 1024];
+        loop {
+            match client.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(count) => drained += count,
+            }
+        }
+        let (first, elapsed, second, flush_failed) = server.join().expect("TLS server thread");
+        assert_eq!(first, std::io::ErrorKind::TimedOut);
+        assert_eq!(second, std::io::ErrorKind::TimedOut);
+        assert!(
+            flush_failed,
+            "buffered TLS records must not flush after expiry"
+        );
+        assert!(
+            elapsed < Duration::from_secs(30),
+            "the write must fail at its deadline, not drain the whole payload: {elapsed:?}"
+        );
+        assert!(
+            drained < payload_len,
+            "expired write resumed after fast client drain: {drained}/{payload_len} bytes"
+        );
+    }
+
     #[test]
     fn keep_alive_idle_timeout_matches_go_source_and_closes_socket() {
         let go_http = include_str!(

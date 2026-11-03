@@ -1168,8 +1168,9 @@ AREA_KDF_MIGRATION_TESTS := 10
 # enroll.rs and the 5 device_enroll_replay tests; measured: 53 result lines,
 # 385 passed, 0 failed); the
 # gate asserts the real count, so a shrunken run still fails. Raise it together
+# 386 after merging local/tls-write-deadline (+1 TLS write-deadline regression).
 # with the new tests (and the workflows' constant when they run again).
-AREA_MCP_TEST_COUNT := 385
+AREA_MCP_TEST_COUNT := 386
 
 .PHONY: area-oracle-runner
 area-oracle-runner:

@@ -43,6 +43,10 @@ def context(identities,version,client=None,ca='server-ca'):
     return result
 
 
+# A debug-build CLI can need many seconds of CPU to start listening on a starved host; the wait ends at the first accepted connection.
+LISTEN_DEADLINE=120
+
+
 class NativeServer:
     def __init__(self,binary,home,port,identities,mtls,records,known):
         self.known,self.record = known,{}
@@ -54,7 +58,7 @@ class NativeServer:
                                     stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         self.capture=ProcessCapture(self.child)
         try:
-            deadline=time.monotonic()+30
+            deadline=time.monotonic()+LISTEN_DEADLINE
             while True:
                 assert self.child.poll() is None,'native TLS CLI exited before listening'
                 try:
@@ -80,10 +84,10 @@ class EmptyTLSResponse(ConnectionError):
     """Actual post-handshake EOF with no HTTP application bytes."""
 
 
-def exchange(port,data,tls,row,server_name='localhost',head=False):
+def exchange(port,data,tls,row,server_name='localhost',head=False,timeout=5):
     observed=bytearray()
     try:
-        with socket.create_connection(('127.0.0.1',port),timeout=5) as raw:
+        with socket.create_connection(('127.0.0.1',port),timeout=timeout) as raw:
             with tls.wrap_socket(raw,server_hostname=server_name) as stream:
                 row.update(tls_version=stream.version(),cipher=list(stream.cipher()),
                            server_certificate_sha256=hashlib.sha256(stream.getpeercert(binary_form=True)).hexdigest())

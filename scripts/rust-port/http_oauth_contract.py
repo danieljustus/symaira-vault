@@ -164,6 +164,10 @@ def token_pair(response, root, known, client=None, access_ttl=86400, refresh_ttl
     return access, refresh, record, registry
 
 
+# A debug-build CLI can need many seconds of CPU to start listening on a starved host; the wait ends at the first accepted connection.
+LISTEN_DEADLINE=120
+
+
 class Server:
     def __init__(self, binary, home, port, process_records, known):
         self.known, self.record = known, {}
@@ -176,7 +180,7 @@ class Server:
         self.child.stdin.close()
         self.child.stdin = None
         try:
-            deadline = time.monotonic() + 30
+            deadline = time.monotonic() + LISTEN_DEADLINE
             while True:
                 assert self.child.poll() is None, 'native OAuth CLI exited before listening'
                 try:

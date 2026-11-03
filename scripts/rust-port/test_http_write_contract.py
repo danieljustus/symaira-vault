@@ -625,5 +625,69 @@ class WindowsGoTcpOutputDeclaredDifference(unittest.TestCase):
         self.assertNotEqual(self.run_validator('Linux', [], rust_complete=True), 0)
 
 
+class StarvedOutputPrecondition(unittest.TestCase):
+    """The slow-read probe needs bytes before the write budget ends; a starved host may not deliver any."""
+
+    def test_budgets_escalate_and_are_whole_seconds(self):
+        seconds = [contract.budget_seconds(budget) for budget in contract.OUTPUT_BUDGETS]
+        self.assertEqual(seconds[0], 30)
+        self.assertEqual(seconds, sorted(set(seconds)))
+        self.assertGreaterEqual(contract.EXCHANGE_TIMEOUT, 30)
+        # Only the two output profiles are retried; every other profile keeps its fixed budget.
+        self.assertEqual({name for name, _, _ in contract.PROFILES if name.endswith('-output')},
+                         {'tls-output', 'tcp-output'})
+
+    def test_progress_needs_four_reads_and_4096_bytes(self):
+        self.assertTrue(contract.output_progressing(dict(slow_read_calls=4, slow_received_bytes=4096)))
+        self.assertFalse(contract.output_progressing(dict(slow_read_calls=3, slow_received_bytes=4096)))
+        self.assertFalse(contract.output_progressing(dict(slow_read_calls=4, slow_received_bytes=4095)))
+        # The observed starved-host failures: no byte at all, or a late trickle (13 reads, 98 bytes).
+        self.assertFalse(contract.output_progressing(dict(slow_read_calls=0, slow_received_bytes=0)))
+        self.assertFalse(contract.output_progressing(dict(slow_read_calls=13, slow_received_bytes=98)))
+
+    def observe(self, progress):
+        calls = []
+        def starved_or_progressing(port, tokens, row, tls, budget):
+            calls.append(budget)
+            row.update(progress)
+        server = mock.Mock()
+        server.child.pid = 1
+        exchanged = mock.Mock(return_value={'status_line': 'HTTP/1.1 200 OK', 'raw_base64': ''})
+        result = dict(rows=[], processes=[], late_body={'received_base64': ''}, handshake_peer={}, slow_output={})
+        with mock.patch.object(contract, 'Server', return_value=server), \
+                mock.patch.object(contract, 'request', return_value=b'GET'), \
+                mock.patch.object(contract, 'tcp_exchange', exchanged), \
+                mock.patch.object(contract, 'late_body'), \
+                mock.patch.object(contract, 'slow_output', starved_or_progressing), \
+                mock.patch.object(contract, 'assert_response'):
+            try:
+                contract.observe('bin', 'home', 1, {}, None, 'tcp-output', None, result, 60)
+            except BaseException as error:
+                return error, calls, exchanged, server
+        return None, calls, exchanged, server
+
+    def test_starved_output_stops_before_the_next_exchange_and_closes_the_server(self):
+        error, calls, exchanged, server = self.observe(dict(slow_read_calls=0, slow_received_bytes=0))
+        self.assertIsInstance(error, contract.OutputPreconditionUnmet)
+        self.assertEqual(calls, [60], 'the attempt budget must reach the slow-read phase')
+        self.assertEqual(exchanged.call_count, 2, 'ping-after must not wait on a server still busy with the bulk response')
+        server.close.assert_called_once()
+
+    def test_progressing_output_reaches_the_expiry_verdict_unchanged(self):
+        error, calls, exchanged, _ = self.observe(dict(slow_read_calls=5, slow_received_bytes=8192, received_base64=''))
+        self.assertIsNone(error)
+        self.assertEqual(exchanged.call_count, 3)
+
+    def test_listener_wait_tolerates_a_starved_host(self):
+        import http_oauth_contract
+        self.assertGreaterEqual(http_oauth_contract.LISTEN_DEADLINE, 120)
+        self.assertGreaterEqual(http_tls_contract.LISTEN_DEADLINE, 120)
+
+    def test_exchanges_use_the_load_tolerant_timeout(self):
+        _, _, exchanged, _ = self.observe(dict(slow_read_calls=5, slow_received_bytes=8192, received_base64=''))
+        for call in exchanged.call_args_list:
+            self.assertEqual(call.kwargs['timeout'], contract.EXCHANGE_TIMEOUT)
+
+
 if __name__ == '__main__':
     unittest.main()
