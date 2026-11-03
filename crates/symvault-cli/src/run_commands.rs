@@ -334,6 +334,125 @@ fn parse_env_file_contents(
     Ok(result)
 }
 
+/// The process group of a bounded `run` child, so a fatal signal can be
+/// forwarded to it (see `process_signals`). Single slot: the CLI runs one
+/// command; the MCP server never reads it.
+#[cfg(unix)]
+pub(crate) mod child_group {
+    use std::sync::atomic::{AtomicI32, Ordering};
+    use std::time::{Duration, Instant};
+
+    const NONE: i32 = 0;
+    const SPAWNING: i32 = -1;
+    /// Upper bound for a signal that lands between `begin` and the child's pid
+    /// being known (fork/exec is microseconds; this only guards a stalled box).
+    const SPAWN_WAIT: Duration = Duration::from_secs(2);
+
+    /// One process-group slot. The production code uses the single `SLOT`;
+    /// tests build their own so they never touch the shared one (a test that
+    /// signalled the shared slot would kill another test's child).
+    struct Slot(AtomicI32);
+
+    impl Slot {
+        const fn new() -> Self {
+            Self(AtomicI32::new(NONE))
+        }
+
+        fn begin(&self) {
+            self.0.store(SPAWNING, Ordering::SeqCst);
+        }
+
+        fn set(&self, pid: u32) {
+            self.0
+                .store(i32::try_from(pid).unwrap_or(NONE), Ordering::SeqCst);
+        }
+
+        fn clear(&self) {
+            self.0.store(NONE, Ordering::SeqCst);
+        }
+
+        fn forward(&self, signal: i32) {
+            let deadline = Instant::now() + SPAWN_WAIT;
+            let mut group = self.0.load(Ordering::SeqCst);
+            while group == SPAWNING && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(1));
+                group = self.0.load(Ordering::SeqCst);
+            }
+            if group > 0
+                && let Some(pid) = rustix::process::Pid::from_raw(group)
+                && let Some(signal) = rustix::process::Signal::from_named_raw(signal)
+            {
+                let _ = rustix::process::kill_process_group(pid, signal);
+            }
+        }
+    }
+
+    static SLOT: Slot = Slot::new();
+
+    /// Registration of one child's group; cleared on drop.
+    pub(crate) struct Guard(());
+
+    /// Marks a spawn as imminent. A signal arriving before [`Guard::set`]
+    /// waits for the pid instead of dying with the child unreachable.
+    pub(crate) fn begin() -> Guard {
+        SLOT.begin();
+        Guard(())
+    }
+
+    impl Guard {
+        /// Registers the spawned child (its own group leader).
+        pub(crate) fn set(&self, pid: u32) {
+            SLOT.set(pid);
+        }
+    }
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            SLOT.clear();
+        }
+    }
+
+    /// Delivers `signal` to the registered child group, if any.
+    pub(crate) fn forward(signal: i32) {
+        SLOT.forward(signal);
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::os::unix::process::{CommandExt, ExitStatusExt};
+
+        #[test]
+        fn slot_registers_and_clears_the_group() {
+            let slot = Slot::new();
+            slot.begin();
+            assert_eq!(slot.0.load(Ordering::SeqCst), SPAWNING);
+            slot.set(4242);
+            assert_eq!(slot.0.load(Ordering::SeqCst), 4242);
+            slot.clear();
+            assert_eq!(slot.0.load(Ordering::SeqCst), NONE);
+        }
+
+        #[test]
+        fn forward_signals_the_registered_child_group_only() {
+            let mut child = std::process::Command::new("sleep")
+                .arg("30")
+                .process_group(0)
+                .spawn()
+                .expect("spawn sleep");
+            let slot = Slot::new();
+            // Nothing registered: the signal goes nowhere.
+            slot.forward(libc::SIGTERM);
+            assert!(child.try_wait().expect("try_wait").is_none());
+            slot.begin();
+            slot.set(child.id());
+            slot.forward(libc::SIGTERM);
+            let status = child.wait().expect("child ends");
+            assert_eq!(status.signal(), Some(libc::SIGTERM));
+        }
+    }
+}
+
 /// Execute a command using the caller-selected environment policy.
 ///
 /// The process itself is deliberately kept behind this small seam so `run`
@@ -358,10 +477,15 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         // then reaches the child instead of orphaning it, and the child keeps
         // terminal reads. ponytail: process-group scope; detached descendants
         // need OS-specific supervision.
-        // Residual (#1242): Ctrl-C does not reach a child started with
-        // --timeout/MCP execute, which Go would also have signalled.
+        // A terminal Ctrl-C then reaches only this process, so the CLI's
+        // signal thread forwards SIGINT/SIGTERM/SIGHUP/SIGQUIT to this group
+        // before dying (`run_commands::child_group`, ADR 0034 item 12).
         child_command.process_group(0);
     }
+    // Registered before the spawn so a signal in the fork window still waits
+    // for the pid; cleared on every exit path when the guard drops.
+    #[cfg(unix)]
+    let group_guard = options.timeout.is_some().then(child_group::begin);
     child_command.env_clear();
     for &key in options.whitelist {
         if let Some(value) = std::env::var_os(key) {
@@ -429,6 +553,10 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
             ));
         }
     };
+    #[cfg(unix)]
+    if let Some(guard) = &group_guard {
+        guard.set(child.id());
+    }
     let stdout = match child.stdout.take() {
         Some(stdout) => stdout,
         None => {

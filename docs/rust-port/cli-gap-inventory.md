@@ -822,6 +822,28 @@ the store API are pre-marked with `symvault_store::data_safety::test_support_pre
 `test-support`, dev-dependencies only); the store crate's own unit
 tests run with the gate off (`cfg(test)`) except `data_safety::tests`.
 
+## CLI-007: `run --timeout` Ctrl-C reaches the child (ADR 0034 item 12)
+
+A bounded `run` (`--timeout`, also `run --broker --timeout`) keeps the child in
+its own process group so a timeout can kill the tree (#1199). Go's child shares
+the caller's group, so a terminal Ctrl-C reached it; Rust's parent died and the
+child kept running with the injected secrets and no parent left to enforce the
+timeout. Fixed: `run_commands::child_group` holds the child's group
+(registered before the spawn, cleared on every exit path) and the signal thread
+forwards SIGINT/SIGTERM/SIGHUP/SIGQUIT to it before the parent dies exactly as
+before (death by that signal; exit 2 for SIGQUIT). The `KNOWN_DIVERGENCES`
+exemption of `signal_process_contract.py` is gone, so `run-timeout-group-sigint`
+is compared Go against Rust like the other 32 cases.
+
+Residuals (probed, not fixed):
+
+| Class | Go | Rust |
+| --- | --- | --- |
+| signal sent to the `run --timeout` **parent only** (`kill -TERM <pid>`) | child keeps running | child group receives the same signal (a process cannot tell a tty group delivery from a direct one) |
+| child that ignores or handles the forwarded signal | survives, like in Go | survives, like in Go; the parent still dies at once |
+| MCP `execute_with_secret` child (own group, #1242) | receives a terminal Ctrl-C | not forwarded: the MCP server has its own shutdown path (`mcp_shutdown`) |
+| secret file cleanup when the parent dies from the signal | not applicable | `file use` temporary files are not zeroed on death by signal (unchanged) |
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate

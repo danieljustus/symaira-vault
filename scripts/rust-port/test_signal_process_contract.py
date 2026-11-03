@@ -49,7 +49,6 @@ def rust_records():
     rows = copy.deepcopy(go_records())
     for row in rows:
         row["state"] = [n for n in row["state"] if n != "vault/broker-ca.pem"]
-    rows[6]["orphaned_child_alive"] = True  # documented bounded-run divergence
     return rows
 
 
@@ -104,8 +103,11 @@ class SignalContractControls(unittest.TestCase):
     def test_case_lists_must_match(self):
         self.rejects(lambda r: r.pop(), "different case lists")
 
-    def test_known_divergence_cannot_go_stale(self):
-        self.rejects(lambda r: r[6].update(orphaned_child_alive=False), "remove the exemption")
+    def test_bounded_run_child_surviving_group_sigint_is_rejected(self):
+        # ADR 0034 item 12: `run --timeout` must not leave the secret-bearing
+        # child running after a terminal Ctrl-C (Go: the child dies with it).
+        self.assertEqual(go_records()[6]["case"], "run-timeout-group-sigint")
+        self.rejects(lambda r: r[6].update(orphaned_child_alive=True), "orphaned_child_alive")
 
     def test_oracle_drift_is_detected(self):
         go = go_records()[:6]
