@@ -1114,10 +1114,12 @@ AREA_KDF_MIGRATION_TESTS := 10
 # passing test, early return, once the Go copy is deleted), 339 at the
 # local/integ2 merge (MCP audit ids, policy BuildContext, OAuth expiry, HTTP
 # drain and token-registry overlay tests), 346 at fc806ff4 (approval proof window,
-# scope boundary, sharing corpus and clipboard auto-clear replays); the
+# scope boundary, sharing corpus and clipboard auto-clear replays), 354 on
+# local/device-approvals (device-token approvals replay: 4 tests, plus 4 unit
+# tests in approval.rs); the
 # gate asserts the real count, so a shrunken run still fails. Raise it together
 # with the new tests (and the workflows' constant when they run again).
-AREA_MCP_TEST_COUNT := 346
+AREA_MCP_TEST_COUNT := 354
 
 .PHONY: area-oracle-runner
 area-oracle-runner:
