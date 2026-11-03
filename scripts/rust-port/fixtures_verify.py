@@ -546,6 +546,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", type=Path, default=default_root(), help="repository root")
     parser.add_argument("--git-dir", default=None, help="git directory holding the oracle objects (default: the root's repository)")
     parser.add_argument("--write", action="store_true", help="regenerate the manifests (freeze step)")
+    parser.add_argument("--allow-downgrade", action="store_true", help="with --write: accept recomputed digests becoming recorded")
     parser.add_argument("--list-pins", action="store_true", help="print the oracle commits pinned by the fixtures")
     parser.add_argument("--generator-ref", default=None, help="ref whose blobs generator digests are recomputed from (default: legacy/go-oracle, else HEAD)")
     args = parser.parse_args(argv)
@@ -569,8 +570,25 @@ def main(argv: list[str] | None = None) -> int:
             print("--write regenerates the whole manifest; do not combine with fixture arguments", file=sys.stderr)
             return 2
         generator_ref = pick_generator_ref(git, args.generator_ref)
-        (root / MANIFEST).write_text("".join(f"{sha256_file(root / rel)}  {rel}\n" for rel in files))
         oracle = build_oracle_manifest(scan, git, generator_ref)
+        # Ratchet: a refreeze must not silently turn a recomputed digest into a
+        # merely recorded one (that would let a tampered digest pass).
+        old_path = root / ORACLE_MANIFEST
+        if old_path.is_file() and not args.allow_downgrade:
+            try:
+                old = json.loads(old_path.read_text()).get("entries", {})
+            except ValueError:
+                old = {}
+            downgraded = sorted(
+                key for key, entry in oracle["entries"].items()
+                if old.get(key, {}).get("class") == "recomputed" and entry["class"] != "recomputed"
+            )
+            if downgraded:
+                for key in downgraded:
+                    print(f"--write refused: {key} was recomputed and would become {oracle['entries'][key]['class']}", file=sys.stderr)
+                print("rerun with --allow-downgrade only after reviewing why the digest no longer recomputes", file=sys.stderr)
+                return 1
+        (root / MANIFEST).write_text("".join(f"{sha256_file(root / rel)}  {rel}\n" for rel in files))
         (root / ORACLE_MANIFEST).write_text(json.dumps(oracle, indent=1, sort_keys=False) + "\n")
         # The oracle manifest is itself a frozen file: list it now that it exists.
         files = frozen_files(root)

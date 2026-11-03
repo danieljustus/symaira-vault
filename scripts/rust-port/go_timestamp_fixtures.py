@@ -112,7 +112,7 @@ def main():
         return
     stale = [path.name for path, text in ((CASES, cases), (DISPLAY, display)) if not path.exists() or path.read_text(encoding='utf-8') != text]
     if stale:
-        raise SystemExit(f'STALE: {", ".join(stale)} differ from the Go oracle (run make timestamp-fixtures-generate)')
+        raise SystemExit(f'STALE: {", ".join(stale)} differ from the Go oracle (run the Go oracle archive recipe (docs/rust-port/go-oracle-archive.md))')
     print(f'PASS: {n_cases} acceptance and {n_display} display cases match Go {TOOLCHAIN} under TZ {", ".join(ZONES)}')
 
 

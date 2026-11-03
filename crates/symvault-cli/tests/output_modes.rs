@@ -2017,13 +2017,13 @@ fn fixture_provenance_matches_checkout() {
         digest_of(&root, &oracle.source_files),
         oracle.source_digest,
         "Go contract source changed since fixture capture — re-freeze \
-         testdata/port/cli/output-modes.json (make output-modes-regenerate)"
+         testdata/port/cli/output-modes.json (the Go oracle archive recipe (docs/rust-port/go-oracle-archive.md))"
     );
     assert_eq!(
         digest_of(&root, &oracle.generator_files),
         oracle.generator_digest,
         "generator changed since fixture capture — re-freeze the fixture \
-         (make output-modes-regenerate)"
+         (the Go oracle archive recipe (docs/rust-port/go-oracle-archive.md))"
     );
     // The gate rows that decide which modes run are part of the provenance:
     // json.Marshal([]gateRow) in the generator, spelled out here.

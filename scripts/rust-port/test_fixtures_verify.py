@@ -138,6 +138,16 @@ class FixturesVerifyControls(unittest.TestCase):
         self.assertEqual(proc.returncode, 1, proc.stdout)
         self.assertIn("fixture now claims", proc.stdout)
 
+    def test_refreeze_refuses_to_downgrade_a_recomputed_digest(self):
+        data = json.loads(self.fixture.read_text())
+        data["oracle"]["source_digest"] = "0" * 64
+        self.fixture.write_text(json.dumps(data, indent=1) + "\n")
+        proc = run(self.root, "--write")
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("--write refused", proc.stderr)
+        # the explicit override still works, and the check then reports it as recorded
+        run(self.root, "--write", "--allow-downgrade", check=True)
+
     def test_unlisted_new_fixture_and_fixture_argument(self):
         (self.root / "testdata/port/z.txt").write_text("new\n")
         self.assertEqual(run(self.root).returncode, 1)

@@ -592,13 +592,13 @@ fn fixture_provenance_matches_checkout() {
         oracle.source_digest,
         "Go contract source changed since fixture capture — re-freeze \
          crates/symvault-cli/tests/fixtures/import-command/cases.json \
-         (make import-cli-regenerate)"
+         (the Go oracle archive recipe (docs/rust-port/go-oracle-archive.md))"
     );
     assert_eq!(
         digest_of(&root, &oracle.generator_files),
         oracle.generator_digest,
         "generator changed since fixture capture — re-freeze the fixture \
-         (make import-cli-regenerate)"
+         (the Go oracle archive recipe (docs/rust-port/go-oracle-archive.md))"
     );
 }
 

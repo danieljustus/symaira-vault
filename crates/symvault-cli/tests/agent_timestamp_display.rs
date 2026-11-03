@@ -2,7 +2,7 @@
 //! `time.Time.Format("2006-01-02 15:04")` of the *parsed* registry timestamp.
 //! Every accepted timestamp of the Go-recorded sweep
 //! (`go_timestamp_display_cases.json`, re-recorded by
-//! `make timestamp-fixtures-generate`) is run through the real binary, so a
+//! `the Go oracle archive recipe (docs/rust-port/go-oracle-archive.md)`) is run through the real binary, so a
 //! non-canonical form Go's parser accepts (one-digit hour, `,` fraction,
 //! `+24:00`, ...) must display exactly what Go displays.
 
