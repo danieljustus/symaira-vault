@@ -165,3 +165,21 @@ Go oracle, never a reading of the source alone.
   rather than widening it, and Go writes the same bytes, so it is not a declared difference.
 - **Related, not a widening:** Go writes no `canWrite` for a custom profile that never set it; Rust always writes
   `canWrite` (a missing one is `false` either way). Declared as `rust_adds` for case `custom_without_can_write`.
+
+## 12. `allowed_tools` in a policy condition matches every tool
+
+- **Where:** `policy.ContextProvider.BuildContext` (`internal/policy/context.go`) never sets
+  `EvalContext.ToolName`; `matchAllowedTool` (`internal/policy/engine.go`) returns `true` for an empty
+  tool name. Both production call sites (`authorizerImpl.checkPolicy`, `Server.checkPolicy`) use
+  `BuildContext`.
+- **Repro:** a rule `{action: deny, conditions: {allowed_tools: [delete_entry]}}` denies `get_entry`
+  as well; `{action: allow, conditions: {allowed_tools: [get_entry]}}` allows `delete_entry`. The
+  condition is a no-op, so an operator who scopes a rule to a tool gets a rule for all tools.
+- **Expected (arguably):** the rule applies only to the named tools.
+- **Rust (mirrors Go, security-driven):** `symvault_mcp::policy_context::build_context` also leaves
+  `tool_name` empty, so a deny/prompt/require_biometry rule scoped by `allowed_tools` keeps applying
+  to every tool. Passing the real tool name would make Rust *more permissive* than Go for those rules
+  (the rule would stop applying to other tools), so the port deliberately does not. Fixing this belongs
+  upstream in Go (set `ToolName` in the call sites); once Go changes, regenerate
+  `testdata/port/mcp/policy-build-context.json` and pass the name through the helper. Pinned by
+  `policy_build_context_contract.rs` (Go-recorded `eval_cases`) and `policy_context_authorize.rs`.

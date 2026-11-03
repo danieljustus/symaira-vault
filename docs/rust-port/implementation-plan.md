@@ -298,8 +298,9 @@ The approval-denial regression now uses an isolated loopback template rather
 than public GitHub DNS, preserving production target validation order.
 
 This evidence concerns entry/action authorization. Go's shared policy helper
-still supplies an empty tool name; tool-name conditions are not claimed
-(prompt/biometry diagnostics now match Go, see `cli-gap-inventory.md`
+supplies an empty tool name and Rust's `policy_context::build_context` mirrors that, so
+`allowed_tools` conditions match every tool in both (`upstream-go-bugs.md` section 12;
+prompt/biometry diagnostics match Go, see `cli-gap-inventory.md`
 "MCP-AUDIT-IDS, OAUTH-EXPIRY, API-POLICY-DIAG"). Public DNS, native platform gates,
 MCP-003/BROKER-002 promotion, releases and cutover remain separate work.
 

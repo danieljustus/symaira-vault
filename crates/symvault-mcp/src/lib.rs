@@ -26,6 +26,7 @@ pub mod http;
 mod oauth;
 pub mod payment;
 pub mod perplexity;
+pub mod policy_context;
 mod prompts;
 pub mod render;
 mod request_context;

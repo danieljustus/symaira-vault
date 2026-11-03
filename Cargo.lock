@@ -4199,6 +4199,7 @@ dependencies = [
  "hickory-resolver",
  "hmac 0.13.0",
  "http",
+ "libc",
  "rcgen",
  "reqwest",
  "rustls",

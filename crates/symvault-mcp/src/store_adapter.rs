@@ -8,6 +8,7 @@ use crate::call::{
     ReadOnlyUnavailableTool, SecureInputPreflightError, ToolCallResult, ToolCallRuntime,
     WriteApprovalDecision, normalize_scope_path, write_approval_decision,
 };
+use crate::policy_context::build_context;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde_json::{Value, json};
 use std::{
@@ -19,7 +20,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use symvault_core::policy::{Action, Engine, EvalContext};
+use symvault_core::policy::{Action, Engine};
 use symvault_core::secret_ref::SecretHandle;
 use symvault_crypto::{Identity, SecretBytes};
 use symvault_platform::approval::{
@@ -1076,13 +1077,8 @@ impl StoreReadOnlyRuntime {
                 ));
             }
             if let Some(policy) = &self.policy {
-                let result = policy.evaluate(EvalContext {
-                    agent_id: self.agent_name.clone(),
-                    path: candidate_path.clone(),
-                    action_type: "run".into(),
-                    tool_name: "run_command".into(),
-                    ..EvalContext::default()
-                });
+                let result =
+                    policy.evaluate(build_context(&self.agent_name, &candidate_path, "run"));
                 if !result.matched || result.action != Action::Allow {
                     self.append_audit("policy_denied", &candidate_path, false);
                     return Err(if !result.matched {
@@ -1102,13 +1098,7 @@ impl StoreReadOnlyRuntime {
                 ));
             }
             if let Some(policy) = &self.policy {
-                let result = policy.evaluate(EvalContext {
-                    agent_id: self.agent_name.clone(),
-                    path: path.clone(),
-                    action_type: "run".into(),
-                    tool_name: "run_command".into(),
-                    ..EvalContext::default()
-                });
+                let result = policy.evaluate(build_context(&self.agent_name, &path, "run"));
                 if !result.matched || result.action != Action::Allow {
                     self.append_audit("policy_denied", &path, false);
                     return Err(if !result.matched {
@@ -1417,7 +1407,7 @@ impl StoreReadOnlyRuntime {
                     }
                 };
                 let generated_name = generate_env_var_name(&entry_path, &field);
-                self.authorize_run_secret_path(&entry_path, "execute_with_secret")
+                self.authorize_run_secret_path(&entry_path)
                     .map_err(run_files_error)?;
                 let resolver_ref = if field.is_empty() {
                     entry_path.clone()
@@ -1426,7 +1416,7 @@ impl StoreReadOnlyRuntime {
                 };
                 let resolved_path = StoreReadOnlyAdapter::ref_path(&reader, &resolver_ref)
                     .map_err(|error| format!("cannot resolve secret ref {reference:?}: {error}"))?;
-                self.authorize_run_secret_path(&resolved_path, "execute_with_secret")
+                self.authorize_run_secret_path(&resolved_path)
                     .map_err(run_files_error)?;
                 let value =
                     StoreReadOnlyAdapter::ref_at_path(&reader, &resolver_ref, &resolved_path)
@@ -2003,11 +1993,11 @@ impl StoreReadOnlyRuntime {
             let (reference, encoding) = parse_run_file_spec(spec)
                 .map_err(|message| RunFilesError::Tool(format!("files.{name}: {message}")))?;
             let candidate_path = extract_path_from_secret_ref(&reference);
-            self.authorize_run_secret_path(&candidate_path, "run_command")?;
+            self.authorize_run_secret_path(&candidate_path)?;
             let path = StoreReadOnlyAdapter::ref_path(reader, &reference).map_err(|error| {
                 RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
             })?;
-            self.authorize_run_secret_path(&path, "run_command")?;
+            self.authorize_run_secret_path(&path)?;
             let source =
                 StoreReadOnlyAdapter::ref_at_path(reader, &reference, &path).map_err(|error| {
                     RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
@@ -2035,7 +2025,7 @@ impl StoreReadOnlyRuntime {
         Ok(files)
     }
 
-    fn authorize_run_secret_path(&self, path: &str, tool_name: &str) -> Result<(), RunFilesError> {
+    fn authorize_run_secret_path(&self, path: &str) -> Result<(), RunFilesError> {
         if !self.inner.scope_allows(path) {
             self.append_audit("scope_denied", path, false);
             return Err(RunFilesError::Denied(format!(
@@ -2043,13 +2033,7 @@ impl StoreReadOnlyRuntime {
             )));
         }
         if let Some(policy) = &self.policy {
-            let result = policy.evaluate(EvalContext {
-                agent_id: self.agent_name.clone(),
-                path: path.to_owned(),
-                action_type: "run".into(),
-                tool_name: tool_name.into(),
-                ..EvalContext::default()
-            });
+            let result = policy.evaluate(build_context(&self.agent_name, path, "run"));
             if !result.matched || result.action != Action::Allow {
                 self.append_audit("policy_denied", path, false);
                 return Err(RunFilesError::Denied(if !result.matched {
@@ -2069,19 +2053,13 @@ impl StoreReadOnlyRuntime {
     /// middleware, this helper only reports the biometry requirement, it never
     /// challenges. The tool name is not part of the evaluation context: Go's
     /// `BuildContext` leaves it empty, so `allowed_tools` conditions match every
-    /// tool there; Rust still passes the name (see the BROKER-002 residual).
+    /// tool there, and so they do here (see `policy_context`).
     /// An unrecognised action is denied (Go returns nil and proceeds).
     fn check_api_entry_policy(&self, path: &str) -> Result<(), String> {
         let Some(policy) = &self.policy else {
             return Ok(());
         };
-        let result = policy.evaluate(EvalContext {
-            agent_id: self.agent_name.clone(),
-            path: path.to_owned(),
-            action_type: "run".into(),
-            tool_name: "execute_api_request".into(),
-            ..EvalContext::default()
-        });
+        let result = policy.evaluate(build_context(&self.agent_name, path, "run"));
         let rule = symvault_core::go_quote(&result.rule_name);
         if !result.matched {
             self.append_audit("policy_denied", path, false);
@@ -2577,13 +2555,7 @@ impl StoreReadOnlyRuntime {
             "generate_password" | "generate_totp" | "generate_template" => "generate",
             _ => "read",
         };
-        let result = policy.evaluate(EvalContext {
-            agent_id: self.agent_name.clone(),
-            path: path.to_owned(),
-            action_type: action_type.to_owned(),
-            tool_name: name.to_owned(),
-            ..EvalContext::default()
-        });
+        let result = policy.evaluate(build_context(&self.agent_name, path, action_type));
         if result.matched && result.action == Action::Allow {
             return Ok(());
         }

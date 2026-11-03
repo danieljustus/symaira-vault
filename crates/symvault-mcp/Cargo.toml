@@ -32,6 +32,9 @@ symvault-platform = { path = "../symvault-platform", version = "=0.0.0" }
 symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
 time = { version = "=0.3.55", features = ["formatting"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.191"
+
 [dev-dependencies]
 # Fixtures mark their throw-away vaults as Rust-created (test-only helper).
 symvault-store = { path = "../symvault-store", version = "=0.0.0", features = ["test-support"] }

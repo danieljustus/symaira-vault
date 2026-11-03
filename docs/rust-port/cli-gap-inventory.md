@@ -894,13 +894,16 @@ credential entry: `policy: no matching rule (default deny)`,
 by rule %q` (audit `policy_prompt`) and `biometric verification required by
 policy by rule %q` (audit `policy_biometry`); all nine Go-recorded
 `execute-api-policy.json` cases now compare the error text (previously prompt
-and biometry were skipped). Still open: Go's `BuildContext` leaves
-`EvalContext.ToolName` empty, so an `allowed_tools` condition matches every
-tool in Go; Rust passes the tool name, so such a rule applies only to the named
-tool (an `allow` rule is narrower, a `deny` rule is narrower too, i.e. Rust is
-*more permissive* for deny-with-allowed_tools). Changing it alters policy
-behavior for every tool (`authorize_policy`, `run_command`, `execute_with_secret`)
-and is not S-sized; it needs an owner decision (parity vs. fixing Go).
+and biometry were skipped). Every policy evaluation in `symvault-mcp` (the tool gate
+`authorize_policy`, `run_command`, `execute_with_secret`, `execute_api_request`) now builds its
+`EvalContext` through `symvault_mcp::policy_context::build_context`, a field-by-field mirror of
+Go's `ContextProvider.BuildContext`: `ToLogicalPath(path)`, the local wall-clock `now`,
+`working_dir` (`os.Getwd`, `$PWD` first), `home_dir` (`$HOME`), `env_vars` `HOME` and `GIT_BRANCH`
+(git run with Go's `DefaultWhitelist` environment), and **no tool name**. Go never sets
+`EvalContext.ToolName`, so an `allowed_tools` condition matches every tool there and here (see
+`upstream-go-bugs.md` section 12); the tool name still feeds the separate tool-scope and catalog
+checks. Pinned by the Go-recorded `testdata/port/mcp/policy-build-context.json`
+(`make policy-context-differential`) and `policy_context_authorize.rs`.
 Unknown actions are denied (Go proceeds), the existing fail-closed difference.
 
 ## Historical measurement, 2026-09-27

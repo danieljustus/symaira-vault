@@ -1,0 +1,796 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit_sha": "d1cd0f97ac550bc3020bc86b0514989f8d28d95c",
+    "source_files": [
+      "internal/policy/context.go",
+      "internal/policy/engine.go",
+      "internal/policy/types.go",
+      "internal/secrets/filter.go"
+    ],
+    "source_digest": "d598f3ad076dc8dc8ef295b440cea9e325658bfef716ea97b613ef89bcff2082"
+  },
+  "cases": [
+    {
+      "name": "plain",
+      "home": "/home/dev",
+      "working_dir": "/work/repo",
+      "git_branch": "main",
+      "agent_id": "agent",
+      "path": "ssh/prod",
+      "action_type": "get",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": "ssh/prod",
+        "tags": null,
+        "working_dir": "/work/repo",
+        "home_dir": "/home/dev",
+        "env_vars": {
+          "GIT_BRANCH": "main",
+          "HOME": "/home/dev"
+        },
+        "action_type": "get",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "path_cleaned",
+      "home": "/home/dev",
+      "working_dir": "/work/repo",
+      "git_branch": "main",
+      "agent_id": "agent",
+      "path": "ssh//keys/../prod/",
+      "action_type": "run",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": "ssh/prod",
+        "tags": null,
+        "working_dir": "/work/repo",
+        "home_dir": "/home/dev",
+        "env_vars": {
+          "GIT_BRANCH": "main",
+          "HOME": "/home/dev"
+        },
+        "action_type": "run",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "path_empty",
+      "home": "/home/dev",
+      "working_dir": "/work/repo",
+      "git_branch": "main",
+      "agent_id": "agent",
+      "path": "",
+      "action_type": "get",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": "",
+        "tags": null,
+        "working_dir": "/work/repo",
+        "home_dir": "/home/dev",
+        "env_vars": {
+          "GIT_BRANCH": "main",
+          "HOME": "/home/dev"
+        },
+        "action_type": "get",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "path_dot_result",
+      "home": "/home/dev",
+      "working_dir": "/work/repo",
+      "git_branch": "main",
+      "agent_id": "agent",
+      "path": "a/..",
+      "action_type": "get",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": ".",
+        "tags": null,
+        "working_dir": "/work/repo",
+        "home_dir": "/home/dev",
+        "env_vars": {
+          "GIT_BRANCH": "main",
+          "HOME": "/home/dev"
+        },
+        "action_type": "get",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "path_parent_escape",
+      "home": "/home/dev",
+      "working_dir": "/work/repo",
+      "git_branch": "main",
+      "agent_id": "agent",
+      "path": "../x/./y",
+      "action_type": "get",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": "../x/y",
+        "tags": null,
+        "working_dir": "/work/repo",
+        "home_dir": "/home/dev",
+        "env_vars": {
+          "GIT_BRANCH": "main",
+          "HOME": "/home/dev"
+        },
+        "action_type": "get",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "working_dir_cleaned",
+      "home": "/home/dev/",
+      "working_dir": "/work/./repo/src/../",
+      "git_branch": "feature/x",
+      "agent_id": "agent",
+      "path": "p",
+      "action_type": "get",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": "p",
+        "tags": null,
+        "working_dir": "/work/repo",
+        "home_dir": "/home/dev",
+        "env_vars": {
+          "GIT_BRANCH": "feature/x",
+          "HOME": "/home/dev/"
+        },
+        "action_type": "get",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "tags_passed_through",
+      "home": "/home/dev",
+      "working_dir": "/work/repo",
+      "git_branch": "main",
+      "agent_id": "agent",
+      "path": "p",
+      "action_type": "get",
+      "tags": [
+        "prod",
+        "ci"
+      ],
+      "context": {
+        "agent_id": "agent",
+        "path": "p",
+        "tags": [
+          "prod",
+          "ci"
+        ],
+        "working_dir": "/work/repo",
+        "home_dir": "/home/dev",
+        "env_vars": {
+          "GIT_BRANCH": "main",
+          "HOME": "/home/dev"
+        },
+        "action_type": "get",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "home_unset",
+      "home": "",
+      "home_unset": true,
+      "working_dir": "/work/repo",
+      "git_branch": "main",
+      "agent_id": "agent",
+      "path": "p",
+      "action_type": "get",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": "p",
+        "tags": null,
+        "working_dir": "/work/repo",
+        "home_dir": "",
+        "env_vars": {
+          "GIT_BRANCH": "main",
+          "HOME": ""
+        },
+        "action_type": "get",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "home_empty",
+      "home": "",
+      "working_dir": "/work/repo",
+      "git_branch": "main",
+      "agent_id": "agent",
+      "path": "p",
+      "action_type": "get",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": "p",
+        "tags": null,
+        "working_dir": "/work/repo",
+        "home_dir": "",
+        "env_vars": {
+          "GIT_BRANCH": "main",
+          "HOME": ""
+        },
+        "action_type": "get",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "home_unclean_env_raw",
+      "home": "/home//dev/./",
+      "working_dir": "/work/repo",
+      "git_branch": "main",
+      "agent_id": "agent",
+      "path": "p",
+      "action_type": "get",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": "p",
+        "tags": null,
+        "working_dir": "/work/repo",
+        "home_dir": "/home/dev",
+        "env_vars": {
+          "GIT_BRANCH": "main",
+          "HOME": "/home//dev/./"
+        },
+        "action_type": "get",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "unresolvable_git_branch",
+      "home": "/home/dev",
+      "working_dir": "/nonexistent-policy-fixture-dir",
+      "git_branch": "",
+      "agent_id": "agent",
+      "path": "p",
+      "action_type": "get",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": "p",
+        "tags": null,
+        "working_dir": "/nonexistent-policy-fixture-dir",
+        "home_dir": "/home/dev",
+        "env_vars": {
+          "GIT_BRANCH": "",
+          "HOME": "/home/dev"
+        },
+        "action_type": "get",
+        "tool_name": ""
+      }
+    },
+    {
+      "name": "root_working_dir",
+      "home": "/",
+      "working_dir": "/",
+      "git_branch": "main",
+      "agent_id": "agent",
+      "path": "/abs/../etc",
+      "action_type": "delete",
+      "tags": null,
+      "context": {
+        "agent_id": "agent",
+        "path": "/etc",
+        "tags": null,
+        "working_dir": "/",
+        "home_dir": "/",
+        "env_vars": {
+          "GIT_BRANCH": "main",
+          "HOME": "/"
+        },
+        "action_type": "delete",
+        "tool_name": ""
+      }
+    }
+  ],
+  "eval_cases": [
+    {
+      "name": "deny_allowed_tools_applies_to_every_tool",
+      "rules": [
+        {
+          "name": "deny-x",
+          "priority": 10,
+          "action": "deny",
+          "allowed_tools": [
+            "X"
+          ]
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_allowed_tools_applies_to_every_tool",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "deny",
+      "rule_name": "deny-x",
+      "matched": true
+    },
+    {
+      "name": "allow_allowed_tools_applies_to_every_tool",
+      "rules": [
+        {
+          "name": "allow-x",
+          "action": "allow",
+          "allowed_tools": [
+            "X"
+          ]
+        }
+      ],
+      "input": {
+        "name": "allow_allowed_tools_applies_to_every_tool",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "allow",
+      "rule_name": "allow-x",
+      "matched": true
+    },
+    {
+      "name": "prompt_allowed_tools_applies_to_every_tool",
+      "rules": [
+        {
+          "name": "prompt-x",
+          "priority": 10,
+          "action": "prompt",
+          "allowed_tools": [
+            "X"
+          ]
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "prompt_allowed_tools_applies_to_every_tool",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "prompt",
+      "rule_name": "prompt-x",
+      "matched": true
+    },
+    {
+      "name": "biometry_allowed_tools_applies_to_every_tool",
+      "rules": [
+        {
+          "name": "bio-x",
+          "priority": 10,
+          "action": "require_biometry",
+          "allowed_tools": [
+            "X"
+          ]
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "biometry_allowed_tools_applies_to_every_tool",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "require_biometry",
+      "rule_name": "bio-x",
+      "matched": true
+    },
+    {
+      "name": "deny_home_relative_path_hit",
+      "rules": [
+        {
+          "name": "deny-vault",
+          "priority": 10,
+          "action": "deny",
+          "path": "~/vault/**"
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_home_relative_path_hit",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "deny",
+      "rule_name": "deny-vault",
+      "matched": true
+    },
+    {
+      "name": "deny_home_relative_path_miss",
+      "rules": [
+        {
+          "name": "deny-vault",
+          "priority": 10,
+          "action": "deny",
+          "path": "~/vault/**"
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_home_relative_path_miss",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/other",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "allow",
+      "rule_name": "allow-all",
+      "matched": true
+    },
+    {
+      "name": "deny_home_relative_path_home_unset",
+      "rules": [
+        {
+          "name": "deny-vault",
+          "priority": 10,
+          "action": "deny",
+          "path": "~/vault/**"
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_home_relative_path_home_unset",
+        "home": "",
+        "home_unset": true,
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "allow",
+      "rule_name": "allow-all",
+      "matched": true
+    },
+    {
+      "name": "deny_working_dir_hit",
+      "rules": [
+        {
+          "name": "deny-wd",
+          "priority": 10,
+          "action": "deny",
+          "working_dir": "/work/repo/**"
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_working_dir_hit",
+        "home": "/home/dev",
+        "working_dir": "/work/repo/./src/",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "deny",
+      "rule_name": "deny-wd",
+      "matched": true
+    },
+    {
+      "name": "deny_working_dir_miss",
+      "rules": [
+        {
+          "name": "deny-wd",
+          "priority": 10,
+          "action": "deny",
+          "working_dir": "/work/repo/**"
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_working_dir_miss",
+        "home": "/home/dev",
+        "working_dir": "/elsewhere",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "allow",
+      "rule_name": "allow-all",
+      "matched": true
+    },
+    {
+      "name": "deny_working_dir_home_relative",
+      "rules": [
+        {
+          "name": "deny-wd",
+          "priority": 10,
+          "action": "deny",
+          "working_dir": "~/proj/**"
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_working_dir_home_relative",
+        "home": "/home/dev",
+        "working_dir": "/home/dev/proj/a",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "deny",
+      "rule_name": "deny-wd",
+      "matched": true
+    },
+    {
+      "name": "deny_env_git_branch_hit",
+      "rules": [
+        {
+          "name": "deny-branch",
+          "priority": 10,
+          "action": "deny",
+          "env": {
+            "GIT_BRANCH": "feature/x"
+          }
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_env_git_branch_hit",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "deny",
+      "rule_name": "deny-branch",
+      "matched": true
+    },
+    {
+      "name": "deny_env_git_branch_miss",
+      "rules": [
+        {
+          "name": "deny-branch",
+          "priority": 10,
+          "action": "deny",
+          "env": {
+            "GIT_BRANCH": "feature/x"
+          }
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_env_git_branch_miss",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "main",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "allow",
+      "rule_name": "allow-all",
+      "matched": true
+    },
+    {
+      "name": "deny_env_home_raw_value",
+      "rules": [
+        {
+          "name": "deny-home",
+          "priority": 10,
+          "action": "deny",
+          "env": {
+            "HOME": "/home/dev"
+          }
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_env_home_raw_value",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "deny",
+      "rule_name": "deny-home",
+      "matched": true
+    },
+    {
+      "name": "deny_env_home_wildcard_present_when_unset",
+      "rules": [
+        {
+          "name": "deny-home",
+          "priority": 10,
+          "action": "deny",
+          "env": {
+            "HOME": "*"
+          }
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_env_home_wildcard_present_when_unset",
+        "home": "",
+        "home_unset": true,
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "deny",
+      "rule_name": "deny-home",
+      "matched": true
+    },
+    {
+      "name": "deny_env_git_branch_wildcard_present_when_empty",
+      "rules": [
+        {
+          "name": "deny-branch",
+          "priority": 10,
+          "action": "deny",
+          "env": {
+            "GIT_BRANCH": "*"
+          }
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_env_git_branch_wildcard_present_when_empty",
+        "home": "/home/dev",
+        "working_dir": "/nonexistent-policy-fixture-dir",
+        "git_branch": "",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "deny",
+      "rule_name": "deny-branch",
+      "matched": true
+    },
+    {
+      "name": "deny_env_unknown_key_never_present",
+      "rules": [
+        {
+          "name": "deny-ci",
+          "priority": 10,
+          "action": "deny",
+          "env": {
+            "CI": "*"
+          }
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_env_unknown_key_never_present",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "get",
+        "tags": null
+      },
+      "action": "allow",
+      "rule_name": "allow-all",
+      "matched": true
+    },
+    {
+      "name": "deny_action_type_with_allowed_tools",
+      "rules": [
+        {
+          "name": "deny-run",
+          "priority": 10,
+          "action": "deny",
+          "action_type": "run",
+          "allowed_tools": [
+            "get_entry"
+          ]
+        },
+        {
+          "name": "allow-all",
+          "action": "allow"
+        }
+      ],
+      "input": {
+        "name": "deny_action_type_with_allowed_tools",
+        "home": "/home/dev",
+        "working_dir": "/work/repo",
+        "git_branch": "feature/x",
+        "agent_id": "agent",
+        "path": "/home/dev/vault/prod/key",
+        "action_type": "run",
+        "tags": null
+      },
+      "action": "deny",
+      "rule_name": "deny-run",
+      "matched": true
+    }
+  ]
+}

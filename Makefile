@@ -2000,13 +2000,28 @@ mcp-oracle-controls:
 mcp-ordered-fixtures-check: mcp-oracle-controls
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)"
 
-mcp-call-differential: mcp-call-fixtures-check mcp-authz-differential mcp-copy-clipboard-differential mcp-secure-input-differential mcp-execute-api-https-differential mcp-execute-with-secret-differential mcp-write-tty-approval-differential mcp-execute-api-request-differential api-templates-differential
+mcp-call-differential: mcp-call-fixtures-check mcp-authz-differential policy-context-differential mcp-copy-clipboard-differential mcp-secure-input-differential mcp-execute-api-https-differential mcp-execute-with-secret-differential mcp-write-tty-approval-differential mcp-execute-api-request-differential api-templates-differential
 	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --test tools_secret_unseal --locked
 
 # MCP-002/MCP-003: Go-recorded tools/call outcome of every tool under 22 agent
 # profiles and three token scopes, replayed through the production CLI assembly.
 # The check rebuilds the corrected Go oracle out of tree (non-CGO,
 # -buildvcs=false) and requires byte equality with the committed fixture.
+# Go-recorded policy.BuildContext field mapping and the policy outcomes it yields
+# (allowed_tools matches every tool, ~/ expansion, working_dir, HOME/GIT_BRANCH
+# env). Rust must build every evaluation context the same way, so no
+# deny/prompt/biometry rule that Go applies is skipped.
+.PHONY: policy-context-fixtures-generate policy-context-fixtures-check policy-context-differential
+policy-context-fixtures-generate:
+	SYMAIRA_GENERATE_POLICY_CONTEXT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/policy -run '^TestGeneratePolicyBuildContextFixture$$' -count=1
+
+policy-context-fixtures-check:
+	SYMAIRA_CHECK_POLICY_CONTEXT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/policy -run '^TestGeneratePolicyBuildContextFixture$$' -count=1
+
+policy-context-differential: policy-context-fixtures-check
+	$(CARGO) test -p symvault-mcp --test policy_build_context_contract --test policy_context_authorize --locked
+	$(CARGO) test -p symvault-mcp --lib --locked -- policy_context::
+
 .PHONY: mcp-authz-fixtures-check mcp-authz-differential
 mcp-authz-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_authz_matrix.py --check
