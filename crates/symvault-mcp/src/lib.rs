@@ -757,9 +757,31 @@ impl ProtocolHandler {
             ));
         };
 
-        let (name, arguments) = match call::parse_params(msg.params.as_deref().map(RawValue::get)) {
-            Ok(params) => params,
-            Err(error) => {
+        let (name, raw_arguments) =
+            match call::parse_params(msg.params.as_deref().map(RawValue::get)) {
+                Ok(params) => params,
+                Err(error) => {
+                    return Ok(Message::error_response(
+                        msg.id.clone(),
+                        error_code::INVALID_PARAMS,
+                        "Invalid params",
+                        Some(serde_json::Value::String(error)),
+                    ));
+                }
+            };
+        // Go decodes `arguments` in `executeTool`, after the params decode and
+        // before the tool lookup: a decode error is -32603 `parse arguments`.
+        let arguments = match call::decode_arguments(&raw_arguments) {
+            Ok(arguments) => arguments,
+            Err(call::ArgumentsError::Decode(message)) => {
+                return Ok(Message::error_response(
+                    msg.id.clone(),
+                    error_code::INTERNAL_ERROR,
+                    &message,
+                    None,
+                ));
+            }
+            Err(call::ArgumentsError::TooDeep(error)) => {
                 return Ok(Message::error_response(
                     msg.id.clone(),
                     error_code::INVALID_PARAMS,
@@ -768,17 +790,6 @@ impl ProtocolHandler {
                 ));
             }
         };
-        if !arguments.is_object() {
-            return Ok(Message::error_response(
-                msg.id.clone(),
-                error_code::INTERNAL_ERROR,
-                &format!(
-                    "parse arguments: json: cannot unmarshal {} into Go value of type map[string]interface {{}}",
-                    go_kind(&arguments)
-                ),
-                None,
-            ));
-        }
         // Go's executeTool resolves the tool definition (unknown tool is a
         // JSON-RPC error) before validateToolAccess, whose order is
         // availability, tier, token scope, registry drift, entry policy. The

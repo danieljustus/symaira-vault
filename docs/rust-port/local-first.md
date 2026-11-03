@@ -159,7 +159,7 @@ Where the gate differs from the hosted workflows:
   and wrong values). Logs are checked the same way (`log-ok` with exact name
   prefixes, `--sum-passed`, `N passed; 0 failed; 0 ignored` totals; `go-json`
   names; `gaps --exact-path/--min-paths`). One value differs from the workflows:
-  the `symvault-mcp --all-targets` total is 441 (`AREA_MCP_TEST_COUNT`), the
+  the `symvault-mcp --all-targets` total is 447 (`AREA_MCP_TEST_COUNT`), the
   workflows still say 246, which the tree outgrew; raise the constant when
   tests are added. `native_os` must equal the host's (the workflows accepted
   any of the three).
@@ -353,6 +353,39 @@ Findings of the first full runs on `ca0f2300` and what changed:
   `envelope.rs` unit test and `error_data_number_overflow_matches_go_exactly`;
   438 + 2 is 440, so one more test than the recorded baseline accounts for is
   present in the base tree (not bisected).
+- `mcp-named-tests` (`local/args-raw`, MCP-004, ADR 0034 item 15): `tools/call`
+  `arguments` is now a raw text member like Go's `json.RawMessage` and is decoded
+  after the params, before the tool lookup (`call::decode_arguments`): absent and
+  `null` are an empty map, a non-object value is Go's `UnmarshalTypeError` for its
+  kind without being looked into, and an object is scanned once, iteratively, for
+  a number that overflows `float64` (`-32603 parse arguments: json: cannot
+  unmarshal number 1e400 into Go value of type float64`, the first one in document
+  order, spelled as written) before the `serde_json::Value` is built. The
+  oracle behaviour is recorded by `mcpstdiogen` as section `tools_call_arguments`
+  (47 probes; oracle `caadd5e`, release `v0.22.1`). A tool `Server` is needed to
+  observe a decode, and the working tree's server package has moved since the
+  oracle, so the generator extracts the pinned commit with `git archive`
+  (`go.mod go.sum internal pkg`), copies `argsprobe/main.go` into that
+  extraction and runs it there; the probe digest and the extraction roots are in
+  the fixture, and `--check` re-runs it (it builds the oracle's module, so it is
+  slower than the other generator checks). Duplicate keys (top level, nested,
+  whole-object, `null` replacing), case-sensitive keys, escaped keys, lone
+  surrogates (value, nested key, unused member), float64 overflow/underflow/
+  `MaxFloat64`, non-object kinds and nesting up to 126 array levels are now
+  recorded and replayed with identical frames. **Declared, ratified Rust-stricter
+  (ADR 0034 item 15 (b), not ported):** an `arguments` object with 127 or more
+  nested array levels (or 129 object levels, 1000, and the frame-limit 9997) is
+  `-32602 Invalid params` in Rust where the oracle executes the tool; total
+  frame depth 10000 is accepted and 10001 is `-32700` in both. The set is pinned
+  both ways by `tools_call_arguments_nesting_beyond_the_value_limit_is_rust_stricter`
+  and recorded as the fixture divergence
+  `tools_call_arguments_nesting_beyond_serde_value_limit`. The
+  `symvault-mcp --all-targets` total is now 447 (measured: 0 failed over 56
+  result lines); `AREA_MCP_TEST_COUNT` was 441. The six new tests: 3 in
+  `stdio_hygiene_contract` (probe corpus guard, parity replay, the stricter pin)
+  and 3 `call.rs` unit tests (`arguments_keys_follow_a_go_map`,
+  `non_object_arguments_are_type_errors_that_never_look_inside`,
+  `number_overflow_fails_the_decode_like_encoding_json`).
 - `http-write-contract` (macOS): one run at load 40 to 120 failed `actual
   progressing output required` (the slow reader of `rust/tls-output` received no
   byte within 34 seconds, the Go side and `rust/tcp-output` progressed). Reruns

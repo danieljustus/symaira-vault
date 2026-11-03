@@ -1198,7 +1198,10 @@ AREA_KDF_MIGRATION_TESTS := 10
 # 441 from local/envelope-data (+2 of the +3 measured: 1 envelope.rs unit test, 1
 # stdio_hygiene_contract test for the error.data float64 overflow; measured: 441
 # passed, 0 failed over 56 result lines).
-AREA_MCP_TEST_COUNT := 441
+# 447 from local/args-raw (+6: 3 stdio_hygiene_contract tests for the tools/call
+# `arguments` probes recorded from the oracle, 3 call.rs unit tests for the
+# raw-text arguments decode; measured: 447 passed, 0 failed over 56 result lines).
+AREA_MCP_TEST_COUNT := 447
 
 .PHONY: area-oracle-runner
 area-oracle-runner:

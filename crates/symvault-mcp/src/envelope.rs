@@ -111,7 +111,7 @@ fn is_go_int(text: &str) -> bool {
 /// `ErrRange` exactly when the result overflows to an infinity, while an
 /// underflow is a plain zero. Strings are skipped, so a number-looking string
 /// never counts.
-fn overflowing_number(value: &str) -> Option<&str> {
+pub(crate) fn overflowing_number(value: &str) -> Option<&str> {
     let bytes = value.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
