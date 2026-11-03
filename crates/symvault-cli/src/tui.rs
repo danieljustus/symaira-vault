@@ -131,11 +131,8 @@ pub fn run(root: &Path, identity: &Identity) -> Result<(), String> {
     let clipboard = symvault_platform::native_text_clipboard();
     let mut model = Model::new(root, identity, clipboard, Duration::from_secs(ttl))?;
     let stopping = Arc::new(AtomicBool::new(false));
-    let signal = stopping.clone();
-    ctrlc::set_handler(move || {
-        signal.store(true, Ordering::Release);
-    })
-    .map_err(|_| "install UI signal handler")?;
+    let interrupted = Arc::new(AtomicBool::new(false));
+    install_signals(&stopping, &interrupted, model.clipboard.handle())?;
     let mut mode = TerminalMode::enter().map_err(|e| format!("enter UI terminal: {e}"))?;
     let mut terminal =
         Terminal::new(CrosstermBackend::new(io::stdout())).map_err(|e| e.to_string())?;
@@ -206,8 +203,52 @@ pub fn run(root: &Path, identity: &Identity) -> Result<(), String> {
     })();
     model.clear_clipboard();
     mode.leave();
+    if result.is_ok() && interrupted.load(Ordering::Acquire) {
+        return Err(INTERRUPTED_MESSAGE.into());
+    }
     result
 }
+
+/// Go's bubbletea program quits cleanly on SIGTERM, fails an external SIGINT
+/// with `program was interrupted` (exit 1), and leaves SIGHUP/SIGQUIT to the
+/// Go runtime (death by SIGHUP, exit 2) without restoring the terminal.
+/// `process_signals` registers exactly that set (CLI-007). A copy that waits on
+/// its auto-clear timer additionally behaves like Go's `StartAutoClear`
+/// subscription: SIGHUP clears the clipboard and `ui` keeps running; SIGINT and
+/// SIGTERM clear from the signal thread right after the stop request (Go clears
+/// at receipt, so a main thread blocked in `$EDITOR` cannot hold the secret);
+/// SIGQUIT clears before exiting (declared Rust-safer difference, Go has no
+/// SIGQUIT clear).
+fn install_signals(
+    stopping: &Arc<AtomicBool>,
+    interrupted: &Arc<AtomicBool>,
+    clipboard: symvault_platform::OwnedClipboardHandle,
+) -> Result<(), String> {
+    let (stop_flag, interrupt_flag) = (stopping.clone(), interrupted.clone());
+    let armed = clipboard.clone();
+    crate::process_signals::install_with_signal(
+        Box::new(move |signal| {
+            if signal == INTERRUPT_SIGNAL {
+                interrupt_flag.store(true, Ordering::Release);
+            }
+            stop_flag.store(true, Ordering::Release);
+        }),
+        crate::process_signals::SecretGuard {
+            clear_if_armed: Box::new(move || armed.clear_if_armed()),
+            clear_before_exit: Box::new(move || clipboard.clear_before_exit()),
+        },
+    )
+    .map_err(|error| format!("install UI signal handler: {error}"))
+}
+
+/// SIGINT; the same number on every Unix and what `process_signals` reports
+/// for the Windows console interrupt.
+const INTERRUPT_SIGNAL: i32 = 2;
+
+/// Go's `ui` failure for an external SIGINT: bubbletea's `ErrInterrupted`
+/// wrapped as `ui failed: %w` (observed against the real oracle).
+pub(crate) const INTERRUPTED_MESSAGE: &str =
+    "ui failed: program was killed: program was interrupted";
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Mode {
@@ -1118,5 +1159,235 @@ mod tests {
         m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert_eq!(clipboard.values.lock().unwrap()[0].len(), 8);
         assert_eq!(m.store.get("alpha/login", &id).unwrap(), before);
+    }
+    /// Appends `secret` / `clear` to a file, standing in for the pasteboard tool
+    /// (the real macOS pasteboard is never touched by these tests).
+    struct EventClipboard(std::path::PathBuf);
+    impl EventClipboard {
+        fn record(&self, event: &str) {
+            use std::io::Write;
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.0)
+                .unwrap();
+            writeln!(file, "{event}").unwrap();
+        }
+    }
+    impl Clipboard for EventClipboard {
+        fn set(&self, _text: &[u8]) -> Result<(), symvault_core::platform::PlatformError> {
+            self.record("secret");
+            Ok(())
+        }
+        fn clear(&self) -> Result<(), symvault_core::platform::PlatformError> {
+            self.record("clear");
+            Ok(())
+        }
+    }
+    /// Go `StartAutoClear` semantics seen by the UI model: a copy waiting on its
+    /// timer is armed (SIGHUP clears it once and the UI keeps running); a copy
+    /// kept until quit is not armed but is still cleared before a signal death.
+    #[test]
+    fn armed_signal_clear_follows_the_copy_lifetime() {
+        let (root, id) = fixture();
+        let clipboard = Arc::new(TestClipboard::default());
+        let mut m =
+            Model::new(root.path(), &id, clipboard.clone(), Duration::from_secs(30)).unwrap();
+        let handle = m.clipboard.handle();
+        assert!(!handle.clear_if_armed(), "nothing copied yet");
+        m.copy_selected();
+        assert!(handle.clear_if_armed());
+        assert_eq!(
+            clipboard.values.lock().unwrap().last().unwrap(),
+            &Vec::<u8>::new()
+        );
+        m.tick();
+        assert_eq!(m.status, "Clipboard cleared");
+        assert!(
+            !handle.clear_if_armed(),
+            "the subscription ended with the clear"
+        );
+        let before = clipboard.values.lock().unwrap().len();
+        handle.clear_before_exit();
+        assert_eq!(
+            clipboard.values.lock().unwrap().len(),
+            before,
+            "nothing held"
+        );
+
+        let mut kept = Model::new(root.path(), &id, clipboard.clone(), Duration::ZERO).unwrap();
+        let handle = kept.clipboard.handle();
+        kept.copy_selected();
+        assert!(!handle.clear_if_armed(), "no timer, no Go subscription");
+        handle.clear_before_exit();
+        assert_eq!(
+            clipboard.values.lock().unwrap().last().unwrap(),
+            &Vec::<u8>::new()
+        );
+    }
+    /// Real-signal contract for `ui` with a copy held, using an injected
+    /// clipboard that records events in a file. Go oracle (`ui-clipboard-*`
+    /// cases of signal_process_contract.py): SIGHUP with an armed copy clears and
+    /// keeps running, the next SIGHUP kills by the signal; SIGQUIT exits 2
+    /// (Rust-safer: clears first); SIGINT/SIGTERM stop the loop and the signal
+    /// thread clears at receipt (Go `StartAutoClear`), even while the main thread
+    /// is blocked.
+    #[cfg(unix)]
+    #[test]
+    fn ui_signal_with_held_copy_process_contract() {
+        use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGQUIT, SIGTERM};
+        use std::{env, os::unix::process::ExitStatusExt, process::Command};
+
+        if let Ok(spec) = env::var("SYMVAULT_UI_SIGNAL_CHILD") {
+            let (name, ttl) = spec.split_once(':').expect("signal:ttl");
+            let signal = match name {
+                "SIGINT" => SIGINT,
+                "SIGTERM" => SIGTERM,
+                "SIGQUIT" => SIGQUIT,
+                _ => SIGHUP,
+            };
+            let events = std::path::PathBuf::from(env::var("SYMVAULT_UI_SIGNAL_EVENTS").unwrap());
+            let (root, id) = fixture();
+            let ttl = Duration::from_secs(ttl.parse().unwrap());
+            let mut m = Model::new(
+                root.path(),
+                &id,
+                Arc::new(EventClipboard(events.clone())),
+                ttl,
+            )
+            .unwrap();
+            if !name.ends_with("nocopy") {
+                m.copy_selected();
+            }
+            let (stopping, interrupted) = (
+                Arc::new(AtomicBool::new(false)),
+                Arc::new(AtomicBool::new(false)),
+            );
+            install_signals(&stopping, &interrupted, m.clipboard.handle()).unwrap();
+            signal_hook::low_level::raise(signal).unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(30);
+            let settled = || {
+                let log = fs::read_to_string(&events).unwrap_or_default();
+                matches!(signal, SIGINT | SIGTERM) && stopping.load(Ordering::Acquire)
+                    || signal == SIGHUP && log.lines().count() == 2
+            };
+            while !settled() && std::time::Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            // A wrongly cleared SIGINT/SIGTERM or a duplicate would land here.
+            std::thread::sleep(Duration::from_millis(300));
+            m.tick();
+            println!(
+                "UI_SIGNAL_RECEIPT {spec} alive=1 stopping={} interrupted={} status={:?} events={}",
+                stopping.load(Ordering::Acquire),
+                interrupted.load(Ordering::Acquire),
+                m.status,
+                fs::read_to_string(&events)
+                    .unwrap_or_default()
+                    .replace('\n', ",")
+            );
+            // The first SIGHUP was swallowed by the armed subscription; a second
+            // one finds nothing armed and dies by the signal.
+            if signal == SIGHUP
+                && fs::read_to_string(&events)
+                    .unwrap_or_default()
+                    .lines()
+                    .count()
+                    == 2
+            {
+                signal_hook::low_level::raise(SIGHUP).unwrap();
+                std::thread::sleep(Duration::from_secs(30));
+            }
+            return;
+        }
+
+        // (spec, how it ends, events, alive receipt substring)
+        struct Case(
+            &'static str,
+            Option<i32>,
+            Option<i32>,
+            &'static str,
+            &'static str,
+        );
+        let cases = [
+            // armed SIGHUP: cleared, keeps running, second SIGHUP kills (Go).
+            Case(
+                "SIGHUP:30",
+                Some(SIGHUP),
+                None,
+                "secret,clear,",
+                "Clipboard cleared",
+            ),
+            // SIGHUP with a kept (untimed) copy: Go dies leaving the secret; Rust clears first.
+            Case("SIGHUP:0", Some(SIGHUP), None, "secret,clear,", ""),
+            // SIGQUIT: Go exits 2 without clearing; Rust clears first.
+            Case("SIGQUIT:30", None, Some(2), "secret,clear,", ""),
+            // SIGINT/SIGTERM: stop callback, then the signal thread clears at receipt.
+            Case("SIGINT:30", None, Some(0), "secret,clear,", ""),
+            Case("SIGTERM:30", None, Some(0), "secret,clear,", ""),
+        ];
+        for Case(spec, killed_by, exit_code, events, status) in cases {
+            let dir = tempfile::tempdir().unwrap();
+            let log = dir.path().join("events");
+            let output = Command::new(env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tui::tests::ui_signal_with_held_copy_process_contract",
+                    "--nocapture",
+                ])
+                .env("SYMVAULT_UI_SIGNAL_CHILD", spec)
+                .env("SYMVAULT_UI_SIGNAL_EVENTS", &log)
+                .output()
+                .expect("run ui signal child");
+            assert_eq!(output.status.signal(), killed_by, "{spec}: {output:?}");
+            if killed_by.is_none() {
+                assert_eq!(output.status.code(), exit_code, "{spec}: {output:?}");
+            }
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let final_log = fs::read_to_string(&log)
+                .unwrap_or_default()
+                .replace('\n', ",");
+            match spec.split_once(':').unwrap().0 {
+                // The receipt line proves the SIGHUP was survived once.
+                "SIGHUP" if spec == "SIGHUP:30" => {
+                    assert!(
+                        stdout.contains(&format!(
+                            "UI_SIGNAL_RECEIPT {spec} alive=1 stopping=false interrupted=false status={status:?} events={events}\n"
+                        )),
+                        "{spec}: {output:?}"
+                    );
+                    assert_eq!(final_log, events, "second SIGHUP must not clear twice");
+                }
+                "SIGINT" | "SIGTERM" => {
+                    assert!(
+                        stdout.contains(&format!(
+                            "UI_SIGNAL_RECEIPT {spec} alive=1 stopping=true interrupted={} status=",
+                            spec.starts_with("SIGINT")
+                        )) && stdout.contains(&format!("events={events}\n")),
+                        "{spec}: {output:?}"
+                    );
+                    // The clear happened in the signal thread (the receipt above
+                    // already shows it, before any exit path ran) and the exit
+                    // path found nothing left to clear.
+                    assert_eq!(final_log, events, "{spec}: cleared once, at receipt");
+                }
+                _ => assert_eq!(final_log, events, "{spec}: {output:?}"),
+            }
+        }
+        // Control: SIGHUP with nothing copied dies by the signal and clears nothing.
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("events");
+        let output = Command::new(env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tui::tests::ui_signal_with_held_copy_process_contract",
+                "--nocapture",
+            ])
+            .env("SYMVAULT_UI_SIGNAL_CHILD", "SIGHUP-nocopy:30")
+            .env("SYMVAULT_UI_SIGNAL_EVENTS", &log)
+            .output()
+            .expect("run ui signal control child");
+        assert_eq!(output.status.signal(), Some(SIGHUP), "{output:?}");
+        assert!(fs::read_to_string(&log).unwrap_or_default().is_empty());
     }
 }

@@ -236,7 +236,8 @@ def good_connect():
 
 
 def good_signal():
-    return base(expect_mismatch=False, **per_impl(lambda _: [{"n": i} for i in range(33)]))
+    return base(expect_mismatch=False, go_only=[{"n": i} for i in range(7)],
+                **per_impl(lambda _: [{"n": i} for i in range(41)]))
 
 
 def good_http_drain():
@@ -510,6 +511,9 @@ class ReceiptProfiles(unittest.TestCase):
             ("connect", lambda r: r["rust"].pop()),
             ("signal", lambda r: r.update(expect_mismatch=True)),
             ("signal", lambda r: r["rust"].pop()),
+            ("signal", lambda r: r["go"].pop()),
+            ("signal", lambda r: r["go_only"].pop()),
+            ("signal", lambda r: r.pop("go_only")),
             ("http-drain", lambda r: r.update(expect_mismatch=True)),
             ("http-drain", lambda r: r.update(mismatch="x")),
             ("http-drain", lambda r: r.update(drain_seconds=1.0)),

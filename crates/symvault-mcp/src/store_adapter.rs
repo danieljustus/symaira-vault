@@ -3982,14 +3982,24 @@ impl StoreReadOnlyRuntime {
         let clipboard = Arc::clone(&self.clipboard);
         let delay = Duration::from_secs(self.clipboard_auto_clear_seconds.unsigned_abs());
         let clear_claimed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        // stdio `mcp` owns the router slot; every other embedding (HTTP `mcp`)
+        // registers with the process list the HTTP shutdown clears.
         #[cfg(unix)]
         let signal_registration = approval_prompt::register_stdio_clipboard_auto_clear(
             cancel.clone(),
             Arc::clone(&clear_claimed),
         );
+        #[cfg(unix)]
+        let process_registration = signal_registration.is_none().then(|| {
+            approval_prompt::register_process_clipboard_auto_clear(
+                cancel.clone(),
+                Arc::clone(&clear_claimed),
+                Arc::clone(&clipboard),
+            )
+        });
         thread::spawn(move || {
             #[cfg(unix)]
-            let _signal_registration = signal_registration;
+            let _signal_registration = (signal_registration, process_registration);
             if matches!(
                 receiver.recv_timeout(delay),
                 Err(mpsc::RecvTimeoutError::Timeout)

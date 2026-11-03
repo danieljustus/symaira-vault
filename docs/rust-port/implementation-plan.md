@@ -15,7 +15,7 @@ signal-process-differential`, `rust-signal-process.yml`) builds the pinned Go
 oracle `45b8577e` from `git archive` in a disposable directory and delivers
 SIGINT/SIGTERM/SIGHUP/SIGQUIT to the real Go and Rust processes in disposable
 HOME/XDG/TMPDIR roots with a memory keyring (no operator credentials). It
-compares 33 observations per implementation (21 plain deliveries plus 12 started with the signal inherited as `SIG_IGN`): how the process ended, stdout,
+compares 41 observations per implementation (29 plain deliveries plus 12 started with the signal inherited as `SIG_IGN`): how the process ended, stdout,
 stderr, listener closed, orphaned child alive, and signal-relevant names left
 on disk. Each case first asserts that the process runs until signalled. The
 Go record is itself checked against expected endings so a vacuous oracle fails.
@@ -55,7 +55,14 @@ Residuals added by review: the per-instance broker CA directory is created in
 `prepare()` before the signal handler (which needs its path) can be installed, so
 a catchable signal in that short window, like SIGKILL, leaves it; the stdio
 approval prompt in `symvault-platform` (`approval.rs`) runs its own `signal-hook`
-thread during prompts and is not covered by this module or the driver.
+thread during prompts and is not covered by this module or the driver (since
+#1472 it is held by `make mcp-approval-pty-acceptance` and the process tests).
+
+Residual packet (2026-11-03): `mcp --stdio --allow-locked` (4 cases) and `ui` on a
+pseudo-terminal (4 cases) join the compared set (41 observations per implementation),
+and three Go-only armed-clipboard records pin Go's clear-then-shutdown; see
+`cli-gap-inventory.md` "CLI-007: residual packet". The `sync`/git push and in-flight
+intake spool signals stay bounded claims there.
 
 Status: local Darwin/arm64 PASS. Native Linux CI, native macOS CI and every
 Windows console case are pending; this driver refuses to run on Windows rather

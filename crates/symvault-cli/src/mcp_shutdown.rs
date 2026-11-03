@@ -15,12 +15,31 @@
 //! are cleared unconditionally afterwards and the process exits 0; a second
 //! signal during the drain is swallowed.
 //!
+//! `mcp --stdio --allow-locked` installs the same shutdown (Go subscribes the
+//! signals in `serve` before it branches on the vault; real-process observation
+//! in `signal_process_contract.py`, cases `mcp-locked-*`).
+//!
+//! Armed clipboard auto-clear (real Go process): SIGINT/SIGTERM clear the
+//! clipboard and then shut the server down (`serve` and the timer both
+//! subscribe); SIGHUP is subscribed by the timer only, so it clears and the
+//! server keeps serving. The router in `symvault-platform` `approval.rs`
+//! requests this shutdown through the terminator installed here.
+//!
+//! SIGQUIT with an armed clipboard timer: Go's timer does not subscribe SIGQUIT,
+//! so Go shuts down and leaves the copied secret on the clipboard. Rust clears it
+//! before exiting 0 (declared Rust-safer difference, `clear_armed_stdio_clipboard`).
+//!
+//! HTTP armed clipboard (CLI007-LOW): Go's `Server.startClipboardAutoClear` is
+//! transport-independent, so `copy_to_clipboard`/`generate_totp` over HTTP arm the
+//! same `StartAutoClear` timer, which subscribes SIGINT/SIGTERM next to `serve`.
+//! `install_http` therefore clears every armed HTTP timer at signal receipt and
+//! again after the drain (SIGQUIT included, a declared Rust-safer addition).
+//! SIGHUP is not subscribed here, so an armed HTTP copy still dies with a SIGHUP
+//! death (Go would clear it and keep serving).
+//!
 //! Known residuals against Go (#1242):
-//! - stdio: a signal while a clipboard auto-clear is armed outside a secure-input
-//!   prompt only clears the clipboard and the server keeps running; Go also shuts down.
-//!   (During a secure-input prompt the signal also ends the process, see
-//!   below.)
-//! - `mcp --stdio --allow-locked` keeps the OS default signal actions.
+//! - Go's SIGQUIT goroutine dump (ADR 0034 item 11) is a maintainer decision and
+//!   is not reproduced here.
 //!
 //! Signal during an in-flight stdio prompt (#1472, Go oracle 0cc78062 under a
 //! controlling PTY): the in-flight request is answered with Go's
@@ -90,6 +109,13 @@ mod unix {
         let shutdown = Arc::new(move |signal: i32| {
             REQUESTED.store(true, Ordering::Release);
             warn_quit(signal);
+            if signal == SIGQUIT {
+                // Go's clipboard timer does not subscribe SIGQUIT, so Go exits 0
+                // with the copied secret still on the clipboard. Clear it first
+                // (declared Rust-safer difference; SIGINT/SIGTERM were already
+                // cleared by the signal router).
+                symvault_platform::approval::clear_armed_stdio_clipboard();
+            }
             let (lock, changed) = &STDIO_FINISHED;
             let deadline = Instant::now() + STDIO_SHUTDOWN_GRACE;
             let mut finished = lock
@@ -166,8 +192,14 @@ mod unix {
             move |signal| {
                 REQUESTED.store(true, Ordering::Release);
                 warn_quit(signal);
+                // Go's armed `StartAutoClear` timer receives the same signal and
+                // clears at receipt (SIGQUIT is a declared Rust-safer addition);
+                // do not wait for the drain. A request still in flight may copy
+                // meanwhile, so clear again once the drain is over.
+                symvault_platform::approval::clear_armed_process_clipboards();
                 // Go ignores the drain error too: the process exits 0 either way.
                 let _ = drain.drain(timeout);
+                symvault_platform::approval::clear_armed_process_clipboards();
                 cleanup();
                 std::process::exit(0);
             },
@@ -188,3 +220,148 @@ pub fn stdio_finished() {}
 
 #[cfg(not(unix))]
 pub fn park_if_requested() {}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::{env, fs, io::Write, os::unix::process::ExitStatusExt, process::Command, sync::Arc};
+    use symvault_core::platform::{Clipboard, PlatformError};
+
+    struct EventClipboard(std::path::PathBuf);
+    impl Clipboard for EventClipboard {
+        fn set(&self, _: &[u8]) -> Result<(), PlatformError> {
+            Ok(())
+        }
+        fn clear(&self) -> Result<(), PlatformError> {
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.0)
+                .unwrap();
+            writeln!(file, "clear").unwrap();
+            Ok(())
+        }
+    }
+
+    /// stdio `mcp` with an armed clipboard timer. Go: SIGQUIT is not part of the
+    /// timer's subscription, so Go shuts down (exit 0, warning) and leaves the
+    /// secret on the clipboard. Rust clears first (declared Rust-safer
+    /// difference). Control: without an armed timer nothing is cleared. The child
+    /// owns the process-wide router and records clears in a file instead of
+    /// touching the real pasteboard.
+    #[test]
+    fn sigquit_shutdown_clears_an_armed_clipboard() {
+        if let Ok(spec) = env::var("SYMVAULT_MCP_QUIT_CHILD") {
+            let events = std::path::PathBuf::from(env::var("SYMVAULT_MCP_QUIT_EVENTS").unwrap());
+            let root = std::path::PathBuf::from(env::var("SYMVAULT_MCP_QUIT_ROOT").unwrap());
+            symvault_platform::approval::install_stdio_clipboard_signal_router(Arc::new(
+                EventClipboard(events),
+            ))
+            .unwrap();
+            super::install_stdio(root).unwrap();
+            let (cancel, _canceled) = std::sync::mpsc::channel();
+            let _registration = (spec == "armed").then(|| {
+                symvault_platform::approval::register_stdio_clipboard_auto_clear(
+                    cancel,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                )
+                .expect("router installed")
+            });
+            signal_hook::low_level::raise(libc::SIGQUIT).unwrap();
+            // The shutdown thread exits 0; reaching the end would be a failure.
+            std::thread::sleep(std::time::Duration::from_secs(30));
+            std::process::exit(99);
+        }
+        for (spec, clears) in [("armed", "clear\n"), ("idle", "")] {
+            let dir = tempfile::tempdir().unwrap();
+            let events = dir.path().join("events");
+            fs::write(dir.path().join(".runtime-port"), "1").unwrap();
+            let output = Command::new(env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "mcp_commands::mcp_shutdown::tests::sigquit_shutdown_clears_an_armed_clipboard",
+                ])
+                .env("SYMVAULT_MCP_QUIT_CHILD", spec)
+                .env("SYMVAULT_MCP_QUIT_EVENTS", &events)
+                .env("SYMVAULT_MCP_QUIT_ROOT", dir.path())
+                .output()
+                .expect("run SIGQUIT child");
+            assert_eq!(output.status.code(), Some(0), "{spec}: {output:?}");
+            assert_eq!(output.status.signal(), None, "{spec}: {output:?}");
+            assert_eq!(
+                fs::read_to_string(&events).unwrap_or_default(),
+                clears,
+                "{spec}"
+            );
+            assert!(
+                !dir.path().join(".runtime-port").exists(),
+                "{spec}: records cleared"
+            );
+            assert!(
+                String::from_utf8_lossy(&output.stderr)
+                    .contains("Received SIGQUIT, shutting down gracefully..."),
+                "{spec}: {output:?}"
+            );
+        }
+    }
+
+    /// HTTP `mcp` with a clipboard timer armed by `copy_to_clipboard` (Go arms
+    /// `StartAutoClear` per Server, HTTP included, and its signal subscription
+    /// clears at receipt). SIGINT/SIGTERM clear like Go; SIGQUIT is the declared
+    /// Rust-safer addition. The child records clears in a file instead of
+    /// touching the real pasteboard. Control: nothing armed, nothing cleared.
+    #[test]
+    fn http_signal_shutdown_clears_an_armed_clipboard() {
+        if let Ok(spec) = env::var("SYMVAULT_MCP_HTTP_CHILD") {
+            let (state, signal) = spec.split_once(':').unwrap();
+            let events = std::path::PathBuf::from(env::var("SYMVAULT_MCP_HTTP_EVENTS").unwrap());
+            let signal = match signal {
+                "SIGINT" => libc::SIGINT,
+                "SIGQUIT" => libc::SIGQUIT,
+                _ => libc::SIGTERM,
+            };
+            let (cancel, _canceled) = std::sync::mpsc::channel();
+            let _registration = (state == "armed").then(|| {
+                symvault_platform::approval::register_process_clipboard_auto_clear(
+                    cancel,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                    Arc::new(EventClipboard(events)),
+                )
+            });
+            super::install_http(
+                symvault_mcp::http::HttpShutdown::for_process(),
+                std::time::Duration::from_millis(100),
+                Arc::new(|| {}),
+            )
+            .unwrap();
+            signal_hook::low_level::raise(signal).unwrap();
+            // The listener thread exits 0; reaching the end would be a failure.
+            std::thread::sleep(std::time::Duration::from_secs(30));
+            std::process::exit(99);
+        }
+        for (spec, clears) in [
+            ("armed:SIGINT", "clear\n"),
+            ("armed:SIGTERM", "clear\n"),
+            ("armed:SIGQUIT", "clear\n"),
+            ("idle:SIGTERM", ""),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let events = dir.path().join("events");
+            let output = Command::new(env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "mcp_commands::mcp_shutdown::tests::http_signal_shutdown_clears_an_armed_clipboard",
+                ])
+                .env("SYMVAULT_MCP_HTTP_CHILD", spec)
+                .env("SYMVAULT_MCP_HTTP_EVENTS", &events)
+                .output()
+                .expect("run HTTP signal child");
+            assert_eq!(output.status.code(), Some(0), "{spec}: {output:?}");
+            assert_eq!(output.status.signal(), None, "{spec}: {output:?}");
+            assert_eq!(
+                fs::read_to_string(&events).unwrap_or_default(),
+                clears,
+                "{spec}: cleared exactly once, at receipt"
+            );
+        }
+    }
+}

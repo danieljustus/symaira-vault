@@ -63,6 +63,7 @@ jobs:
           cargo fmt --all --check
           cargo clippy -p symvault-cli --all-targets --all-features --locked -- -D warnings
           cargo test -p symvault-cli --bin symvault --locked run_commands
+          cargo test -p symvault-cli --bin symvault --locked -- tui::tests mcp_shutdown::tests process_signals::tests
       - name: Execute actual Go and Rust signal observations
         run: |
           set -euo pipefail
@@ -75,7 +76,8 @@ jobs:
           assert receipt['candidate_commit'] == subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
           assert receipt['native_os'] == 'Linux'
           for implementation in ('go', 'rust'):
-              assert len(receipt[implementation]) == 33, len(receipt[implementation])
+              assert len(receipt[implementation]) == 41, len(receipt[implementation])
+          assert len(receipt['go_only']) == 7, len(receipt['go_only'])
           assert not subprocess.check_output(['git', 'status', '--porcelain=v1', '--untracked-files=normal']).strip()
           PY
       - name: Upload complete signal observations

@@ -1,5 +1,6 @@
 //! Go-compatible signal handling for the long-running non-MCP commands
-//! (`broker`, `run --broker`, `intake watch`), CLI-007 / #1242.
+//! (`broker`, `run --broker`, `intake watch`, and the `ui` terminal UI),
+//! CLI-007 / #1242.
 //!
 //! Go subscribes exactly SIGINT and SIGTERM in these commands (`signal.Notify`
 //! / `signal.NotifyContext`) and treats them as a clean stop that returns
@@ -44,6 +45,32 @@
 //! registered child group: the child never outlives the parent holding the
 //! injected secrets (ADR 0034 item 12, CLI-007).
 //!
+//! `ui` (bubbletea in Go) uses the same set with a signal-aware stop: SIGTERM
+//! quits cleanly (exit 0, terminal restored), an external SIGINT also restores
+//! the terminal but fails with `ui failed: program was killed: program was
+//! interrupted` (exit 1); SIGHUP and SIGQUIT end the process like Go's runtime
+//! and leave the terminal as it is (real-process PTY observation in
+//! `signal_process_contract.py`, cases `ui-*`), except with an armed clipboard
+//! copy (see `SecretGuard` below: `ui-clipboard-armed-*`).
+//!
+//! Armed clipboard auto-clear in `ui` (Go `clipboard.StartAutoClear`): every copy
+//! with a positive auto-clear duration runs a subscription that `signal.Notify`s
+//! SIGINT, SIGTERM and SIGHUP (not SIGQUIT) until the timer fires or a signal
+//! arrives. The effects of a `SecretGuard` mirror that:
+//!
+//! - SIGHUP while a copy is armed: the subscription receives it, clears the
+//!   clipboard, and the program keeps running (the `Notify` replaced the default
+//!   action, even over an inherited `SIG_IGN`). With nothing armed the signal
+//!   keeps its `SIGHUP` row above: death by SIGHUP, or ignored when inherited
+//!   ignored. A second SIGHUP after the clear is such an unarmed one.
+//! - SIGINT/SIGTERM: the stop callback runs and the signal thread clears right
+//!   away (Go clears at receipt too), so a main thread blocked in `$EDITOR`
+//!   cannot keep the secret on the clipboard; the exit path finds nothing left.
+//! - SIGQUIT (declared Rust-safer difference): Go's subscription does not include
+//!   SIGQUIT and the goroutine dump leaves the secret on the clipboard. Rust
+//!   clears any still-held copy before exiting 2. The same clear runs before a
+//!   SIGHUP death when a copy without a timer (duration 0) is still held.
+//!
 //! Windows keeps `ctrlc` (Ctrl-C and Ctrl-Break in a console) unchanged;
 //! its native evidence lives in `egress_contract.py` and
 //! `intake_watch_contract.py`.
@@ -54,9 +81,23 @@ use std::path::PathBuf;
 /// Ctrl-Break on Windows).
 pub(crate) type StopCallback = Box<dyn Fn() + Send + 'static>;
 
+/// Like [`StopCallback`] for commands whose Go counterpart tells SIGINT from
+/// SIGTERM (`ui`: bubbletea fails an interrupt with `program was interrupted`
+/// and quits cleanly on SIGTERM). Receives the signal number.
+pub(crate) type SignalStopCallback = Box<dyn Fn(i32) + Send + 'static>;
+
+/// The clipboard side of a command that holds a copied secret (`ui`).
+pub(crate) struct SecretGuard {
+    /// Clears the clipboard when a copy waits on its auto-clear timer; true if it did.
+    pub(crate) clear_if_armed: Box<dyn Fn() -> bool + Send + 'static>,
+    /// Clears any still-held copy and refuses later copies; for signals that end
+    /// the process or stop `ui` (everything except the armed-SIGHUP keep-running clear).
+    pub(crate) clear_before_exit: Box<dyn Fn() + Send + 'static>,
+}
+
 #[cfg(unix)]
 mod unix {
-    use super::{PathBuf, StopCallback};
+    use super::{PathBuf, SecretGuard, SignalStopCallback};
     use signal_hook::{
         consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM},
         iterator::Signals,
@@ -82,11 +123,17 @@ mod unix {
     /// The signals to register, mirroring Go's runtime (see the module docs):
     /// only SIGHUP and SIGINT respect an inherited `SIG_IGN`, and SIGINT is
     /// taken over again when the command subscribes it (`has_stop`).
-    pub(super) fn registered_signals(has_stop: bool, ignored: impl Fn(i32) -> bool) -> Vec<i32> {
+    pub(super) fn registered_signals(
+        has_stop: bool,
+        has_secret: bool,
+        ignored: impl Fn(i32) -> bool,
+    ) -> Vec<i32> {
         [SIGINT, SIGTERM, SIGHUP, SIGQUIT]
             .into_iter()
             .filter(|&signal| match signal {
-                SIGHUP => !ignored(signal),
+                // An armed copy's `Notify(SIGHUP)` overrides an inherited ignore;
+                // the loop below puts the ignore back while nothing is armed.
+                SIGHUP => has_secret || !ignored(signal),
                 SIGINT => has_stop || !ignored(signal),
                 _ => true,
             })
@@ -100,10 +147,16 @@ mod unix {
 
     pub(crate) fn install(
         cleanup_dir: Option<PathBuf>,
-        on_stop: Option<StopCallback>,
+        on_stop: Option<SignalStopCallback>,
+        secret: Option<SecretGuard>,
     ) -> Result<(), String> {
-        let mut signals = Signals::new(registered_signals(on_stop.is_some(), ignored_at_startup))
-            .map_err(|error| format!("register process signal listener: {error}"))?;
+        let hup_ignored = ignored_at_startup(SIGHUP);
+        let mut signals = Signals::new(registered_signals(
+            on_stop.is_some(),
+            secret.is_some(),
+            ignored_at_startup,
+        ))
+        .map_err(|error| format!("register process signal listener: {error}"))?;
         std::thread::Builder::new()
             .name("symvault-command-signals".to_owned())
             .spawn(move || {
@@ -111,8 +164,25 @@ mod unix {
                     if matches!(signal, SIGINT | SIGTERM)
                         && let Some(stop) = &on_stop
                     {
-                        stop();
+                        stop(signal);
+                        // Go's `StartAutoClear` clears at signal receipt, not
+                        // when the program unwinds: the main thread may be
+                        // blocked in `$EDITOR` and the secret must not wait for it.
+                        if let Some(secret) = &secret {
+                            (secret.clear_before_exit)();
+                        }
                         continue;
+                    }
+                    if let Some(secret) = &secret {
+                        if signal == SIGHUP {
+                            if (secret.clear_if_armed)() {
+                                continue;
+                            }
+                            if hup_ignored {
+                                continue;
+                            }
+                        }
+                        (secret.clear_before_exit)();
                     }
                     // Go's child shares the caller's group and gets the same
                     // signal; a bounded run's child has its own group.
@@ -145,7 +215,21 @@ pub(crate) fn install(
     cleanup_dir: Option<PathBuf>,
     on_stop: Option<StopCallback>,
 ) -> Result<(), String> {
-    unix::install(cleanup_dir, on_stop)
+    unix::install(
+        cleanup_dir,
+        on_stop.map(|stop| Box::new(move |_| stop()) as SignalStopCallback),
+        None,
+    )
+}
+
+/// [`install`] for a stop callback that needs the signal number and a clipboard
+/// guard (the `ui` command).
+#[cfg(unix)]
+pub(crate) fn install_with_signal(
+    on_stop: SignalStopCallback,
+    secret: SecretGuard,
+) -> Result<(), String> {
+    unix::install(None, Some(on_stop), Some(secret))
 }
 
 #[cfg(not(unix))]
@@ -159,13 +243,29 @@ pub(crate) fn install(
     }
 }
 
+/// Windows has one console interrupt; report it as SIGINT (2).
+#[cfg(not(unix))]
+pub(crate) fn install_with_signal(
+    on_stop: SignalStopCallback,
+    _secret: SecretGuard,
+) -> Result<(), String> {
+    ctrlc::set_handler(move || on_stop(2)).map_err(|error| error.to_string())
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::unix::registered_signals;
     use signal_hook::consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM};
 
     fn registered(has_stop: bool, ignored: &[i32]) -> Vec<i32> {
-        registered_signals(has_stop, |signal| ignored.contains(&signal))
+        registered_signals(has_stop, false, |signal| ignored.contains(&signal))
+    }
+
+    #[test]
+    fn armed_clipboard_guard_takes_over_an_inherited_sighup_ignore() {
+        // Go: the auto-clear subscription's Notify(SIGHUP) overrides SIG_IGN.
+        assert!(registered_signals(true, true, |s| s == SIGHUP).contains(&SIGHUP));
+        assert!(!registered_signals(true, false, |s| s == SIGHUP).contains(&SIGHUP));
     }
 
     #[test]

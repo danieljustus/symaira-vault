@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""CLI-007: real Go/Rust signal behavior of `broker`, `run`, `run --broker`, `intake watch`.
+"""CLI-007: real Go/Rust signal behavior of `broker`, `run`, `run --broker`, `intake watch`,
+`mcp --stdio --allow-locked` and the `ui` terminal UI (under a pseudo-terminal).
 
 Unix only. Signals are delivered to real child processes in disposable HOME /
 XDG / TMPDIR roots with a memory keyring and a synthetic passphrase. Windows
@@ -13,6 +14,17 @@ on-disk names left under HOME (including a private TMPDIR). The Go oracle is
 built from ORACLE; Rust must produce the same observation. The one documented
 difference is Go's persistent <vault>/broker-ca.pem, which Rust replaces with a
 per-instance temporary CA directory that must not survive any catchable signal.
+
+Go-only oracle records (`go_only`, not compared against Rust): a stdio `mcp` server and the
+`ui` terminal UI (PTY, Enter copies the selected entry) with an armed clipboard auto-clear
+timer. The Rust leg would need the real macOS pasteboard (`/usr/bin/pbcopy` is the only
+lookup), so the Rust side is carried by injected-clipboard process tests:
+`approval::tests::stdio_armed_clipboard_signal_clears_and_requests_shutdown` (mcp) and
+`tui::tests::ui_signal_with_held_copy_process_contract` (ui; Makefile target
+`signal-process-contract` runs both). Go runs against fake pasteboard tools on a PATH that
+cannot reach the real ones. Declared Rust-safer differences: SIGQUIT clears an armed
+clipboard (Go has no SIGQUIT in its auto-clear subscription and leaves the secret), in `ui`
+and in stdio `mcp`; a `ui` copy kept until quit (duration 0) is cleared before a SIGHUP death.
 """
 import argparse
 import hashlib
@@ -21,7 +33,9 @@ import json
 import os
 from pathlib import Path
 import platform
+import pty
 import re
+import select
 import shutil
 import signal
 import socket
@@ -29,6 +43,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import termios
 import threading
 import time
 
@@ -58,7 +73,34 @@ GO_EXPECTED = {
     ("run", "SIGHUP"): ("signal", signal.SIGHUP), ("run", "SIGQUIT"): ("exit", 2),
     ("run-broker", "SIGINT"): ("signal", signal.SIGINT), ("run-broker", "SIGTERM"): ("signal", signal.SIGTERM),
     ("run-broker", "SIGHUP"): ("signal", signal.SIGHUP), ("run-broker", "SIGQUIT"): ("exit", 2),
+    # `mcp --stdio --allow-locked`: `serve` subscribes SIGINT/SIGTERM/SIGQUIT before it branches on the vault.
+    ("mcp-locked", "SIGINT"): ("exit", 0), ("mcp-locked", "SIGTERM"): ("exit", 0),
+    ("mcp-locked", "SIGHUP"): ("signal", signal.SIGHUP), ("mcp-locked", "SIGQUIT"): ("exit", 0),
+    # `ui` (bubbletea): SIGTERM quits, an external SIGINT fails with `program was interrupted`.
+    ("ui", "SIGINT"): ("exit", 1), ("ui", "SIGTERM"): ("exit", 0),
+    ("ui", "SIGHUP"): ("signal", signal.SIGHUP), ("ui", "SIGQUIT"): ("exit", 2),
 }
+# Terminal state after `ui` ended: bubbletea restores the terminal and leaves the alternate
+# screen on SIGTERM and SIGINT; SIGHUP and SIGQUIT end the Go runtime and leave it raw.
+GO_EXPECTED_UI_TERMINAL = {"SIGINT": True, "SIGTERM": True, "SIGHUP": False, "SIGQUIT": False}
+UI_INTERRUPTED = "Error: ui failed: program was killed: program was interrupted\n"
+LOCKED_WARNING = "Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools.\n"
+ALT_SCREEN_ON, ALT_SCREEN_OFF = b"\x1b[?1049h", b"\x1b[?1049l"
+INITIALIZE = (b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25",'
+              b'"clientInfo":{"name":"signals","version":"1"},"capabilities":{}}}\n')
+# Fake pasteboard tools for the Go-only clipboard observation: every name atotto/clipboard can
+# resolve, writing to a file next to the script. `events` records `secret`/`clear` per write.
+FAKE_CLIPBOARD = '''#!/bin/sh
+d="${0%/*}"
+case "${0##*/}" in
+ pbpaste|wl-paste) cat "$d/clip.txt" 2>/dev/null; exit 0;;
+esac
+for a in "$@"; do case "$a" in -out|-o|--output) cat "$d/clip.txt" 2>/dev/null; exit 0;; esac; done
+cat > "$d/clip.txt"
+if [ -s "$d/clip.txt" ]; then echo secret >> "$d/events"; else echo clear >> "$d/events"; fi
+'''
+FAKE_CLIPBOARD_TOOLS = ("pbcopy", "pbpaste", "xclip", "xsel", "wl-copy", "wl-paste")
+CLIPBOARD_SECRET = "s3cret-value-12345"
 
 # Dispositions inherited as SIG_IGN (a parent such as nohup or a job-control-free
 # supervisor). Go 1.26 runtime/signal_unix.go sigInstallGoHandler keeps the
@@ -119,12 +161,12 @@ def ignoring(argv, names):
 class Proc:
     """A child with pipe readers, so a dead or orphan-holding child never blocks the driver."""
 
-    def __init__(self, args, home, new_session=False, ignore=()):
+    def __init__(self, args, home, new_session=False, ignore=(), stdin=subprocess.DEVNULL, env=None):
         self.home = home
         ignore = tuple(ignore)
         self.out, self.err = bytearray(), bytearray()
-        self.popen = subprocess.Popen(ignoring([str(x) for x in args], ignore), cwd=home, env=isolated(home),
-                                      stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        self.popen = subprocess.Popen(ignoring([str(x) for x in args], ignore), cwd=home, env=env or isolated(home),
+                                      stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                       start_new_session=new_session)
         self.threads = [threading.Thread(target=self._pump, args=(stream, sink), daemon=True)
                         for stream, sink in ((self.popen.stdout, self.out), (self.popen.stderr, self.err))]
@@ -149,13 +191,18 @@ class Proc:
         except subprocess.TimeoutExpired:
             self.popen.kill()
             self.popen.wait()
-            raise AssertionError("process did not stop after the signal")
+            raise AssertionError(("process did not stop after the signal", self.popen.args[-3:], bytes(self.err)[-300:]))
         finally:
             for thread in self.threads:
                 thread.join(timeout=3)
         return self.popen.returncode
 
     def kill(self):
+        if self.popen.stdin is not None and not self.popen.stdin.closed:
+            try:
+                self.popen.stdin.close()
+            except OSError:
+                pass
         if self.popen.poll() is None:
             self.popen.kill()
             self.popen.wait()
@@ -244,13 +291,14 @@ def new_home(base, template, name):
     return home
 
 
-def case_record(name, command, sig, proc, home, **extra):
+def case_record(name, command, sig, proc, home, graceful_quit=False, **extra):
     stderr = normal(bytes(proc.err), home)
     record = dict(case=name, command=command, signal=sig, ending=ending(proc.popen.returncode),
                   stdout=normal(bytes(proc.out), home),
                   # Go's SIGQUIT goroutine dump is runtime-specific and unbounded;
-                  # the exit status 2 and on-disk state are compared instead.
-                  stderr="<not compared: Go SIGQUIT goroutine dump>" if sig == "SIGQUIT" else stderr,
+                  # the exit status 2 and on-disk state are compared instead. `mcp`
+                  # handles SIGQUIT itself and prints one fixed line, which is compared.
+                  stderr="<not compared: Go SIGQUIT goroutine dump>" if sig == "SIGQUIT" and not graceful_quit else stderr,
                   state=snapshot(home))
     record.update(extra)
     return record
@@ -348,6 +396,250 @@ def run_case(binary, base, template, command, sig, group, extra=(), label="", ig
     return record
 
 
+def locked_case(binary, base, template, sig):
+    """`mcp --stdio --allow-locked --agent cli` with a locked vault, stdin held open.
+
+    Go subscribes SIGINT/SIGTERM/SIGQUIT in `serve` before it looks at the vault, so the
+    locked server shuts down like an unlocked one and clears the runtime records.
+    """
+    name = f"mcp-locked-{sig.lower()}"
+    home = new_home(base, template, name)
+    (home / "vault" / ".runtime-port").write_text('{"port":1,"bind":"127.0.0.1"}')
+    env = isolated(home)
+    for key in ("SYMVAULT_PASSPHRASE", "SYMVAULT_ALLOW_ENV_PASSPHRASE"):
+        env.pop(key)
+    proc = Proc([binary, "mcp", "--stdio", "--allow-locked", "--agent", "cli"], home, stdin=subprocess.PIPE, env=env)
+    try:
+        # A reply to `initialize` proves the stdio loop runs, which is after signal installation.
+        proc.popen.stdin.write(INITIALIZE)
+        proc.popen.stdin.flush()
+        proc.wait_for_output(b'"result"')
+        assert LOCKED_WARNING.encode() in bytes(proc.err), "control: the vault must be locked"
+        assert proc.popen.poll() is None, "control: process must run until signalled"
+        proc.popen.send_signal(getattr(signal, sig))
+        proc.finish()
+        record = case_record(name, "mcp-locked", sig, proc, home, graceful_quit=True)
+    finally:
+        proc.kill()
+    return record
+
+
+def read_pty(master, sink, seconds):
+    """Collect terminal output for up to `seconds`; answer cursor-position queries like a terminal."""
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        try:
+            ready, _, _ = select.select([master], [], [], 0.05)
+            if ready:
+                chunk = os.read(master, 65536)
+                if not chunk:
+                    return
+                sink.extend(chunk)
+                if b"\x1b[6n" in chunk:
+                    os.write(master, b"\x1b[1;1R")
+        except OSError:  # the slave side is gone
+            return
+
+
+def ui_case(binary, base, template, sig):
+    """`ui` on a pseudo-terminal; records the ending, stderr and whether the terminal was restored."""
+    name = f"ui-{sig.lower()}"
+    home = new_home(base, template, name)
+    env = isolated(home)
+    env["TERM"] = "xterm-256color"
+    master, slave = pty.openpty()
+    screen = bytearray()
+    popen = subprocess.Popen([str(binary), "ui"], cwd=home, env=env, stdin=slave, stdout=slave,
+                             stderr=subprocess.PIPE, start_new_session=True)
+    os.close(slave)
+    err = bytearray()
+    pump = threading.Thread(target=lambda: err.extend(popen.stderr.read()), daemon=True)
+    pump.start()
+    try:
+        deadline = time.monotonic() + 30
+        while ALT_SCREEN_ON not in screen:
+            assert popen.poll() is None, ("ui exited before ready", bytes(err)[-500:])
+            assert time.monotonic() < deadline, "ui never entered the alternate screen"
+            read_pty(master, screen, 0.2)
+        read_pty(master, screen, 0.5)  # let the first frame settle; handlers are installed before it
+        raw = termios.tcgetattr(master)[3]
+        assert not raw & termios.ICANON and not raw & termios.ECHO, "control: ui must run in raw mode"
+        assert popen.poll() is None, "control: ui must run until signalled"
+        popen.send_signal(getattr(signal, sig))
+        deadline = time.monotonic() + 15
+        while popen.poll() is None and time.monotonic() < deadline:
+            read_pty(master, screen, 0.1)
+        assert popen.poll() is not None, "ui did not stop after the signal"
+        read_pty(master, screen, 0.3)
+        pump.join(timeout=3)
+        cooked = termios.tcgetattr(master)[3]
+        record = dict(case=name, command="ui", signal=sig, ending=ending(popen.returncode), stdout="",
+                      stderr="<not compared: Go SIGQUIT goroutine dump>" if sig == "SIGQUIT" else normal(bytes(err), home),
+                      terminal_restored=bool(cooked & termios.ICANON and cooked & termios.ECHO),
+                      alt_screen_left=ALT_SCREEN_OFF in screen, state=snapshot(home))
+    finally:
+        if popen.poll() is None:
+            popen.kill()
+            popen.wait()
+        os.close(master)
+    return record
+
+
+def clipboard_case(go, base, template, sig):
+    """Go only: stdio `mcp` with an armed clipboard auto-clear timer receives `sig`.
+
+    Fake pasteboard tools sit first on a PATH that cannot reach the real ones (macOS keeps
+    `pbcopy` in /usr/bin), so the real pasteboard is never touched. The record notes
+    whether the tool recorded the secret and the clear, how the process ended, and
+    whether it kept serving after the clear.
+    """
+    name = f"mcp-clipboard-armed-{sig.lower()}"
+    home = new_home(base, template, name)
+    fake = home / "fakebin"
+    fake.mkdir()
+    for tool in FAKE_CLIPBOARD_TOOLS:
+        (fake / tool).write_text(FAKE_CLIPBOARD)
+        (fake / tool).chmod(0o755)
+    config = home / "vault" / "config.yaml"
+    config.write_text(config.read_text().replace("        canWrite: true\n",
+                                                 "        canWrite: true\n        canUseClipboard: true\n        approvalMode: none\n"))
+    checked([go, "--vault", home / "vault", "set", "github", "--value", CLIPBOARD_SECRET], cwd=home, env=isolated(home))
+    env = isolated(home)
+    env["PATH"] = f"{fake}:/bin"
+    proc = Proc([go, "mcp", "--stdio", "--agent", "cli"], home, stdin=subprocess.PIPE, env=env)
+    events = fake / "events"
+    try:
+        def send(line):
+            proc.popen.stdin.write(line + b"\n")
+            proc.popen.stdin.flush()
+        send(INITIALIZE.strip())
+        proc.wait_for_output(b'"id":1')
+        send(b'{"jsonrpc":"2.0","method":"notifications/initialized"}')
+        send(b'{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"copy_to_clipboard","arguments":{"path":"github"}}}')
+        proc.wait_for_output(b'"id":2')
+        assert b'"isError":false' in bytes(proc.out), ("copy_to_clipboard failed", bytes(proc.out)[-300:])
+        assert events.read_text().split() == ["secret"], "control: the fake tool must hold the secret before the signal"
+        proc.popen.send_signal(getattr(signal, sig))
+        try:
+            proc.popen.wait(timeout=DIE_WINDOW if sig != "SIGHUP" else SURVIVE_WINDOW)
+            serving = False
+        except subprocess.TimeoutExpired:
+            send(b'{"jsonrpc":"2.0","id":3,"method":"ping"}')
+            proc.wait_for_output(b'"id":3')
+            serving = True
+        # The fake tool is a child of the server and may finish after the server exited.
+        deadline = time.monotonic() + 5
+        while events.read_text().split() != ["secret", "clear"] and time.monotonic() < deadline:
+            time.sleep(0.02)
+        record = dict(case=name, command="mcp-clipboard-armed", signal=sig, serving_after_signal=serving,
+                      ending=None if serving else ending(proc.popen.returncode),
+                      clipboard_events=events.read_text().split())
+    finally:
+        proc.kill()
+    return record
+
+
+def ui_clipboard_case(go, base, template, sig):
+    """Go only: `ui` on a pseudo-terminal copies the selected entry (an armed auto-clear), then gets `sig`.
+
+    Same fake-pasteboard PATH as `clipboard_case`: the real pasteboard is never touched. Go's
+    `StartAutoClear` subscription takes SIGINT, SIGTERM and SIGHUP: SIGHUP clears and `ui`
+    keeps running (a second SIGHUP, with nothing armed, kills it by the signal); SIGQUIT is not
+    subscribed, so Go dumps goroutines, exits 2 and leaves the secret on the clipboard.
+    """
+    name = f"ui-clipboard-armed-{sig.lower()}"
+    home = new_home(base, template, name)
+    fake = home / "fakebin"
+    fake.mkdir()
+    for tool in FAKE_CLIPBOARD_TOOLS:
+        (fake / tool).write_text(FAKE_CLIPBOARD)
+        (fake / tool).chmod(0o755)
+    checked([go, "--vault", home / "vault", "set", "github", "--value", CLIPBOARD_SECRET], cwd=home, env=isolated(home))
+    env = isolated(home)
+    env["PATH"] = f"{fake}:/bin"
+    env["TERM"] = "xterm-256color"
+    events = fake / "events"
+
+    def logged():
+        return events.read_text().split() if events.exists() else []
+
+    master, slave = pty.openpty()
+    screen = bytearray()
+    popen = subprocess.Popen([str(go), "ui"], cwd=home, env=env, stdin=slave, stdout=slave,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+    os.close(slave)
+
+    def wait_until(done, seconds):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and not done():
+            read_pty(master, screen, 0.05)
+        return done()
+
+    try:
+        assert wait_until(lambda: ALT_SCREEN_ON in screen, 30), "ui never entered the alternate screen"
+        read_pty(master, screen, 0.5)
+        os.write(master, b"\r")  # Enter copies the selected entry's field
+        assert wait_until(lambda: logged() == ["secret"], 10), ("control: the copy must reach the fake tool", logged())
+        assert CLIPBOARD_SECRET.encode() not in screen, "control: the secret is never drawn"
+        popen.send_signal(getattr(signal, sig))
+        wait_until(lambda: popen.poll() is not None, SURVIVE_WINDOW if sig == "SIGHUP" else DIE_WINDOW)
+        serving = popen.poll() is None
+        record = dict(case=name, command="ui-clipboard-armed", signal=sig, serving_after_signal=serving,
+                      ending=None if serving else ending(popen.returncode), second_ending=None)
+        if serving:
+            assert wait_until(lambda: logged() == ["secret", "clear"], 5), ("clear after signal", logged())
+            popen.send_signal(signal.SIGHUP)  # nothing armed any more
+            assert wait_until(lambda: popen.poll() is not None, DIE_WINDOW), "second SIGHUP must end ui"
+            record["second_ending"] = ending(popen.returncode)
+        # The fake tool is a child of the UI and may finish after it exited.
+        wait_until(lambda: logged() == ["secret", "clear"], 3)
+        record["clipboard_events"] = logged()
+    finally:
+        if popen.poll() is None:
+            popen.kill()
+            popen.wait()
+        os.close(master)
+    return record
+
+
+def exercise_go_only(go, base, template):
+    return ([clipboard_case(go, base, template, sig) for sig in ("SIGINT", "SIGTERM", "SIGHUP")]
+            + [ui_clipboard_case(go, base, template, sig) for sig in ("SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT")])
+
+
+GO_EXPECTED_CLIPBOARD = {  # (serving after the signal, ending when it stopped)
+    "SIGINT": (False, ["exit", 0]), "SIGTERM": (False, ["exit", 0]), "SIGHUP": (True, None),
+}
+# `ui` with an armed copy: (serving after the signal, ending, ending after a second SIGHUP, events).
+# SIGQUIT is not part of Go's auto-clear subscription, so Go leaves the secret on the clipboard.
+GO_EXPECTED_UI_CLIPBOARD = {
+    "SIGINT": (False, ["exit", 1], None, ["secret", "clear"]),
+    "SIGTERM": (False, ["exit", 0], None, ["secret", "clear"]),
+    "SIGHUP": (True, None, ["signal", signal.SIGHUP], ["secret", "clear"]),
+    "SIGQUIT": (False, ["exit", 2], None, ["secret"]),
+}
+
+
+def check_go_only(records):
+    """The Go clipboard records must show clear-then-shutdown (SIGINT/SIGTERM) or clear-and-serve (SIGHUP)."""
+    mcp = [r for r in records if r["command"] == "mcp-clipboard-armed"]
+    ui = [r for r in records if r["command"] == "ui-clipboard-armed"]
+    assert len(mcp) + len(ui) == len(records), ("go_only commands", [r["case"] for r in records])
+    assert [r["signal"] for r in mcp] == list(GO_EXPECTED_CLIPBOARD), ("go_only mcp cases", [r["case"] for r in mcp])
+    assert [r["signal"] for r in ui] == list(GO_EXPECTED_UI_CLIPBOARD), ("go_only ui cases", [r["case"] for r in ui])
+    for record in mcp:
+        serving, final = GO_EXPECTED_CLIPBOARD[record["signal"]]
+        assert record["serving_after_signal"] is serving, ("oracle drifted: clipboard signal", record)
+        assert record["ending"] == final, ("oracle drifted: clipboard signal", record)
+        assert record["clipboard_events"] == ["secret", "clear"], ("oracle drifted: clipboard clear", record)
+    for record in ui:
+        serving, final, second, events = GO_EXPECTED_UI_CLIPBOARD[record["signal"]]
+        assert record["serving_after_signal"] is serving, ("oracle drifted: ui clipboard signal", record)
+        assert record["ending"] == final, ("oracle drifted: ui clipboard signal", record)
+        assert record["second_ending"] == second, ("oracle drifted: ui second SIGHUP", record)
+        assert record["clipboard_events"] == events, ("oracle drifted: ui clipboard clear", record)
+
+
 def exercise(binary, base, template):
     binary = Path(binary)
     records = []
@@ -365,6 +657,10 @@ def exercise(binary, base, template):
             records.append(foreground_case(binary, base, template, command, sig, ignored=True))
         else:
             records.append(run_case(binary, base, template, command, sig, False, ignored=True))
+    for sig in KILLING:
+        records.append(locked_case(binary, base, template, sig))
+    for sig in KILLING:
+        records.append(ui_case(binary, base, template, sig))
     return records
 
 
@@ -374,7 +670,8 @@ def compare(go, rust):
     for left, right in zip(go, rust):
         name = left["case"]
         keys = ["ending", "stdout", "stderr", "listener_closed", "orphaned_child_alive",
-                "ignored", "survived", "listener_open_after_ignored_signal"]
+                "ignored", "survived", "listener_open_after_ignored_signal",
+                "terminal_restored", "alt_screen_left"]
         for key in keys:
             assert left.get(key) == right.get(key), (name, key, left.get(key), right.get(key))
         go_state, rust_state = list(left["state"]), list(right["state"])
@@ -397,6 +694,19 @@ def check_oracle_expectations(go):
                 assert record["listener_open_after_ignored_signal"] is True, ("listener must survive", key)
         elif key in GO_EXPECTED:
             assert record["ending"] == list(GO_EXPECTED[key]), ("oracle drifted", key, record["ending"])
+        if record["command"] == "mcp-locked":
+            assert record["state"].count("vault/.runtime-port") == (record["signal"] == "SIGHUP"), \
+                ("Go clears the runtime port record on a handled signal only", record["case"], record["state"])
+            quit_line = "Received SIGQUIT, shutting down gracefully...\n"
+            assert record["stderr"] == LOCKED_WARNING + (quit_line if record["signal"] == "SIGQUIT" else ""), \
+                ("oracle drifted: locked stderr", record["case"], record["stderr"])
+        if record["command"] == "ui":
+            assert record["terminal_restored"] is GO_EXPECTED_UI_TERMINAL[record["signal"]], ("oracle drifted: terminal", record["case"])
+            assert record["alt_screen_left"] is GO_EXPECTED_UI_TERMINAL[record["signal"]], ("oracle drifted: alt screen", record["case"])
+            if record["signal"] == "SIGINT":
+                assert record["stderr"] == UI_INTERRUPTED * 2, ("oracle drifted: ui interrupt message", record["stderr"])
+            elif record["signal"] != "SIGQUIT":
+                assert record["stderr"] == "", ("oracle drifted: ui stderr", record["case"], record["stderr"])
         if record["command"] in ("broker", "run-broker") and "group" not in record["case"]:
             assert record["state"].count(f"vault/{CA_NAME}") == 1, ("Go keeps its persistent CA file", record["case"])
         if record["command"] in ("run", "run-broker"):
@@ -446,7 +756,7 @@ def main():
                    candidate_worktree_clean=clean, native_os=platform.system(), architecture=platform.machine(),
                    rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),
                    driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                   keyring="memory", expect_mismatch=args.expect_mismatch, go=[], rust=[], passed=False)
+                   keyring="memory", expect_mismatch=args.expect_mismatch, go=[], rust=[], go_only=[], passed=False)
     args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
     with tempfile.TemporaryDirectory(prefix="symvault-signals-") as raw:
         base = Path(raw)
@@ -458,6 +768,8 @@ def main():
         rust_root.mkdir()
         receipt["go"] = exercise(go, go_root, template)
         check_oracle_expectations(receipt["go"])
+        receipt["go_only"] = exercise_go_only(go, go_root, template)
+        check_go_only(receipt["go_only"])
         receipt["rust"] = exercise(rust, rust_root, template)
         try:
             compare(receipt["go"], receipt["rust"])
@@ -472,7 +784,8 @@ def main():
     if args.expect_mismatch:
         print(f"PASS (negative control): mutant rejected: {mismatch}")
     else:
-        print(f"PASS: {len(receipt['go'])} actual Go/Rust signal observations on {platform.system()}")
+        print(f"PASS: {len(receipt['go'])} actual Go/Rust signal observations and {len(receipt['go_only'])} "
+              f"Go-only clipboard observations on {platform.system()}")
 
 
 if __name__ == "__main__":

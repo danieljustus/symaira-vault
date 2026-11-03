@@ -1433,7 +1433,14 @@ fn run_cli() -> ExitCode {
                     let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                     require_initialized(&root)?;
                     let identity = device::unlock_vault(&root)?;
-                    tui::run(&root, &identity)
+                    // Go prints a failed `ui` twice (cobra, then `ExecuteRoot`).
+                    tui::run(&root, &identity).map_err(|error| {
+                        if error == tui::INTERRUPTED_MESSAGE {
+                            reported(1, &error, None)
+                        } else {
+                            error
+                        }
+                    })
                 })()
             };
             finish_vault_result(result)
@@ -5238,7 +5245,7 @@ fn run_mcp(
                 eprintln!(
                     "Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools."
                 );
-                return mcp_commands::run_locked_stdio();
+                return mcp_commands::run_locked_stdio(&vault);
             }
             Err(error) => return Err(error),
         };

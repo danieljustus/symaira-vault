@@ -32,7 +32,7 @@ use symvault_core::{
 use symvault_crypto::{Identity, SecretBytes};
 use symvault_mcp::{
     ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, StoreReadOnlyRuntime,
-    ToolListConfig, read_only_tool_names, run_stdio, run_stdio_until, unavailable_tool,
+    ToolListConfig, read_only_tool_names, run_stdio_until, unavailable_tool,
 };
 use symvault_platform::approval::is_tty_present;
 
@@ -58,7 +58,19 @@ pub fn install_auth_guard(seams: AuthGuardSeams) {
 
 /// Go's locked stdio bootstrap owns no vault runtime. Keep protocol input
 /// intact and deny every tool call through the existing locked handler.
-pub fn run_locked_stdio() -> Result<(), String> {
+///
+/// Go subscribes SIGINT/SIGTERM/SIGQUIT in `serve` before it branches on the
+/// vault, so a locked stdio server shuts down like an unlocked one (real Go
+/// process: exit 0, SIGQUIT warns first, SIGHUP keeps its default action).
+pub fn run_locked_stdio(root: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        symvault_platform::approval::install_stdio_secure_input_signal_router()
+            .map_err(|error| format!("install MCP stdio signal router: {error}"))?;
+        mcp_shutdown::install_stdio(root.to_path_buf())?;
+    }
+    #[cfg(not(unix))]
+    let _ = root;
     // Go lists host-capable secure input metadata even with a nil vault. This
     // handler still owns no tool runtime: listing cannot enable a prompt/read.
     let available = locked_secure_input_metadata_available();
@@ -73,8 +85,16 @@ pub fn run_locked_stdio() -> Result<(), String> {
     );
     let stdin = io::stdin();
     let stdout = io::stdout();
-    run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
-        .map_err(|error| format!("MCP stdio: {error}"))
+    let result = run_stdio_until(
+        BufReader::new(stdin.lock()),
+        stdout.lock(),
+        &mut handler,
+        mcp_shutdown::requested,
+    );
+    mcp_shutdown::stdio_finished();
+    // A signal-driven shutdown is a success and finishes in its own thread.
+    mcp_shutdown::park_if_requested();
+    result.map_err(|error| format!("MCP stdio: {error}"))
 }
 
 fn locked_secure_input_metadata_available() -> bool {
