@@ -591,6 +591,87 @@ pub fn register_stdio_clipboard_auto_clear(
     Some(StdioClipboardAutoClearRegistration { state, id })
 }
 
+/// An auto-clear timer armed outside the stdio router (HTTP `mcp`, where
+/// `copy_to_clipboard` and `generate_totp` arm Go's `StartAutoClear` too). The
+/// HTTP shutdown clears whatever is armed when SIGINT/SIGTERM/SIGQUIT arrives,
+/// like Go's per-timer `signal.Notify` subscription. Each handler runtime owns
+/// its own timer, so unlike the stdio slot a new entry never cancels another.
+#[cfg(unix)]
+struct ProcessClipboardTimer {
+    cancel: std::sync::mpsc::Sender<()>,
+    clear_claimed: Arc<AtomicBool>,
+    clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+}
+
+#[cfg(unix)]
+static PROCESS_CLIPBOARD_TIMERS: Mutex<Vec<(usize, ProcessClipboardTimer)>> =
+    Mutex::new(Vec::new());
+#[cfg(unix)]
+static PROCESS_CLIPBOARD_TIMER_ID: AtomicUsize = AtomicUsize::new(1);
+
+/// Registration of a [`ProcessClipboardTimer`]; dropping it (timer fired,
+/// canceled or replaced) removes the entry.
+#[cfg(unix)]
+pub struct ProcessClipboardAutoClearRegistration {
+    id: usize,
+}
+
+#[cfg(unix)]
+impl Drop for ProcessClipboardAutoClearRegistration {
+    fn drop(&mut self) {
+        PROCESS_CLIPBOARD_TIMERS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|(id, _)| *id != self.id);
+    }
+}
+
+/// Registers an armed timer for the HTTP shutdown (see above). `clear_claimed`
+/// is shared with the timer thread so exactly one side clears.
+#[cfg(unix)]
+pub fn register_process_clipboard_auto_clear(
+    cancel: std::sync::mpsc::Sender<()>,
+    clear_claimed: Arc<AtomicBool>,
+    clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+) -> ProcessClipboardAutoClearRegistration {
+    let id = PROCESS_CLIPBOARD_TIMER_ID.fetch_add(1, Ordering::Relaxed);
+    PROCESS_CLIPBOARD_TIMERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .push((
+            id,
+            ProcessClipboardTimer {
+                cancel,
+                clear_claimed,
+                clipboard,
+            },
+        ));
+    ProcessClipboardAutoClearRegistration { id }
+}
+
+/// Clears every clipboard whose auto-clear timer is armed outside the stdio
+/// router and cancels those timers. Returns how many it cleared. Called by the
+/// HTTP shutdown at signal receipt and again after the drain (a request that
+/// was still in flight may have copied meanwhile).
+#[cfg(unix)]
+pub fn clear_armed_process_clipboards() -> usize {
+    let timers: Vec<ProcessClipboardTimer> = PROCESS_CLIPBOARD_TIMERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .drain(..)
+        .map(|(_, timer)| timer)
+        .collect();
+    let mut cleared = 0;
+    for timer in timers {
+        if !timer.clear_claimed.swap(true, Ordering::AcqRel) {
+            let _ = timer.clipboard.clear();
+            cleared += 1;
+        }
+        let _ = timer.cancel.send(());
+    }
+    cleared
+}
+
 #[cfg(unix)]
 struct SecureInputPromptScope {
     _prompt_lock: Option<MutexGuard<'static, ()>>,

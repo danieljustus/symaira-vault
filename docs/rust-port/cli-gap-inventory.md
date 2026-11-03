@@ -1098,10 +1098,29 @@ pinned by `make signal-process-contract` (41 compared observations per implement
 | `ui`, SIGHUP | death by SIGHUP, terminal left raw | exit 0, terminal restored (`ctrlc` `termination`) | same as Go |
 | `ui`, SIGQUIT | exit 2 (goroutine dump), terminal left raw | death by SIGQUIT | exit 2, terminal left raw |
 | `ui` with an armed copy (Enter, default 30 s auto-clear), SIGHUP | clipboard cleared, **`ui` keeps running** (the copy's `StartAutoClear` subscribes SIGINT/SIGTERM/SIGHUP); the next SIGHUP, with nothing armed, kills it by SIGHUP | secret left on the clipboard, death by SIGHUP (review finding: regression against the `ctrlc` build) | same as Go: `OwnedClipboardHandle::clear_if_armed` clears and `ui` shows `Clipboard cleared`; the next SIGHUP dies by SIGHUP |
-| same, SIGINT/SIGTERM | cleared, exit 1 (`program was interrupted`) / 0 | cleared on the exit path | same |
+| same, SIGINT/SIGTERM | cleared at signal receipt (goroutine), exit 1 (`program was interrupted`) / 0 | cleared on the exit path only: a main thread blocked in `$EDITOR` kept the secret (CLI007-LOW) | cleared by the signal thread right after the stop request (`clear_before_exit`), the exit path finds nothing left; same exit codes |
 | same, SIGQUIT | exit 2, **secret left on the clipboard** (SIGQUIT is not in Go's auto-clear subscription) | secret left on the clipboard | **declared Rust-safer difference**: cleared, then exit 2 |
 | `ui` with a copy kept until quit (`auto_clear_duration: 0`), SIGHUP | no subscription: death by SIGHUP, secret left | secret left | **declared Rust-safer difference**: cleared, then death by SIGHUP |
 | stdio `mcp` with an armed timer, SIGQUIT | shuts down (exit 0, warning) and **leaves the secret** (the timer does not subscribe SIGQUIT) | secret left | **declared Rust-safer difference**: `clear_armed_stdio_clipboard` first, then the Go shutdown (exit 0, warning) |
+
+CLI007-LOW follow-ups (delta review, APPROVE): (1) `OwnedClipboardHandle::clear_before_exit` marks the
+owner as stopping under the clear's lock, so a `copy` racing the death-path clear on the main thread is
+refused instead of putting a new secret behind it (the armed-SIGHUP `clear_if_armed` keep-running path does
+not stop the owner). (2) see the SIGINT/SIGTERM row. (3) A failing backend `clear()` no longer drops the
+deadline: the copy stays held and the worker retries every second; the failure reaches `Model::tick` through
+`take_clear_result`, and on paths without a UI (worker shutdown, signal exit) it is written to stderr as
+`warning: clipboard clear failed: ...`. (4) HTTP `mcp` **can** arm the timer: `copy_to_clipboard` and
+`generate_totp` go through the same `start_clipboard_auto_clear` per request runtime, and Go's
+`Server.startClipboardAutoClear` is transport-independent, so Go's armed timer clears on SIGINT/SIGTERM next
+to `serve`'s shutdown. Rust only registered stdio runtimes with the signal router, so an HTTP shutdown
+(drain, then exit 0) left the secret. Fixed: HTTP runtimes register in a process list
+(`approval::register_process_clipboard_auto_clear`), and `install_http` clears it at signal receipt and
+again after the drain (a request still in flight may copy meanwhile); SIGQUIT is cleared too (declared
+Rust-safer, as in stdio). Pinned by `mcp_shutdown::tests::http_signal_shutdown_clears_an_armed_clipboard`
+(real signals, injected clipboard) and `clipboard_http_signal_clear` (real `copy_to_clipboard`). Not covered
+by a Go observation (the Go oracle legs are stdio/`ui` only). Remaining difference: SIGHUP in HTTP mode is
+not subscribed by `install_http`, so an armed copy dies with the process by SIGHUP (default action) while Go
+clears and keeps serving.
 
 The task description called the clipboard row "only clears and the server keeps running"; the
 real Go process shows that this is true for SIGHUP only. Ordinary approval prompts under an armed

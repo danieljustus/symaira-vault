@@ -63,7 +63,9 @@
 //!   action, even over an inherited `SIG_IGN`). With nothing armed the signal
 //!   keeps its `SIGHUP` row above: death by SIGHUP, or ignored when inherited
 //!   ignored. A second SIGHUP after the clear is such an unarmed one.
-//! - SIGINT/SIGTERM: the stop callback runs and `ui` clears on its way out.
+//! - SIGINT/SIGTERM: the stop callback runs and the signal thread clears right
+//!   away (Go clears at receipt too), so a main thread blocked in `$EDITOR`
+//!   cannot keep the secret on the clipboard; the exit path finds nothing left.
 //! - SIGQUIT (declared Rust-safer difference): Go's subscription does not include
 //!   SIGQUIT and the goroutine dump leaves the secret on the clipboard. Rust
 //!   clears any still-held copy before exiting 2. The same clear runs before a
@@ -88,7 +90,8 @@ pub(crate) type SignalStopCallback = Box<dyn Fn(i32) + Send + 'static>;
 pub(crate) struct SecretGuard {
     /// Clears the clipboard when a copy waits on its auto-clear timer; true if it did.
     pub(crate) clear_if_armed: Box<dyn Fn() -> bool + Send + 'static>,
-    /// Clears any still-held copy right before the process ends from a signal.
+    /// Clears any still-held copy and refuses later copies; for signals that end
+    /// the process or stop `ui` (everything except the armed-SIGHUP keep-running clear).
     pub(crate) clear_before_exit: Box<dyn Fn() + Send + 'static>,
 }
 
@@ -162,6 +165,12 @@ mod unix {
                         && let Some(stop) = &on_stop
                     {
                         stop(signal);
+                        // Go's `StartAutoClear` clears at signal receipt, not
+                        // when the program unwinds: the main thread may be
+                        // blocked in `$EDITOR` and the secret must not wait for it.
+                        if let Some(secret) = &secret {
+                            (secret.clear_before_exit)();
+                        }
                         continue;
                     }
                     if let Some(secret) = &secret {

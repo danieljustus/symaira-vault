@@ -214,9 +214,11 @@ pub fn run(root: &Path, identity: &Identity) -> Result<(), String> {
 /// Go runtime (death by SIGHUP, exit 2) without restoring the terminal.
 /// `process_signals` registers exactly that set (CLI-007). A copy that waits on
 /// its auto-clear timer additionally behaves like Go's `StartAutoClear`
-/// subscription: SIGHUP clears the clipboard and `ui` keeps running; SIGQUIT
-/// clears before exiting (declared Rust-safer difference, Go has no SIGQUIT
-/// clear).
+/// subscription: SIGHUP clears the clipboard and `ui` keeps running; SIGINT and
+/// SIGTERM clear from the signal thread right after the stop request (Go clears
+/// at receipt, so a main thread blocked in `$EDITOR` cannot hold the secret);
+/// SIGQUIT clears before exiting (declared Rust-safer difference, Go has no
+/// SIGQUIT clear).
 fn install_signals(
     stopping: &Arc<AtomicBool>,
     interrupted: &Arc<AtomicBool>,
@@ -1227,8 +1229,9 @@ mod tests {
     /// clipboard that records events in a file. Go oracle (`ui-clipboard-*`
     /// cases of signal_process_contract.py): SIGHUP with an armed copy clears and
     /// keeps running, the next SIGHUP kills by the signal; SIGQUIT exits 2
-    /// (Rust-safer: clears first); SIGINT/SIGTERM stop the loop and leave the
-    /// clear to the exit path.
+    /// (Rust-safer: clears first); SIGINT/SIGTERM stop the loop and the signal
+    /// thread clears at receipt (Go `StartAutoClear`), even while the main thread
+    /// is blocked.
     #[cfg(unix)]
     #[test]
     fn ui_signal_with_held_copy_process_contract() {
@@ -1319,9 +1322,9 @@ mod tests {
             Case("SIGHUP:0", Some(SIGHUP), None, "secret,clear,", ""),
             // SIGQUIT: Go exits 2 without clearing; Rust clears first.
             Case("SIGQUIT:30", None, Some(2), "secret,clear,", ""),
-            // SIGINT/SIGTERM: stop callback only, the exit path clears.
-            Case("SIGINT:30", None, Some(0), "secret,", ""),
-            Case("SIGTERM:30", None, Some(0), "secret,", ""),
+            // SIGINT/SIGTERM: stop callback, then the signal thread clears at receipt.
+            Case("SIGINT:30", None, Some(0), "secret,clear,", ""),
+            Case("SIGTERM:30", None, Some(0), "secret,clear,", ""),
         ];
         for Case(spec, killed_by, exit_code, events, status) in cases {
             let dir = tempfile::tempdir().unwrap();
@@ -1363,11 +1366,10 @@ mod tests {
                         )) && stdout.contains(&format!("events={events}\n")),
                         "{spec}: {output:?}"
                     );
-                    // The model's drop (the real exit path) clears afterwards.
-                    assert_eq!(
-                        final_log, "secret,clear,",
-                        "{spec}: only the exit path clears"
-                    );
+                    // The clear happened in the signal thread (the receipt above
+                    // already shows it, before any exit path ran) and the exit
+                    // path found nothing left to clear.
+                    assert_eq!(final_log, events, "{spec}: cleared once, at receipt");
                 }
                 _ => assert_eq!(final_log, events, "{spec}: {output:?}"),
             }

@@ -116,7 +116,11 @@ impl OwnedTextClipboard {
                 };
                 loop {
                     if state.stopping {
-                        let _ = clear_owned(&mut state);
+                        // Last attempt before the worker ends; nobody polls
+                        // `cleared` any more, so surface a failure here.
+                        if let Err(error) = clear_owned(&mut state) {
+                            report_clear_failure(&error);
+                        }
                         return;
                     }
                     if let Some(deadline) = state.deadline {
@@ -209,25 +213,62 @@ impl OwnedClipboardHandle {
         changed.notify_all();
         true
     }
-    /// Clears a still-held copy (armed or kept until quit) before the process
-    /// ends from a signal.
+    /// Clears a still-held copy (armed or kept until quit) on a path that ends
+    /// the process (SIGINT/SIGTERM stop, SIGHUP/SIGQUIT death). The owner is
+    /// marked as stopping under the same lock, so a `copy` racing on another
+    /// thread either finished before this clear or is refused afterwards: no
+    /// new secret can land behind the clear. Never call this on a path that
+    /// keeps running (the armed-SIGHUP clear uses [`Self::clear_if_armed`]).
+    /// A failed clear is reported on stderr, as nobody polls the result.
     pub fn clear_before_exit(&self) {
         let (lock, changed) = &*self.shared;
         let mut state = lock
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let _ = clear_owned(&mut state);
+        state.stopping = true;
+        if let Err(error) = clear_owned(&mut state) {
+            report_clear_failure(&error);
+        }
         changed.notify_all();
     }
 }
+
+/// How long a failed clear waits before the worker retries it.
+#[cfg(not(test))]
+const CLEAR_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+#[cfg(test)]
+const CLEAR_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_millis(30);
+
+/// Clears the backend if a copy is held. A failing clear keeps the copy marked
+/// as held and schedules a retry (the timer must not silently end with the
+/// secret still on the clipboard); the caller gets the error to surface.
 fn clear_owned(state: &mut ClipboardState) -> Result<(), symvault_core::platform::PlatformError> {
-    state.deadline = None;
     if !state.active {
+        state.deadline = None;
         return Ok(());
     }
-    state.backend.clear()?;
-    state.active = false;
-    Ok(())
+    match state.backend.clear() {
+        Ok(()) => {
+            state.active = false;
+            state.deadline = None;
+            Ok(())
+        }
+        Err(error) => {
+            state.deadline = std::time::Instant::now().checked_add(CLEAR_RETRY_INTERVAL);
+            Err(error)
+        }
+    }
+}
+
+/// Paths without a UI left to show the result (worker shutdown, signal exit).
+fn report_clear_failure(error: &symvault_core::platform::PlatformError) {
+    use std::io::Write;
+    // A closed stderr must not stop the shutdown.
+    let _ = writeln!(
+        std::io::stderr(),
+        "warning: clipboard clear failed: {}",
+        error.message
+    );
 }
 impl Drop for OwnedTextClipboard {
     fn drop(&mut self) {
@@ -244,5 +285,166 @@ fn ownership_error() -> symvault_core::platform::PlatformError {
     symvault_core::platform::PlatformError {
         kind: symvault_core::platform::PlatformErrorKind::Failed,
         message: "clipboard ownership unavailable".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+    };
+    use std::time::Duration;
+    use symvault_core::platform::{PlatformError, PlatformErrorKind};
+
+    #[derive(Default)]
+    struct Recording {
+        /// "set:<text>" / "clear" in backend order.
+        events: Mutex<Vec<String>>,
+        fail_clears: AtomicUsize,
+        clear_entered: Mutex<Option<mpsc::Sender<()>>>,
+        clear_delay: Mutex<Duration>,
+    }
+    impl Recording {
+        fn events(&self) -> Vec<String> {
+            self.events.lock().unwrap().clone()
+        }
+    }
+    impl Clipboard for Recording {
+        fn set(&self, text: &[u8]) -> Result<(), PlatformError> {
+            self.events
+                .lock()
+                .unwrap()
+                .push(format!("set:{}", String::from_utf8_lossy(text)));
+            Ok(())
+        }
+        fn clear(&self) -> Result<(), PlatformError> {
+            if let Some(entered) = self.clear_entered.lock().unwrap().as_ref() {
+                let _ = entered.send(());
+            }
+            std::thread::sleep(*self.clear_delay.lock().unwrap());
+            self.events.lock().unwrap().push("clear".into());
+            if self
+                .fail_clears
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+                .is_ok()
+            {
+                return Err(PlatformError {
+                    kind: PlatformErrorKind::Failed,
+                    message: "clear boom".into(),
+                });
+            }
+            Ok(())
+        }
+    }
+
+    fn wait_for(what: &str, condition: impl Fn() -> bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !condition() {
+            assert!(std::time::Instant::now() < deadline, "timed out: {what}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// A `copy` racing the death-path clear on another thread must not leave a
+    /// new secret behind: it either lands before the clear (and is cleared) or
+    /// is refused after it.
+    #[test]
+    fn clear_before_exit_refuses_a_racing_copy() {
+        let backend = Arc::new(Recording::default());
+        let (entered, clearing) = mpsc::channel();
+        *backend.clear_entered.lock().unwrap() = Some(entered);
+        *backend.clear_delay.lock().unwrap() = Duration::from_millis(200);
+        let owner = OwnedTextClipboard::new(backend.clone()).unwrap();
+        owner.copy(b"first", Duration::from_secs(60)).unwrap();
+        let handle = owner.handle();
+        let signal = std::thread::spawn(move || handle.clear_before_exit());
+        // The clear holds the state lock; the racing copy queues behind it.
+        clearing.recv_timeout(Duration::from_secs(10)).unwrap();
+        let racing = owner.copy(b"second", Duration::from_secs(60));
+        signal.join().unwrap();
+        assert!(
+            racing.is_err(),
+            "a copy after the death-path clear is refused"
+        );
+        assert_eq!(backend.events(), ["set:first", "clear"]);
+        assert!(owner.copy(b"third", Duration::ZERO).is_err());
+        assert_eq!(
+            backend.events(),
+            ["set:first", "clear"],
+            "no secret behind the clear"
+        );
+    }
+
+    /// The armed-SIGHUP path keeps the program running, so it must not stop the
+    /// owner: a later copy works and is armed again.
+    #[test]
+    fn clear_if_armed_keeps_the_owner_running() {
+        let backend = Arc::new(Recording::default());
+        let owner = OwnedTextClipboard::new(backend.clone()).unwrap();
+        let handle = owner.handle();
+        owner.copy(b"first", Duration::from_secs(60)).unwrap();
+        assert!(handle.clear_if_armed());
+        owner.copy(b"second", Duration::from_secs(60)).unwrap();
+        assert!(handle.clear_if_armed());
+        assert_eq!(
+            backend.events(),
+            ["set:first", "clear", "set:second", "clear"]
+        );
+    }
+
+    /// A failed clear keeps the copy held and retries instead of dropping the
+    /// deadline, and the failure is surfaced through the result channel.
+    #[test]
+    fn failed_expiry_clear_is_retried_and_surfaced() {
+        let backend = Arc::new(Recording::default());
+        backend.fail_clears.store(2, Ordering::SeqCst);
+        let owner = OwnedTextClipboard::new(backend.clone()).unwrap();
+        owner.copy(b"secret", Duration::from_millis(10)).unwrap();
+        wait_for(
+            "failure surfaced",
+            || matches!(owner.take_clear_result(), Some(Err(e)) if e.message == "clear boom"),
+        );
+        // Two failures, then the third attempt succeeds without any new copy.
+        wait_for("retried until cleared", || {
+            backend.events().iter().filter(|e| *e == "clear").count() >= 3
+        });
+        wait_for("success surfaced", || {
+            matches!(owner.take_clear_result(), Some(Ok(())))
+        });
+        assert!(!owner.handle().clear_if_armed(), "nothing left to clear");
+        let clears = backend.events().iter().filter(|e| *e == "clear").count();
+        std::thread::sleep(CLEAR_RETRY_INTERVAL * 3);
+        assert_eq!(
+            backend.events().iter().filter(|e| *e == "clear").count(),
+            clears,
+            "retries stop after the clear succeeded"
+        );
+    }
+
+    #[test]
+    fn failed_explicit_clear_keeps_the_copy_and_schedules_a_retry() {
+        let backend = Arc::new(Recording::default());
+        backend.fail_clears.store(1, Ordering::SeqCst);
+        let owner = OwnedTextClipboard::new(backend.clone()).unwrap();
+        // No timer at all: the retry deadline is the only thing that can save it.
+        owner.copy(b"secret", Duration::ZERO).unwrap();
+        assert_eq!(owner.clear().unwrap_err().message, "clear boom");
+        wait_for("retry", || {
+            backend.events().iter().filter(|e| *e == "clear").count() >= 2
+        });
+        wait_for("held copy released", || {
+            !owner.shared.0.lock().unwrap().active
+        });
+    }
+
+    #[test]
+    fn stopping_flag_is_set_only_by_the_death_path() {
+        let backend = Arc::new(Recording::default());
+        let owner = OwnedTextClipboard::new(backend).unwrap();
+        owner.handle().clear_before_exit();
+        assert!(owner.shared.0.lock().unwrap().stopping);
     }
 }
