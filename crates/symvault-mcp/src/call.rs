@@ -2271,19 +2271,29 @@ fn is_redacted_field(field: &str, patterns: &[String]) -> bool {
 /// keeps a leading `/` and a `..` that climbs above a relative path, so
 /// `/prod/a` and `../prod/a` stay outside an allowed `prod`, as in Go. Only
 /// Windows turns `\` into `/` (`filepath.ToSlash` is the identity elsewhere).
-/// The allowed-path boundary shared by every tool: Go's `pathAllowed` over
-/// [`go_scope_path`], except that an allowed path that cleans to nothing
-/// (`""`, `"."`, `"a/.."`) grants nothing. Go's `HasPrefix(path, "" + "/")`
-/// would admit every absolute path there; failing closed is a deliberate,
-/// stricter deviation.
+/// The allowed-path boundary shared by every tool.
+///
+/// A path is admitted only when BOTH boundaries admit it: Go's `pathAllowed`
+/// over [`go_scope_path`] (so `/prod/a` and `../prod/a` stay outside an allowed
+/// `prod`, as in Go) and the earlier Rust boundary over
+/// [`normalize_scope_path`] (so an allowed `..`, `\\` or a path that cleans to
+/// nothing never widens the scope). Rust is therefore never more permissive than
+/// Go or than its own earlier behaviour; every case where the two disagree is a
+/// deliberate, stricter deviation (docs/rust-port/upstream-go-bugs.md, 14).
 pub(crate) fn scope_allows(allowed_paths: &[String], path: &str) -> bool {
-    let path = go_scope_path(path);
+    let go_path = go_scope_path(path);
+    let legacy_path = normalize_scope_path(path);
     allowed_paths.iter().any(|allowed| {
         if allowed == "*" {
             return true;
         }
-        let allowed = go_scope_path(allowed);
-        !allowed.is_empty() && (path == allowed || path.starts_with(&format!("{allowed}/")))
+        let go_allowed = go_scope_path(allowed);
+        let legacy_allowed = normalize_scope_path(allowed);
+        let go = !go_allowed.is_empty()
+            && (go_path == go_allowed || go_path.starts_with(&format!("{go_allowed}/")));
+        let legacy =
+            legacy_path == legacy_allowed || legacy_path.starts_with(&format!("{legacy_allowed}/"));
+        go && legacy
     })
 }
 
@@ -2466,5 +2476,21 @@ mod scope_tests {
         assert!(!allows(&["/"], "/x"));
         assert!(allows(&["*"], "/anything"));
         assert!(!allows(&[], "prod"));
+    }
+
+    #[test]
+    fn forms_the_earlier_rust_boundary_denied_stay_denied() {
+        // Go admits these; the earlier Rust boundary did not (security review).
+        for (allowed, path) in [
+            ("..", "../prod"),
+            ("\\\\", "\\\\/child"),
+            ("../é/../", "../x"),
+            ("/\\\\", "/\\\\/x"),
+        ] {
+            assert!(
+                !allows(&[allowed], path),
+                "allowed {allowed:?} must not admit {path:?}"
+            );
+        }
     }
 }

@@ -225,8 +225,10 @@ Go's `pathAllowed` compares `path.Clean` forms with `strings.HasPrefix(path, all
 An agent `allowed_paths` entry of `""`, `"."` or `"a/.."` cleans to the empty string, so
 `"/"` becomes the prefix and every absolute request path (`/secret`) is admitted.
 
-Rust (`symvault_mcp::call::scope_allows`) follows Go's `path.Clean` boundary for every
-other form but grants nothing for an allowed path that cleans to empty. This is a
+Rust (`symvault_mcp::call::scope_allows`) admits a path only when both Go's `path.Clean`
+boundary and the earlier Rust boundary (`normalize_scope_path`) admit it, and grants nothing
+for an allowed path that cleans to empty. Go also admits `../prod` under an allowed `..` and
+backslash forms the earlier Rust boundary denied (86 of 59,467 reviewed pairs); Rust keeps them denied. This is a
 deliberate, stricter deviation (Rust must never be more permissive than Go or than its
 own earlier behaviour); regression tests: `call::scope_tests`. Upstream fix: reject such
 entries at profile load.
