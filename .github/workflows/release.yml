@@ -17,11 +17,8 @@ env:
 jobs:
   # Release gate. The shipped binary is the Rust CLI, so the gates are the Rust
   # ones (rustfmt + Clippy -D warnings, nextest + doctests, cargo audit/deny),
-  # replacing the former golangci-lint/gosec, `go test` and govulncheck jobs.
-  # Go is still installed, but only because part of the Rust test suite diffs
-  # the CLI against the frozen Go oracle (`crates/symvault-cli/tests/*_differential.rs`,
-  # same setup as the `rust` job in ci.yml). Drop setup-go together with the Go
-  # sources once the oracle is retired.
+  # replacing the former Go lint, test and vulnerability jobs. No Go toolchain
+  # is installed: differential tests replay committed Go observations.
   rust-gates:
     name: Rust Lint, Test & Security Gates
     runs-on: ubuntu-latest
@@ -35,12 +32,6 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Set up Go (differential-test oracle only)
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
 
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
@@ -344,8 +335,7 @@ jobs:
           # The SymvaultIOS app target consumes SymvaultFFI.xcframework
           # (crates/symvault-ffi, ADR 0031: ios-arm64, ios-arm64-simulator,
           # macos-arm64). It is git-ignored and must be generated before
-          # xcodebuild resolves the SPM package graph. The previous gomobile
-          # Vaultcore build stays behind SYMVAULT_VAULTCORE=gomobile.
+          # xcodebuild resolves the SPM package graph.
           # Runs before the signing keychain and the private-SPM git
           # credentials exist: cargo executes build scripts and proc macros
           # of third-party crates.
