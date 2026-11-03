@@ -4,7 +4,7 @@
 //! context and returns success. The process therefore exits 0 with no output
 //! (SIGQUIT first prints one warning) and removes the runtime port/TLS records
 //! instead of dying from the signal. SIGHUP is not subscribed and keeps its
-//! default action. These helpers exist only on Unix; Windows console events
+//! default action (HTTP: see below). These helpers exist only on Unix; Windows console events
 //! use a different mechanism and are not covered here.
 //!
 //! HTTP (ADR 0009): the first SIGINT/SIGTERM/SIGQUIT stops accepting, cancels
@@ -34,8 +34,22 @@
 //! same `StartAutoClear` timer, which subscribes SIGINT/SIGTERM next to `serve`.
 //! `install_http` therefore clears every armed HTTP timer at signal receipt and
 //! again after the drain (SIGQUIT included, a declared Rust-safer addition).
-//! SIGHUP is not subscribed here, so an armed HTTP copy still dies with a SIGHUP
-//! death (Go would clear it and keep serving).
+//! Real Go process (`signal_process_contract.py`, cases `mcp-http-clipboard-*`):
+//! with a copy armed, SIGINT/SIGTERM exit 0 but Go usually exits before its timer
+//! has run the clear (13 of 14 runs left the secret; Rust always clears, a
+//! declared Rust-safer difference). SIGHUP is subscribed by the timer only:
+//! armed, it clears and the server keeps serving; the next SIGHUP finds no timer
+//! and kills the process by the signal. Nothing armed, SIGHUP kills by the
+//! signal (no runtime records are cleared), unless the process inherited
+//! `SIG_IGN` for it: then an unarmed SIGHUP is ignored, an armed one overrides the
+//! ignore (`Notify`) and clears, and the ignore is back in force afterwards.
+//! `install_http` mirrors that: its SIGHUP listener clears and keeps serving
+//! while a timer is armed and otherwise takes the default action (or ignores the
+//! signal when it was inherited ignored, like `process_signals`).
+//!
+//! Shutdown-path clears run on a short-lived thread that is joined for a bounded
+//! time (`CLIPBOARD_CLEAR_BOUND`): a hung clipboard backend can neither hold up
+//! the drain and exit nor swallow later signals on the listener thread.
 //!
 //! Known residuals against Go (#1242):
 //! - Go's SIGQUIT goroutine dump (ADR 0034 item 11) is a maintainer decision and
@@ -72,8 +86,15 @@ mod unix {
     const SIGQUIT: i32 = 3;
     const SIGTERM: i32 = 15;
 
+    const SIGHUP: i32 = 1;
+
     /// Go's stdio bootstrap waits this long for the transport after cancel.
     const STDIO_SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
+
+    /// Longest a shutdown-path clipboard clear may hold up the signal thread
+    /// that issued it. A clipboard tool that never returns is abandoned (the
+    /// thread keeps running; the process is about to exit or keeps serving).
+    const CLIPBOARD_CLEAR_BOUND: Duration = Duration::from_secs(2);
 
     static REQUESTED: AtomicBool = AtomicBool::new(false);
     static STDIO_FINISHED: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
@@ -82,6 +103,79 @@ mod unix {
     /// frames, like Go's transport checks its context.
     pub fn requested() -> bool {
         REQUESTED.load(Ordering::Acquire)
+    }
+
+    /// True when the process inherited `SIG_IGN` for `signal` (for example from
+    /// `nohup`) and nothing has replaced it yet; same query as
+    /// `process_signals`' (that module is not part of every build of this file).
+    #[allow(unsafe_code)] // One read-only sigaction(2) query with a null new action.
+    fn inherited_ignore(signal: i32) -> bool {
+        // SAFETY: `current` is a zeroed, properly sized out-parameter, and a
+        // null `act` makes sigaction(2) report the disposition without
+        // changing it.
+        unsafe {
+            let mut current: libc::sigaction = std::mem::zeroed();
+            libc::sigaction(signal, std::ptr::null(), &mut current) == 0
+                && current.sa_sigaction == libc::SIG_IGN
+        }
+    }
+
+    /// Runs `work` on a short-lived thread and waits at most `bound` for its
+    /// result. `None` means it did not finish in time (the thread is abandoned).
+    /// If no thread can be started the work runs inline: clearing the secret
+    /// matters more than the bound in a process that cannot start a thread.
+    fn run_bounded<T: Send + 'static>(
+        bound: Duration,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Option<T> {
+        let work = Arc::new(Mutex::new(Some(work)));
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let for_thread = Arc::clone(&work);
+        let spawned = std::thread::Builder::new()
+            .name("symvault-clipboard-clear".to_owned())
+            .spawn(move || {
+                let taken = for_thread
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .take();
+                if let Some(work) = taken {
+                    let _ = sender.send(work());
+                }
+            });
+        if spawned.is_err() {
+            let taken = work
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            return taken.map(|work| work());
+        }
+        receiver.recv_timeout(bound).ok()
+    }
+
+    /// Takes every armed HTTP clipboard timer and clears its clipboard with a
+    /// bounded wait. Returns how many timers were armed (the clear may still be
+    /// running on the abandoned thread when the bound passed).
+    fn clear_armed_http_clipboards(bound: Duration) -> usize {
+        let armed = symvault_platform::approval::take_armed_process_clipboards();
+        let count = armed.len();
+        if count > 0 {
+            let _ = run_bounded(bound, move || armed.clear_all());
+        }
+        count
+    }
+
+    /// Go's SIGHUP handling for HTTP `mcp`: only an armed `StartAutoClear` timer
+    /// subscribes it. Armed: clear and keep serving. Not armed: the Go runtime
+    /// default (death by SIGHUP, runtime records untouched), or nothing when the
+    /// process inherited `SIG_IGN` for it.
+    fn handle_http_hangup(inherited_ignore: bool, bound: Duration) {
+        if clear_armed_http_clipboards(bound) > 0 || inherited_ignore {
+            return;
+        }
+        if signal_hook::low_level::emulate_default_handler(SIGHUP).is_err() {
+            std::process::abort();
+        }
+        std::process::exit(128 + SIGHUP);
     }
 
     fn warn_quit(signal: i32) {
@@ -105,6 +199,13 @@ mod unix {
     /// own listener) into the Go shutdown: stop reading after the in-flight
     /// frame (at most 2 seconds), clear the runtime records and exit 0.
     pub fn install_stdio(root: PathBuf) -> Result<(), String> {
+        install_stdio_with_bound(root, CLIPBOARD_CLEAR_BOUND)
+    }
+
+    pub(super) fn install_stdio_with_bound(
+        root: PathBuf,
+        clear_bound: Duration,
+    ) -> Result<(), String> {
         let root_for_fallback = root.clone();
         let shutdown = Arc::new(move |signal: i32| {
             REQUESTED.store(true, Ordering::Release);
@@ -114,7 +215,10 @@ mod unix {
                 // with the copied secret still on the clipboard. Clear it first
                 // (declared Rust-safer difference; SIGINT/SIGTERM were already
                 // cleared by the signal router).
-                symvault_platform::approval::clear_armed_stdio_clipboard();
+                let _ = run_bounded(
+                    clear_bound,
+                    symvault_platform::approval::clear_armed_stdio_clipboard,
+                );
             }
             let (lock, changed) = &STDIO_FINISHED;
             let deadline = Instant::now() + STDIO_SHUTDOWN_GRACE;
@@ -182,11 +286,26 @@ mod unix {
     /// finish, then force-close), `cleanup` clears the runtime records and the
     /// process exits 0. The listener thread is busy until it exits, so a second
     /// signal is swallowed, as Go's buffered channel swallows it.
+    ///
+    /// SIGHUP gets its own listener (Go's armed clipboard timer is its only
+    /// subscriber, see the module docs): it clears an armed copy and keeps
+    /// serving, and otherwise behaves as if nothing were subscribed.
     pub fn install_http(
         drain: symvault_mcp::http::HttpShutdown,
         timeout: Duration,
         cleanup: Arc<dyn Fn() + Send + Sync>,
     ) -> Result<(), String> {
+        install_http_with_bound(drain, timeout, cleanup, CLIPBOARD_CLEAR_BOUND)
+    }
+
+    pub(super) fn install_http_with_bound(
+        drain: symvault_mcp::http::HttpShutdown,
+        timeout: Duration,
+        cleanup: Arc<dyn Fn() + Send + Sync>,
+        clear_bound: Duration,
+    ) -> Result<(), String> {
+        // Asked before the listener below replaces the inherited disposition.
+        let hangup_inherited_ignore = inherited_ignore(SIGHUP);
         symvault_platform::approval::spawn_signal_listener(
             &[SIGINT, SIGTERM, SIGQUIT],
             move |signal| {
@@ -196,14 +315,17 @@ mod unix {
                 // clears at receipt (SIGQUIT is a declared Rust-safer addition);
                 // do not wait for the drain. A request still in flight may copy
                 // meanwhile, so clear again once the drain is over.
-                symvault_platform::approval::clear_armed_process_clipboards();
+                clear_armed_http_clipboards(clear_bound);
                 // Go ignores the drain error too: the process exits 0 either way.
                 let _ = drain.drain(timeout);
-                symvault_platform::approval::clear_armed_process_clipboards();
+                clear_armed_http_clipboards(clear_bound);
                 cleanup();
                 std::process::exit(0);
             },
-        )
+        )?;
+        symvault_platform::approval::spawn_signal_listener(&[SIGHUP], move |_| {
+            handle_http_hangup(hangup_inherited_ignore, clear_bound);
+        })
     }
 }
 
@@ -363,5 +485,249 @@ mod tests {
                 "{spec}: cleared exactly once, at receipt"
             );
         }
+    }
+
+    /// A backend that records the attempt and then never returns.
+    struct HangClipboard(std::path::PathBuf);
+    impl Clipboard for HangClipboard {
+        fn set(&self, _: &[u8]) -> Result<(), PlatformError> {
+            Ok(())
+        }
+        fn clear(&self) -> Result<(), PlatformError> {
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.0)
+                .unwrap();
+            writeln!(file, "clear-started").unwrap();
+            drop(file);
+            std::thread::sleep(std::time::Duration::from_secs(60));
+            Ok(())
+        }
+    }
+
+    fn register_armed(
+        clipboard: Arc<dyn Clipboard>,
+    ) -> symvault_platform::approval::ProcessClipboardAutoClearRegistration {
+        let (cancel, _canceled) = std::sync::mpsc::channel();
+        symvault_platform::approval::register_process_clipboard_auto_clear(
+            cancel,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            clipboard,
+        )
+    }
+
+    fn wait_for_events(events: &std::path::Path, wanted: &str) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !fs::read_to_string(events)
+            .unwrap_or_default()
+            .contains(wanted)
+        {
+            if std::time::Instant::now() > deadline {
+                std::process::exit(98);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    /// HTTP `mcp` receives SIGHUP. Go (real process, `mcp-http-clipboard-*`
+    /// records): only the armed `StartAutoClear` timer subscribes SIGHUP, so an
+    /// armed copy is cleared and the server keeps serving, and the next SIGHUP
+    /// (nothing armed) kills it by the signal; with nothing armed the first
+    /// SIGHUP already kills it. A SIGHUP inherited as `SIG_IGN` is overridden by
+    /// the armed subscription and ignored again afterwards. The child records
+    /// clears in a file instead of touching the real pasteboard.
+    #[test]
+    fn http_sighup_follows_the_armed_clipboard_timer() {
+        if let Ok(spec) = env::var("SYMVAULT_MCP_HUP_CHILD") {
+            let events = std::path::PathBuf::from(env::var("SYMVAULT_MCP_HUP_EVENTS").unwrap());
+            let _registration = spec
+                .starts_with("armed")
+                .then(|| register_armed(Arc::new(EventClipboard(events.clone()))));
+            super::install_http(
+                symvault_mcp::http::HttpShutdown::for_process(),
+                std::time::Duration::from_millis(100),
+                Arc::new(|| {}),
+            )
+            .unwrap();
+            signal_hook::low_level::raise(libc::SIGHUP).unwrap();
+            if spec.starts_with("armed") {
+                wait_for_events(&events, "clear");
+            }
+            // An unarmed, not-ignored SIGHUP dies right here by the signal.
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            println!("survived-first");
+            signal_hook::low_level::raise(libc::SIGHUP).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            println!("survived-second");
+            std::process::exit(0);
+        }
+        // (spec, inherit SIG_IGN, killed by SIGHUP at, clears)
+        for (spec, ignored, dies, clears) in [
+            ("armed", false, Some("second"), "clear\n"),
+            ("idle", false, Some("first"), ""),
+            ("armed-ignored", true, None, "clear\n"),
+            ("idle-ignored", true, None, ""),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let events = dir.path().join("events");
+            let exe = env::current_exe().unwrap();
+            let mut command = if ignored {
+                // SIG_IGN survives exec, like `nohup` or a supervisor parent.
+                let mut command = Command::new("sh");
+                command
+                    .args(["-c", "trap '' HUP; exec \"$@\"", "sh"])
+                    .arg(&exe);
+                command
+            } else {
+                Command::new(&exe)
+            };
+            let output = command
+                .args([
+                    "--exact",
+                    "mcp_commands::mcp_shutdown::tests::http_sighup_follows_the_armed_clipboard_timer",
+                    "--nocapture",
+                ])
+                .env("SYMVAULT_MCP_HUP_CHILD", spec)
+                .env("SYMVAULT_MCP_HUP_EVENTS", &events)
+                .output()
+                .expect("run SIGHUP child");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            match dies {
+                Some(at) => {
+                    assert_eq!(
+                        output.status.signal(),
+                        Some(libc::SIGHUP),
+                        "{spec}: {output:?}"
+                    );
+                    assert_eq!(
+                        stdout.contains("survived-first"),
+                        at == "second",
+                        "{spec}: dies at the {at} SIGHUP: {output:?}"
+                    );
+                    assert!(!stdout.contains("survived-second"), "{spec}: {output:?}");
+                }
+                None => {
+                    assert_eq!(output.status.code(), Some(0), "{spec}: {output:?}");
+                    assert!(stdout.contains("survived-second"), "{spec}: {output:?}");
+                }
+            }
+            assert_eq!(
+                fs::read_to_string(&events).unwrap_or_default(),
+                clears,
+                "{spec}: cleared once, by the first SIGHUP only"
+            );
+        }
+    }
+
+    /// A clipboard backend that never returns must not hold up the HTTP drain and
+    /// exit (SIGTERM) nor swallow later signals (the SIGHUP that found it armed
+    /// returns after the bound, so the next SIGHUP is handled). Without the
+    /// bounded join both children run past the elapsed-time assertion.
+    #[test]
+    fn http_shutdown_bounds_a_hung_clipboard_backend() {
+        if let Ok(spec) = env::var("SYMVAULT_MCP_HANG_CHILD") {
+            let events = std::path::PathBuf::from(env::var("SYMVAULT_MCP_HANG_EVENTS").unwrap());
+            let _registration = register_armed(Arc::new(HangClipboard(events.clone())));
+            super::unix::install_http_with_bound(
+                symvault_mcp::http::HttpShutdown::for_process(),
+                std::time::Duration::from_millis(100),
+                Arc::new(|| {}),
+                std::time::Duration::from_millis(200),
+            )
+            .unwrap();
+            if spec == "sigterm" {
+                signal_hook::low_level::raise(libc::SIGTERM).unwrap();
+            } else {
+                signal_hook::low_level::raise(libc::SIGHUP).unwrap();
+                wait_for_events(&events, "clear-started");
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                // Nothing is armed any more: the default action must still run.
+                signal_hook::low_level::raise(libc::SIGHUP).unwrap();
+            }
+            std::thread::sleep(std::time::Duration::from_secs(30));
+            std::process::exit(99);
+        }
+        for (spec, code, signal) in [
+            ("sigterm", Some(0), None),
+            ("sighup", None, Some(libc::SIGHUP)),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let events = dir.path().join("events");
+            let started = std::time::Instant::now();
+            let output = Command::new(env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "mcp_commands::mcp_shutdown::tests::http_shutdown_bounds_a_hung_clipboard_backend",
+                ])
+                .env("SYMVAULT_MCP_HANG_CHILD", spec)
+                .env("SYMVAULT_MCP_HANG_EVENTS", &events)
+                .output()
+                .expect("run hung-clipboard child");
+            assert_eq!(output.status.code(), code, "{spec}: {output:?}");
+            assert_eq!(output.status.signal(), signal, "{spec}: {output:?}");
+            assert!(
+                started.elapsed() < std::time::Duration::from_secs(20),
+                "{spec}: waited on the hung clipboard: {:?}",
+                started.elapsed()
+            );
+            assert_eq!(
+                fs::read_to_string(&events).unwrap_or_default(),
+                "clear-started\n",
+                "{spec}: the clear was attempted exactly once"
+            );
+        }
+    }
+
+    /// stdio SIGQUIT clears an armed copy before exiting; a hung backend is
+    /// abandoned after the bound, so the process still exits 0 and removes the
+    /// runtime records.
+    #[test]
+    fn sigquit_shutdown_bounds_a_hung_clipboard_backend() {
+        if env::var("SYMVAULT_MCP_QUIT_HANG_CHILD").is_ok() {
+            let events =
+                std::path::PathBuf::from(env::var("SYMVAULT_MCP_QUIT_HANG_EVENTS").unwrap());
+            let root = std::path::PathBuf::from(env::var("SYMVAULT_MCP_QUIT_HANG_ROOT").unwrap());
+            symvault_platform::approval::install_stdio_clipboard_signal_router(Arc::new(
+                HangClipboard(events),
+            ))
+            .unwrap();
+            super::unix::install_stdio_with_bound(root, std::time::Duration::from_millis(200))
+                .unwrap();
+            let (cancel, _canceled) = std::sync::mpsc::channel();
+            let _registration = symvault_platform::approval::register_stdio_clipboard_auto_clear(
+                cancel,
+                Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            )
+            .expect("router installed");
+            signal_hook::low_level::raise(libc::SIGQUIT).unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(30));
+            std::process::exit(99);
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let events = dir.path().join("events");
+        fs::write(dir.path().join(".runtime-port"), "1").unwrap();
+        let started = std::time::Instant::now();
+        let output = Command::new(env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "mcp_commands::mcp_shutdown::tests::sigquit_shutdown_bounds_a_hung_clipboard_backend",
+            ])
+            .env("SYMVAULT_MCP_QUIT_HANG_CHILD", "1")
+            .env("SYMVAULT_MCP_QUIT_HANG_EVENTS", &events)
+            .env("SYMVAULT_MCP_QUIT_HANG_ROOT", dir.path())
+            .output()
+            .expect("run hung SIGQUIT child");
+        assert_eq!(output.status.code(), Some(0), "{output:?}");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(20),
+            "waited on the hung clipboard: {:?}",
+            started.elapsed()
+        );
+        assert_eq!(fs::read_to_string(&events).unwrap(), "clear-started\n");
+        assert!(
+            !dir.path().join(".runtime-port").exists(),
+            "records cleared"
+        );
     }
 }

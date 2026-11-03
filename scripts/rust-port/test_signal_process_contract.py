@@ -279,7 +279,12 @@ class SignalContractControls(unittest.TestCase):
         ui = [dict(case=f"ui-clipboard-armed-{sig.lower()}", command="ui-clipboard-armed", signal=sig,
                    serving_after_signal=serving, ending=final, second_ending=second, clipboard_events=list(events))
               for sig, (serving, final, second, events) in contract.GO_EXPECTED_UI_CLIPBOARD.items()]
-        return mcp + ui
+        http = [dict(case=f"mcp-http-clipboard-{'armed' if armed else 'idle'}-{sig.lower()}", command="mcp-http-clipboard",
+                     armed=armed, signal=sig, ignored=ignored, serving_after_signal=serving, ending=final,
+                     second_ending=second, final_ending=after, clipboard_events=list(events[-1]))
+                for (armed, sig, ignored), (serving, final, second, after, events)
+                in contract.GO_EXPECTED_HTTP_CLIPBOARD.items()]
+        return mcp + ui + http
 
     def test_go_only_clipboard_expectations_hold_and_detect_drift(self):
         contract.check_go_only(self.clipboard_records())
@@ -303,6 +308,46 @@ class SignalContractControls(unittest.TestCase):
             contract.check_go_only(self.clipboard_records()[:2])
         with self.assertRaises(AssertionError):
             contract.check_go_only(self.clipboard_records()[:6])
+        with self.assertRaises(AssertionError):  # the HTTP cases are required
+            contract.check_go_only(self.clipboard_records()[:7])
+
+    def test_go_only_http_clipboard_expectations_detect_drift(self):
+        records = self.clipboard_records()
+        self.assertEqual(len(records), 13)
+        contract.check_go_only(records)
+        # Go's SIGINT/SIGTERM usually exit before the clear reaches the tool: both logs are fine.
+        for index in (7, 8):
+            relaxed = self.clipboard_records()
+            relaxed[index]["clipboard_events"] = ["secret"]
+            contract.check_go_only(relaxed)
+        for index, change in ((7, dict(serving_after_signal=True, ending=None)),  # SIGINT shuts down
+                              (7, dict(ending=["exit", 1])),
+                              (7, dict(clipboard_events=["clear"])),
+                              (9, dict(serving_after_signal=False, ending=["signal", signal.SIGHUP])),  # armed SIGHUP serves
+                              (9, dict(second_ending=None)),  # ... and the next SIGHUP kills
+                              (9, dict(second_ending=["exit", 0])),
+                              (9, dict(clipboard_events=["secret"])),  # armed SIGHUP must clear
+                              (10, dict(serving_after_signal=True, ending=None)),  # idle SIGHUP kills by the signal
+                              (10, dict(ending=["exit", 0])),
+                              (10, dict(clipboard_events=["secret", "clear"])),  # ... and touches no clipboard
+                              (11, dict(second_ending=["signal", signal.SIGHUP])),  # SIG_IGN is back after the clear
+                              (11, dict(final_ending=["signal", signal.SIGTERM])),
+                              (11, dict(clipboard_events=["secret"])),
+                              (12, dict(serving_after_signal=False, ending=["signal", signal.SIGHUP])),  # ignored stays
+                              (12, dict(clipboard_events=["secret", "clear"]))):
+            records = self.clipboard_records()
+            records[index].update(change)
+            with self.assertRaisesRegex(AssertionError, "oracle drifted"):
+                contract.check_go_only(records)
+        records = self.clipboard_records()
+        records[11]["ignored"] = False  # the case list itself is pinned
+        with self.assertRaisesRegex(AssertionError, "go_only http cases"):
+            contract.check_go_only(records)
+
+    def test_http_clipboard_cases_cover_armed_idle_and_ignored_sighup(self):
+        self.assertEqual(list(contract.GO_EXPECTED_HTTP_CLIPBOARD), list(contract.HTTP_CLIPBOARD_CASES))
+        self.assertEqual({(armed, ignored) for armed, sig, ignored in contract.HTTP_CLIPBOARD_CASES if sig == "SIGHUP"},
+                         {(True, False), (False, False), (True, True), (False, True)})
 
     def test_ending_and_normalization(self):
         self.assertEqual(contract.ending(-1), ["signal", 1])

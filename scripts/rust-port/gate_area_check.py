@@ -429,8 +429,9 @@ def signal(r):
     for impl, rows in both(r):
         size(rows, 41, f"{impl} signal observations")
     # Go-only armed-clipboard observations (the Rust leg would need the real pasteboard):
-    # 3 stdio `mcp` (SIGINT/SIGTERM/SIGHUP) + 4 `ui` (SIGINT/SIGTERM/SIGHUP/SIGQUIT).
-    size(r["go_only"], 7, "go-only clipboard observations")
+    # 3 stdio `mcp` (SIGINT/SIGTERM/SIGHUP) + 4 `ui` (SIGINT/SIGTERM/SIGHUP/SIGQUIT) + 6 HTTP
+    # `mcp` (armed SIGINT/SIGTERM/SIGHUP, idle SIGHUP, armed and idle SIGHUP inherited as SIG_IGN).
+    size(r["go_only"], 13, "go-only clipboard observations")
 
 
 def http_drain(r):

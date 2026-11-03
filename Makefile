@@ -1518,7 +1518,7 @@ signal-process-contract:
 	$(CARGO) test -p symvault-cli --bin symvault --locked run_commands $(call AREA_LOGGED,native-signal-tests.txt)
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-signal-tests.txt" --results-ok
 	$(CARGO) test -p symvault-cli --bin symvault --locked -- tui::tests mcp_shutdown::tests process_signals::tests $(call AREA_LOGGED,native-signal-clipboard-tests.txt)
-	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-signal-clipboard-tests.txt" ui_signal_with_held_copy_process_contract armed_signal_clear_follows_the_copy_lifetime sigquit_shutdown_clears_an_armed_clipboard http_signal_shutdown_clears_an_armed_clipboard armed_clipboard_guard_takes_over_an_inherited_sighup_ignore --results-ok
+	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-signal-clipboard-tests.txt" ui_signal_with_held_copy_process_contract armed_signal_clear_follows_the_copy_lifetime sigquit_shutdown_clears_an_armed_clipboard http_signal_shutdown_clears_an_armed_clipboard http_sighup_follows_the_armed_clipboard_timer http_shutdown_bounds_a_hung_clipboard_backend sigquit_shutdown_bounds_a_hung_clipboard_backend armed_clipboard_guard_takes_over_an_inherited_sighup_ignore --results-ok
 	$(CARGO) test -p symvault-mcp --test clipboard_http_signal_clear --locked $(call AREA_LOGGED,native-signal-http-clipboard-tests.txt)
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-signal-http-clipboard-tests.txt" http_shutdown_clears_the_clipboard_armed_by_copy_to_clipboard --results-ok
 	$(CARGO) test -p symvault-platform --lib --locked text_clipboard::tests $(call AREA_LOGGED,native-signal-text-clipboard-tests.txt)

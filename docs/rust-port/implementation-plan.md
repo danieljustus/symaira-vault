@@ -60,7 +60,7 @@ thread during prompts and is not covered by this module or the driver (since
 
 Residual packet (2026-11-03): `mcp --stdio --allow-locked` (4 cases) and `ui` on a
 pseudo-terminal (4 cases) join the compared set (41 observations per implementation),
-and three Go-only armed-clipboard records pin Go's clear-then-shutdown; see
+and thirteen Go-only armed-clipboard records (3 stdio `mcp`, 4 `ui`, 6 HTTP `mcp` incl. SIGHUP armed/idle/inherited-ignored) pin Go's clipboard signal behavior; see
 `cli-gap-inventory.md` "CLI-007: residual packet". The `sync`/git push and in-flight
 intake spool signals stay bounded claims there.
 
