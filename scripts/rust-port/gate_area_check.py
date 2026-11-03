@@ -34,6 +34,7 @@ Exit status 0 only when every assertion holds; any missing key, wrong type or
 wrong count is a failure (exit 1), never a crash that could be mistaken for one.
 """
 import argparse
+import hashlib
 import json
 import platform
 import re
@@ -448,6 +449,156 @@ def http_drain(r):
             eq(x["outcome"], GO_EXPECTED[x["case"]][0], f"{name} peer outcome")
 
 
+# ---- HTTP-001 / HTTP-002 process contracts (no hosted workflow step) --------
+# The counts below are pinned here and cross-checked against the driver's own
+# tables (imported, never copied), so neither can drift on its own.
+
+def driver_calls(what, function, *arguments):
+    """Run a driver's pure comparison/policy function; its AssertionError is a failed check."""
+    try:
+        return function(*arguments)
+    except AssertionError as error:
+        raise Check(f"{what}: {error}") from error
+
+
+ROW_KEYS = {"case", "request_sha256", "request_base64", "raw_base64", "reset", "responses"}
+CALL_KEYS = {"case", "raw_base64", "reset", "responses"}
+RESPONSE_FIELDS = ("status_line", "code", "interim", "headers", "headers_without_date", "body_base64", "truncated")
+
+
+def wire_rows(rows, what, keys=ROW_KEYS):
+    """Structure of raw-transcript rows (http_replay_contract.exchange): every field the evidence needs is present."""
+    for x in rows:
+        need(keys <= x.keys(), f"{what} {x.get('case')!r}: incomplete row")
+        need(x["reset"] != "timeout", f"{what} {x['case']!r}: the server left the connection open")
+        need(isinstance(x["responses"], list), f"{what} {x['case']!r}: responses is not a list")
+        for response in x["responses"]:
+            if "code" not in response:   # a stream cut before a complete head
+                need(response.get("truncated") is True and "partial_base64" in response,
+                     f"{what} {x['case']!r}: malformed partial response")
+                continue
+            need(all(key in response for key in RESPONSE_FIELDS), f"{what} {x['case']!r}: incomplete response")
+            eq(response["headers_without_date"], sorted([k, v] for k, v in response["headers"] if k != "date"),
+               f"{what} {x['case']!r} headers_without_date")
+
+
+def driver_sha(receipt, name):
+    eq(receipt["driver_sha256"], hashlib.sha256((HERE / name).read_bytes()).hexdigest(),
+       f"driver_sha256 ({name} changed after the receipt was written)")
+
+
+REPLAY_TOKENS = dict.fromkeys(("full", "health", "metadata", "other", "expired", "revoked"), "placeholder")
+
+
+def http_replay(r):
+    """HTTP-001: SSE negotiation, replay, envelope, route and framing corpus (http_replay_contract.py)."""
+    sys.path.insert(0, str(HERE))
+    import http_replay_contract as driver
+    driver_sha(r, "http_replay_contract.py")
+    need(isinstance(r["port"], int), "port")
+    names = [name for name, *_ in driver.cases(r["port"], REPLAY_TOKENS)]
+    eq(len(names), 276, "driver case count")
+    eq(len(driver.DECLARED), 71, "driver declared count")
+    eq(sorted(driver.INTERIM_ONLY), ["expect-100", "expect-100-chunked"], "driver interim-only cases")
+    eq(len(driver.HEALTH_CASES) - 1, 8, "driver health clock cases (route-head-health is compared separately)")
+    for impl, o in both(r):
+        eq([x["case"] for x in o["rows"]], names, f"{impl} case inventory and order")
+        wire_rows(o["rows"], impl)
+        processes_ok(o["processes"], 1, f"{impl} processes")
+    identical, declared, semantic, interim_only = driver_calls("replay comparison", driver.compare,
+                                                                r["go"]["rows"], r["rust"]["rows"], r["port"])
+    eq(len(identical), 194, "identical cases")
+    eq(len(declared), 71, "declared cases")
+    eq(len(semantic), 8, "semantic (health clock) cases")
+    eq(len(interim_only), 2, "final-identical (Go-only interim 100 Continue) cases")
+    eq(len(identical) + len(declared) + len(semantic) + len(interim_only) + 1, len(names),
+       "identical + declared + semantic + interim-only + route-head-health")
+    eq({d["case"]: d["decision"] for d in r["declared_differences"]},
+       {case: label for case, (label, _, _) in driver.DECLARED.items()}, "declared_differences")
+    size(r["declared_differences"], 71, "declared_differences")
+    eq([x["case"] for x in r["interim_only_cases"]], sorted(driver.INTERIM_ONLY), "interim_only_cases")
+    eq((r["identical_cases"], r["semantic_cases"]), (194, 8), "receipt identical/semantic counts")
+
+
+def http_token(r):
+    """HTTP-002: bearer-token state, clock and storage matrix (http_token_contract.py)."""
+    sys.path.insert(0, str(HERE))
+    import http_token_contract as driver
+    driver_sha(r, "http_token_contract.py")
+    need(isinstance(r["port"], int), "port")
+    raws, body = driver.token_registry()
+    names = [name for name, _ in driver.token_cases(r["port"], raws)]
+    scenarios = driver.startup_scenarios(raws, body)
+    eq((len(names), len(scenarios)), (180, 70), "driver token-state and startup/storage counts")
+    for impl, o in both(r):
+        eq([x["case"] for x in o["rows"]], names, f"{impl} token-state case inventory and order")
+        wire_rows(o["rows"], impl)
+        need(isinstance(o["process"]["exit"], int) and o["process"]["disposal"] == "killed"
+             and all(isinstance(o["process"][k], str) for k in ("stdout", "stderr")), f"{impl}: process record")
+    driver_calls("token-state comparison", driver.check_token_rows, r["go"]["rows"], r["rust"]["rows"])
+    eq(r["token_cases"], 180, "token_cases")
+    size(r["startup"], 70, "startup/storage scenarios")
+    eq([x["case"] for x in r["startup"]], [s[0] for s in scenarios], "startup scenario inventory and order")
+    for scenario, x in zip(scenarios, r["startup"], strict=True):
+        for impl in ("go", "rust"):
+            need(isinstance(x[impl]["stderr_utf8"], str), f"{scenario[0]} {impl}: stderr_utf8")
+            wire_rows(x[impl]["responses"], f"{scenario[0]} {impl}", CALL_KEYS)
+        driver_calls(f"startup {scenario[0]}", driver.check_startup, scenario, x["go"], x["rust"])
+    eq(set(r["dynamic"]), {"go", "rust"}, "dynamic implementations")
+    driver_calls("dynamic scenario", driver.check_dynamic, r["dynamic"]["go"], r["dynamic"]["rust"])
+    reload_steps = r["duplicate_reload"]
+    eq(set(reload_steps), {"go", "rust"}, "duplicate_reload implementations")
+    size(reload_steps["go"], 21, "go duplicate-key reload steps")
+    driver_calls("duplicate-key reload", driver.check_duplicate_reload, reload_steps["go"], reload_steps["rust"])
+    stale = r["stale_revocation"]
+    eq(set(stale), {"go", "rust"}, "stale_revocation implementations")
+    for impl in ("go", "rust"):
+        size(stale[impl], 2, f"{impl} stale-revocation scenarios")
+        eq([x["mode"] for x in stale[impl]], ["corrupt", "delete"], f"{impl} stale-revocation modes")
+    driver_calls("stale revocation", driver.check_stale_revocation, stale["go"], stale["rust"])
+
+
+def toolhash(r):
+    """TOOLHASH-001: registry hash stamp, drift refusal and audit rows (toolhash_process_contract.py)."""
+    sys.path.insert(0, str(HERE))
+    import toolhash_process_contract as driver
+    driver_sha(r, "toolhash_process_contract.py")
+    recorded = json.loads(driver.FIXTURE.read_bytes())["registry"]["hash"]
+    eq(r["recorded_go_hash"], recorded, "recorded Go registry hash")
+    eq(r["issue"], {impl: {"new": recorded, "rotate": recorded} for impl in ("go", "rust")}, "CLI issuance hashes")
+    expected = [(scenario, token) for scenario, _, _, who in driver.SCENARIOS for token in who]
+    eq(len(expected), 14, "driver HTTP outcome count")
+    eq(sorted((h["scenario"], h["token"]) for h in r["http"]), sorted(expected), "HTTP outcomes")
+    outcomes = {}
+    for h in r["http"]:
+        eq(h["go"], h["rust"], f"{h['scenario']}/{h['token']} go vs rust")
+        eq(h["go"][0], "HTTP/1.1 200 OK", f"{h['scenario']}/{h['token']} status line")
+        outcomes[h["scenario"], h["token"]] = json.loads(h["go"][1])
+    for token in ("go_current", "go_legacy_empty", "go_cli_issued", "rust_cli_issued"):
+        need(not outcomes["search", token]["result"]["isError"], f"search with {token} must be accepted")
+    for scenario, token in (("search", "go_stale"), ("policy-denied-path", "go_stale"), ("health", "go_stale")):
+        result = outcomes[scenario, token]["result"]
+        need(result["isError"] and result["content"][0]["text"] == driver.DRIFT_TEXT,
+             f"{scenario} with {token} must be refused with the drift text")
+    scoped = outcomes["out-of-scope-tool", driver.STALE_SCOPED]["result"]
+    need(scoped["isError"] and "tool registry has changed" not in scoped["content"][0]["text"],
+         "scope denial must precede the drift refusal")
+    need(not outcomes["policy-allowed-path", "go_current"]["result"]["isError"], "allowed path with a current token")
+    denied = outcomes["policy-denied-path", "go_current"]
+    need("error" in denied and "result" not in denied, "entry policy denies the path for a current token")
+    need(not outcomes["health", "rust_cli_issued"]["result"]["isError"], "health with a Rust-issued token")
+    audit = r["audit"]
+    eq(set(audit), {"go", "rust"}, "audit implementations")
+    size(audit["go"], driver.EXPECTED_AUDIT_ROWS, "go audit rows")
+    eq(driver.EXPECTED_AUDIT_ROWS, 8, "driver audit row count")
+    eq(audit["go"], audit["rust"], "go vs rust audit rows")
+    need({"tool_denied", "tool_registry_drift"} <= {dict(row)["action"] for row in audit["go"]},
+         "audit rows lack the denial and drift actions")
+    for row in audit["go"]:
+        fields = dict(row)
+        eq((fields["sess_id"], fields["req_id"]), ("<sess>", "<req>"), "masked audit ids")
+
+
 # name -> (checker, workflow asserts candidate_worktree_clean_at_end,
 #          workflow asserts an empty `differences`)
 PROFILES = {
@@ -469,6 +620,9 @@ PROFILES = {
     "connect": (connect, False, False),
     "signal": (signal, False, False),
     "http-drain": (http_drain, True, False),
+    "http-replay": (http_replay, True, False),
+    "http-token": (http_token, True, False),
+    "toolhash": (toolhash, True, False),
 }
 
 

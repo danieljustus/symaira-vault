@@ -21,11 +21,12 @@ config-session-differential device-list-differential device-session-differential
 git-winner-differential http-framing-contract http-head-contract http-oauth-contract http-origin-contract
 http-process-contract http-slow-peer-contract http-timeout-contract http-tls-contract http-write-contract
 intake-cli-contract kdf-resource-policy-contract mcp-call-differential mcp-clipboard-signals-differential
-mcp-execute-api-policy-differential mcp-http-shutdown-contract mcp-init-differential mcp-list-differential
-mcp-named-tests mcp-oauth-contract mcp-process-contract mcp-stdio-differential pairing-differential
+mcp-execute-api-policy-differential mcp-http-replay-contract mcp-http-shutdown-contract mcp-http-token-contract mcp-init-differential
+mcp-list-differential mcp-named-tests mcp-oauth-contract mcp-process-contract mcp-stdio-differential pairing-differential
 pairing-oracle-contract read-resource-policy-contract rust-007-differential serve-cli-contract
 signal-process-contract store-live-contract store-observations-contract store004-isolation-check
-sync-observations-contract tui-named-tests update-fixtures-check worktree-prune-check
+sync-observations-contract toolhash-process-contract tui-named-tests update-fixtures-check
+worktree-prune-check
 """.split()
 LANE_ONLY = {"macos": "tui-harness-check", "linux": "tui-contract"}
 PINNED = {lane: sorted(COMMON + [extra]) for lane, extra in LANE_ONLY.items()}
@@ -40,7 +41,7 @@ def area_list(lane):
 
 class AreaLists(unittest.TestCase):
     def test_pinned_counts(self):
-        self.assertEqual({lane: len(names) for lane, names in PINNED.items()}, {"macos": 48, "linux": 48})
+        self.assertEqual({lane: len(names) for lane, names in PINNED.items()}, {"macos": 51, "linux": 51})
         for names in PINNED.values():
             self.assertEqual(len(names), len(set(names)))
 

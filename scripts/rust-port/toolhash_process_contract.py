@@ -28,8 +28,10 @@ Checks, each against disposable HOME/vault roots only:
      comparison must then fail (negative control).
 """
 import argparse
+import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import socket
@@ -44,6 +46,14 @@ FIXTURE = ROOT / 'testdata/port/mcp/tool-registry-hash.json'
 PASSPHRASE = 'correct horse battery staple'
 DRIFT_TEXT = ("tool registry has changed since this token was issued \u2014 "
               "re-issue the token with 'symvault agent token new fixture'")
+
+
+def git(*arguments):
+    return subprocess.run(['git', *arguments], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+
+
+def sha256(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def isolated(home):
@@ -123,6 +133,21 @@ def serve(binary, home, port):
             time.sleep(.05)
 
 
+STALE_SCOPED = 'go_stale_scoped_health'
+# (scenario, tool, arguments, tokens that call it). The 14 HTTP outcomes of the
+# receipt are exactly these pairs; gate_area_check.py imports this table.
+SCENARIOS = [
+    ('search', 'symaira_search', {'intent': 'auth', 'return': 'names'},
+     ['go_current', 'go_legacy_empty', 'go_stale', 'go_cli_issued', 'rust_cli_issued', STALE_SCOPED]),
+    # entry-policy ordering: public/ is allowed, private/ is not
+    ('policy-allowed-path', 'get_entry_metadata', {'path': 'public/fixture'}, ['go_current', 'go_stale']),
+    ('policy-denied-path', 'get_entry_metadata', {'path': 'private/x'}, ['go_current', 'go_stale']),
+    ('out-of-scope-tool', 'symaira_search', {'intent': 'auth'}, [STALE_SCOPED]),
+    ('health', 'health', {}, ['go_current', 'go_stale', 'rust_cli_issued']),
+]
+EXPECTED_AUDIT_ROWS = 8
+
+
 AUDIT_LOG = 'vault/audit-fixture.log'
 MASKED = ('ts', 'hmac', 'kid')
 
@@ -183,122 +208,124 @@ def main():
     parser.add_argument('--go-seed', type=Path, required=True)
     parser.add_argument('--rust', type=Path, required=True)
     parser.add_argument('--receipt', type=Path)
+    parser.add_argument('--allow-dirty-for-development', action='store_true')
     parser.add_argument('--drop-audit-ids', action='store_true',
                         help='negative control: strip the ids from the Rust audit rows')
     args = parser.parse_args()
     recorded = json.loads(FIXTURE.read_text())['registry']['hash']
-    receipt = {'recorded_go_hash': recorded, 'issue': {}, 'http': []}
+    parser_clean = not git('status', '--porcelain=v1').strip()
+    assert parser_clean or args.allow_dirty_for_development, 'a clean worktree is required (--allow-dirty-for-development)'
+    receipt = {'passed': False, 'candidate_commit': git('rev-parse', 'HEAD').strip(), 'candidate_worktree_clean': parser_clean,
+               'native_os': platform.system(), 'architecture': platform.machine(),
+               'driver_sha256': sha256(Path(__file__)), 'go_binary_sha256': sha256(args.go_cli),
+               'seed_binary_sha256': sha256(args.go_seed), 'rust_binary_sha256': sha256(args.rust),
+               'recorded_go_hash': recorded, 'issue': {}, 'http': []}
+    try:
+        with tempfile.TemporaryDirectory(prefix='symvault-toolhash-') as raw:
+            base = Path(raw)
+            seed_home = fresh_home(base, 'seed')
+            tokens = json.loads(run([args.go_seed, '--root', seed_home / 'vault'], seed_home).stdout)
 
-    with tempfile.TemporaryDirectory(prefix='symvault-toolhash-') as raw:
-        base = Path(raw)
-        seed_home = fresh_home(base, 'seed')
-        tokens = json.loads(run([args.go_seed, '--root', seed_home / 'vault'], seed_home).stdout)
+            # (1) CLI issuance by both binaries, on throwaway copies of the vault.
+            issued = {}
+            for impl, binary in (('go', args.go_cli), ('rust', args.rust)):
+                home = fresh_home(base, f'issue-{impl}', seed_home / 'vault')
+                new = run([binary, 'agent', 'token', 'new', 'fixture', '--tools', '*', '--label', f'{impl}-new'], home)
+                issued[f'{impl}_cli_issued'] = raw_token(new.stdout)
+                hashes = {t['label']: t.get('tool_registry_hash', '') for t in registry_tokens(home).values()}
+                assert hashes[f'{impl}-new'] == recorded, (impl, 'agent token new', hashes)
+                run([binary, 'agent', 'token', 'rotate', 'fixture', '--tools', '*', '--label', f'{impl}-rotated'], home)
+                hashes = {t['label']: t.get('tool_registry_hash', '') for t in registry_tokens(home).values()
+                          if not t.get('revoked')}
+                assert hashes == {f'{impl}-rotated': recorded}, (impl, 'agent token rotate', hashes)
+                receipt['issue'][impl] = {'new': recorded, 'rotate': recorded}
 
-        # (1) CLI issuance by both binaries, on throwaway copies of the vault.
-        issued = {}
-        for impl, binary in (('go', args.go_cli), ('rust', args.rust)):
-            home = fresh_home(base, f'issue-{impl}', seed_home / 'vault')
-            new = run([binary, 'agent', 'token', 'new', 'fixture', '--tools', '*', '--label', f'{impl}-new'], home)
-            issued[f'{impl}_cli_issued'] = raw_token(new.stdout)
-            hashes = {t['label']: t.get('tool_registry_hash', '') for t in registry_tokens(home).values()}
-            assert hashes[f'{impl}-new'] == recorded, (impl, 'agent token new', hashes)
-            run([binary, 'agent', 'token', 'rotate', 'fixture', '--tools', '*', '--label', f'{impl}-rotated'], home)
-            hashes = {t['label']: t.get('tool_registry_hash', '') for t in registry_tokens(home).values()
-                      if not t.get('revoked')}
-            assert hashes == {f'{impl}-rotated': recorded}, (impl, 'agent token rotate', hashes)
-            receipt['issue'][impl] = {'new': recorded, 'rotate': recorded}
+            # Tokens issued by the CLIs go into one shared vault copy served by both.
+            shared = fresh_home(base, 'shared', seed_home / 'vault')
+            for impl, binary in (('go', args.go_cli), ('rust', args.rust)):
+                out = run([binary, 'agent', 'token', 'new', 'fixture', '--tools', '*', '--label', f'serve-{impl}'], shared)
+                tokens[f'{impl}_cli_issued'] = raw_token(out.stdout)
+            # (the rotate above revoked nothing here: rotate ran on the throwaway copies)
 
-        # Tokens issued by the CLIs go into one shared vault copy served by both.
-        shared = fresh_home(base, 'shared', seed_home / 'vault')
-        for impl, binary in (('go', args.go_cli), ('rust', args.rust)):
-            out = run([binary, 'agent', 'token', 'new', 'fixture', '--tools', '*', '--label', f'serve-{impl}'], shared)
-            tokens[f'{impl}_cli_issued'] = raw_token(out.stdout)
-        # (the rotate above revoked nothing here: rotate ran on the throwaway copies)
-
-        stale_scoped = 'go_stale_scoped_health'
-        scenarios = [
-            ('search', 'symaira_search', {'intent': 'auth', 'return': 'names'},
-             ['go_current', 'go_legacy_empty', 'go_stale', 'go_cli_issued', 'rust_cli_issued', stale_scoped]),
-            # entry-policy ordering: public/ is allowed, private/ is not
-            ('policy-allowed-path', 'get_entry_metadata', {'path': 'public/fixture'}, ['go_current', 'go_stale']),
-            ('policy-denied-path', 'get_entry_metadata', {'path': 'private/x'}, ['go_current', 'go_stale']),
-            ('out-of-scope-tool', 'symaira_search', {'intent': 'auth'}, [stale_scoped]),
-            ('health', 'health', {}, ['go_current', 'go_stale', 'rust_cli_issued']),
-        ]
-        results = {}
-        audits = {}
-        with socket.socket() as selection:
-            selection.bind(('127.0.0.1', 0))
-            port = selection.getsockname()[1]
-        for impl, binary in (('go', args.go_cli), ('rust', args.rust)):
-            home = fresh_home(base, f'serve-{impl}', shared / 'vault')
-            process = serve(binary, home, port)
-            try:
-                init = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {
-                    'protocolVersion': '2025-11-25', 'clientInfo': {'name': 'p', 'version': '1'},
-                    'capabilities': {}}}).encode()
-                for name, tool, arguments, who in scenarios:
-                    for token_name in who:
-                        token = tokens[token_name]
-                        http(port, token, init)
-                        status, body = http(port, token, call(tool, arguments, 2))
-                        assert token not in body
-                        results[(impl, name, token_name)] = (status, body)
-            finally:
-                # SIGTERM lets Go's buffered audit logger flush before exit.
-                process.terminate()
+            results = {}
+            audits = {}
+            with socket.socket() as selection:
+                selection.bind(('127.0.0.1', 0))
+                port = selection.getsockname()[1]
+            for impl, binary in (('go', args.go_cli), ('rust', args.rust)):
+                home = fresh_home(base, f'serve-{impl}', shared / 'vault')
+                process = serve(binary, home, port)
                 try:
-                    process.wait(timeout=15)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=15)
-            audits[impl] = audit_rows(home)
-            time.sleep(.3)
+                    init = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {
+                        'protocolVersion': '2025-11-25', 'clientInfo': {'name': 'p', 'version': '1'},
+                        'capabilities': {}}}).encode()
+                    for name, tool, arguments, who in SCENARIOS:
+                        for token_name in who:
+                            token = tokens[token_name]
+                            http(port, token, init)
+                            status, body = http(port, token, call(tool, arguments, 2))
+                            assert token not in body
+                            results[(impl, name, token_name)] = (status, body)
+                finally:
+                    # SIGTERM lets Go's buffered audit logger flush before exit.
+                    process.terminate()
+                    try:
+                        process.wait(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=15)
+                audits[impl] = audit_rows(home)
+                time.sleep(.3)
 
-        failures = []
-        for key in sorted(k for k in results if k[0] == 'go'):
-            _, name, token_name = key
-            go, rust = results[key], results[('rust', name, token_name)]
-            receipt['http'].append({'scenario': name, 'token': token_name, 'go': go, 'rust': rust})
-            if go != rust:
-                failures.append((name, token_name, go, rust))
-        assert not failures, f'Go/Rust differences: {json.dumps(failures, indent=1)}'
+            failures = []
+            for key in sorted(k for k in results if k[0] == 'go'):
+                _, name, token_name = key
+                go, rust = results[key], results[('rust', name, token_name)]
+                receipt['http'].append({'scenario': name, 'token': token_name, 'go': go, 'rust': rust})
+                if go != rust:
+                    failures.append((name, token_name, go, rust))
+            assert not failures, f'Go/Rust differences: {json.dumps(failures, indent=1)}'
 
-        go_audit = mask_audit(audits['go'])
-        rust_audit = mask_audit(audits['rust'], drop_ids=args.drop_audit_ids)
-        receipt['audit'] = {'go': go_audit, 'rust': rust_audit}
-        actions = {dict(row)['action'] for row in go_audit}
-        assert {'tool_denied', 'tool_registry_drift'} <= actions, ('Go audit lacks denials', actions)
-        assert any(dict(row).get('token_id') for row in go_audit), 'Go rows carry token ids'
-        assert go_audit == rust_audit, (
-            'Go/Rust audit rows differ:\n' + json.dumps({'go': go_audit, 'rust': rust_audit}, indent=1))
+            go_audit = mask_audit(audits['go'])
+            rust_audit = mask_audit(audits['rust'], drop_ids=args.drop_audit_ids)
+            receipt['audit'] = {'go': go_audit, 'rust': rust_audit}
+            actions = {dict(row)['action'] for row in go_audit}
+            assert {'tool_denied', 'tool_registry_drift'} <= actions, ('Go audit lacks denials', actions)
+            assert any(dict(row).get('token_id') for row in go_audit), 'Go rows carry token ids'
+            assert go_audit == rust_audit, (
+                'Go/Rust audit rows differ:\n' + json.dumps({'go': go_audit, 'rust': rust_audit}, indent=1))
 
-        def body(impl, scenario, token_name):
-            frame = json.loads(results[(impl, scenario, token_name)][1])
-            return frame['result']
+            def body(impl, scenario, token_name):
+                frame = json.loads(results[(impl, scenario, token_name)][1])
+                return frame['result']
 
-        for impl in ('go', 'rust'):
-            for token_name in ('go_current', 'go_legacy_empty', 'go_cli_issued', 'rust_cli_issued'):
-                result = body(impl, 'search', token_name)
-                assert not result['isError'], (impl, token_name, result)
-            stale = body(impl, 'search', 'go_stale')
-            assert stale['isError'] and stale['content'][0]['text'] == DRIFT_TEXT, (impl, stale)
-            scoped = body(impl, 'out-of-scope-tool', stale_scoped)
-            assert scoped['isError'] and 'tool registry has changed' not in scoped['content'][0]['text'], (impl, scoped)
-            allowed = body(impl, 'policy-allowed-path', 'go_current')
-            assert not allowed['isError'], (impl, allowed)
-            # Control: with a current token the entry policy itself denies the
-            # path (a JSON-RPC error); the stale token must hit drift first.
-            denied_current = json.loads(results[(impl, 'policy-denied-path', 'go_current')][1])
-            assert 'error' in denied_current and 'result' not in denied_current, (impl, denied_current)
-            assert 'tool registry has changed' not in json.dumps(denied_current)
-            denied_stale = body(impl, 'policy-denied-path', 'go_stale')
-            assert denied_stale['content'][0]['text'] == DRIFT_TEXT, (impl, 'drift must precede entry policy', denied_stale)
-            assert body(impl, 'health', 'rust_cli_issued')['isError'] is False
-            assert body(impl, 'health', 'go_stale')['content'][0]['text'] == DRIFT_TEXT
+            for impl in ('go', 'rust'):
+                for token_name in ('go_current', 'go_legacy_empty', 'go_cli_issued', 'rust_cli_issued'):
+                    result = body(impl, 'search', token_name)
+                    assert not result['isError'], (impl, token_name, result)
+                stale = body(impl, 'search', 'go_stale')
+                assert stale['isError'] and stale['content'][0]['text'] == DRIFT_TEXT, (impl, stale)
+                scoped = body(impl, 'out-of-scope-tool', STALE_SCOPED)
+                assert scoped['isError'] and 'tool registry has changed' not in scoped['content'][0]['text'], (impl, scoped)
+                allowed = body(impl, 'policy-allowed-path', 'go_current')
+                assert not allowed['isError'], (impl, allowed)
+                # Control: with a current token the entry policy itself denies the
+                # path (a JSON-RPC error); the stale token must hit drift first.
+                denied_current = json.loads(results[(impl, 'policy-denied-path', 'go_current')][1])
+                assert 'error' in denied_current and 'result' not in denied_current, (impl, denied_current)
+                assert 'tool registry has changed' not in json.dumps(denied_current)
+                denied_stale = body(impl, 'policy-denied-path', 'go_stale')
+                assert denied_stale['content'][0]['text'] == DRIFT_TEXT, (impl, 'drift must precede entry policy', denied_stale)
+                assert body(impl, 'health', 'rust_cli_issued')['isError'] is False
+                assert body(impl, 'health', 'go_stale')['content'][0]['text'] == DRIFT_TEXT
 
-    if args.receipt:
-        args.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
+        receipt['candidate_worktree_clean_at_end'] = not git('status', '--porcelain=v1').strip()
+        assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development, 'worktree changed during the run'
+        assert sha256(args.rust) == receipt['rust_binary_sha256'], 'Rust binary changed during the run'
+        receipt['passed'] = True
+    finally:
+        if args.receipt:
+            args.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
     print(f'PASS: {len(receipt["audit"]["go"])} audit rows identical (ids masked); '
           f'{len(receipt["http"])} Go/Rust HTTP outcomes identical; CLI issuance hash {recorded[:12]} for both binaries')
 
