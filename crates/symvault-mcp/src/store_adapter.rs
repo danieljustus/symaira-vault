@@ -1698,8 +1698,7 @@ impl StoreReadOnlyRuntime {
 
         // Authorize the template's credential entry for the run action before
         // reading it, matching the retained Go handler's policy boundary.
-        self.authorize_run_secret_path(&entry_path, "execute_api_request")
-            .map_err(run_files_error)?;
+        self.check_api_entry_policy(&entry_path)?;
 
         // Resolve only after scope, policy and approval. The accessor returns
         // the authorized entry projection and response-redaction strings.
@@ -2061,6 +2060,50 @@ impl StoreReadOnlyRuntime {
             }
         }
         Ok(())
+    }
+
+    /// Go `checkPolicy(ctx, entryPath, "run")` as `execute_api_request` calls
+    /// it for the template's credential entry: scope was checked by the caller;
+    /// the four outcomes carry Go's audit action and error text
+    /// (`policy_denied`, `policy_prompt`, `policy_biometry`). Unlike the tool
+    /// middleware, this helper only reports the biometry requirement, it never
+    /// challenges. The tool name is not part of the evaluation context: Go's
+    /// `BuildContext` leaves it empty, so `allowed_tools` conditions match every
+    /// tool there; Rust still passes the name (see the BROKER-002 residual).
+    /// An unrecognised action is denied (Go returns nil and proceeds).
+    fn check_api_entry_policy(&self, path: &str) -> Result<(), String> {
+        let Some(policy) = &self.policy else {
+            return Ok(());
+        };
+        let result = policy.evaluate(EvalContext {
+            agent_id: self.agent_name.clone(),
+            path: path.to_owned(),
+            action_type: "run".into(),
+            tool_name: "execute_api_request".into(),
+            ..EvalContext::default()
+        });
+        let rule = symvault_core::go_quote(&result.rule_name);
+        if !result.matched {
+            self.append_audit("policy_denied", path, false);
+            return Err("policy: no matching rule (default deny)".into());
+        }
+        match result.action {
+            Action::Allow => Ok(()),
+            Action::Prompt => {
+                self.append_audit("policy_prompt", path, false);
+                Err(format!("policy requires approval by rule {rule}"))
+            }
+            Action::RequireBiometry => {
+                self.append_audit("policy_biometry", path, false);
+                Err(format!(
+                    "biometric verification required by policy by rule {rule}"
+                ))
+            }
+            _ => {
+                self.append_audit("policy_denied", path, false);
+                Err(format!("policy denied by rule {rule}"))
+            }
+        }
     }
 
     /// Supplies the caller-owned key without copying it into public runtime config.

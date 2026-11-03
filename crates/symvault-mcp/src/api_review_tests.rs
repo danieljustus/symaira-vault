@@ -670,11 +670,9 @@ fn api_review_entry_policy_matches_corrected_go_observations() {
         assert_eq!(API_REVIEW_READS.with(|count| count.get()) as u64, case["credential_reads"].as_u64().unwrap(), "{name}");
         assert_eq!(API_REVIEW_REQUESTS.with(|count| count.get()) as u64, case["requests"].as_u64().unwrap(), "{name}");
         if denied {
-            // Go retains prompt/biometry-specific diagnostics. Rust denies all
-            // non-allow actions; compare their denial and side effects above.
-            if matches!(action, "deny" | "allow") {
-                assert_eq!(result.unwrap_err(), case["error"].as_str().unwrap(), "{name}");
-            }
+            // Every denial, including prompt and require_biometry, carries
+            // Go's `checkPolicy` text (BROKER-002 diagnostic residual closed).
+            assert_eq!(result.unwrap_err(), case["error"].as_str().unwrap(), "{name}");
         } else {
             let result = result.unwrap();
             assert!(!result.is_error, "{name}: {}", result.text);
