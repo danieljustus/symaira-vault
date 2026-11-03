@@ -22,8 +22,18 @@
 //! command run by both binaries on the vault the first one left (a vault healed
 //! by Rust must open in Go and the other way round).
 //!
-//! The oracle comes from `SYMVAULT_GO_BINARY` (the non-CGO build); without it
-//! the tests print a skip notice.
+//! The Go side (the non-CGO build) was recorded once
+//! (`testdata/port/cli-observations/zero_key_differential.json`): the vaults
+//! `init`/`set` created (random keys, frozen as trees), every Go run with the
+//! files it left, and the Go follow-up answers. Replay installs the recorded
+//! Go-made vault, runs the Rust binary live on it and compares; the Rust
+//! follow-up runs on the recorded Go-healed vault, so "a vault healed by Go must
+//! open in Rust" stays live. The reverse direction (Go opening a vault healed by
+//! Rust) needs a live Go and is only exercised by a capture; replay compares the
+//! Rust follow-up with the recorded Go answer on the Go-healed vault instead.
+
+#[path = "common/go_oracle_ext.rs"]
+mod go_oracle_ext;
 
 use std::{
     collections::BTreeMap,
@@ -32,11 +42,14 @@ use std::{
     os::unix::fs::{PermissionsExt, symlink},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::OnceLock,
     thread,
     time::Instant,
 };
 
 use base64::Engine;
+use go_oracle_ext::Observations;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 const RUST: &str = env!("CARGO_BIN_EXE_symvault");
@@ -45,14 +58,175 @@ const INIT_PASS: &str = "initial passphrase value";
 const PASS23: &str = "abcdefghijklmnopqrstuvw";
 const INTRO: &[u8] = b"age-encryption.org/v1\n";
 
-fn oracle() -> Option<PathBuf> {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return None;
-    };
-    let go = PathBuf::from(go);
-    assert!(go.is_file(), "SYMVAULT_GO_BINARY is not a file: {go:?}");
-    Some(go)
+/// Pinned Go oracle (a `CGO_ENABLED=0` build of this commit).
+const ORACLE_COMMIT: &str = "c069d3f2b17d704525cedc1bd42840cc6a3e9896";
+
+/// One recorded Go session: the observations plus the frozen base vaults.
+struct Session {
+    obs: Observations,
+    go: PathBuf,
+    rust: PathBuf,
+    init_tree: OnceLock<Value>,
+    plain_tree: OnceLock<Value>,
+}
+
+impl Session {
+    fn begin(test: &str) -> Self {
+        let obs = Observations::begin("zero_key_differential", test, Some(ORACLE_COMMIT));
+        obs.stable_under(stable_observation);
+        let go = obs.binary();
+        Self {
+            obs,
+            go,
+            rust: PathBuf::from(RUST),
+            init_tree: OnceLock::new(),
+            plain_tree: OnceLock::new(),
+        }
+    }
+
+    /// The vault the Go oracle's `init` made (`plain`: plus `set w/a.password`),
+    /// as `{"root": tree, "home": tree}`. `init` generates random keys, so a
+    /// capture keeps the committed tree.
+    fn base(&self, plain: bool) -> &Value {
+        let (cell, key) = if plain {
+            (&self.plain_tree, "base:plain")
+        } else {
+            (&self.init_tree, "base:init")
+        };
+        cell.get_or_init(|| {
+            self.obs.observe_frozen(key, |go| {
+                let temp = tempfile::Builder::new()
+                    .prefix("symvault-zk-base-")
+                    .tempdir()
+                    .expect("temp");
+                let root = temp.path().join("vault");
+                let home = temp.path().join("home");
+                fs::create_dir_all(&home).expect("home");
+                fs::create_dir_all(&root).expect("vault root");
+                let init = run(
+                    go,
+                    &root,
+                    &home,
+                    Some(INIT_PASS),
+                    &["init", "--auth", "passphrase"],
+                    None,
+                );
+                assert_eq!(init.code, Some(0), "init: {init:?}");
+                if plain {
+                    let set = run(
+                        go,
+                        &root,
+                        &home,
+                        Some(INIT_PASS),
+                        &["set", "w/a.password", "--value", "StrongPassword123!"],
+                        None,
+                    );
+                    assert_eq!(set.code, Some(0), "set: {set:?}");
+                }
+                json!({"root": snapshot_tree(&root), "home": snapshot_tree(&home)})
+            })
+        })
+    }
+}
+
+/// A recapture keeps the committed value when only random bytes (re-wrapped
+/// identities in the recorded trees) changed.
+fn stable_observation(value: &Value) -> Value {
+    let mut value = value.clone();
+    if let Some(object) = value.as_object_mut() {
+        for key in ["trees_after_follow"] {
+            if let Some(slot) = object.get_mut(key) {
+                *slot = tree_shape(slot);
+            }
+        }
+    }
+    value
+}
+
+fn tree_shape(value: &Value) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(items.iter().map(tree_shape).collect()),
+        Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (key, item) in map {
+                if key != "b" {
+                    out.insert(key.clone(), tree_shape(item));
+                }
+            }
+            Value::Object(out)
+        }
+        other => other.clone(),
+    }
+}
+
+/// Files, directories and symlinks below `dir` (relative paths, modes and
+/// base64 contents); `.git/hooks` samples are left out.
+fn snapshot_tree(dir: &Path) -> Value {
+    fn walk(base: &Path, dir: &Path, out: &mut Vec<Value>) {
+        let mut paths: Vec<PathBuf> = fs::read_dir(dir)
+            .expect("read dir")
+            .flatten()
+            .map(|entry| entry.path())
+            .collect();
+        paths.sort();
+        for path in paths {
+            let meta = fs::symlink_metadata(&path).expect("metadata");
+            let relative = path.strip_prefix(base).unwrap().display().to_string();
+            if relative.ends_with(".git/hooks") {
+                continue;
+            }
+            let mode = meta.permissions().mode() & 0o7777;
+            if meta.file_type().is_symlink() {
+                let target = fs::read_link(&path).unwrap().display().to_string();
+                out.push(json!({"p": relative, "k": "l", "m": mode, "b": target}));
+            } else if meta.is_dir() {
+                out.push(json!({"p": relative, "k": "d", "m": mode}));
+                walk(base, &path, out);
+            } else {
+                let bytes = fs::read(&path).expect("read file");
+                out.push(json!({"p": relative, "k": "f", "m": mode,
+                    "b": base64::engine::general_purpose::STANDARD.encode(bytes)}));
+            }
+        }
+    }
+    let mut entries = Vec::new();
+    walk(dir, dir, &mut entries);
+    Value::Array(entries)
+}
+
+/// Recreates a tree written by [`snapshot_tree`] (replacing what is there).
+fn install_tree(dir: &Path, tree: &Value) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_dir()) {
+                let _ = fs::remove_dir_all(&path);
+            } else {
+                let _ = fs::remove_file(&path);
+            }
+        }
+    }
+    fs::create_dir_all(dir).expect("tree root");
+    for entry in tree.as_array().expect("tree array") {
+        let path = dir.join(entry["p"].as_str().expect("path"));
+        let mode = u32::try_from(entry["m"].as_u64().expect("mode")).expect("mode bits");
+        match entry["k"].as_str().expect("kind") {
+            "d" => {
+                fs::create_dir_all(&path).expect("tree dir");
+                fs::set_permissions(&path, fs::Permissions::from_mode(mode)).expect("dir mode");
+            }
+            "l" => {
+                symlink(entry["b"].as_str().expect("target"), &path).expect("tree symlink");
+            }
+            _ => {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(entry["b"].as_str().expect("content"))
+                    .expect("base64");
+                fs::write(&path, bytes).expect("tree file");
+                fs::set_permissions(&path, fs::Permissions::from_mode(mode)).expect("file mode");
+            }
+        }
+    }
 }
 
 fn fixture(name: &str) -> (Vec<u8>, String) {
@@ -94,7 +268,7 @@ fn environment(root: &Path, home: &Path, passphrase: Option<&str>) -> Vec<(&'sta
     environment
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 struct Out {
     code: Option<i32>,
     stdout: String,
@@ -362,20 +536,15 @@ fn scrypt_shaped_lines(lines: usize) -> Vec<u8> {
     data
 }
 
-fn prepare(binary_for_init: &Path, parent: &Path, case: &Case) -> (PathBuf, PathBuf, Vec<u8>) {
+/// Installs the frozen Go-made base vault below `parent` and applies the case.
+fn prepare(session: &Session, parent: &Path, case: &Case) -> (PathBuf, PathBuf, Vec<u8>) {
     let root = parent.join("vault");
     let home = parent.join("home");
     fs::create_dir_all(&home).expect("home");
     fs::create_dir_all(&root).expect("vault root");
-    let init = run(
-        binary_for_init,
-        &root,
-        &home,
-        Some(INIT_PASS),
-        &["init", "--auth", "passphrase"],
-        None,
-    );
-    assert_eq!(init.code, Some(0), "init: {init:?}");
+    let base = session.base(matches!(case.prep, Prep::Plain(_)));
+    install_tree(&root, &base["root"]);
+    install_tree(&home, &base["home"]);
     let original = match &case.prep {
         Prep::ZeroKey {
             fixture: name,
@@ -400,15 +569,6 @@ fn prepare(binary_for_init: &Path, parent: &Path, case: &Case) -> (PathBuf, Path
             bytes
         }
         Prep::Plain(manifest) => {
-            let set = run(
-                binary_for_init,
-                &root,
-                &home,
-                Some(INIT_PASS),
-                &["set", "w/a.password", "--value", "StrongPassword123!"],
-                None,
-            );
-            assert_eq!(set.code, Some(0), "set: {set:?}");
             match manifest {
                 Manifest::Kept => {}
                 Manifest::Removed => fs::remove_file(root.join("manifest.age")).expect("manifest"),
@@ -439,8 +599,15 @@ fn prepare(binary_for_init: &Path, parent: &Path, case: &Case) -> (PathBuf, Path
     (root, home, original)
 }
 
-fn observe(binary: &Path, go: &Path, rust: &Path, parent: &Path, case: &Case) -> Observed {
-    let (root, home, original) = prepare(go, parent, case);
+/// Everything one binary left behind on a freshly prepared vault. Returns the
+/// observation and, when the case has follow-ups, nothing else to run here.
+fn observe_run(
+    session: &Session,
+    binary: &Path,
+    parent: &Path,
+    case: &Case,
+) -> (PathBuf, PathBuf, Observed) {
+    let (root, home, original) = prepare(session, parent, case);
     let out = run_under(
         binary,
         &root,
@@ -457,43 +624,114 @@ fn observe(binary: &Path, go: &Path, rust: &Path, parent: &Path, case: &Case) ->
     let backup_is_original = fs::read(root.join("identity.age.bak"))
         .ok()
         .map(|backup| backup == original);
-    // Go first, then Rust, on the same vault: each must open what the other left.
-    let mut follow = Vec::new();
-    for (passphrase, args) in &case.follow {
-        for follower in [go, rust] {
-            follow.push(run(follower, &root, &home, Some(passphrase), args, None));
-        }
-    }
-    Observed {
-        out,
-        files,
-        identity_rewritten,
-        backup_is_original,
-        follow,
-    }
+    (
+        root,
+        home,
+        Observed {
+            out,
+            files,
+            identity_rewritten,
+            backup_is_original,
+            follow: Vec::new(),
+        },
+    )
 }
 
-fn compare(cases: &[Case], budget_seconds: u64) {
-    let Some(go) = oracle() else {
-        return;
+/// The Go side of a case, exactly as recorded: the run, the files it left, the
+/// Go follow-up answers and the vault after the run / after each Go follow-up.
+fn record_go(session: &Session, go: &Path, parent: &Path, case: &Case) -> Value {
+    let (root, home, observed) = observe_run(session, go, parent, case);
+    let mut follow_go = Vec::new();
+    let mut trees_after_follow = Vec::new();
+    for (passphrase, args) in &case.follow {
+        follow_go.push(run(go, &root, &home, Some(passphrase), args, None));
+        trees_after_follow.push(snapshot_tree(&root));
+    }
+    json!({
+        "out": observed.out,
+        "files": observed.files,
+        "identity_rewritten": observed.identity_rewritten,
+        "backup_is_original": observed.backup_is_original,
+        "follow_go": follow_go,
+        "trees_after_follow": trees_after_follow,
+    })
+}
+
+/// Rebuilds the Go `Observed` from its record. Follow-ups run Go first, then
+/// Rust, on the same vault: the Go answer is the recorded one, the Rust
+/// follow-up runs live on the recorded Go-healed vault.
+fn go_observed(session: &Session, record: &Value, parent: &Path, case: &Case) -> Observed {
+    let mut observed = Observed {
+        out: serde_json::from_value(record["out"].clone()).expect("recorded Go output"),
+        files: serde_json::from_value(record["files"].clone()).expect("recorded Go files"),
+        identity_rewritten: record["identity_rewritten"].as_bool().expect("flag"),
+        backup_is_original: record["backup_is_original"].as_bool(),
+        follow: Vec::new(),
     };
-    let rust = PathBuf::from(RUST);
+    if case.follow.is_empty() {
+        return observed;
+    }
+    let (root, home, _) = prepare(session, parent, case);
+    for (index, (passphrase, args)) in case.follow.iter().enumerate() {
+        let go_answer: Out = serde_json::from_value(record["follow_go"][index].clone())
+            .expect("recorded Go follow-up");
+        install_tree(&root, &record["trees_after_follow"][index]);
+        observed.follow.push(go_answer);
+        observed.follow.push(run(
+            &session.rust,
+            &root,
+            &home,
+            Some(passphrase),
+            args,
+            None,
+        ));
+    }
+    observed
+}
+
+/// Rust on its own prepared vault; the Go follow-up answers come from the Go
+/// session (the live Go-on-Rust-vault direction is capture-only).
+fn rust_observed(session: &Session, record: &Value, parent: &Path, case: &Case) -> Observed {
+    let (root, home, mut observed) = observe_run(session, &session.rust, parent, case);
+    for (index, (passphrase, args)) in case.follow.iter().enumerate() {
+        let go_answer = if session.obs.capturing() {
+            run(&session.go, &root, &home, Some(passphrase), args, None)
+        } else {
+            serde_json::from_value(record["follow_go"][index].clone())
+                .expect("recorded Go follow-up")
+        };
+        observed.follow.push(go_answer);
+        observed.follow.push(run(
+            &session.rust,
+            &root,
+            &home,
+            Some(passphrase),
+            args,
+            None,
+        ));
+    }
+    observed
+}
+
+fn compare(session: &Session, cases: &[Case], budget_seconds: u64) {
     let mut failures = Vec::new();
     for batch in cases.chunks(4) {
         let results: Vec<_> = thread::scope(|scope| {
             batch
                 .iter()
                 .map(|case| {
-                    let (go, rust) = (&go, &rust);
                     scope.spawn(move || {
                         let temp = tempfile::Builder::new()
                             .prefix("symvault-zk-diff-")
                             .tempdir()
                             .expect("temp");
+                        let record = session.obs.observe(&case.name, |go| {
+                            record_go(session, go, &temp.path().join("rec"), case)
+                        });
                         let started = Instant::now();
-                        // Follow-ups run in the order (Go, Rust) for both sides.
-                        let go_run = observe(go, go, rust, &temp.path().join("go"), case);
-                        let rust_run = observe(rust, go, rust, &temp.path().join("rs"), case);
+                        let go_run = go_observed(session, &record, &temp.path().join("go"), case);
+                        let rust_run =
+                            rust_observed(session, &record, &temp.path().join("rs"), case);
                         (case, go_run, rust_run, started.elapsed().as_secs())
                     })
                 })
@@ -530,10 +768,12 @@ fn compare(cases: &[Case], budget_seconds: u64) {
         cases.len(),
         failures.join("\n")
     );
+    assert!(session.obs.count() > cases.len(), "every case replayed");
 }
 
 #[test]
 fn zero_key_heal_matches_the_go_oracle() {
+    let session = Session::begin("zero_key_heal_matches_the_go_oracle");
     let long: &'static str = Box::leak("p".repeat(1024).into_boxed_str());
     let too_long: &'static str = Box::leak("p".repeat(1025).into_boxed_str());
     let wrong_len: &'static str = "abcdefghijklmnopqrstuv"; // 22 bytes
@@ -637,7 +877,7 @@ fn zero_key_heal_matches_the_go_oracle() {
             .stdin(format!("{wrong_len}\nanother long passphrase\nanother long passphrase\n").as_bytes())
             .healed(false),
     ];
-    compare(&cases, 120);
+    compare(&session, &cases, 120);
 }
 
 /// `fsutil.AtomicWriteFile` is `CreateTemp` + `Chmod(perm)`: under a umask that
@@ -649,10 +889,7 @@ fn zero_key_heal_matches_the_go_oracle() {
 /// writes are compared here.)
 #[test]
 fn heal_files_keep_mode_0600_under_a_restrictive_umask_like_go() {
-    let Some(go) = oracle() else {
-        return;
-    };
-    let rust = PathBuf::from(RUST);
+    let session = Session::begin("heal_files_keep_mode_0600_under_a_restrictive_umask_like_go");
     let case = zero("heal under umask 0277", PASS23, &["list"])
         .umask("0277")
         .healed(true);
@@ -660,8 +897,11 @@ fn heal_files_keep_mode_0600_under_a_restrictive_umask_like_go() {
         .prefix("symvault-zk-umask-")
         .tempdir()
         .expect("temp");
-    let go_run = observe(&go, &go, &rust, &temp.path().join("go"), &case);
-    let rust_run = observe(&rust, &go, &rust, &temp.path().join("rs"), &case);
+    let record = session.obs.observe(&case.name, |go| {
+        record_go(&session, go, &temp.path().join("rec"), &case)
+    });
+    let go_run = go_observed(&session, &record, &temp.path().join("go"), &case);
+    let rust_run = rust_observed(&session, &record, &temp.path().join("rs"), &case);
     assert!(go_run.identity_rewritten, "oracle did not heal: {go_run:?}");
     let healed_files = |run: &Observed| -> BTreeMap<String, u32> {
         run.files
@@ -704,6 +944,7 @@ fn header_case(name: &str, data: fn() -> Vec<u8>, recipients: Recipients) -> Cas
 
 #[test]
 fn oversized_identity_headers_fail_like_go_and_fast() {
+    let session = Session::begin("oversized_identity_headers_fail_like_go_and_fast");
     let none = Recipients::Missing;
     let cases = vec![
         header_case("header 2 MiB - 1", || header_at(-1), none.clone()),
@@ -801,7 +1042,7 @@ fn oversized_identity_headers_fail_like_go_and_fast() {
     ];
     // The `age` crate needs minutes for a header of this size; the budget is
     // the proof that it is never asked.
-    compare(&cases, 30);
+    compare(&session, &cases, 30);
 }
 
 fn manifest_case(name: &str, manifest: Manifest, args: &[&'static str]) -> Case {
@@ -820,6 +1061,7 @@ fn manifest_case(name: &str, manifest: Manifest, args: &[&'static str]) -> Case 
 
 #[test]
 fn open_rebuilds_a_missing_or_incomplete_manifest_like_go() {
+    let session = Session::begin("open_rebuilds_a_missing_or_incomplete_manifest_like_go");
     let cases = vec![
         manifest_case("verify, manifest present", Manifest::Kept, &["verify"]),
         manifest_case("verify, manifest missing", Manifest::Removed, &["verify"]),
@@ -845,11 +1087,12 @@ fn open_rebuilds_a_missing_or_incomplete_manifest_like_go() {
             &["list"],
         ),
     ];
-    compare(&cases, 60);
+    compare(&session, &cases, 60);
 }
 
 #[test]
 fn touch_id_skipped_warning_matches_the_go_oracle() {
+    let session = Session::begin("touch_id_skipped_warning_matches_the_go_oracle");
     let case = |name: &str, args: &[&'static str]| Case {
         name: name.to_owned(),
         prep: Prep::TouchId,
@@ -869,29 +1112,48 @@ fn touch_id_skipped_warning_matches_the_go_oracle() {
         ),
         case("list with Touch ID configured", &["list"]),
     ];
-    compare(&cases, 60);
+    compare(&session, &cases, 60);
 
     // Where there is no GUI session (a headless runner, an SSH login) the
     // non-interactive path must say why Touch ID was skipped; that branch is
     // exercised on such hosts, and by a unit test in the binary on this one.
-    if let Some(go) = oracle() {
-        let gui = Command::new("launchctl")
+    // The Go oracle's answer is recorded together with the GUI state of the
+    // recording host (the rule is "warning iff no GUI session"); Rust is checked
+    // live against the GUI state of the host that runs the test.
+    let warning = "Touch ID skipped (no GUI session); use 'symvault unlock' in a graphical session or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE";
+    let gui_session = || {
+        Command::new("launchctl")
             .arg("managername")
             .output()
-            .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "Aqua");
-        let temp = tempfile::tempdir().expect("temp");
-        let case = &cases[0];
-        let (root, home, _) = prepare(&go, temp.path(), case);
-        let warning = "Touch ID skipped (no GUI session); use 'symvault unlock' in a graphical session or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE";
-        for binary in [go.as_path(), Path::new(RUST)] {
-            let out = run(binary, &root, &home, Some(INIT_PASS), &case.args, None);
-            assert_eq!(
-                out.stderr.contains(warning),
-                !gui,
-                "{binary:?}: warning presence must follow the GUI session ({gui}): {out:?}"
-            );
-        }
-    }
+            .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "Aqua")
+    };
+    let temp = tempfile::tempdir().expect("temp");
+    let case = &cases[0];
+    let recorded = session.obs.observe("touch-id warning rule", |go| {
+        let (root, home, _) = prepare(&session, &temp.path().join("rec"), case);
+        let out = run(go, &root, &home, Some(INIT_PASS), &case.args, None);
+        json!({"gui": gui_session(), "warned": out.stderr.contains(warning)})
+    });
+    assert_eq!(
+        recorded["warned"].as_bool(),
+        recorded["gui"].as_bool().map(|gui| !gui),
+        "recorded oracle: the warning appears exactly when there is no GUI session"
+    );
+    let gui = gui_session();
+    let (root, home, _) = prepare(&session, &temp.path().join("rust"), case);
+    let out = run(
+        Path::new(RUST),
+        &root,
+        &home,
+        Some(INIT_PASS),
+        &case.args,
+        None,
+    );
+    assert_eq!(
+        out.stderr.contains(warning),
+        !gui,
+        "Rust: warning presence must follow the GUI session ({gui}): {out:?}"
+    );
 }
 
 /// Opens a pseudo-terminal as stdin, types the scripted chunks once their
@@ -950,9 +1212,9 @@ print(json.dumps({"rc": proc.returncode, "stdout": out.hex(), "stderr": err.hex(
                   "echo": echo.hex(), "left": len(steps)}))
 "####;
 
-fn run_prompted(binary: &Path, parent: &Path, init: &Path, steps: &[(&str, &str)]) -> Value {
+fn run_prompted(session: &Session, binary: &Path, parent: &Path, steps: &[(&str, &str)]) -> Value {
     let case = manifest_case("prompted", Manifest::Kept, &["get", "w/a.password"]);
-    let (root, home, _) = prepare(init, parent, &case);
+    let (root, home, _) = prepare(session, parent, &case);
     let spec = json!({
         "binary": binary,
         "args": ["get", "w/a.password"],
@@ -986,9 +1248,7 @@ fn run_prompted(binary: &Path, parent: &Path, init: &Path, steps: &[(&str, &str)
 
 #[test]
 fn ctrl_d_at_the_hidden_prompt_is_ignored_like_go() {
-    let Some(go) = oracle() else {
-        return;
-    };
+    let session = Session::begin("ctrl_d_at_the_hidden_prompt_is_ignored_like_go");
     let rust = PathBuf::from(RUST);
     let typed = format!("{INIT_PASS}\r");
     let (head, tail) = INIT_PASS.split_at(7);
@@ -1010,8 +1270,10 @@ fn ctrl_d_at_the_hidden_prompt_is_ignored_like_go() {
     for (name, steps) in scenarios {
         let steps: Vec<(&str, &str)> = steps.iter().map(|(a, b)| (*a, b.as_str())).collect();
         let temp = tempfile::tempdir().expect("temp");
-        let go_run = run_prompted(&go, &temp.path().join("go"), &go, &steps);
-        let rust_run = run_prompted(&rust, &temp.path().join("rs"), &go, &steps);
+        let go_run = session.obs.observe(name, |go| {
+            run_prompted(&session, go, &temp.path().join("go"), &steps)
+        });
+        let rust_run = run_prompted(&session, &rust, &temp.path().join("rs"), &steps);
         assert_eq!(go_run, rust_run, "{name}");
         assert_eq!(
             go_run["rc"], 0,
@@ -1019,4 +1281,5 @@ fn ctrl_d_at_the_hidden_prompt_is_ignored_like_go() {
         );
         assert_eq!(go_run["left"], 0, "{name}: every step answered");
     }
+    assert_eq!(session.obs.count(), 4 + 1, "every scenario replayed");
 }

@@ -241,6 +241,28 @@ impl Observations {
         kept
     }
 
+    /// Like [`observe`], for set-up steps whose result is random (fresh keys):
+    /// a capture keeps the committed value and only runs `live` when none exists.
+    pub fn observe_frozen(&self, key: &str, live: impl FnOnce(&Path) -> Value) -> Value {
+        let prior = {
+            let st = self.inner.lock().unwrap();
+            if st.capture {
+                st.prior.get(key).cloned()
+            } else {
+                None
+            }
+        };
+        match prior {
+            Some(value) => {
+                let mut st = self.inner.lock().unwrap();
+                st.used.insert(key.to_owned());
+                st.captured.insert(key.to_owned(), value.clone());
+                value
+            }
+            None => self.observe(key, live),
+        }
+    }
+
     /// Number of observations replayed (replay) or recorded (capture) so far.
     pub fn count(&self) -> usize {
         self.inner.lock().unwrap().used.len()
