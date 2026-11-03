@@ -37,9 +37,20 @@ const (
 	// MacBook, false on a Mac without Touch ID and on Linux), not of the CLI.
 	normalizeTouchID = "touch_id_available"
 	touchIDLine      = "Touch ID available: __BOOL__\n"
+
+	// normalizeTokenValues replaces the random parts of a minted agent token:
+	// its id (`tok-<date>-<8 hex>`, also named by the migration warning of the
+	// first vault read), its expiry and the raw token.
+	normalizeTokenValues = "token_values"
+	tokenIDMarker        = "tok-__ID__"
+	expiresMarker        = "__TIME__"
+	rawTokenMarker       = "__TOKEN__"
+	expiresPrefix        = "  Expires: "
+	rawTokenPrefix       = "Raw token (copy now — shown once): "
 )
 
 var (
+	tokenID    = regexp.MustCompile(`tok-[0-9]{8}-[0-9a-f]{8}`)
 	password20 = regexp.MustCompile(`^[A-Za-z0-9]{20}\n$`)
 	keyBytes   = regexp.MustCompile(`New key: [0-9a-f]{8} \(first 4 bytes\)`)
 	touchID    = regexp.MustCompile(`Touch ID available: (true|false)\n`)
@@ -66,8 +77,11 @@ type scenarioCase struct {
 	// Platforms lists the GOOS values the observation can be compared on; empty
 	// means every platform. A scenario of a host-dependent command carries the
 	// platform it was recorded on.
-	Platforms   []string    `json:"platforms,omitempty"`
-	Observation observation `json:"observation"`
+	Platforms []string `json:"platforms,omitempty"`
+	// Files are disposable files written into the sandbox's working directory
+	// before the run (a relative path in the arguments resolves there).
+	Files       map[string]string `json:"files,omitempty"`
+	Observation observation       `json:"observation"`
 	// serviceManager marks a scenario of a service-manager command
 	// (serviceManagerCommands); it is not recorded, the --check projection reads
 	// it from the fresh run.
@@ -83,6 +97,8 @@ type scenarioInput struct {
 	args                     []string
 	normalize                []string
 	platforms                []string
+	// files are written into the working directory before the run.
+	files map[string]string
 	// serviceManager allows the run to call launchctl/systemctl; any other
 	// scenario that does fails the recording.
 	serviceManager bool
@@ -97,6 +113,7 @@ type extraSections struct {
 	serviceManager   []string
 	runFileUse       []scenarioCase
 	unlockStates     []scenarioCase
+	typedFlags       []scenarioCase
 }
 
 // Seams for tests of main; production always uses the defaults.
@@ -193,6 +210,9 @@ func applyNormalizers(names []string, obs observation) (observation, error) {
 			obs.Stderr = keyBytes.ReplaceAllString(obs.Stderr, keyBytesLine)
 		case normalizeTouchID:
 			obs.Stdout = touchID.ReplaceAllString(obs.Stdout, touchIDLine)
+		case normalizeTokenValues:
+			obs.Stdout = normalizeTokenText(obs.Stdout)
+			obs.Stderr = normalizeTokenText(obs.Stderr)
 		default:
 			return obs, fmt.Errorf("unknown normalizer %q", name)
 		}
@@ -557,6 +577,8 @@ func recordScenarios(goBinary string, seed []seedFile, inputs []scenarioInput) (
 		var recorded []observation
 		var calls [][]string
 		for attempt := 0; attempt < 2; attempt++ {
+			spec.files = in.files
+			spec.parents = true
 			res, err := runSpecified(goBinary, in.args, spec)
 			if err != nil {
 				return nil, fmt.Errorf("scenario %s: %w", in.name, err)
@@ -587,7 +609,7 @@ func recordScenarios(goBinary string, seed []seedFile, inputs []scenarioInput) (
 			problems = append(problems, fmt.Sprintf("scenario %s makes different host-tool calls per run: %q vs %q", in.name, calls[0], calls[1]))
 			continue
 		}
-		out = append(out, scenarioCase{Name: in.name, Description: in.description, State: in.state, Normalize: in.normalize, Platforms: in.platforms, Observation: recorded[0], HostToolCalls: calls[0], serviceManager: in.serviceManager})
+		out = append(out, scenarioCase{Name: in.name, Description: in.description, State: in.state, Normalize: in.normalize, Platforms: in.platforms, Files: in.files, Observation: recorded[0], HostToolCalls: calls[0], serviceManager: in.serviceManager})
 	}
 	if len(problems) > 0 {
 		return nil, fmt.Errorf("%d scenario(s) cannot be recorded:\n%s", len(problems), strings.Join(problems, "\n"))
@@ -630,8 +652,12 @@ func buildExtraSections(goBinary, output string, newSeed bool) (extraSections, e
 	if err != nil {
 		return extraSections{}, err
 	}
+	typed, err := recordScenarios(goBinary, seed, typedFlagInputs())
+	if err != nil {
+		return extraSections{}, err
+	}
 	sort.SliceStable(inventory, func(i, j int) bool { return inventory[i].Path < inventory[j].Path })
-	return extraSections{nilArgs: inventory, seed: seed, extraPositionals: extra, exclusions: scenarioExclusions, hostDependent: scenarioHostDependence, serviceManager: serviceManagerCommands, runFileUse: forwarded, unlockStates: unlock}, nil
+	return extraSections{nilArgs: inventory, seed: seed, extraPositionals: extra, exclusions: scenarioExclusions, hostDependent: scenarioHostDependence, serviceManager: serviceManagerCommands, runFileUse: forwarded, unlockStates: unlock, typedFlags: typed}, nil
 }
 
 // firstDifference names the first line that differs between two observations.
@@ -655,4 +681,23 @@ func firstDifference(a, b observation) string {
 		}
 	}
 	return "identical"
+}
+
+// normalizeTokenText rewrites the token id anywhere, and the expiry and raw-token
+// lines of a minted token. A line is rewritten whole-prefix only: the text after
+// the prefix is replaced, so a different shape still differs.
+func normalizeTokenText(text string) string {
+	text = tokenID.ReplaceAllString(text, tokenIDMarker)
+	lines := strings.SplitAfter(text, "\n")
+	for i, line := range lines {
+		body := strings.TrimSuffix(line, "\n")
+		newline := line[len(body):]
+		switch {
+		case strings.HasPrefix(body, expiresPrefix):
+			lines[i] = expiresPrefix + expiresMarker + newline
+		case strings.HasPrefix(body, rawTokenPrefix):
+			lines[i] = rawTokenPrefix + rawTokenMarker + newline
+		}
+	}
+	return strings.Join(lines, "")
 }

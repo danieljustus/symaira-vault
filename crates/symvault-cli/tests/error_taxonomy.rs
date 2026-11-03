@@ -114,6 +114,9 @@ struct ScenarioCase {
     /// means every platform.
     #[serde(default)]
     platforms: Vec<String>,
+    /// Disposable files written into the working directory before the run.
+    #[serde(default)]
+    files: BTreeMap<String, String>,
     observation: Observation,
     /// Service-manager calls the recording made, valid on `generated_on`.
     #[serde(default)]
@@ -168,6 +171,7 @@ struct Fixture {
     service_manager_commands: Vec<String>,
     run_file_use_argv: Vec<ScenarioCase>,
     unlock_states: Vec<ScenarioCase>,
+    typed_flags: Vec<ScenarioCase>,
 }
 
 const USAGE_CASES: usize = 159;
@@ -182,6 +186,9 @@ const EXTRA_POSITIONAL_EXCLUSIONS: usize = 7;
 const EXTRA_POSITIONALS_UNINITIALIZED: usize = 138;
 const EXTRA_POSITIONALS_INITIALIZED: usize = 82;
 const RUN_FILE_USE_ARGV_PER_STATE: usize = 82;
+/// The typed-flag section (CLI-003): values pflag accepts and the command then uses.
+const TYPED_FLAGS_UNINITIALIZED: usize = 8;
+const TYPED_FLAGS_INITIALIZED: usize = 132;
 /// The unlock-state section: commands that unlock the vault, in the settled vault
 /// without the environment passphrase (`locked`, EOF at the prompt) and in the
 /// vault shapes that miss `config.yaml` or `identity.age`.
@@ -483,7 +490,11 @@ fn run_scenario_full(
     fs::create_dir_all(&home).expect("create isolated home");
     write_seed(&root, seed);
     for (name, content) in files {
-        fs::write(root.join(name), content).expect("write disposable file");
+        let path = root.join(name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create disposable file directory");
+        }
+        fs::write(path, content).expect("write disposable file");
     }
     install_host_tools(&root);
     let mut command = Command::new(env!("CARGO_BIN_EXE_symvault"));
@@ -586,9 +597,57 @@ fn apply_normalizers(names: &[String], stdout: &mut String, stderr: &mut String)
                         "Touch ID available: __BOOL__\n",
                     );
             }
+            "token_values" => {
+                *stdout = normalize_token_text(stdout);
+                *stderr = normalize_token_text(stderr);
+            }
             other => panic!("unknown normalizer {other}"),
         }
     }
+}
+
+/// Mirrors `normalizeTokenText` of the generator: the random id of a minted agent token
+/// (`tok-<8 digits>-<8 hex>`, anywhere), and the text after the expiry and raw-token
+/// prefixes of a line. A different shape is left alone, so it still differs.
+fn normalize_token_text(text: &str) -> String {
+    let mut with_ids = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("tok-") {
+        let (head, tail) = rest.split_at(at);
+        with_ids.push_str(head);
+        let id = &tail["tok-".len()..];
+        let digits = id.get(..8).unwrap_or("");
+        let hex = id.get(9..17).unwrap_or("");
+        if digits.len() == 8
+            && digits.bytes().all(|byte| byte.is_ascii_digit())
+            && id.as_bytes().get(8) == Some(&b'-')
+            && hex.len() == 8
+            && hex
+                .bytes()
+                .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        {
+            with_ids.push_str("tok-__ID__");
+            rest = &tail["tok-".len() + 17..];
+        } else {
+            with_ids.push_str("tok-");
+            rest = &tail["tok-".len()..];
+        }
+    }
+    with_ids.push_str(rest);
+    with_ids
+        .split_inclusive('\n')
+        .map(|line| {
+            let body = line.strip_suffix('\n').unwrap_or(line);
+            let newline = &line[body.len()..];
+            if body.starts_with("  Expires: ") {
+                format!("  Expires: __TIME__{newline}")
+            } else if body.starts_with("Raw token (copy now \u{2014} shown once): ") {
+                format!("Raw token (copy now \u{2014} shown once): __TOKEN__{newline}")
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect()
 }
 
 /// `New key: <8 lowercase hex digits> (first 4 bytes)` -> `New key: __KEY__ (first 4 bytes)`.
@@ -689,12 +748,7 @@ fn run_case_full(case: &ScenarioCase, seed: &[SeedFile]) -> RunOutput {
             }
         }
     }
-    let mut run = run_scenario_full(
-        &case.observation.args,
-        &BTreeMap::new(),
-        &seed,
-        passphrase_env,
-    );
+    let mut run = run_scenario_full(&case.observation.args, &case.files, &seed, passphrase_env);
     apply_normalizers(&case.normalize, &mut run.stdout, &mut run.stderr);
     run
 }
@@ -853,6 +907,16 @@ fn fixture_provenance_and_counts() {
             RUN_FILE_USE_ARGV_PER_STATE
         );
     }
+    for (state, count) in [
+        ("uninitialized", TYPED_FLAGS_UNINITIALIZED),
+        ("initialized", TYPED_FLAGS_INITIALIZED),
+    ] {
+        assert_eq!(in_state(&fixture.typed_flags, state), count, "{state}");
+    }
+    assert_eq!(
+        fixture.typed_flags.len(),
+        TYPED_FLAGS_UNINITIALIZED + TYPED_FLAGS_INITIALIZED
+    );
     assert!(!fixture.vault_seed.is_empty());
 }
 
@@ -1194,6 +1258,231 @@ fn native_cli_matches_go_run_file_use_argv_initialized() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+/// CLI-003: values of typed flags that pflag accepts and the command then uses.
+/// `file add --max-size` is an int64 (hex, octal, binary, `_`, negative limits),
+/// `stringSlice` flags are one CSV record per occurrence (`doctor --only|--exclude`,
+/// `agent token new|rotate --tools`) and `time.Duration` flags are used by the
+/// commands (`run|file use --timeout`, `unlock --ttl`, `intake watch
+/// --interval|--debounce`, `dynamic generate --ttl`).
+#[test]
+fn native_cli_matches_go_typed_flags_uninitialized() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    let replay = replay_scenarios(
+        &fixture,
+        &fixture.typed_flags,
+        "uninitialized",
+        &mut failures,
+    );
+    assert_eq!(
+        replay,
+        Replay {
+            replayed: TYPED_FLAGS_UNINITIALIZED,
+            skipped: 0
+        }
+    );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[cfg(unix)]
+#[test]
+fn native_cli_matches_go_typed_flags_initialized() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    let replay = replay_scenarios(&fixture, &fixture.typed_flags, "initialized", &mut failures);
+    assert_eq!(
+        replay,
+        Replay {
+            replayed: TYPED_FLAGS_INITIALIZED,
+            skipped: 0
+        }
+    );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The recorded typed-flag cases really exercise the residual classes (a generator that
+/// silently dropped a class would leave the replay green).
+#[test]
+fn typed_flag_section_records_every_residual_class() {
+    let fixture = fixture();
+    let case = |name: &str| {
+        fixture
+            .typed_flags
+            .iter()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("{name} is not recorded"))
+    };
+    let names: std::collections::BTreeSet<&str> = fixture
+        .typed_flags
+        .iter()
+        .map(|case| case.name.as_str())
+        .collect();
+    assert_eq!(names.len(), fixture.typed_flags.len(), "duplicate names");
+    for case in &fixture.typed_flags {
+        assert!(case.name.starts_with("typed_"), "{}", case.name);
+        assert!(
+            case.name.ends_with(&format!("_{}", case.state)),
+            "{}",
+            case.name
+        );
+        assert!(
+            case.platforms.is_empty(),
+            "{} compares everywhere",
+            case.name
+        );
+        assert!(case.host_tool_calls.is_empty(), "{}", case.name);
+    }
+    // int64: a hex limit below the size, a negative limit and the smallest int64.
+    let hex = case("typed_max_size_hex_below_size_initialized");
+    assert_eq!(hex.observation.exit_code, 9);
+    assert!(hex.observation.stderr.contains("exceeds the 16 byte limit"));
+    let negative = case("typed_max_size_negative_initialized");
+    assert_eq!(negative.observation.exit_code, 9);
+    assert!(
+        negative
+            .observation
+            .stderr
+            .contains("exceeds the -1 byte limit")
+    );
+    assert!(
+        case("typed_max_size_min_int64_hex_initialized")
+            .observation
+            .stderr
+            .contains("exceeds the -9223372036854775808 byte limit")
+    );
+    assert_eq!(
+        case("typed_max_size_max_int64_initialized")
+            .observation
+            .exit_code,
+        0
+    );
+    assert_eq!(
+        case("typed_max_size_hex_overflow_initialized")
+            .observation
+            .exit_code,
+        1
+    );
+    // The size and the flag checks come before the vault.
+    for name in [
+        "typed_max_size_negative_before_vault_uninitialized",
+        "typed_file_add_no_flags_uninitialized",
+    ] {
+        assert_eq!(case(name).observation.exit_code, 9, "{name}");
+    }
+    assert_eq!(
+        case("typed_max_size_fits_vault_check_uninitialized")
+            .observation
+            .exit_code,
+        3
+    );
+    // stringSlice: an empty value is no filter; quoted commas and empty elements.
+    let all = case("typed_slice_doctor_only_empty_value_initialized");
+    assert!(all.observation.stdout.matches("\"id\"").count() >= 4);
+    let quoted = case("typed_slice_doctor_only_quoted_comma_initialized");
+    assert_eq!(quoted.observation.stdout.matches("\"id\"").count(), 0);
+    let tools = case("typed_slice_token_new_empty_value_initialized");
+    assert_eq!(tools.observation.exit_code, 1);
+    assert!(
+        tools
+            .observation
+            .stderr
+            .contains("at least one tool must be specified")
+    );
+    assert!(
+        case("typed_slice_token_new_quoted_comma_initialized")
+            .observation
+            .stdout
+            .contains("  Tools: a,b, c\n")
+    );
+    assert!(
+        case("typed_slice_token_new_empty_elements_initialized")
+            .observation
+            .stdout
+            .contains("  Tools: a, , b\n")
+    );
+    // Durations: a timeout that expired before the start, a negative one and a
+    // fractional one.
+    assert!(
+        case("typed_duration_run_expired_before_start_ns_initialized")
+            .observation
+            .stderr
+            .contains("failed to run command: context deadline exceeded")
+    );
+    assert!(
+        case("typed_duration_run_fraction_initialized")
+            .observation
+            .stderr
+            .contains("command timed out after 250.5ms")
+    );
+    assert_eq!(
+        case("typed_duration_run_negative_initialized")
+            .observation
+            .exit_code,
+        0
+    );
+    assert_eq!(
+        case("typed_duration_run_zero_initialized")
+            .observation
+            .exit_code,
+        0
+    );
+    assert_eq!(
+        case("typed_duration_watch_interval_negative_initialized")
+            .observation
+            .exit_code,
+        0
+    );
+    // Every case that reads a source file brings it.
+    for case in &fixture.typed_flags {
+        if case.observation.args.iter().any(|arg| arg == "a.bin") {
+            assert_eq!(
+                case.files.get("a.bin").map(String::len),
+                Some(100),
+                "{}",
+                case.name
+            );
+        }
+    }
+}
+
+/// Negative control: a changed expectation of the typed-flag section is reported.
+#[test]
+fn mutated_typed_flag_expectation_is_detected() {
+    let fixture = fixture();
+    let case = fixture
+        .typed_flags
+        .iter()
+        .find(|case| case.name == "typed_max_size_negative_initialized")
+        .expect("case");
+    let actual = run_case(case, &fixture.vault_seed);
+    let mut failures = Vec::new();
+    record_difference(&case.name, &case.observation, actual.clone(), &mut failures);
+    assert!(failures.is_empty(), "{failures:?}");
+    let mut tampered = case.observation.clone();
+    tampered.stderr = tampered.stderr.replace("-1 byte", "1 byte");
+    record_difference(&case.name, &tampered, actual.clone(), &mut failures);
+    tampered = case.observation.clone();
+    tampered.exit_code = 1;
+    record_difference(&case.name, &tampered, actual, &mut failures);
+    assert_eq!(failures.len(), 2, "{failures:?}");
+}
+
+#[test]
+fn token_value_normalizer_rewrites_only_the_random_parts() {
+    let mut stdout = "Token created successfully.\n  ID:    tok-20261103-9dc781fc\n  Expires: 2026-11-04T06:48:37Z\n\nRaw token (copy now \u{2014} shown once): 7cc5ce8b\n  Tools: tok-1-x, tok-20261103-ZZZZZZZZ\n".to_string();
+    let mut stderr =
+        "WARNING: (id=tok-20261103-ef3b1dc9) revoke legacy tok-20261103-ef3b1dc9\n".to_string();
+    apply_normalizers(&["token_values".to_string()], &mut stdout, &mut stderr);
+    assert_eq!(
+        stdout,
+        "Token created successfully.\n  ID:    tok-__ID__\n  Expires: __TIME__\n\nRaw token (copy now \u{2014} shown once): __TOKEN__\n  Tools: tok-1-x, tok-20261103-ZZZZZZZZ\n"
+    );
+    assert_eq!(
+        stderr,
+        "WARNING: (id=tok-__ID__) revoke legacy tok-__ID__\n"
+    );
+}
+
 /// The unlock-state section: Go resolves `config.yaml` (a missing file is the
 /// default configuration), obtains the passphrase under that policy and only then
 /// opens the vault (reads `identity.age`, loads `config.yaml`); a prompt that reads
@@ -1390,6 +1679,7 @@ fn scenario(name: &str, args: &[&str], calls: &[&str]) -> ScenarioCase {
         state: "uninitialized".to_string(),
         normalize: Vec::new(),
         platforms: Vec::new(),
+        files: BTreeMap::new(),
         observation: Observation {
             args: args.iter().map(|arg| arg.to_string()).collect(),
             exit_code: 0,

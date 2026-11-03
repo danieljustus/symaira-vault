@@ -183,12 +183,83 @@ and the appended cases differ). Negative control: dropping `unlock --ttl`,
 `intake --max-files`, `doctor --only` and `profile add`'s required `vault` fails 14
 corpus cases plus both unit guards.
 
-Residual (CLI-003 stays open): `file add --max-size` is a `u64` in the clap tree
-(Go `int64`), so a negative or non-decimal value that Go accepts is still rejected
-by clap after the emulation; `stringSlice` values are split on `,` by clap rather
-than read as a CSV record (a quoted comma splits differently); duration flags are
-`String`s that the commands re-parse, so a value Go accepts and the command rejects
-(or the reverse) is a command-body question, not a flag-diagnostic one.
+### CLI-003 residuals: int64 `--max-size`, `stringSlice` CSV, re-read durations (`local/cli003-resid`)
+
+The three residuals the typed-flag work above left open are closed with a new section
+`typed_flags` of `testdata/port/cli/error-taxonomy.json` (140 Go-recorded scenarios:
+132 in the initialized vault, 8 in an uninitialized one; oracle `0cc78062` unchanged,
+`errtaxgen` regenerated, only `generator_digest` and the new section differ; the
+sandbox accepts `files` in nested directories for it, and a `token_values` normalizer
+rewrites the random token id, expiry and raw token).
+
+- **`file add --max-size` is an `int64`.** The clap field was a `u64`, so a negative or
+  base-prefixed value that Go accepts was rejected by clap after the emulation let it
+  through. It now parses with `parse_go_int` (`ParseInt(s, 0, 64)`: `0x`/`0o`/`0b`/
+  leading-`0` prefixes, `_` separators, a sign), takes a dash-leading word as its value
+  like pflag, and keeps the last of a repeated flag (`args_override_self`). A negative
+  limit rejects every file (`source file is 100 bytes, exceeds the -1 byte limit`, exit 9,
+  printed twice); `-9223372036854775808` and `0x7fffffffffffffff` are accepted, `0x8000…`
+  and `±99999999999999999999` are the recorded range errors. Making the value observable
+  exposed that `file add` ran its whole front end after the vault unlock: Go checks
+  `--field` and `--from` (exit 9: `--field is required`, `--from is required`), stats the
+  source (exit 1, `cannot stat source file: stat <path>: no such file or directory`), applies
+  the size limit (exit 9) and reads the file (exit 1, `read <dir>: is a directory`) **before**
+  it resolves the vault, so none of them needs an initialized vault. `--field` and `--from`
+  were clap-required arguments with clap wording and exit 1. `file_commands::read_source`
+  now does Go's checks in Go's order before `resolve_vault`/unlock; the bounded read (a
+  source that grows past the limit after the stat is still refused) is kept.
+- **`stringSlice` flags are one CSV record per occurrence.** `go_csv_record` (port of
+  `encoding/csv` `readRecord`, the same code `go_csv_error` now derives its message from)
+  returns the elements pflag stores: a quoted comma stays in one element, `""` inside
+  quotes is a quote, empty elements are kept, only the first record is read (a second line
+  is ignored), leading blank lines are skipped, an empty value is an **empty slice, not the
+  default**, the first occurrence replaces the default and later ones append
+  (`string_slice_flag`). Native clap split on `,` instead (`value_delimiter`), which kept
+  quotes, kept a lone empty element for `--only ""` (so the filter matched nothing where Go
+  filters nothing), appended `x,y` + `""` as an empty element and rejected a dash-leading
+  value. `doctor --only|--exclude`, `agent token new|rotate --tools` (default `*`, an empty
+  result is `at least one tool must be specified`), `broker --passthrough` and `run
+  --broker-passthrough` take the raw occurrences (`allow_hyphen_values`) and split them
+  with the shared function; the private CSV parser of `broker_commands` is gone.
+  `go_csv_record_equals_pflag_string_slice` compares 45 occurrence lists with real pflag
+  v1.0.10 (12 are errors).
+- **Durations commands re-read.** The cobra emulation already validated the syntax; what
+  was left is what the commands do with a value Go accepts. Differences found and fixed:
+  a dash-leading value (`run --timeout -5s`, `file use -t -5s`, `unlock --ttl -5s`) was
+  rejected by clap; `file use` rejected a repeated `-t`/`--timeout` (pflag keeps the last);
+  a timeout that has already expired when the process would start is not started by Go
+  (`exec.Cmd.Start` checks the context: `failed to run command: context deadline exceeded`,
+  `run --timeout 1ns`) while Rust started and killed it (`command timed out after 1ns`);
+  and `file use` printed that error once instead of Go's two lines. Accepted forms
+  (`+5s`, `.5s`, `1.s`, `1µs`/`1μs`, compound units, `0`, `-0s`, the largest int64
+  nanoseconds, a negative value meaning no timeout) were already identical and are now
+  recorded for `run`, `file use`, `unlock --ttl`, `intake watch --once --interval|--debounce`
+  and `dynamic generate --ttl`.
+
+Evidence: `native_cli_matches_go_typed_flags_{uninitialized,initialized}` replay all 140
+scenarios (8 + 132, zero skipped); `typed_flag_section_records_every_residual_class` and
+the Go test `TestTypedFlagInputsCoverEveryResidualClass` fail when a class disappears;
+negative controls: restoring `u64`, the old comma split and the missing deadline check each
+fail the replay (see the receipt in the packet result).
+
+Still open after this packet (not flag parsing):
+
+- `broker --passthrough` and `run --broker-passthrough` hand the slice to the egress proxy;
+  `broker` prints it only after it listens, so no terminating Go run shows it. The values
+  are covered by the shared `go_csv_record` corpus and the usage errors, not by a recorded
+  broker run.
+- The text `Watching <dir> (interval X, debounce Y). Ctrl-C to stop.` of the always-on
+  `intake watch` for unusual literals needs a signal-ended run (IO-003's contract covers
+  `--interval 1h`; `--once` with zero/negative values is covered there and here).
+- A timeout of roughly a microsecond to a millisecond races Go's process start against the
+  deadline (`run --timeout 1us` printed `command timed out after 1µs` in one run and the
+  expired-context error in another), so it is not recorded; Rust uses Go's rule (deadline
+  already past before the start), which makes the outcome equally timing-dependent there.
+- `unlock --ttl` only shows the effective TTL on a persistent session cache; the sandbox
+  keeps the cache in memory (`CI=1`), so the recorded runs prove acceptance, not the value.
+  `dynamic generate --ttl` is accepted and ignored: the pinned oracle registers no engine.
+- Deliberate deviation: a source that grows past `--max-size` between the stat and the
+  read is refused by Rust (bounded read) where Go would store it.
 
 ### Review correction: NoArgs versus legacyArgs and bare dash
 

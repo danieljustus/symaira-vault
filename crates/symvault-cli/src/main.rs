@@ -187,7 +187,7 @@ enum Command {
         passthrough: Vec<String>,
         #[arg(short = 'C', long)]
         working_dir: Option<PathBuf>,
-        #[arg(short = 't', long)]
+        #[arg(short = 't', long, allow_hyphen_values = true)]
         timeout: Option<String>,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
             default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "broker")]
@@ -195,7 +195,7 @@ enum Command {
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
             default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "broker_strict")]
         broker_strict: bool,
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         broker_passthrough: Vec<String>,
         #[arg(required = true, num_args = 1..)]
         command: Vec<String>,
@@ -208,7 +208,7 @@ enum Command {
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
             default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "strict")]
         strict: bool,
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         passthrough: Vec<String>,
         #[arg(hide = true)]
         _args: Vec<String>,
@@ -362,11 +362,11 @@ enum Command {
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "strict")]
         strict: bool,
         /// Only run checks matching these glob patterns (comma-separated, e.g. vault.*)
-        #[arg(long, value_delimiter = ',')]
-        only: Option<Vec<String>>,
+        #[arg(long, allow_hyphen_values = true)]
+        only: Vec<String>,
         /// Skip checks matching these glob patterns (comma-separated)
-        #[arg(long, value_delimiter = ',')]
-        exclude: Option<Vec<String>>,
+        #[arg(long, allow_hyphen_values = true)]
+        exclude: Vec<String>,
         /// Auto-repair safe issues (permissions, gitignore, git init)
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "fix")]
         fix: bool,
@@ -615,7 +615,7 @@ enum Command {
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "check")]
         check: bool,
         /// Session duration override (for example, 30m or 1h).
-        #[arg(long, value_name = "DURATION")]
+        #[arg(long, value_name = "DURATION", allow_hyphen_values = true)]
         ttl: Option<String>,
         #[command(flatten)]
         _ignored: IgnoredPositionals,
@@ -960,12 +960,7 @@ enum AgentTokenCommand {
     },
     New {
         name: String,
-        #[arg(
-            long,
-            use_value_delimiter = true,
-            value_delimiter = ',',
-            default_value = "*"
-        )]
+        #[arg(long, allow_hyphen_values = true)]
         tools: Vec<String>,
         #[arg(long, default_value = "")]
         ttl: String,
@@ -978,12 +973,7 @@ enum AgentTokenCommand {
     },
     Rotate {
         name: String,
-        #[arg(
-            long,
-            use_value_delimiter = true,
-            value_delimiter = ',',
-            default_value = "*"
-        )]
+        #[arg(long, allow_hyphen_values = true)]
         tools: Vec<String>,
         #[arg(long, default_value = "")]
         ttl: String,
@@ -1090,17 +1080,28 @@ enum RecipientsCommand {
 #[derive(Debug, Subcommand)]
 enum FileCommand {
     /// Attach a source file to an entry field.
+    ///
+    /// Go checks `--field` and `--from` in the command body and reads the source
+    /// before it opens the vault, so neither is a clap-required argument; pflag takes
+    /// the next word as a value even when it starts with `-` and keeps the last of
+    /// repeated flags. `--max-size` is an `int64` (`ParseInt(s, 0, 64)`).
+    #[command(args_override_self = true)]
     Add {
         #[arg(value_name = "PATH")]
         path: String,
-        #[arg(long)]
+        #[arg(long, default_value = "", allow_hyphen_values = true)]
         field: String,
-        #[arg(long = "from")]
-        source: PathBuf,
-        #[arg(long = "type", default_value = "certificate")]
+        #[arg(long = "from", default_value = "", allow_hyphen_values = true)]
+        source: String,
+        #[arg(
+            long = "type",
+            default_value = "certificate",
+            allow_hyphen_values = true
+        )]
         secret_type: String,
-        #[arg(long, default_value_t = file_commands::DEFAULT_MAX_ATTACHMENT_SIZE)]
-        max_size: u64,
+        #[arg(long, default_value_t = file_commands::DEFAULT_MAX_ATTACHMENT_SIZE,
+            allow_hyphen_values = true, value_parser = cobra_usage::parse_go_int)]
+        max_size: i64,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "shred")]
         shred: bool,
     },
@@ -1114,6 +1115,7 @@ enum FileCommand {
         out: Option<PathBuf>,
     },
     /// Run a command with an attachment materialized to a private temporary file.
+    #[command(args_override_self = true)]
     Use {
         #[arg(value_name = "PATH[#FIELD]")]
         query: String,
@@ -1121,7 +1123,7 @@ enum FileCommand {
         field: Option<String>,
         #[arg(long = "as")]
         as_name: Option<String>,
-        #[arg(short, long)]
+        #[arg(short, long, allow_hyphen_values = true)]
         timeout: Option<String>,
         #[arg(required = true, num_args = 1..)]
         command: Vec<String>,
@@ -1648,8 +1650,8 @@ fn run_cli() -> ExitCode {
             cli._profile.as_deref(),
             no_network,
             strict,
-            only,
-            exclude,
+            cobra_usage::string_slice_flag(&only, &[]),
+            cobra_usage::string_slice_flag(&exclude, &[]),
             fix,
             fix_dry_run,
             quick,
@@ -1823,7 +1825,7 @@ fn run_cli() -> ExitCode {
                         &store,
                         &identity,
                         broker_strict,
-                        &broker_passthrough,
+                        &cobra_usage::string_slice_flag(&broker_passthrough, &[]),
                         execute,
                     )?
                 } else {
@@ -1866,7 +1868,14 @@ fn run_cli() -> ExitCode {
                 let identity = device::unlock_vault(&root)?;
                 let store = symvault_store::Store::open_with_legacy_migration(&root, &identity)
                     .map_err(|error| error.to_string())?;
-                broker_commands::run(&root, &store, &identity, &addr, strict, &passthrough)
+                broker_commands::run(
+                    &root,
+                    &store,
+                    &identity,
+                    &addr,
+                    strict,
+                    &cobra_usage::string_slice_flag(&passthrough, &[]),
+                )
             })();
             if let Err(error) = &result
                 && !is_not_initialized(error)
@@ -2093,7 +2102,7 @@ fn run_cli() -> ExitCode {
                 agent_token_commands::new(
                     &vault,
                     &name,
-                    tools,
+                    cobra_usage::string_slice_flag(&tools, &["*"]),
                     &ttl,
                     &label,
                     cli.quiet,
@@ -2147,7 +2156,7 @@ fn run_cli() -> ExitCode {
                 agent_token_commands::rotate(
                     &vault,
                     &name,
-                    tools,
+                    cobra_usage::string_slice_flag(&tools, &["*"]),
                     &ttl,
                     &label,
                     cli.quiet,
@@ -2996,8 +3005,8 @@ fn run_doctor(
     profile: Option<&str>,
     no_network: bool,
     strict: bool,
-    only: Option<Vec<String>>,
-    exclude: Option<Vec<String>>,
+    only: Vec<String>,
+    exclude: Vec<String>,
     fix: bool,
     fix_dry_run: bool,
     quick: bool,
@@ -3011,8 +3020,8 @@ fn run_doctor(
         no_network,
         quick,
         quiet,
-        only: only.unwrap_or_default(),
-        exclude: exclude.unwrap_or_default(),
+        only,
+        exclude,
     };
 
     let mut results = doctor_commands::run_checks(&vault_dir, &opts);
@@ -3541,6 +3550,19 @@ fn run_file(
     quiet: bool,
 ) -> ExitCode {
     let result = (|| {
+        // Go validates and reads the source of `file add` before it resolves the vault.
+        let source_file = match &command {
+            FileCommand::Add {
+                field,
+                source,
+                max_size,
+                ..
+            } => Some(
+                file_commands::read_source(field, Path::new(source), *max_size)
+                    .map_err(|(code, message)| reported(code, &message, None))?,
+            ),
+            _ => None,
+        };
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
@@ -3550,20 +3572,21 @@ fn run_file(
                 field,
                 source,
                 secret_type,
-                max_size,
                 shred,
+                ..
             } => {
+                let source_file = source_file.ok_or("file add lost its source")?;
                 let result = file_commands::add(
                     &vault,
                     &identity,
                     &file_commands::AddOptions {
                         path,
                         field,
-                        source,
+                        source: PathBuf::from(source),
                         secret_type,
-                        max_size,
                         shred,
                     },
+                    source_file,
                 )?;
                 if !quiet {
                     println!(
@@ -5869,7 +5892,8 @@ fn reported(code: u8, message: &str, hint: Option<&str>) -> String {
 /// recorded attachment needs `--field` (invalid input, 9). A child that outlives
 /// `--timeout` is a plain error (1), printed the same way.
 fn report_file_error(error: String) -> String {
-    if error.starts_with("command timed out after ") {
+    if error.starts_with("command timed out after ") || error.starts_with("failed to run command: ")
+    {
         return reported(1, &error, None);
     }
     if error.starts_with("entry has no recorded attachment fields")
