@@ -488,6 +488,19 @@ approval-tls-fixtures-check:
 approval-e2e:
 	$(CARGO) test -p symvault-cli --test approval_e2e --locked
 
+# APPROVAL-001 device-token /api/v1/approvals endpoint. deviceapprovalgen records
+# the real Go HTTPHandler + DeviceSessionStore behind Go's ServeMux; the replay
+# drives the Rust MCP HTTP server with the same scenarios and needs no Go.
+.PHONY: device-approval-fixtures-generate device-approval-fixtures-check device-approval-replay
+device-approval-fixtures-generate:
+	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/deviceapprovalgen
+
+device-approval-fixtures-check:
+	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/deviceapprovalgen --check
+
+device-approval-replay:
+	$(CARGO) test -p symvault-mcp --test device_approvals_replay --locked
+
 .PHONY: device-list-differential
 DEVICE_LIST_REPORT ?= $(CARGO_TARGET_DIR)/device-list-differential-$(shell date -u +%Y%m%dT%H%M%SZ).json
 device-list-differential:
@@ -1115,10 +1128,12 @@ AREA_KDF_MIGRATION_TESTS := 10
 # passing test, early return, once the Go copy is deleted), 339 at the
 # local/integ2 merge (MCP audit ids, policy BuildContext, OAuth expiry, HTTP
 # drain and token-registry overlay tests), 346 at fc806ff4 (approval proof window,
-# scope boundary, sharing corpus and clipboard auto-clear replays); the
+# scope boundary, sharing corpus and clipboard auto-clear replays), 354 on
+# local/device-approvals (device-token approvals replay: 4 tests, plus 4 unit
+# tests in approval.rs); the
 # gate asserts the real count, so a shrunken run still fails. Raise it together
 # with the new tests (and the workflows' constant when they run again).
-AREA_MCP_TEST_COUNT := 346
+AREA_MCP_TEST_COUNT := 354
 
 .PHONY: area-oracle-runner
 area-oracle-runner:

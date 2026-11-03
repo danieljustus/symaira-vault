@@ -1,0 +1,2006 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "8d2e5e156cd95f04e608182ab8179fdd49f1884a",
+    "release": "unreleased",
+    "source_files": [
+      {
+        "path": "cmd/mcp/serve_deps.go",
+        "sha256": "8094121d8b381efcc7a3e02fd41fdc87e86e5444e57a2bbee8f3b7763b24aca0"
+      },
+      {
+        "path": "internal/approval/http.go",
+        "sha256": "1f6af0d06afd3fedcd20a1f11f44e8caacd900959ac6b534f36441a1123a2e52"
+      },
+      {
+        "path": "internal/approval/queue.go",
+        "sha256": "d1424666ff2382abdfe56698edee13811d95940ada4a5267bc9f8c1276fd907e"
+      },
+      {
+        "path": "internal/mcp/auth/token.go",
+        "sha256": "d67e8cd1e97145ee5af13e1fcb556a810aca2291968de67670e830d61bb4fffc"
+      },
+      {
+        "path": "internal/mcp/serverbootstrap/http.go",
+        "sha256": "ff83f7c73d3caa9c7dcabba4a8878f9f2a083a96cc7665caac67bd9d4d001891"
+      },
+      {
+        "path": "internal/pairing/devicesession.go",
+        "sha256": "03dd939147e9710cf332744f4b5a2658208912422c44666a864ba1a8c1b3ae0c"
+      }
+    ],
+    "source_digest": "79d0307ea78ee1268163236ef54f8eb821c81ff91150357f486793b759186ea1",
+    "generator_files": [
+      "scripts/rust-port/cmd/deviceapprovalgen/main.go"
+    ],
+    "generator_digest": "6aa4360a939ce208a05b1ed1707b84bca07431afef47f969f0e97a6cf099e379"
+  },
+  "mounting": [
+    "cmd/mcp/serve_deps.go: approvalHandler := approval.NewHTTPHandler(ApprovalQueue, sessionStore)",
+    "cmd/mcp/serve_deps.go: serverbootstrap.WithApprovalAPI(approvalHandler)",
+    "internal/mcp/serverbootstrap/http.go: mux.Handle(approval.PathApprovals, approvalChain)",
+    "internal/mcp/serverbootstrap/http.go: mux.Handle(approval.PathApprovalAction, approvalChain)"
+  ],
+  "canonical": {
+    "created_at": "2026-01-02T03:04:05.123456789Z",
+    "decided_at": "2026-01-02T03:04:07.25Z (the undecided zero time 0001-01-01T00:00:00Z is kept)",
+    "expires_at": "2026-01-02T03:09:05.123456789Z",
+    "queue_ids": "request ids are replaced by apr-a0000000000N (N = 1-based enqueue order); apr-ffffffffffff is a literal unknown id; Go draws 6 random bytes",
+    "tokens": "device bearer tokens are the placeholder {token:<device name>}; Go draws 20 random bytes per enrolment"
+  },
+  "scope": {
+    "decision_order": "listing order is newest first by creation instant; requests are enqueued in order with at least 5 ms between them",
+    "expiry_cases": "request expiry uses a 150 ms lifetime and a 450 ms settle pause; the recorded outcome (409 already expired / absent from the list) is not timing dependent beyond that margin",
+    "mounting": "the Go server mounts the handler on both patterns of an http.ServeMux when the approval handler option is given; the generator rebuilds that mux and pins the mounting source lines (mounting)",
+    "not_recorded": "HEAD requests, request bodies above the server limit and TLS/mTLS (transport layers owned by HTTP-001..004 fixtures)",
+    "rate_limit": "serverbootstrap wraps the chain in auth.RateLimiterMiddleware (default 60 requests/minute/IP); the Rust server has no rate limiter on any route, so no throttling case is recorded",
+    "store_cleanup": "Go also runs DeviceSessionStore.StartCleanup every 15 minutes; Validate rejects expired sessions regardless, so only the expiry itself is recorded",
+    "transport": "raw HTTP/1.1 over a loopback TCP listener serving the Go http.ServeMux; only Content-Type, X-Content-Type-Options and Location response headers are contract, Date/Content-Length/Connection are HTTP-library artefacts"
+  },
+  "counts": {
+    "cases": 22,
+    "requests": 88
+  },
+  "cases": [
+    {
+      "id": "list_empty",
+      "description": "empty queue lists {\"requests\":[]}",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": null,
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "list_nonempty_newest_first",
+      "description": "pending requests newest first, Go HTML escaping, undecided decided_at is the zero time",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        },
+        {
+          "key": "b",
+          "agent_name": "agent-b",
+          "path": "notes/b <draft>.md",
+          "write": false,
+          "reason": "needs \"review\" & <care>"
+        },
+        {
+          "key": "c",
+          "agent_name": "agent-c",
+          "path": "notes/c.md",
+          "write": false,
+          "reason": "third"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-c\",\"path\":\"notes/c.md\",\"write\":false,\"reason\":\"third\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000003\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-b\",\"path\":\"notes/b \\u003cdraft\\u003e.md\",\"write\":false,\"reason\":\"needs \\\"review\\\" \\u0026 \\u003ccare\\u003e\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000002\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "list_query_string_ignored",
+      "description": "r.URL.Path excludes the query",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals?x=1&y=2",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "list_excludes_decided_and_expired",
+      "description": "approved and expired requests leave the pending list",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        },
+        {
+          "key": "b",
+          "agent_name": "agent-b",
+          "path": "notes/b <draft>.md",
+          "write": false,
+          "reason": "needs \"review\" & <care>"
+        },
+        {
+          "key": "e",
+          "agent_name": "agent-e",
+          "path": "notes/e.md",
+          "write": false,
+          "reason": "short lived",
+          "ttl_ms": 150
+        }
+      ],
+      "settle_ms": 450,
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000001\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-phone\"}}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-b\",\"path\":\"notes/b \\u003cdraft\\u003e.md\",\"write\":false,\"reason\":\"needs \\\"review\\\" \\u0026 \\u003ccare\\u003e\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000002\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "approve_records_device_id",
+      "description": "decided_by is the device id of the bearer, not its name; two devices",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        },
+        {
+          "name": "tablet",
+          "device_id": "dev-tablet",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        },
+        {
+          "key": "b",
+          "agent_name": "agent-b",
+          "path": "notes/b <draft>.md",
+          "write": false,
+          "reason": "needs \"review\" & <care>"
+        },
+        {
+          "key": "c",
+          "agent_name": "agent-c",
+          "path": "notes/c.md",
+          "write": false,
+          "reason": "third"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000001\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-phone\"}}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:b}/deny",
+            "authorization": "Bearer {token:tablet}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000002\",\"status\":\"denied\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-tablet\"}}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:tablet}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-c\",\"path\":\"notes/c.md\",\"write\":false,\"reason\":\"third\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000003\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "approve_trailing_slash",
+      "description": "one trailing slash after the action is trimmed",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        },
+        {
+          "key": "b",
+          "agent_name": "agent-b",
+          "path": "notes/b <draft>.md",
+          "write": false,
+          "reason": "needs \"review\" & <care>"
+        },
+        {
+          "key": "c",
+          "agent_name": "agent-c",
+          "path": "notes/c.md",
+          "write": false,
+          "reason": "third"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve/",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000001\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-phone\"}}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:b}/deny/",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000002\",\"status\":\"denied\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-phone\"}}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "decide_body_ignored",
+      "description": "no request body is read: malformed JSON (and any other body) does not change the decision",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        },
+        {
+          "key": "b",
+          "agent_name": "agent-b",
+          "path": "notes/b <draft>.md",
+          "write": false,
+          "reason": "needs \"review\" & <care>"
+        },
+        {
+          "key": "c",
+          "agent_name": "agent-c",
+          "path": "notes/c.md",
+          "write": false,
+          "reason": "third"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer {token:phone}",
+            "body": "{not json"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000001\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-phone\"}}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:b}/deny",
+            "authorization": "Bearer {token:phone}",
+            "body": "{\"status\":\"approved\",\"decided_by\":\"attacker\"}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000002\",\"status\":\"denied\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-phone\"}}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "decide_repeat_conflicts",
+      "description": "a decided request cannot be decided again; the conflict names the first decision",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        },
+        {
+          "key": "b",
+          "agent_name": "agent-b",
+          "path": "notes/b <draft>.md",
+          "write": false,
+          "reason": "needs \"review\" & <care>"
+        },
+        {
+          "key": "c",
+          "agent_name": "agent-c",
+          "path": "notes/c.md",
+          "write": false,
+          "reason": "third"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000001\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-phone\"}}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 409,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"approval request apr-a00000000001 already approved\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/deny",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 409,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"approval request apr-a00000000001 already approved\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:b}/deny",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000002\",\"status\":\"denied\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-phone\"}}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:b}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 409,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"approval request apr-a00000000002 already denied\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-c\",\"path\":\"notes/c.md\",\"write\":false,\"reason\":\"third\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000003\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "decide_expired_conflicts",
+      "description": "an expired request is not decidable",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "e",
+          "agent_name": "agent-e",
+          "path": "notes/e.md",
+          "write": false,
+          "reason": "short lived",
+          "ttl_ms": 150
+        }
+      ],
+      "settle_ms": 450,
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:e}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 409,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"approval request apr-a00000000001 already expired\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:e}/deny",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 409,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"approval request apr-a00000000001 already expired\"}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "decide_unknown_id",
+      "description": "unknown id is 404 for approve and deny; nested ids are not special",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/apr-ffffffffffff/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"approval request not found\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/apr-ffffffffffff/deny",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"approval request not found\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/a/b/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"approval request not found\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/x/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"approval request not found\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "decide_percent_encoded_id",
+      "description": "the handler sees the decoded path",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/%61{idtail:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000001\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-phone\"}}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "decide_missing_id",
+      "description": "an authenticated POST to the bare subtree root has no id",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing approval request id\"}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "decide_unknown_action",
+      "description": "an id without /approve or /deny suffix is an unknown action",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unknown approval action\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/reject",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unknown approval action\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approved",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unknown approval action\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unknown approval action\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/deny/",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unknown approval action\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "auth_missing_or_malformed_bearer",
+      "description": "401 for every Authorization value that is not exactly \"Bearer <token>\", list and decide",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": ""
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": ""
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer "
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer "
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "bearer {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "BEARER {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Basic {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Token {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "{token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer  {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone} extra"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "{token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "auth_header_name_case_insensitive",
+      "description": "header names are case-insensitive",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "auth_header_name": "authorization",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "auth_unknown_token",
+      "description": "a token no device holds, including other bearer shapes (MCP legacy/scoped tokens are not device tokens)",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer not-a-device-token"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer not-a-device-token"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer symvault_mcp_legacy_0123456789abcdef"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "auth_revoked_before_start",
+      "description": "a device revoked before the server loads its store is rejected; the other device still works",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "revoked"
+        },
+        {
+          "name": "tablet",
+          "device_id": "dev-tablet",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:tablet}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "auth_expired_before_start",
+      "description": "a session whose expires_at has passed is rejected",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "expired"
+        },
+        {
+          "name": "tablet",
+          "device_id": "dev-tablet",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:tablet}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "auth_revoked_while_running",
+      "description": "a revocation written by another store instance (the approval-revoke CLI) takes effect on the running server",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        },
+        {
+          "name": "tablet",
+          "device_id": "dev-tablet",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        },
+        {
+          "key": "b",
+          "agent_name": "agent-b",
+          "path": "notes/b <draft>.md",
+          "write": false,
+          "reason": "needs \"review\" & <care>"
+        },
+        {
+          "key": "c",
+          "agent_name": "agent-c",
+          "path": "notes/c.md",
+          "write": false,
+          "reason": "third"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-c\",\"path\":\"notes/c.md\",\"write\":false,\"reason\":\"third\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000003\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-b\",\"path\":\"notes/b \\u003cdraft\\u003e.md\",\"write\":false,\"reason\":\"needs \\\"review\\\" \\u0026 \\u003ccare\\u003e\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000002\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"},{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000001\",\"status\":\"approved\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-phone\"}}\n"
+          }
+        },
+        {
+          "action": "revoke_external",
+          "device": "phone"
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:b}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:b}/deny",
+            "authorization": "Bearer {token:tablet}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"outcome\":{\"id\":\"apr-a00000000002\",\"status\":\"denied\",\"decided_at\":\"2026-01-02T03:04:07.25Z\",\"decided_by\":\"dev-tablet\"}}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:tablet}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-c\",\"path\":\"notes/c.md\",\"write\":false,\"reason\":\"third\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000003\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "auth_precedes_route_errors",
+      "description": "an unauthenticated decide is 401 before the 400/404/409 route errors and never decides",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/",
+            "authorization": ""
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}",
+            "authorization": "Bearer wrong"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/apr-ffffffffffff/approve",
+            "authorization": "Bearer wrong"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer wrong"
+          },
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "method_and_path_not_found",
+      "description": "only GET on the list path and POST below the subtree root are served; everything else is the mux 404 before authentication",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals",
+            "authorization": ""
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "PUT",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "DELETE",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals/",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": ""
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "PUT",
+            "path": "/api/v1/approvals/{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "DELETE",
+            "path": "/api/v1/approvals/{id:a}/deny",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "PATCH",
+            "path": "/api/v1/approvals/{id:a}/deny",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvalsx",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approval",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvalsx/{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    },
+    {
+      "id": "path_cleaning_redirects",
+      "description": "ServeMux redirects an unclean path to its clean form before the handler runs",
+      "devices": [
+        {
+          "name": "phone",
+          "device_id": "dev-phone",
+          "state": "active"
+        }
+      ],
+      "queue": [
+        {
+          "key": "a",
+          "agent_name": "agent-a",
+          "path": "notes/a.md",
+          "write": true,
+          "reason": "approve me"
+        }
+      ],
+      "steps": [
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/approvals//{id:a}/approve",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 307,
+            "headers": {
+              "Location": "/api/v1/approvals/apr-a00000000001/approve"
+            },
+            "body": ""
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals/../approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 307,
+            "headers": {
+              "Content-Type": "text/html; charset=utf-8",
+              "Location": "/api/v1/approvals"
+            },
+            "body": "<a href=\"/api/v1/approvals\">Temporary Redirect</a>.\n\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1//approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 307,
+            "headers": {
+              "Content-Type": "text/html; charset=utf-8",
+              "Location": "/api/v1/approvals"
+            },
+            "body": "<a href=\"/api/v1/approvals\">Temporary Redirect</a>.\n\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals",
+            "authorization": "Bearer {token:phone}"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"requests\":[{\"agent_name\":\"agent-a\",\"path\":\"notes/a.md\",\"write\":true,\"reason\":\"approve me\",\"created_at\":\"2026-01-02T03:04:05.123456789Z\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"id\":\"apr-a00000000001\",\"status\":\"pending\",\"decided_at\":\"0001-01-01T00:00:00Z\"}]}\n"
+          }
+        }
+      ]
+    }
+  ]
+}

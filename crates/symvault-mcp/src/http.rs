@@ -8,7 +8,7 @@ mod envelope;
 pub(crate) mod shutdown;
 pub use shutdown::HttpShutdown;
 
-use crate::approval::{ApprovalQueue, handle_local_request};
+use crate::approval::{ApprovalQueue, handle_device_request, handle_local_request};
 use crate::{Error, Message, ProtocolHandler, error_code, is_supported_protocol_version};
 use rustls::{
     RootCertStore, ServerConfig, ServerConnection, StreamOwned,
@@ -421,6 +421,7 @@ pub enum OAuthConsentDecision {
 pub struct LocalApprovalApi {
     queue: Arc<ApprovalQueue>,
     secret: Vec<u8>,
+    device_sessions: Option<Arc<symvault_sync::DeviceSessionStore>>,
     active_mcp_requests: Arc<AtomicUsize>,
 }
 
@@ -429,8 +430,21 @@ impl LocalApprovalApi {
         Self {
             queue,
             secret,
+            device_sessions: None,
             active_mcp_requests: Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    /// Mounts Go's device-token approval transport (`/api/v1/approvals`)
+    /// beside the loopback CLI API, validating bearers against `sessions`.
+    /// Go always mounts both; without a store the route stays unmounted (404).
+    #[must_use]
+    pub fn with_device_sessions(
+        mut self,
+        sessions: Arc<symvault_sync::DeviceSessionStore>,
+    ) -> Self {
+        self.device_sessions = Some(sessions);
+        self
     }
 
     fn try_acquire_mcp_request(&self) -> Option<ActiveMcpRequest> {
@@ -1392,6 +1406,29 @@ where
             &request.path,
             &request.enroll_timestamp,
             &request.enroll_proof,
+        )
+    {
+        write_http_response(
+            stream,
+            HttpResponse {
+                status: approval_response.status,
+                headers: vec![("Content-Type", approval_response.content_type)],
+                body: approval_response.body,
+            },
+            response_version,
+            keep_alive,
+            false,
+        )?;
+        return Ok(keep_alive);
+    }
+    if let Some(local_approval) = local_approval
+        && let Some(sessions) = local_approval.device_sessions.as_deref()
+        && let Some(approval_response) = handle_device_request(
+            &local_approval.queue,
+            sessions,
+            &request.method,
+            &request.path,
+            &request.authorization,
         )
     {
         write_http_response(

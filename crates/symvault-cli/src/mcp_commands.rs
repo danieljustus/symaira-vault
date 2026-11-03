@@ -251,6 +251,10 @@ pub fn run(
         // Go opens the approval-device store before serving; this creates the
         // private empty store on first start.
         ensure_device_session_store(root).map_err(|error| format!("MCP HTTP: {error}"))?;
+        let device_sessions = Arc::new(
+            symvault_sync::DeviceSessionStore::new(Some(root))
+                .map_err(|error| format!("MCP HTTP: load device session store: {error}"))?,
+        );
         if tls.is_none() {
             let loopback_note = if address.is_loopback() {
                 " Even on loopback, a local attacker or compromised process on the same machine can sniff traffic."
@@ -361,7 +365,8 @@ pub fn run(
             consent,
             verify_passphrase,
             tls,
-            symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
+            symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret)
+                .with_device_sessions(device_sessions),
             http_options,
             drain,
         );
