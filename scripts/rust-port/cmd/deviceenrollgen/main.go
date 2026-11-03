@@ -218,7 +218,9 @@ func redeemCode(k int, name string) step {
 
 func redeemBad() step { return redeemBody(`{"code":"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"}`) }
 
-func bearer(k int) map[string]string { return map[string]string{"Authorization": fmt.Sprintf("Bearer {token:%d}", k)} }
+func bearer(k int) map[string]string {
+	return map[string]string{"Authorization": fmt.Sprintf("Bearer {token:%d}", k)}
+}
 
 func repeat(n int, s step) []step {
 	out := make([]step, n)
@@ -290,7 +292,7 @@ func cases() []caseRecord {
 			mintWith(proofHeaders("far", 0)),
 		}})
 	var forms []step
-	for _, f := range []string{"utc", "plus2", "minus0530", "plus00", "frac", "frac9", "comma", "lower_t", "lower_z", "space_sep", "no_colon", "lead_space", "trail_space", "frac12", "frac_dot", "no_zone", "feb30", "hour24", "leap60", "plus2400", "minus2400", "plus2500", "plus0060", "plus0061", "plus0160", "single_digit"} {
+	for _, f := range []string{"utc", "plus2", "minus0530", "plus00", "frac", "frac9", "comma", "lower_t", "lower_z", "space_sep", "no_colon", "lead_space", "trail_space", "frac12", "frac_dot", "no_zone", "feb30", "hour24", "leap60", "plus2400", "minus2400", "plus2500", "plus0060", "plus0061", "plus0160", "single_digit", "hour1"} {
 		forms = append(forms, mintWith(proofHeaders(f, 0)))
 	}
 	add(caseRecord{ID: "mint_timestamp_forms", Description: "which spellings of the timestamp header Go's time.Parse(RFC3339) accepts; the proof is always over the UTC second",
@@ -900,7 +902,7 @@ func tsForm(form string, t time.Time) string {
 	case "plus2":
 		return t.In(time.FixedZone("", 7200)).Format(time.RFC3339)
 	case "minus0530":
-		return t.In(time.FixedZone("", -(5*3600+30*60))).Format(time.RFC3339)
+		return t.In(time.FixedZone("", -(5*3600 + 30*60))).Format(time.RFC3339)
 	case "plus00":
 		return t.Format(layout) + "+00:00"
 	case "frac":
@@ -945,6 +947,16 @@ func tsForm(form string, t time.Time) string {
 		return t.Add(time.Hour+time.Minute).Format(layout) + "+00:61"
 	case "plus0160":
 		return t.Add(2*time.Hour).Format(layout) + "+01:60"
+	case "hour1":
+		// A zone chosen so the written wall clock has a one-digit hour
+		// (Go's "15" takes one or two digits).
+		shift := 5 - t.Hour()
+		sign, magnitude := "+", shift
+		if shift < 0 {
+			sign, magnitude = "-", -shift
+		}
+		local := t.Add(time.Duration(shift) * time.Hour)
+		return fmt.Sprintf("%d-%02d-%02dT%d:%02d:%02d%s%02d:00", local.Year(), int(local.Month()), local.Day(), local.Hour(), local.Minute(), local.Second(), sign, magnitude)
 	case "single_digit":
 		return fmt.Sprintf("%d-%d-%dT%d:%d:%dZ", t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), t.Second())
 	case "epoch":
@@ -1119,7 +1131,6 @@ func (w *world) send(r requestRecord) (*responseRecord, error) {
 	// A redirect's Location may carry a query string; it is part of the contract.
 	return &responseRecord{Status: resp.StatusCode, Headers: headers, Body: canonicalBody}, nil
 }
-
 
 // compactName records a long run of "a" as its {pad:N} placeholder so the
 // fixture does not carry the padding.

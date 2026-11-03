@@ -450,7 +450,10 @@ pub(crate) fn verify_proof(secret: &[u8], timestamp_header: &str, proof_header: 
     if secret.is_empty() || proof_header.len() != 64 {
         return false;
     }
-    let Some(parsed) = parse_go_rfc3339(timestamp_header) else {
+    // `time.Parse(time.RFC3339, …)`, the port the token registry already uses.
+    let Some(parsed) = symvault_store::go_registry::parse_go_rfc3339(timestamp_header)
+        .map(|parsed| parsed.to_offset(time::UtcOffset::UTC))
+    else {
         return false;
     };
     if (OffsetDateTime::now_utc() - parsed).unsigned_abs() > PROOF_WINDOW {
@@ -473,72 +476,6 @@ pub(crate) fn verify_proof(secret: &[u8], timestamp_header: &str, proof_header: 
     };
     mac.update(signed.as_bytes());
     mac.verify_slice(&proof).is_ok()
-}
-
-/// The grammar `time.Parse(time.RFC3339, value)` accepts, as the instant in
-/// UTC: `YYYY-MM-DDTHH:MM:SS`, an optional `.`/`,` fraction (digits past the
-/// ninth are dropped), then `Z` or `±HH:MM`. Upper-case `T`/`Z` only, no
-/// surrounding text, hour 0–23, minute and second 0–59, a real calendar day;
-/// the zone hour may reach 24 and the zone minute 60, as in Go.
-pub(crate) fn parse_go_rfc3339(value: &str) -> Option<OffsetDateTime> {
-    let bytes = value.as_bytes();
-    let digits = |from: usize, len: usize| -> Option<u32> {
-        let part = bytes.get(from..from + len)?;
-        part.iter().all(u8::is_ascii_digit).then(|| {
-            part.iter()
-                .fold(0, |acc, byte| acc * 10 + u32::from(byte - b'0'))
-        })
-    };
-    if bytes.get(4) != Some(&b'-')
-        || bytes.get(7) != Some(&b'-')
-        || bytes.get(10) != Some(&b'T')
-        || bytes.get(13) != Some(&b':')
-        || bytes.get(16) != Some(&b':')
-    {
-        return None;
-    }
-    let year = i32::try_from(digits(0, 4)?).ok()?;
-    let month = time::Month::try_from(u8::try_from(digits(5, 2)?).ok()?).ok()?;
-    let day = u8::try_from(digits(8, 2)?).ok()?;
-    let hour = u8::try_from(digits(11, 2)?).ok()?;
-    let minute = u8::try_from(digits(14, 2)?).ok()?;
-    let second = u8::try_from(digits(17, 2)?).ok()?;
-    let mut rest = &bytes[19..];
-    let mut nanosecond = 0_u32;
-    if matches!(rest.first(), Some(b'.' | b',')) && rest.get(1).is_some_and(u8::is_ascii_digit) {
-        let length = rest[1..]
-            .iter()
-            .take_while(|byte| byte.is_ascii_digit())
-            .count();
-        let kept = &rest[1..1 + length.min(9)];
-        nanosecond = kept
-            .iter()
-            .fold(0, |acc, byte| acc * 10 + u32::from(byte - b'0'))
-            * 10_u32.pow(u32::try_from(9 - kept.len()).ok()?);
-        rest = &rest[1 + length..];
-    }
-    let offset_seconds = match rest {
-        [b'Z'] => 0_i64,
-        [sign @ (b'+' | b'-'), tail @ ..] if tail.len() == 5 && tail[2] == b':' => {
-            let pair = |index: usize| {
-                (tail[index].is_ascii_digit() && tail[index + 1].is_ascii_digit())
-                    .then(|| i64::from(tail[index] - b'0') * 10 + i64::from(tail[index + 1] - b'0'))
-            };
-            let (hours, minutes) = (pair(0)?, pair(3)?);
-            if hours > 24 || minutes > 60 {
-                return None;
-            }
-            let magnitude = (hours * 60 + minutes) * 60;
-            if *sign == b'-' { -magnitude } else { magnitude }
-        }
-        _ => return None,
-    };
-    let date = time::Date::from_calendar_date(year, month, day).ok()?;
-    let clock = time::Time::from_hms_nano(hour, minute, second, nanosecond).ok()?;
-    Some(
-        time::PrimitiveDateTime::new(date, clock).assume_utc()
-            - time::Duration::seconds(offset_seconds),
-    )
 }
 
 pub(crate) fn hex(bytes: &[u8]) -> String {
@@ -576,10 +513,12 @@ mod tests {
     const ZERO: &str = "0001-01-01T00:00:00Z";
 
     fn proof(secret: &[u8], at: OffsetDateTime) -> (String, String) {
-        let timestamp = timestamp(at).expect("timestamp");
+        // The header may carry a fraction; Go signs the whole-second UTC text.
+        let header = timestamp(at).expect("timestamp");
+        let whole = timestamp(at.replace_nanosecond(0).expect("whole second")).expect("timestamp");
         let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC key");
-        mac.update(timestamp.as_bytes());
-        (timestamp, hex(&mac.finalize().into_bytes()))
+        mac.update(whole.as_bytes());
+        (header, hex(&mac.finalize().into_bytes()))
     }
 
     #[test]

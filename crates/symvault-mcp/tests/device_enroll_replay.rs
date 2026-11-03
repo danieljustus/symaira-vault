@@ -31,9 +31,9 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const ORACLE_COMMIT: &str = "bfa4e2440bd8338f177bb739f469794948efa519";
 const SOURCE_DIGEST: &str = "95217929c171eb36b7886bd8e5891061ee6c92da64b88398a4cbf79b4131c89c";
-const GENERATOR_DIGEST: &str = "b9f26a928a7fa8c7afee0fc3bb7599e23fa14c22be5ec03cd425b627e41b7bfe";
+const GENERATOR_DIGEST: &str = "e207059733157a14d9acf077335b193095553f5d1435c2756bdbf0643e971d77";
 const EXPECTED_CASES: usize = 27;
-const EXPECTED_REQUESTS: usize = 265;
+const EXPECTED_REQUESTS: usize = 266;
 const CONTRACT_HEADERS: [&str; 3] = ["Content-Type", "X-Content-Type-Options", "Location"];
 
 const CANONICAL_EXPIRES: &str = "2026-01-02T03:09:05.123456789Z";
@@ -434,6 +434,21 @@ fn ts_form(form: &str, t: OffsetDateTime) -> String {
         "plus0060" => format!("{}+00:60", naive(at(3600))),
         "plus0061" => format!("{}+00:61", naive(at(3660))),
         "plus0160" => format!("{}+01:60", naive(at(7200))),
+        "hour1" => {
+            let shift = 5 - i64::from(t.hour());
+            let local = t + time::Duration::hours(shift);
+            format!(
+                "{}-{:02}-{:02}T{}:{:02}:{:02}{}{:02}:00",
+                local.year(),
+                u8::from(local.month()),
+                local.day(),
+                local.hour(),
+                local.minute(),
+                local.second(),
+                if shift < 0 { '-' } else { '+' },
+                shift.abs()
+            )
+        }
         "single_digit" => format!(
             "{}-{}-{}T{}:{}:{}Z",
             t.year(),
@@ -969,4 +984,48 @@ fn a_minted_code_enrols_once_over_the_wire() {
         .collect::<Vec<_>>();
     assert_eq!(attempts, [200, 401]);
     assert_eq!(sessions.list().expect("list").len(), 1);
+}
+
+#[test]
+fn a_body_that_is_not_utf8_is_refused_and_consumes_no_code() {
+    let dir = tempfile::tempdir().expect("vault directory");
+    let registry = write_registry(dir.path());
+    let sessions = Arc::new(DeviceSessionStore::new(Some(dir.path())).expect("store"));
+    let codes = Arc::new(PairingCodes::new());
+    let api = LocalApprovalApi::new(Arc::new(ApprovalQueue::default()), b"utf8-secret".to_vec())
+        .with_device_sessions(Arc::clone(&sessions))
+        .with_device_enrollment(Arc::clone(&codes), "fp");
+    let server = Server::start(api, &registry);
+    let code = codes.mint().expect("mint");
+
+    // Go decodes the invalid byte as U+FFFD and enrols; Rust refuses the
+    // request before routing (a declared, stricter difference).
+    let mut body = format!(r#"{{"code":"{code}","device_name":"x"#).into_bytes();
+    body.extend_from_slice(&[0xff, b'"', b'}']);
+    let mut stream = TcpStream::connect(server.address).expect("connect");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .expect("read timeout");
+    let head = format!(
+        "POST /api/v1/devices/enroll HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        server.address,
+        body.len()
+    );
+    stream.write_all(head.as_bytes()).expect("send head");
+    stream.write_all(&body).expect("send body");
+    let mut response = Vec::new();
+    let _ = stream.read_to_end(&mut response);
+    let text = String::from_utf8_lossy(&response);
+    assert!(
+        response.is_empty() || text.starts_with("HTTP/1.1 400"),
+        "refused: {text:?}"
+    );
+    assert!(sessions.list().expect("list").is_empty(), "nobody enrolled");
+
+    // The code survived: the well-formed request still redeems it.
+    let good = format!(r#"{{"code":"{code}"}}"#);
+    let reply = server
+        .send("POST", "/api/v1/devices/enroll", &[], &good)
+        .expect("reply");
+    assert_eq!(reply.status, 200, "{}", reply.body);
 }

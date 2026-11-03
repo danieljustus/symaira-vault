@@ -16,6 +16,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use symvault_core::config::Config;
 use symvault_mcp::approval::ApprovalQueue;
+use symvault_mcp::enroll::PairingCodes;
 use symvault_mcp::http::{
     HttpServerOptions, HttpShutdown, LocalApprovalApi, OAuthConsentDecision,
     serve_with_oauth_and_approval_options_until,
@@ -64,6 +65,9 @@ struct StackScenario {
     name: String,
     config_yaml: String,
     effective_config_rate_limit: i64,
+    /// Mounts the two device enrollment routes, as the Go recording did.
+    #[serde(default)]
+    enroll: bool,
     steps: Vec<StackStep>,
 }
 
@@ -159,6 +163,7 @@ fn fixture_is_bound_to_the_pinned_oracle() {
     assert_eq!(
         fixture.oracle.source_files,
         [
+            "internal/approval/enroll.go",
             "internal/approval/http.go",
             "internal/approval/local.go",
             "internal/config/config_merge.go",
@@ -167,11 +172,13 @@ fn fixture_is_bound_to_the_pinned_oracle() {
             "internal/mcp/serverbootstrap/http.go",
             "internal/mcp/serverbootstrap/http_setup.go",
             "internal/mcp/util.go",
+            "internal/pairing/devicesession.go",
+            "internal/pairing/token.go",
         ]
     );
     assert_eq!(
         fixture.oracle.source_digest,
-        "8e2e0b56eeba4d4be1600e2f241a04d20b30e5a38ef9388ff7a6d89003c54e6d"
+        "88368b5bfe63dde0716030e62bed3d12e147e3385ed32bcbd4e9a4d86156307c"
     );
     assert_eq!(
         fixture.oracle.generator_files,
@@ -179,11 +186,11 @@ fn fixture_is_bound_to_the_pinned_oracle() {
     );
     assert_eq!(
         fixture.oracle.generator_digest,
-        "f67be139aa99aba09d26f220b10adfcf6c5548d0d9d7216defcea28eacb6f40d"
+        "67ad01aff1ef13e7621cb754698f32e6942c04a452b2da4deec946d7259d0718"
     );
     assert_eq!(fixture.server_name, "symaira");
     assert_eq!(fixture.server_version, "1.0.0");
-    assert_eq!(fixture.stack_scenarios.len(), 9);
+    assert_eq!(fixture.stack_scenarios.len(), 10);
     assert_eq!(fixture.limiter_scenarios.len(), 33);
     assert_eq!(fixture.eviction_scenarios.len(), 3);
 }
@@ -351,6 +358,14 @@ fn start(scenario: &StackScenario, server_name: &str, server_version: &str) -> R
     let shutdown = HttpShutdown::default();
     let server_shutdown = shutdown.clone();
     let (name, version) = (server_name.to_owned(), server_version.to_owned());
+    let mut api = LocalApprovalApi::new(
+        Arc::new(ApprovalQueue::default()),
+        b"fixture-secret".to_vec(),
+    )
+    .with_device_sessions(sessions);
+    if scenario.enroll {
+        api = api.with_device_enrollment(Arc::new(PairingCodes::new()), "fixture-fingerprint");
+    }
     let thread = thread::spawn(move || {
         let template =
             ProtocolHandler::with_tool_call_runtime(name, version, Arc::new(FixtureRuntime));
@@ -362,11 +377,7 @@ fn start(scenario: &StackScenario, server_name: &str, server_version: &str) -> R
             |_client, _redirect| OAuthConsentDecision::Denied,
             |_passphrase| false,
             None,
-            LocalApprovalApi::new(
-                Arc::new(ApprovalQueue::default()),
-                b"fixture-secret".to_vec(),
-            )
-            .with_device_sessions(sessions),
+            api,
             options,
             Some(server_shutdown),
         )
@@ -486,5 +497,5 @@ fn stack_scenarios_match_go_over_the_real_accept_loop() {
             }
         }
     }
-    assert_eq!((served, refused), (364, 30), "stack requests replayed");
+    assert_eq!((served, refused), (514, 41), "stack requests replayed");
 }

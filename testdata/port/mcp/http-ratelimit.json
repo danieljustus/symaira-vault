@@ -4,6 +4,7 @@
     "commit": "b1da45d1332fdb118b702dedf4addfb28b890cdf",
     "commit_sha": "b1da45d1332fdb118b702dedf4addfb28b890cdf",
     "source_files": [
+      "internal/approval/enroll.go",
       "internal/approval/http.go",
       "internal/approval/local.go",
       "internal/config/config_merge.go",
@@ -11,13 +12,15 @@
       "internal/mcp/auth/auth.go",
       "internal/mcp/serverbootstrap/http.go",
       "internal/mcp/serverbootstrap/http_setup.go",
-      "internal/mcp/util.go"
+      "internal/mcp/util.go",
+      "internal/pairing/devicesession.go",
+      "internal/pairing/token.go"
     ],
-    "source_digest": "8e2e0b56eeba4d4be1600e2f241a04d20b30e5a38ef9388ff7a6d89003c54e6d",
+    "source_digest": "88368b5bfe63dde0716030e62bed3d12e147e3385ed32bcbd4e9a4d86156307c",
     "generator_files": [
       "scripts/rust-port/cmd/http002ratelimitgen/main.go"
     ],
-    "generator_digest": "f67be139aa99aba09d26f220b10adfcf6c5548d0d9d7216defcea28eacb6f40d"
+    "generator_digest": "67ad01aff1ef13e7621cb754698f32e6942c04a452b2da4deec946d7259d0718"
   },
   "server_name": "symaira",
   "server_version": "1.0.0",
@@ -685,9 +688,292 @@
       ]
     },
     {
+      "name": "limit_three_device_enroll_routes_share_the_bucket",
+      "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 3\n",
+      "effective_config_rate_limit": 3,
+      "enroll": true,
+      "steps": [
+        {
+          "note": "slot 1: the pairing-code mint without a proof is answered 401 by the handler, which still consumes a slot",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "66",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "note": "slot 2: a redemption without a code is answered 400 and shares the bucket",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Length": "33",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "note": "slot 3: a method the redemption handler does not route is its own 404 inside the limiter",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/devices/enroll"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Length": "19",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "note": "the redemption route is limited",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the mint route is limited",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "limiting does not look at the method of the mint route",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/devices/enroll-code"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a redemption with a query string is limited",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll?x=1",
+            "body": "{}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "/mcp shares the enrollment bucket",
+          "request": {
+            "method": "POST",
+            "path": "/mcp",
+            "headers": {
+              "Accept": "application/json, text/event-stream",
+              "Content-Type": "application/json",
+              "MCP-Protocol-Version": "2025-11-25",
+              "Origin": "http://127.0.0.1",
+              "X-Symaira-Agent": "default"
+            },
+            "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the local approval API shares the enrollment bucket",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/local/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the device approval API shares the enrollment bucket",
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/approvals"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the redemption route has no subtree: a trailing slash is the mux 404 and is not limited",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll/",
+            "body": "{}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Length": "19",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "note": "the mint route has no subtree either",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code/"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Length": "19",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "note": "a sibling prefix is no enrollment route and is not limited",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enrollx",
+            "body": "{}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 404,
+            "headers": {
+              "Content-Length": "19",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "404 page not found\n"
+          }
+        },
+        {
+          "note": "a path the mux cleans is redirected before the limiter",
+          "request": {
+            "method": "POST",
+            "path": "//api/v1/devices/enroll",
+            "body": "{}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 307,
+            "headers": {
+              "Content-Length": "0",
+              "Location": "/api/v1/devices/enroll"
+            }
+          }
+        },
+        {
+          "note": "health stays reachable",
+          "request": {
+            "method": "GET",
+            "path": "/health"
+          },
+          "repeat": 1,
+          "compare": "status",
+          "response": {
+            "status": 200
+          }
+        }
+      ]
+    },
+    {
       "name": "zero_disables_the_limiter",
       "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 0\n",
       "effective_config_rate_limit": 0,
+      "enroll": true,
       "steps": [
         {
           "note": "70 requests exceed the default of 60 yet none is limited",
@@ -747,6 +1033,41 @@
               "Content-Type": "application/json"
             },
             "body": "{\"error\":\"unauthorized: valid device token required\"}\n"
+          }
+        },
+        {
+          "note": "the device enrollment redemption is not limited either",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{}"
+          },
+          "repeat": 70,
+          "compare": "full",
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Length": "33",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "note": "the pairing-code mint is not limited either",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code"
+          },
+          "repeat": 70,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "66",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
           }
         }
       ]
@@ -929,6 +1250,7 @@
       "name": "trusted_proxy_keys_by_forwarded_for_then_real_ip",
       "config_yaml": "mcp:\n  allow_insecure_bind: true\n  rate_limit: 2\n  trusted_proxy_ips:\n    - \"127.0.0.1\"\n",
       "effective_config_rate_limit": 2,
+      "enroll": true,
       "steps": [
         {
           "note": "10.0.0.1 slot 1",
@@ -1471,6 +1793,128 @@
             "headers": {
               "X-Forwarded-For": "10.0.0.7"
             }
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the device enrollment redemption honours the same key: the socket address is exhausted",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "body": "{}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "the pairing-code mint honours the same key: the socket address is exhausted",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a redemption for the exhausted forwarded client is limited",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "headers": {
+              "X-Forwarded-For": "10.0.0.7"
+            },
+            "body": "{}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 429,
+            "headers": {
+              "Content-Length": "18",
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Content-Type-Options": "nosniff"
+            },
+            "body": "too many requests\n"
+          }
+        },
+        {
+          "note": "a redemption for a fresh forwarded client has its own bucket, slot 1",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "headers": {
+              "X-Forwarded-For": "10.0.0.8"
+            },
+            "body": "{}"
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 400,
+            "headers": {
+              "Content-Length": "33",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing pairing code\"}\n"
+          }
+        },
+        {
+          "note": "a mint for that forwarded client shares its bucket, slot 2",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Forwarded-For": "10.0.0.8"
+            }
+          },
+          "repeat": 1,
+          "compare": "full",
+          "response": {
+            "status": 401,
+            "headers": {
+              "Content-Length": "66",
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "note": "a redemption for that forwarded client is exhausted",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll",
+            "headers": {
+              "X-Forwarded-For": "10.0.0.8"
+            },
+            "body": "{}"
           },
           "repeat": 1,
           "compare": "full",

@@ -18,7 +18,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/deviceenrollgen/main.go"
     ],
-    "generator_digest": "b9f26a928a7fa8c7afee0fc3bb7599e23fa14c22be5ec03cd425b627e41b7bfe"
+    "generator_digest": "e207059733157a14d9acf077335b193095553f5d1435c2756bdbf0643e971d77"
   },
   "mounting": [
     "cmd/mcp/serve_deps.go: approvalHandler := approval.NewHTTPHandler(ApprovalQueue, sessionStore)",
@@ -61,7 +61,7 @@
   },
   "counts": {
     "cases": 27,
-    "requests": 265
+    "requests": 266
   },
   "cases": [
     {
@@ -1163,6 +1163,24 @@
               "Content-Type": "application/json"
             },
             "body": "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+          }
+        },
+        {
+          "action": "request",
+          "request": {
+            "method": "POST",
+            "path": "/api/v1/devices/enroll-code",
+            "headers": {
+              "X-Enroll-Proof": "{proof:0}",
+              "X-Enroll-Timestamp": "{ts:hour1:0}"
+            }
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"C0DE0000000000000000000000000015\",\"expires_at\":\"2026-01-02T03:09:05.123456789Z\",\"fingerprint\":\"3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e\"}\n"
           }
         }
       ],

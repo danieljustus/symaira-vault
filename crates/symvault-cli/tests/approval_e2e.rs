@@ -1071,6 +1071,159 @@ fn real_server_refuses_a_cli_without_the_vault_ownership_secret() {
     assert!(approval_cli(&vault, &["list", "--json"]).status.success());
 }
 
+// ---------------------------------------------------------------- device enrollment
+
+/// PAIRING-001 / APPROVAL-001 server-side device enrollment on the real
+/// `symvault mcp` process (default TLS with the vault's own certificate):
+/// the pairing code is minted with the vault-ownership proof, the fingerprint
+/// it carries is the SHA-256 of the certificate the server really presents,
+/// the code redeems exactly once, the new device shows up in
+/// `device approval-list`, its bearer authorises the device approval API, and
+/// `device approval-revoke` takes effect on the running server.
+#[test]
+fn real_server_enrolls_a_device_with_a_pinned_fingerprint_and_honours_revocation() {
+    use hmac::{Hmac, KeyInit, Mac};
+    use sha2::{Digest, Sha256};
+    use time::format_description::well_known::Rfc3339;
+
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let vault = RealVault::init();
+    let server = McpServer::start(&vault);
+    let base = format!("https://127.0.0.1:{}", server.port);
+
+    let certificate = fs::read(vault.root.join("mcp-server.crt")).expect("vault certificate");
+    let (_, pem) = x509_parser::pem::parse_x509_pem(&certificate).expect("certificate PEM");
+    let presented = Sha256::digest(&pem.contents)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let http = reqwest::blocking::Client::builder()
+        .tls_backend_rustls()
+        .tls_certs_only([reqwest::Certificate::from_pem(&certificate).expect("pin certificate")])
+        .no_proxy()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .expect("HTTPS client");
+
+    // The server announces its port before it writes the ownership secret.
+    let secret_path = vault.root.join("mcp-server.enroll-secret");
+    let secret_deadline = Instant::now() + Duration::from_secs(30);
+    let secret = loop {
+        match fs::read(&secret_path) {
+            Ok(secret) if secret.len() == 32 => break secret,
+            _ if Instant::now() < secret_deadline => thread::sleep(Duration::from_millis(50)),
+            other => panic!("enroll secret did not appear: {other:?}"),
+        }
+    };
+    let proof_headers = |secret: &[u8]| {
+        let timestamp = time::OffsetDateTime::now_utc()
+            .replace_nanosecond(0)
+            .expect("whole second")
+            .format(&Rfc3339)
+            .expect("timestamp");
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC key");
+        mac.update(timestamp.as_bytes());
+        let proof = mac
+            .finalize()
+            .into_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        (timestamp, proof)
+    };
+    let mint = |secret: &[u8]| {
+        let (timestamp, proof) = proof_headers(secret);
+        http.post(format!("{base}/api/v1/devices/enroll-code"))
+            .header("X-Enroll-Timestamp", timestamp)
+            .header("X-Enroll-Proof", proof)
+            .send()
+            .expect("mint request")
+    };
+
+    // A forged proof and a wrong method are refused before anything is minted.
+    let mut forged = secret.clone();
+    forged[0] ^= 0xff;
+    let refused = mint(&forged);
+    assert_eq!(refused.status().as_u16(), 401);
+    assert_eq!(
+        refused.text().expect("body"),
+        "{\"error\":\"missing or invalid proof of vault-directory ownership\"}\n"
+    );
+    let wrong_method = http
+        .get(format!("{base}/api/v1/devices/enroll-code"))
+        .send()
+        .expect("GET mint route");
+    assert_eq!(wrong_method.status().as_u16(), 404);
+
+    let minted = mint(&secret);
+    assert_eq!(minted.status().as_u16(), 200);
+    let minted: serde_json::Value =
+        serde_json::from_str(&minted.text().expect("mint body")).expect("mint JSON");
+    let code = minted["code"].as_str().expect("code").to_owned();
+    assert_eq!(code.len(), 32);
+    assert_eq!(
+        minted["fingerprint"].as_str(),
+        Some(presented.as_str()),
+        "the pinned fingerprint is the presented certificate"
+    );
+
+    let enroll = |code: &str| {
+        http.post(format!("{base}/api/v1/devices/enroll"))
+            .header("Content-Type", "application/json")
+            .body(serde_json::json!({"code": code, "device_name": "e2e phone"}).to_string())
+            .send()
+            .expect("enroll request")
+    };
+    let enrolled = enroll(&code);
+    assert_eq!(enrolled.status().as_u16(), 200);
+    let enrolled: serde_json::Value =
+        serde_json::from_str(&enrolled.text().expect("enroll body")).expect("enroll JSON");
+    let device_id = enrolled["device_id"]
+        .as_str()
+        .expect("device id")
+        .to_owned();
+    let token = enrolled["token"].as_str().expect("token").to_owned();
+    assert!(device_id.starts_with("dev-"));
+
+    let reused = enroll(&code);
+    assert_eq!(reused.status().as_u16(), 401);
+    assert_eq!(
+        reused.text().expect("body"),
+        "{\"error\":\"invalid or expired pairing code\"}\n"
+    );
+
+    // The raw bearer never reaches the disk; the CLI lists the device.
+    let store = fs::read_to_string(vault.root.join(".symvault/device-sessions.json"))
+        .expect("device sessions");
+    assert!(!store.contains(&token));
+    let listed = vault.run(&["device", "approval-list"]);
+    assert!(listed.status.success(), "{listed:?}");
+    let listed = String::from_utf8_lossy(&listed.stdout).into_owned();
+    assert!(
+        listed.contains(&device_id) && listed.contains("e2e phone"),
+        "{listed}"
+    );
+    assert!(listed.contains("active"), "{listed}");
+
+    // The bearer authorises the device approval API of the same server.
+    let approvals = |bearer: &str| {
+        http.get(format!("{base}/api/v1/approvals"))
+            .bearer_auth(bearer)
+            .send()
+            .expect("approvals request")
+    };
+    let allowed = approvals(&token);
+    assert_eq!(allowed.status().as_u16(), 200);
+    assert_eq!(allowed.text().expect("body"), "{\"requests\":[]}\n");
+
+    // Revocation by the CLI (a second process) is seen by the running server.
+    let revoked = vault.run(&["device", "approval-revoke", "--yes", &device_id]);
+    assert!(revoked.status.success(), "{revoked:?}");
+    assert_eq!(approvals(&token).status().as_u16(), 401);
+    let listed = vault.run(&["device", "approval-list"]);
+    assert!(String::from_utf8_lossy(&listed.stdout).contains("revoked"));
+}
+
 // ---------------------------------------------------------------- mTLS settings
 
 #[derive(Debug, Deserialize)]

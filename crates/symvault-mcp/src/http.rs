@@ -3217,6 +3217,8 @@ mod tests {
             .expect("enqueue approval");
         let secret = b"go-contract-secret".to_vec();
         let timestamp = OffsetDateTime::now_utc()
+            .replace_nanosecond(0)
+            .expect("whole second")
             .format(&Rfc3339)
             .expect("format proof timestamp");
         let mut mac = Hmac::<Sha256>::new_from_slice(&secret).expect("HMAC key");
@@ -3309,6 +3311,8 @@ mod tests {
             path: &str,
         ) -> String {
             let timestamp = OffsetDateTime::now_utc()
+                .replace_nanosecond(0)
+                .expect("whole second")
                 .format(&Rfc3339)
                 .expect("format proof timestamp");
             let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC key");
@@ -3459,6 +3463,8 @@ mod tests {
             path: &str,
         ) -> String {
             let timestamp = OffsetDateTime::now_utc()
+                .replace_nanosecond(0)
+                .expect("whole second")
                 .format(&Rfc3339)
                 .expect("format proof timestamp");
             let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC key");

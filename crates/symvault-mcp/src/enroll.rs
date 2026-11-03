@@ -326,9 +326,50 @@ fn parse_enroll_body(body: &str) -> Result<EnrollBody, serde_json::Error> {
         }
     }
 
+    if exceeds_go_nesting(body) {
+        return Err(serde::de::Error::custom("exceeded max depth"));
+    }
     // `Decode` reads one value and stops, so the deserializer is dropped
     // without checking for trailing characters.
     serde_json::Deserializer::from_str(body).deserialize_any(BodyVisitor)
+}
+
+/// `encoding/json`'s `maxNestingDepth`: the first value may nest 10 000
+/// containers, the 10 001st is a syntax error. `serde_json` skips ignored
+/// values without a depth bound, which would be more permissive than Go, so
+/// the first value's bracket depth is measured (string-aware) beforehand.
+fn exceeds_go_nesting(body: &str) -> bool {
+    const MAX_NESTING_DEPTH: usize = 10_000;
+    let (mut depth, mut in_string, mut escaped, mut started) = (0_usize, false, false, false);
+    for byte in body.bytes() {
+        if in_string {
+            match (escaped, byte) {
+                (true, _) => escaped = false,
+                (false, b'\\') => escaped = true,
+                (false, b'"') => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match byte {
+            b'"' => in_string = true,
+            b'{' | b'[' => {
+                started = true;
+                depth += 1;
+                if depth > MAX_NESTING_DEPTH {
+                    return true;
+                }
+            }
+            b'}' | b']' => {
+                depth = depth.saturating_sub(1);
+                if started && depth == 0 {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -570,6 +611,30 @@ mod tests {
         )
         .expect("enroll route");
         assert_eq!(again.status, 401);
+    }
+
+    #[test]
+    fn nesting_is_bounded_like_go_and_lone_surrogates_are_refused() {
+        // Go accepts nesting to 10000 levels and fails at 10001; the bound is
+        // enforced even for ignored values (serde_json would skip any depth).
+        let nested = |levels: usize| {
+            format!(
+                r#"{{"x":{}{},"code":"a"}}"#,
+                "[".repeat(levels - 1),
+                "]".repeat(levels - 1)
+            )
+        };
+        assert_eq!(parse_enroll_body(&nested(10_000)).expect("10000").code, "a");
+        assert!(parse_enroll_body(&nested(10_001)).is_err());
+        // Brackets inside strings do not count, nor does anything after the
+        // first value.
+        let in_string = format!(r#"{{"x":"{}","code":"a"}}"#, "[".repeat(20_000));
+        assert_eq!(parse_enroll_body(&in_string).expect("string").code, "a");
+        let trailing = format!(r#"{{"code":"a"}}{}"#, "[".repeat(20_000));
+        assert_eq!(parse_enroll_body(&trailing).expect("trailing").code, "a");
+        // Go substitutes U+FFFD for a lone surrogate escape; this decoder
+        // refuses it (400), a declared, stricter difference.
+        assert!(parse_enroll_body(r#"{"device_name":"\ud800"}"#).is_err());
     }
 
     #[test]
