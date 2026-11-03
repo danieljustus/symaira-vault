@@ -107,8 +107,13 @@ def stand_in(test, version, alpn):
     return server
 
 
-@unittest.skipUnless(shutil.which('openssl'), 'openssl is needed to mint the stand-in certificate')
 class AlpnPin(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # A skipped negative control is not a pass: fail when openssl is missing.
+        if not shutil.which('openssl'):
+            raise RuntimeError('openssl is needed to mint the stand-in certificate')
+
     def test_rust_without_alpn_passes_on_every_profile(self):
         for version in VERSIONS:
             with self.subTest(version=version):

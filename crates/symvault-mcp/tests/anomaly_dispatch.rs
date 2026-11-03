@@ -210,12 +210,19 @@ fn session_with_sink(options: Options, sink: Option<symvault_mcp::anomaly::WarnS
 
 impl Session {
     fn call(&mut self, tool: &str, arguments: Value) -> Value {
+        self.call_raw(tool, &arguments.to_string())
+    }
+
+    /// Sends `arguments` verbatim, for JSON that `serde_json::Value` cannot hold (1e400).
+    fn call_raw(&mut self, tool: &str, arguments: &str) -> Value {
         let input = format!(
             "{}\n{}\n{}\n",
             r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"probe","version":"1.0"},"capabilities":{}}}"#,
             r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
-            json!({"jsonrpc":"2.0","id":777,"method":"tools/call",
-                   "params":{"name":tool,"arguments":arguments}}),
+            format!(
+                r#"{{"jsonrpc":"2.0","id":777,"method":"tools/call","params":{{"name":{},"arguments":{arguments}}}}}"#,
+                json!(tool)
+            ),
         );
         let out = run_stream(&input, &mut self.handler).expect("stream dispatch");
         serde_json::from_str(out.last().expect("tool response")).expect("response JSON")
@@ -455,6 +462,31 @@ fn off_hours_alone_also_invalidates_the_cache_any_alert_does() {
     s.call("copy_to_clipboard", json!({"path": "github"}));
     // The copy itself is off-hours too (another invalidation), and it re-prompted.
     assert_eq!(s.prompts(), 2);
+}
+
+#[test]
+fn argument_decode_errors_precede_tool_lookup_and_token_scope_like_go() {
+    // Go executeTool: decodeToolRequest, then findToolDefinition, then
+    // validateToolAccess. A broken `arguments` reports the decode error whether
+    // the tool is unknown or token-denied, so it reveals neither.
+    let mut s = session(DAY);
+    s.handler.set_token_scope(&["get_entry".to_string()]);
+    let expected =
+        "parse arguments: json: cannot unmarshal number 1e400 into Go value of type float64";
+    for tool in ["list_entries", "not_a_tool", "get_entry"] {
+        let reply = s.call_raw(tool, r#"{"path":"github","n":1e400}"#);
+        assert_eq!(reply["error"]["code"], -32603, "{tool}: {reply}");
+        assert_eq!(reply["error"]["message"], expected, "{tool}: {reply}");
+    }
+    // Negative control: valid arguments reach the scope check and the lookup.
+    let denied = s.call("list_entries", json!({"prefix": "github"}));
+    assert_eq!(denied["result"]["isError"], true, "{denied}");
+    let unknown = s.call("not_a_tool", json!({"path": "github"}));
+    assert_eq!(
+        unknown["error"]["message"], "unknown tool: not_a_tool",
+        "{unknown}"
+    );
+    assert!(s.anomaly_rows().is_empty(), "{:?}", s.rows());
 }
 
 #[test]
