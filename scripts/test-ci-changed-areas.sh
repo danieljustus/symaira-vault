@@ -7,8 +7,8 @@ repo="$(mktemp -d)"
 trap 'rm -rf "$repo"' EXIT
 cd "$repo"
 git init -q
-mkdir -p docs/adr cmd editors/vscode
-printf 'see docs/contract.md\n' > cmd/contract_test.go
+mkdir -p docs/adr crates/symvault-cli/tests editors/vscode
+printf 'see docs/contract.md\n' > crates/symvault-cli/tests/contract.rs
 for f in docs/contract.md docs/guide.md docs/adr/0001-x.md README.md editors/vscode/main.ts; do
   printf 'x\n' > "$f"
 done
@@ -31,8 +31,7 @@ expect false docs/adr/0001-x.md README.md LICENSE
 expect false editors/vscode/main.ts .github/dependabot.yml .github/CODEOWNERS
 expect false .github/ISSUE_TEMPLATE/bug_report.yml .github/workflows/codeql.yml
 expect true docs/contract.md                    # read by a test
-expect true docs/guide.md cmd/contract_test.go  # any code path wins
-expect true internal/audit/audit.go
+expect true docs/guide.md crates/symvault-cli/tests/contract.rs  # any code path wins
 expect true crates/symvault-store/src/lib.rs
 expect true Cargo.lock
 expect true .github/workflows/ci.yml

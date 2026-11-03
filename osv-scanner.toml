@@ -1,3 +1,2 @@
-[[IgnoredVulns]]
-id = "GO-2026-5932"
-reason = "The golang.org/x/crypto/openpgp package is unmaintained but is not imported or used by Symaira Vault."
+# osv-scanner configuration. Cargo.lock is the only scanned lockfile; add
+# [[IgnoredVulns]] entries here only with a documented reason.
