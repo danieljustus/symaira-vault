@@ -21,9 +21,15 @@
 //! unit test `flag_types_match_the_command_tree` compares every flag both trees
 //! share against the Go type recorded in `command-tree.json`.
 //!
-//! Known limits: only booleans, the integer flags in `INT_FLAGS` and the duration
-//! flags in `DURATION_FLAGS` get Go's `invalid argument` wording (other
-//! int/int64/duration flags are not parsed); a
+//! Every typed flag of the command tree gets pflag's `invalid argument` wording while
+//! the flags are parsed (so before the argument validator, the output gate, the
+//! required-flag check and any vault precondition): booleans, the `int`/`int64` flags
+//! in `INT_FLAGS`, the `time.Duration` flags in `DURATION_FLAGS` and the
+//! `stringSlice` flags in `STRING_SLICE_FLAGS` (a CSV parse error). The unit test
+//! `typed_flag_tables_cover_every_typed_flag_of_the_command_tree` fails when the tree
+//! has a typed flag no table names.
+//!
+//! Known limits: a
 //! flag that exists only in Go is not reported as unknown by Rust's tree; and the
 //! suggestion order of `SUGGESTION_ORDER` is the strict partial order measured
 //! from the oracle, not Go's registration order.
@@ -61,17 +67,45 @@ const JOIN_SUFFIX: &str = " — either '<remote-url> <token>' or '--pairing-file
 const JOIN_PAIRING_FILE_MESSAGE: &str =
     "with --pairing-file, pass only the pairing token: 'device join --pairing-file <path> <token>'";
 
-/// Integer-valued flags, by command path and long name.
-const INT_FLAGS: &[(&str, &str)] = &[("generate", "length")];
+/// Flags Go declares as `int` or `int64`, by command path and long name. pflag parses
+/// the value with `strconv.ParseInt(s, 0, 64)` while the flags are parsed, so a
+/// malformed one is a usage error even in an uninitialized vault.
+const INT_FLAGS: &[(&str, &str)] = &[
+    ("add", "length"),
+    ("agent audit", "limit"),
+    ("audit", "tail"),
+    ("file add", "max-size"),
+    ("generate", "length"),
+    ("intake", "batch-limit"),
+    ("intake", "max-files"),
+    ("mcp", "port"),
+    ("serve", "port"),
+    ("startup-profile", "count"),
+    ("startup-profile", "top"),
+];
 
 /// Flags Go declares as `time.Duration` whose value pflag parses with
 /// `time.ParseDuration` before the command runs (so a malformed value is a usage
-/// error even in an uninitialized vault): the child timeout of `run` and
-/// `file use` and the lease TTL of `dynamic generate`.
+/// error even in an uninitialized vault).
 const DURATION_FLAGS: &[(&str, &str)] = &[
-    ("run", "timeout"),
-    ("file use", "timeout"),
     ("dynamic generate", "ttl"),
+    ("file use", "timeout"),
+    ("intake watch", "debounce"),
+    ("intake watch", "interval"),
+    ("run", "timeout"),
+    ("unlock", "ttl"),
+];
+
+/// Flags Go declares as `stringSlice`: pflag reads every value as one CSV record
+/// (`encoding/csv`), so a stray quote is a usage error before the command runs.
+/// (`stringArray` flags take the value verbatim and cannot fail.)
+const STRING_SLICE_FLAGS: &[(&str, &str)] = &[
+    ("agent token new", "tools"),
+    ("agent token rotate", "tools"),
+    ("broker", "passthrough"),
+    ("doctor", "exclude"),
+    ("doctor", "only"),
+    ("run", "broker-passthrough"),
 ];
 
 /// Flags cobra's `MarkFlagRequired` makes mandatory, by command path. Cobra
@@ -81,6 +115,7 @@ const DURATION_FLAGS: &[(&str, &str)] = &[
 const REQUIRED_FLAGS: &[(&str, &[&str])] = &[
     ("dynamic generate", &["engine", "role"]),
     ("export", &["format"]),
+    ("profile add", &["vault"]),
     ("template generate", &["type"]),
 ];
 
@@ -940,6 +975,157 @@ pub fn parse_go_int(value: &str) -> Result<i64, String> {
         .map_err(|error| format!("strconv.ParseInt: parsing {value:?}: {}", error.text()))
 }
 
+/// pflag's `invalid argument` diagnostic for a value of a typed flag (`Set` failed).
+fn typed_value_error(path: &str, name: &str, arg: &Arg, value: &str) -> Option<String> {
+    let key = (path, name);
+    if INT_FLAGS.contains(&key)
+        && let Err(error) = go_parse_int(value)
+    {
+        return Some(invalid_argument(value, arg, "ParseInt", error.text()));
+    }
+    if DURATION_FLAGS.contains(&key)
+        && let Err(reason) = symvault_core::config::parse_go_duration(value)
+    {
+        return Some(invalid_argument_reason(value, arg, &reason));
+    }
+    if STRING_SLICE_FLAGS.contains(&key)
+        && let Some(reason) = go_csv_error(value)
+    {
+        return Some(invalid_argument_reason(value, arg, &reason));
+    }
+    None
+}
+
+/// The error pflag's `stringSlice` reports for `value`: `readAsCSV` hands the whole value
+/// (unless empty) to a default `encoding/csv` reader and returns its first record, so
+/// the message is the reader's own (`ParseError`, or `EOF` for a value of blank
+/// lines). This follows `Reader.readRecord` for the comma separator, strict quotes
+/// and no comment character; `None` means the value is a valid record.
+fn go_csv_error(value: &str) -> Option<String> {
+    if value.is_empty() {
+        return None;
+    }
+    let mut reader = CsvLines {
+        data: value.as_bytes(),
+        at: 0,
+        num_line: 0,
+    };
+    // Skip empty lines; running out of input before a record is `io.EOF`.
+    let (mut line, mut eof) = reader.read_line();
+    while !eof && line.len() == csv_newline_len(&line) {
+        (line, eof) = reader.read_line();
+    }
+    if eof {
+        return Some("EOF".to_owned());
+    }
+    let rec_line = reader.num_line;
+    let mut pos_line = reader.num_line;
+    let mut pos_col = 1_usize;
+    let mut from = 0_usize;
+    let parse_error = |line: usize, column: usize, reason: &str| {
+        Some(if rec_line == line {
+            format!("parse error on line {line}, column {column}: {reason}")
+        } else {
+            format!(
+                "record on line {rec_line}; parse error on line {line}, column {column}: {reason}"
+            )
+        })
+    };
+    const BARE_QUOTE: &str = "bare \" in non-quoted-field";
+    const QUOTE: &str = "extraneous or missing \" in quoted-field";
+    loop {
+        let rest = &line[from..];
+        if rest.first() != Some(&b'"') {
+            let comma = rest.iter().position(|byte| *byte == b',');
+            let field = match comma {
+                Some(index) => &rest[..index],
+                None => &rest[..rest.len() - csv_newline_len(rest)],
+            };
+            if let Some(quote) = field.iter().position(|byte| *byte == b'"') {
+                return parse_error(reader.num_line, pos_col + quote, BARE_QUOTE);
+            }
+            // No comma: this was the last field and the record is valid.
+            let index = comma?;
+            from += index + 1;
+            pos_col += index + 1;
+            continue;
+        }
+        from += 1;
+        pos_col += 1;
+        loop {
+            let rest = &line[from..];
+            if let Some(index) = rest.iter().position(|byte| *byte == b'"') {
+                from += index + 1;
+                pos_col += index + 1;
+                let rest = &line[from..];
+                match rest.first() {
+                    Some(b'"') => {
+                        from += 1;
+                        pos_col += 1;
+                    }
+                    Some(b',') => {
+                        from += 1;
+                        pos_col += 1;
+                        break;
+                    }
+                    _ if csv_newline_len(rest) == rest.len() => return None,
+                    _ => return parse_error(reader.num_line, pos_col - 1, QUOTE),
+                }
+            } else if !rest.is_empty() {
+                // End of line inside the quotes: the field continues on the next line (a
+                // following `io.EOF` is not an error by itself, only the missing quote).
+                pos_col += rest.len();
+                (line, _) = reader.read_line();
+                from = 0;
+                if !line.is_empty() {
+                    pos_line += 1;
+                    pos_col = 1;
+                }
+            } else {
+                // Abrupt end of input inside a quoted field.
+                return parse_error(pos_line, pos_col, QUOTE);
+            }
+        }
+    }
+}
+
+/// Length of the line terminator (`\n`) that ends `line`, as `encoding/csv`'s `lengthNL`.
+fn csv_newline_len(line: &[u8]) -> usize {
+    usize::from(line.last() == Some(&b'\n'))
+}
+
+/// `encoding/csv`'s `Reader.readLine` over an in-memory value.
+struct CsvLines<'a> {
+    data: &'a [u8],
+    at: usize,
+    num_line: usize,
+}
+
+impl CsvLines<'_> {
+    /// The next line with `\r\n` folded to `\n` and a trailing `\r` before the end of
+    /// input dropped, plus whether the input was already exhausted (`io.EOF` with no data).
+    fn read_line(&mut self) -> (Vec<u8>, bool) {
+        let rest = &self.data[self.at..];
+        let size = rest
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(rest.len(), |index| index + 1);
+        let mut line = rest[..size].to_vec();
+        self.at += size;
+        let eof = line.is_empty();
+        if !eof && line.last() == Some(&b'\r') {
+            line.pop();
+        }
+        self.num_line += 1;
+        let length = line.len();
+        if length >= 2 && line[length - 2] == b'\r' && line[length - 1] == b'\n' {
+            line[length - 2] = b'\n';
+            line.pop();
+        }
+        (line, eof)
+    }
+}
+
 fn flag_label(arg: &Arg) -> String {
     let long = arg.get_long().unwrap_or_default();
     match arg.get_short() {
@@ -955,7 +1141,7 @@ fn invalid_argument(value: &str, arg: &Arg, parser: &str, reason: &str) -> Strin
     )
 }
 
-fn invalid_duration_argument(value: &str, arg: &Arg, reason: &str) -> String {
+fn invalid_argument_reason(value: &str, arg: &Arg, reason: &str) -> String {
     format!(
         "invalid argument {value:?} for {label:?} flag: {reason}",
         label = flag_label(arg)
@@ -1044,15 +1230,8 @@ fn parse_flags(
                         None => return Err(format!("flag needs an argument: --{name}")),
                     },
                 };
-                if INT_FLAGS.contains(&(path, name))
-                    && let Err(error) = go_parse_int(&value)
-                {
-                    return Err(invalid_argument(&value, arg, "ParseInt", error.text()));
-                }
-                if DURATION_FLAGS.contains(&(path, name))
-                    && let Err(reason) = symvault_core::config::parse_go_duration(&value)
-                {
-                    return Err(invalid_duration_argument(&value, arg, &reason));
+                if let Some(error) = typed_value_error(path, name, arg, &value) {
+                    return Err(error);
                 }
                 note(arg, Some(&value), &mut parsed);
             } else {
@@ -1120,15 +1299,8 @@ fn parse_flags(
                     }
                 };
                 let long = arg.get_long().unwrap_or_default();
-                if INT_FLAGS.contains(&(path, long))
-                    && let Err(error) = go_parse_int(&value)
-                {
-                    return Err(invalid_argument(&value, arg, "ParseInt", error.text()));
-                }
-                if DURATION_FLAGS.contains(&(path, long))
-                    && let Err(reason) = symvault_core::config::parse_go_duration(&value)
-                {
-                    return Err(invalid_duration_argument(&value, arg, &reason));
+                if let Some(error) = typed_value_error(path, long, arg, &value) {
+                    return Err(error);
                 }
                 note(arg, Some(&value), &mut parsed);
                 break;
@@ -1500,7 +1672,7 @@ mod tests {
         assert!(fixture.usage.len() >= 40);
         let mut failures = Vec::new();
         for case in &fixture.usage {
-            let got = evaluate(&case.observation.args, root());
+            let got = evaluate_with_required(&case.observation.args, root());
             let want = if matches!(case.observation.exit_code, 0 | 3) {
                 // Group help (stdout), a successful command or the command body's own
                 // "vault not initialized" failure (exit 3): never the emulation's verdict.
@@ -2049,6 +2221,170 @@ mod tests {
                 "{path} --{name} is {}",
                 flag["type"]
             );
+        }
+    }
+
+    #[test]
+    fn string_slice_flag_table_names_string_slice_flags() {
+        let tree = tree();
+        for (path, name) in STRING_SLICE_FLAGS {
+            let entry = tree["commands"]
+                .as_array()
+                .expect("commands")
+                .iter()
+                .find(|entry| go_path(entry) == *path)
+                .unwrap_or_else(|| panic!("{path} is not in the command tree"));
+            let flag = entry["local_flags"]
+                .as_array()
+                .expect("flags")
+                .iter()
+                .find(|flag| flag["name"] == *name)
+                .unwrap_or_else(|| panic!("{path} has no --{name}"));
+            assert_eq!(flag["type"], "stringSlice", "{path} --{name}");
+        }
+    }
+
+    /// Every flag of the Go tree whose type is not string or bool (and not a
+    /// `stringArray`, which takes any value) must be in exactly the table of its type,
+    /// and the required flags must be exactly the `MarkFlagRequired` ones, so a new
+    /// typed or required flag cannot ship without Go's diagnostic.
+    #[test]
+    fn typed_flag_tables_cover_every_typed_flag_of_the_command_tree() {
+        let tree = tree();
+        let mut problems = Vec::new();
+        let mut typed = 0;
+        let mut required = Vec::new();
+        for entry in tree["commands"].as_array().expect("commands") {
+            let path = go_path(entry);
+            for key in ["local_flags", "persistent_flags"] {
+                for flag in entry[key].as_array().into_iter().flatten() {
+                    let name = flag["name"].as_str().expect("flag name");
+                    let kind = flag["type"].as_str().expect("flag type");
+                    let key = (path.as_str(), name);
+                    let tables: [(&str, &[(&str, &str)]); 3] = [
+                        ("int", INT_FLAGS),
+                        ("duration", DURATION_FLAGS),
+                        ("stringSlice", STRING_SLICE_FLAGS),
+                    ];
+                    for (table_kind, table) in tables {
+                        let listed = table.contains(&key);
+                        let expected =
+                            kind == table_kind || (table_kind == "int" && kind == "int64");
+                        if listed != expected {
+                            problems.push(format!(
+                                "{path} --{name} is {kind}, {table_kind} table lists it: {listed}"
+                            ));
+                        }
+                    }
+                    if !matches!(kind, "bool" | "string" | "stringArray") {
+                        typed += 1;
+                    }
+                    if flag["annotations"]["cobra_annotation_bash_completion_one_required_flag"]
+                        .is_array()
+                    {
+                        required.push((path.clone(), name.to_owned()));
+                    }
+                }
+            }
+        }
+        assert!(typed >= 23, "only {typed} typed flags in the tree");
+        let mut table: Vec<(String, String)> = REQUIRED_FLAGS
+            .iter()
+            .flat_map(|(path, names)| {
+                names
+                    .iter()
+                    .map(move |name| ((*path).to_owned(), (*name).to_owned()))
+            })
+            .collect();
+        table.sort();
+        required.sort();
+        assert_eq!(
+            table, required,
+            "REQUIRED_FLAGS vs the tree's required flags"
+        );
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    /// Texts recorded from the pinned Go binary (`symvault doctor --only <value>`: the
+    /// `encoding/csv` error after pflag's `invalid argument ... flag:` prefix).
+    #[test]
+    fn go_csv_errors_match_the_recorded_oracle_texts() {
+        for (value, expected) in [
+            (
+                "\"a",
+                Some("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                "a\"b",
+                Some("parse error on line 1, column 2: bare \" in non-quoted-field"),
+            ),
+            (
+                "a,b\"",
+                Some("parse error on line 1, column 4: bare \" in non-quoted-field"),
+            ),
+            (
+                "\"a\"b",
+                Some("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                "a,\"b\"c",
+                Some("parse error on line 1, column 5: extraneous or missing \" in quoted-field"),
+            ),
+            ("\n", Some("EOF")),
+            (
+                "\"a\nb",
+                Some(
+                    "record on line 1; parse error on line 2, column 2: extraneous or missing \" in quoted-field",
+                ),
+            ),
+            ("a,b", None),
+            ("", None),
+            ("\"a,b\"", None),
+            ("\"a\"\"b\"", None),
+            ("\"a\nb\"", None),
+            (
+                "a\"",
+                Some("parse error on line 1, column 2: bare \" in non-quoted-field"),
+            ),
+            (
+                "\n\n\"a",
+                Some("parse error on line 3, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            ("a\nb\"", None),
+            (
+                "\"a\r\nb",
+                Some(
+                    "record on line 1; parse error on line 2, column 2: extraneous or missing \" in quoted-field",
+                ),
+            ),
+            ("\r\n", Some("EOF")),
+            (
+                "\"",
+                Some("parse error on line 1, column 2: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                "\"\n",
+                Some("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                "\"a\r",
+                Some("parse error on line 1, column 3: extraneous or missing \" in quoted-field"),
+            ),
+            (
+                "a\r\"",
+                Some("parse error on line 1, column 3: bare \" in non-quoted-field"),
+            ),
+            (
+                "x,\"y\n\"z\"w",
+                Some(
+                    "record on line 1; parse error on line 2, column 1: extraneous or missing \" in quoted-field",
+                ),
+            ),
+            ("a,\n\"b", None),
+            ("a\n\"", None),
+            ("a\r\nb\"", None),
+        ] {
+            assert_eq!(go_csv_error(value).as_deref(), expected, "{value:?}");
         }
     }
 
