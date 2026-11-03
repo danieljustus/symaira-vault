@@ -1,0 +1,25 @@
+{
+  "direction": "Rust-produced ciphertext/vault data is decrypted by the live Go mobilebind driver (symvault-ffi interop tests)",
+  "go_verdict": {
+    "accepted": true,
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "symvault-ffi",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "output_sha256": "2fbea3ad582ba6803d8650c148a8093f952bd7c15168e92793fa459d9f72728d"
+  },
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "name": "ffi-differential",
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "rust_artifacts_sha256": {
+    "libsymvault_ffi.a": "7aa2f68ce57df5bd1fdcbb65d5bc9d82df69b3f173ed0e4cb8555afb623f8a29"
+  },
+  "rust_commit": "7fc881eb0951287aa113bf82ab774fda0acf2408",
+  "schema": 1
+}

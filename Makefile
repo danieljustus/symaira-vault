@@ -808,7 +808,7 @@ crypto-differential:
 	$(CARGO) test -p symvault-crypto --all-features --locked
 	@mkdir -p target/crypto
 	$(CARGO) run -p symvault-crypto --example crypto_emit --locked > target/crypto/rust-output.txt
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cryptoverify target/crypto/rust-output.txt
+	python3 scripts/rust-port/go_observations_common.py verify-attestation crypto-differential
 	$(MAKE) crypto-fuzz-smoke
 
 crypto-fuzz-smoke:
@@ -908,7 +908,7 @@ port-contract: timestamp-fixtures-check cfg-overrides-fixtures-check mcp-oauth-c
 .PHONY: update-fixtures-check
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9 --check
+	python3 scripts/rust-port/frozen_generator_replay.py replay update
 port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential clipboard-linux-differential mcp-prompts-differential mcp-render-differential config-cli-differential config-rewrite-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check tool-registry-hash-differential ffi-differential
 
 # TOOLHASH-001: Go-recorded tool-registry hash + call-time drift refusal. The
@@ -997,11 +997,9 @@ store-differential:
 DATA_SAFETY_GO_BINARY := target/port/symvault-go-data-safety
 .PHONY: data-safety-differential
 data-safety-differential:
-	@mkdir -p "$(dir $(DATA_SAFETY_GO_BINARY))"
-	CGO_ENABLED=0 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=true -o "$(DATA_SAFETY_GO_BINARY)" .
 	$(CARGO) build -p symvault-cli --bin symvault --locked
 	$(CARGO) build -p symvault-sync --example data_safety_probe --locked
-	python3 -I scripts/rust-port/data_safety_contract.py --rust "$(RUST_BINARY)" --go "$(DATA_SAFETY_GO_BINARY)" --probe "$(CARGO_TARGET_DIR)/debug/examples/data_safety_probe"
+	python3 -I scripts/rust-port/data_safety_contract.py --rust "$(RUST_BINARY)" --probe "$(CARGO_TARGET_DIR)/debug/examples/data_safety_probe"
 
 audit-fixtures-generate:
 	UPDATE_AUDIT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
@@ -1014,7 +1012,7 @@ audit-differential: audit-fixtures-check
 	$(CARGO) test -p symvault-store --test audit --locked
 	$(CARGO) run -p symvault-store --example audit-emit --locked -- target/audit/rust-output.jsonl >/dev/null
 	@test -s target/audit/rust-output.jsonl
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
+	python3 scripts/rust-port/go_observations_common.py verify-attestation audit-differential
 
 # FFI-001: the Rust replacement for the gomobile pkg/mobilebind bridge.
 #
@@ -1045,9 +1043,10 @@ ffi-fixtures-check:
 		--check --output testdata/port/ffi/mobilebind.json
 
 ffi-differential: ffi-fixtures-check
-	@mkdir -p $(dir $(FFI_DRIVER))
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -o $(FFI_DRIVER) ./scripts/rust-port/cmd/mobilebindgen
-	SYMVAULT_FFI_GO_DRIVER=$(FFI_DRIVER) $(CARGO) test -p symvault-ffi --locked
+	# Fixture replay and C ABI tests run live; the Go-decrypts-Rust interop direction (interop.rs, which
+	# prints a visible SKIP without the Go driver) is the attestation.
+	$(CARGO) test -p symvault-ffi --locked
+	python3 scripts/rust-port/go_observations_common.py verify-attestation ffi-differential
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
 		set -eu; \
 		$(CARGO) build -p symvault-ffi --profile ffi --locked; \
@@ -1543,9 +1542,7 @@ store-live-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(CARGO) test -p symvault-store --all-targets --all-features --locked $(call AREA_LOGGED,rust-store-tests.txt)
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/rust-store-tests.txt" --results-ok
-	$(AREA_ENV) $(AREA_GO) CARGO_TARGET_DIR="$(CARGO_TARGET_DIR)" $(GO) test ./internal/vault \
-		-run '^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance|TestEncryptedIndexBuildEmptyGoRust)$$' \
-		-count=1 -timeout=15m -json > "$(AREA_EVIDENCE)/storage-differential.jsonl"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-go-json store-live --output "$(AREA_EVIDENCE)/storage-differential.jsonl"
 	$(AREA_CHECK) go-json "$(AREA_EVIDENCE)/storage-differential.jsonl" \
 		TestEntryWriterGoRustLiveAcceptance TestManifestSequenceGoRustDifferential \
 		TestManifestSequenceJSONTransportControls TestEncryptedIndexGoRustLiveAcceptance TestEncryptedIndexBuildEmptyGoRust
@@ -1553,23 +1550,19 @@ store-live-contract:
 # rust-store-observations.yml
 store-observations-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	test "$$($(AREA_HTTP_GO) $(GO) env GOVERSION)" = go1.26.6
-	$(AREA_ENV) $(AREA_HTTP_GO) $(GO) test -race ./scripts/rust-port/cmd/storegen -count=1 -json > "$(AREA_EVIDENCE)/store-observations.jsonl"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-go-json store-observations --output "$(AREA_EVIDENCE)/store-observations.jsonl"
 	$(AREA_CHECK) go-json "$(AREA_EVIDENCE)/store-observations.jsonl" \
 		TestRepeatedPinnedStoreObservationsHaveStableProjection TestClockProjectionPreservesOtherJSONBytes
-	$(AREA_ENV) $(AREA_HTTP_GO) $(GO) run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-checked store-observations-fixture --file testdata/port/store/store.json
 
 # rust-sync-observations.yml (including the Git I/O observation step)
 sync-observations-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	test "$$($(AREA_HTTP_GO) $(GO) env GOVERSION)" = go1.26.6
-	$(AREA_ENV) $(AREA_HTTP_GO) $(GO) test -race ./scripts/rust-port/cmd/syncgen -count=1 -json > "$(AREA_EVIDENCE)/sync-observations.jsonl"
-	$(AREA_ENV) $(AREA_HTTP_GO) $(GO) test -race ./cmd/admin -run '^TestCreateBackup_NormalizesTarMemberSeparators$$' -count=1 -json \
-		>> "$(AREA_EVIDENCE)/sync-observations.jsonl"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-go-json sync-observations-syncgen --output "$(AREA_EVIDENCE)/sync-observations.jsonl"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-go-json sync-observations-backup --output "$(AREA_EVIDENCE)/sync-observations.jsonl" --append
 	$(AREA_CHECK) go-json "$(AREA_EVIDENCE)/sync-observations.jsonl" \
 		TestPinnedSyncOracleIsRepeatable TestPinnedSyncArchiveContract TestCreateBackup_NormalizesTarMemberSeparators
-	$(AREA_ENV) $(AREA_HTTP_GO) $(GO) run ./scripts/rust-port/cmd/syncgen --portable --check --output testdata/port/sync/portable.json
-	$(AREA_ENV) $(AREA_HTTP_GO) $(GO) run ./scripts/rust-port/cmd/gitio --check --output testdata/port/sync/git-io.json
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-checked sync-observations-fixtures --file testdata/port/sync/portable.json --file testdata/port/sync/git-io.json
 
 # rust-pairing.yml: oracle-bound steps not covered by pairing-differential,
 # config-profile-differential and device-list-differential.
@@ -1578,8 +1571,12 @@ sync-observations-contract:
 AREA_PAIRING_TMP := $(if $(filter Darwin,$(shell uname -s)),TMPDIR="$(shell getconf DARWIN_USER_TEMP_DIR)")
 pairing-oracle-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_ENV) $(AREA_PAIRING_TMP) CARGO="$(CARGO)" GO="$(GO)" BUILD_GO_TOOLCHAIN="$(BUILD_GO_TOOLCHAIN)" AREA_CHECK="$(AREA_CHECK)" \
-		scripts/rust-port/area_pairing_oracle.sh "$(abspath $(AREA_EVIDENCE))"
+	# The cli/import/auth/startup differentials interleave the live Go CLI and the Rust CLI on shared
+	# vaults: a reverse check, attested once (go-attest-other). The Go process-tree harness tests are
+	# recorded observations.
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py verify-attestation pairing-oracle
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-go-text pairing-process-tree --output "$(AREA_EVIDENCE)/pairing-process-tree.log"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/gate_area_check.py go-text-pass "$(AREA_EVIDENCE)/pairing-process-tree.log" TestExecuteNativeObservations
 
 # rust-tui.yml: the named browser tests of `cargo test -p symvault-cli
 # -p symvault-platform --all-targets` (the whole run is rust-test).
@@ -1598,10 +1595,10 @@ tui-named-tests:
 kdf-resource-policy-contract:
 	@mkdir -p "$(AREA_EVIDENCE)/kdf-policy"
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/check_argon2_upstream.py
-	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/kdf_policy_fixtures.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py replay kdf-policy
 	$(CARGO) test --manifest-path third_party/argon2/Cargo.toml --all-features --locked
-	$(AREA_ENV) $(AREA_GO) $(GO) test -race ./internal/crypto -count=1 -json > "$(AREA_EVIDENCE)/kdf-go.jsonl"
-	$(AREA_ENV) $(AREA_GO) $(GO) test -race ./internal/vault -run '^TestKDFPolicyMigration' -count=1 -json >> "$(AREA_EVIDENCE)/kdf-go.jsonl"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-go-json kdf-go-crypto --output "$(AREA_EVIDENCE)/kdf-go.jsonl"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-go-json kdf-go-vault --output "$(AREA_EVIDENCE)/kdf-go.jsonl" --append
 	$(AREA_CHECK) go-json "$(AREA_EVIDENCE)/kdf-go.jsonl" TestArgon2ResourcePolicyLimits \
 		TestArgon2PreflightRejectsWholeEnvelopeBeforeKDF TestHistoricalGoKDFPolicyEnvelopes \
 		TestArgon2BoundedAdmissionRunsRealDerivations TestArgon2LegacyAdmissionExcludesAutomaticDerivation \
@@ -1616,26 +1613,20 @@ kdf-resource-policy-contract:
 		policy_migration_restores_both_files_after_post_replacement_failure \
 		policy_migration_accepts_null_vault_configuration \
 		--contains "$(AREA_KDF_MIGRATION_TESTS) passed; 0 failed; 0 ignored"
-	$(AREA_GO) CGO_ENABLED=0 $(GO) build -o "$(AREA_EVIDENCE)/kdf-policy/go-cli" .
-	$(AREA_ENV) $(AREA_GO) SYMVAULT_GO_BINARY="$(abspath $(AREA_EVIDENCE))/kdf-policy/go-cli" \
-		$(CARGO) test -p symvault-cli --test migrate_kdf_differential --locked -- --ignored $(call AREA_LOGGED,kdf-cli.log)
-	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/kdf-cli.log" --exact-prefix "" \
-		kdf_resource_policy_go_rust_integration migrate_kdf_go_rust_integration \
-		--contains "2 passed; 0 failed; 0 ignored"
+	# Go<->Rust KDF migration integration drives the live Go CLI: attested once (go-attest-other).
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py verify-attestation kdf-go-rust-integration
 
 # vault-read-resource-policy.yml
 read-resource-policy-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(GO) test -race -json \
-		./internal/vault ./internal/template ./internal/mcp/server -run TestResourcePolicy -count=1 \
-		> "$(AREA_EVIDENCE)/go-read-policy.jsonl"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-go-json read-policy-go --output "$(AREA_EVIDENCE)/go-read-policy.jsonl"
 	$(AREA_CHECK) go-json "$(AREA_EVIDENCE)/go-read-policy.jsonl" \
 		TestResourcePolicyAdmissionBoundsActualEntryReads \
 		TestResourcePolicyFailedIndexPreservesFileAndFindFallsBack \
 		TestResourcePolicyRecoveryRejectsOversizeBeforeMutation \
 		TestResourcePolicyTemplateResolutionsShareOneAllowance \
 		TestResourcePolicyCommandRefsShareOneAllowance
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/refresh-read-policy-fixtures.py --check \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py replay read-policy \
 		--receipt "$(AREA_EVIDENCE)/native-read-policy.json"
 	$(CARGO) test -p symvault-store --lib --all-features > "$(AREA_EVIDENCE)/rust-read-store.log" 2>&1 || { cat "$(AREA_EVIDENCE)/rust-read-store.log"; exit 1; }
 	$(CARGO) test -p symvault-cli --bin symvault template_resolutions_share_the_operation_allowance \
@@ -2174,7 +2165,6 @@ mcp-clipboard-signals-differential:
 ifeq ($(OS),Windows_NT)
 	@echo "SKIP Unix clipboard signal contract: native Windows signal behavior remains unverified"
 else
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/clipboard -run '^TestStartAutoClearSignalRouterProcessContract$$' -count=1
 	$(CARGO) test -p symvault-platform --lib --locked -- approval::tests::stdio_clipboard_signal_router_process_contract --exact
 endif
 
@@ -2188,7 +2178,6 @@ mcp-secure-input-fixtures-check: mcp-ordered-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/secure_input_unicode
 
 mcp-secure-input-differential: mcp-secure-input-fixtures-check
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/secureui -run '^(TestTTYReadStringRuneEditing|TestPrompt_TTYBackend_SignalCancel)$$' -count=1
 	$(CARGO) test -p symvault-mcp --test secure_input_contract --locked
 	$(CARGO) test -p symvault-platform --lib --locked -- approval::tests::secure_input_
 
@@ -2242,7 +2231,7 @@ policy-context-differential: policy-context-fixtures-check
 .PHONY: mcp-authz-fixtures-check mcp-authz-differential
 mcp-authz-fixtures-check:
 	python3 -B scripts/rust-port/test_mcp_authz_matrix.py
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_authz_matrix.py --check
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_authz_matrix.py --check
 
 mcp-authz-differential: mcp-authz-fixtures-check
 	SYMVAULT_SECUREUI=none $(CARGO) test -p symvault-cli --test mcp_authz_matrix --locked authorization_matrix -- --nocapture
@@ -2253,8 +2242,10 @@ export-cli-fixtures-check:
 
 .PHONY: reencrypt-journal-differential
 reencrypt-journal-differential:
-	$(CARGO) build -p symvault-cli --locked
-	SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/vault -run '^TestReencryptJournalGoRustIntegration$$' -count=1
+	# Go->Rust crash recovery needed the live Go test: attested once (go-attest-other); the Rust-side
+	# journal tests are the symvault-store suite.
+	$(CARGO) test -p symvault-store --locked reencrypt
+	python3 scripts/rust-port/go_observations_common.py verify-attestation reencrypt-journal-differential
 
 # Capture the Go side of the non-HTTP process contracts and live-Go differentials
 # once (needs Go; writes scripts/rust-port/fixtures/go-observations/<contract>.<goos>.json).
@@ -2277,3 +2268,43 @@ go-observations-capture-other:
 
 go-observations-selftest:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_go_observations_common.py
+
+# Go-only capture of the helper-driven observations (go test / go run), then the reverse-check
+# attestations. Needs the Go oracle; run once per OS before Go is removed.
+GO_OBS_HELPER := $(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py
+GO_OBS_HELPER_HTTP := $(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py
+.PHONY: go-attest-other
+go-observations-capture-other: go-observations-capture-other-tests
+go-observations-capture-other-tests:
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/mcp_authz_matrix.py --capture-go
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py capture update
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py capture kdf-policy
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py capture read-policy
+	$(GO_OBS_HELPER) capture-go-json kdf-go-crypto -- $(GO) test -race ./internal/crypto -count=1 -json
+	$(GO_OBS_HELPER) capture-go-json kdf-go-vault -- $(GO) test -race ./internal/vault -run '^TestKDFPolicyMigration' -count=1 -json
+	$(GO_OBS_HELPER) capture-go-json read-policy-go -- $(GO) test -race -json ./internal/vault ./internal/template ./internal/mcp/server -run TestResourcePolicy -count=1
+	$(GO_OBS_HELPER_HTTP) capture-go-json store-live --env SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" -- $(GO) test ./internal/vault -run '^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance|TestEncryptedIndexBuildEmptyGoRust)$$' -count=1 -timeout=15m -json
+	$(GO_OBS_HELPER_HTTP) capture-go-json store-observations -- $(GO) test -race ./scripts/rust-port/cmd/storegen -count=1 -json
+	$(GO_OBS_HELPER_HTTP) capture-checked store-observations-fixture --file testdata/port/store/store.json -- $(GO) run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json
+	$(GO_OBS_HELPER_HTTP) capture-go-json sync-observations-syncgen -- $(GO) test -race ./scripts/rust-port/cmd/syncgen -count=1 -json
+	$(GO_OBS_HELPER_HTTP) capture-go-json sync-observations-backup -- $(GO) test -race ./cmd/admin -run '^TestCreateBackup_NormalizesTarMemberSeparators$$' -count=1 -json
+	$(GO_OBS_HELPER_HTTP) capture-checked sync-observations-fixtures --file testdata/port/sync/portable.json --file testdata/port/sync/git-io.json -- sh -c '$(GO) run ./scripts/rust-port/cmd/syncgen --portable --check --output testdata/port/sync/portable.json && $(GO) run ./scripts/rust-port/cmd/gitio --check --output testdata/port/sync/git-io.json'
+	$(GO_OBS_HELPER_HTTP) capture-go-text pairing-process-tree -- $(GO) test -count=1 -v ./scripts/rust-port/cmd/caserun ./scripts/rust-port/cmd/devicelistdriver ./scripts/rust-port/internal/diff
+	$(CARGO) build -p symvault-cli --bin symvault --locked
+	$(CARGO) build -p symvault-sync --example data_safety_probe --locked
+	CGO_ENABLED=0 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=false -o "$(DATA_SAFETY_GO_BINARY)" .
+	python3 -I scripts/rust-port/data_safety_contract.py --capture-go --rust "$(RUST_BINARY)" --go "$(DATA_SAFETY_GO_BINARY)" --probe "$(CARGO_TARGET_DIR)/debug/examples/data_safety_probe"
+
+# Reverse checks (Go verifies or consumes what Rust wrote): run once with Go, commit the attestations
+# under docs/rust-port/evidence/go-removal-attestations/. Needs built Rust artifacts (rust-build).
+go-attest-other:
+	@mkdir -p target/audit target/crypto
+	$(CARGO) build -p symvault-cli --bin symvault -p symvault-store --example audit-emit -p symvault-crypto --example crypto_emit --locked
+	$(CARGO_TARGET_DIR)/debug/examples/audit-emit target/audit/rust-output.jsonl >/dev/null
+	$(CARGO_TARGET_DIR)/debug/examples/crypto_emit > target/crypto/rust-output.txt
+	$(GO_OBS_HELPER_HTTP) attest audit-differential --artifact rust-output.jsonl=target/audit/rust-output.jsonl --note "Go auditverify validates the audit log Rust wrote" -- $(GO) run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
+	$(GO_OBS_HELPER_HTTP) attest crypto-differential --artifact rust-output.txt=target/crypto/rust-output.txt --note "Go cryptoverify validates the age/KDF output Rust emitted" -- $(GO) run ./scripts/rust-port/cmd/cryptoverify target/crypto/rust-output.txt
+	$(GO_OBS_HELPER_HTTP) attest reencrypt-journal-differential --env SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" --artifact symvault="$(RUST_BINARY)" --note "Go test drives the Rust binary through re-encrypt journal crash recovery" -- $(GO) test ./internal/vault -run '^TestReencryptJournalGoRustIntegration$$' -count=1
+	$(GO_OBS_HELPER_HTTP) attest kdf-go-rust-integration --env SYMVAULT_GO_BINARY="$(abspath target/port/go-cli-kdf)" --artifact symvault="$(RUST_BINARY)" --note "Go CLI creates vaults, the Rust CLI migrates KDF policy and Go reads them back" -- sh -c 'CGO_ENABLED=0 $(GO) build -o target/port/go-cli-kdf . && $(CARGO) test -p symvault-cli --test migrate_kdf_differential --locked -- --ignored'
+	$(GO_OBS_HELPER_HTTP) attest ffi-differential --env SYMVAULT_FFI_GO_DRIVER="$(FFI_DRIVER)" --artifact symvault="$(RUST_BINARY)" --note "Rust-produced vault data is decrypted by the live Go mobilebind driver" -- sh -c '$(GO) build -o $(FFI_DRIVER) ./scripts/rust-port/cmd/mobilebindgen && $(CARGO) test -p symvault-ffi --locked'
+	$(GO_OBS_HELPER_HTTP) attest pairing-oracle --artifact symvault="$(RUST_BINARY)" --note "Live Go CLI and Rust CLI interleaved on shared vaults (cli_differential, import quarantine, auth, startup profile)" -- env CARGO="$(CARGO)" GO="$(GO)" BUILD_GO_TOOLCHAIN="$(BUILD_GO_TOOLCHAIN)" AREA_CHECK="$(AREA_CHECK)" scripts/rust-port/area_pairing_oracle.sh "$(abspath $(AREA_EVIDENCE))"
