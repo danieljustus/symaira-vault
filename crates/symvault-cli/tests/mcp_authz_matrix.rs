@@ -504,14 +504,17 @@ fn authorization_matrix_password_mask_ignores_sanitizer_rewrites() {
         (state >> 33) as usize
     };
     let hostile: Vec<char> = "-->-->-<</>>/abz_".chars().collect();
-    let password: Vec<char> = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%^&*()-_=+[]{}|;:,.<>?/~"
-        .chars()
-        .collect();
+    let password: Vec<char> =
+        "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%^&*()-_=+[]{}|;:,.<>?/~"
+            .chars()
+            .collect();
     let mut rewritten = 0;
     for trial in 0..20_000 {
         let alphabet = if trial % 2 == 1 { &hostile } else { &password };
         let length = [1, 8, 16, 17, 40][next() % 5];
-        let original: String = (0..length).map(|_| alphabet[next() % alphabet.len()]).collect();
+        let original: String = (0..length)
+            .map(|_| alphabet[next() % alphabet.len()])
+            .collect();
         let sanitized = symvault_mcp::render::sanitize_for_mcp(&original);
         rewritten += usize::from(sanitized != original);
         assert_eq!(undo_mcp_sanitizer(&sanitized), original);
