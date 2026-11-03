@@ -474,6 +474,20 @@ approval-fixtures-check:
 approval-replay:
 	$(CARGO) test -p symvault-cli --test approval_queue_replay --locked
 
+# APPROVAL-001 end to end: the Rust CLI against the production Rust listener
+# (seeded queue, TLS and mTLS) and against a real `symvault mcp` process, plus
+# the mTLS settings refusals frozen from the real Go `symvault mcp` by
+# approvaltlsgen (pinned oracle sources). The e2e needs no Go.
+.PHONY: approval-tls-fixtures-generate approval-tls-fixtures-check approval-e2e
+approval-tls-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/approvaltlsgen
+
+approval-tls-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/approvaltlsgen --check
+
+approval-e2e:
+	$(CARGO) test -p symvault-cli --test approval_e2e --locked
+
 .PHONY: device-list-differential
 DEVICE_LIST_REPORT ?= $(CARGO_TARGET_DIR)/device-list-differential-$(shell date -u +%Y%m%dT%H%M%SZ).json
 device-list-differential:

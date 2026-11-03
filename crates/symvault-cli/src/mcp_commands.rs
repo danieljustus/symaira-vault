@@ -212,17 +212,17 @@ pub fn run(
             ),
             None => (tls_cert, tls_key),
         };
-        validate_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca, mtls_enabled)?;
+        // Go returns every `RunHTTPServer` error wrapped as `http server: %w`.
+        validate_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca, mtls_enabled)
+            .map_err(|error| format!("http server: {error}"))?;
         let tls = if tls_cert.is_empty() {
             None
+        } else if mtls_enabled {
+            Some(load_mtls_server_config(tls_cert, tls_key, tls_ca)?)
         } else {
             Some(
-                symvault_mcp::http::load_tls_server_config(
-                    tls_cert,
-                    tls_key,
-                    mtls_enabled.then(|| Path::new(tls_ca)),
-                )
-                .map_err(|error| format!("MCP HTTP TLS: {error}"))?,
+                symvault_mcp::http::load_tls_server_config(tls_cert, tls_key, None)
+                    .map_err(|error| format!("MCP HTTP TLS: {error}"))?,
             )
         };
         let address = if bind == "localhost" {
@@ -752,6 +752,51 @@ fn confirm_insecure_bind(input: impl BufRead, output: &mut impl Write) -> Result
         return Err("insecure bind not confirmed; set MCP.allow_insecure_bind=false to use TLS (auto-generated self-signed certificate)".to_owned());
     }
     Ok(())
+}
+
+/// Loads the mTLS listener identity in the order and wording of Go's
+/// `RunHTTPServerOnListener`: the client CA is read, then parsed, then the
+/// server key pair is loaded, and each failure is `http server: <text>`. The
+/// key pair failure deliberately carries no cause, as in Go.
+fn load_mtls_server_config(
+    cert: &str,
+    key: &str,
+    ca: &str,
+) -> Result<Arc<rustls::ServerConfig>, String> {
+    use rustls::pki_types::{CertificateDer, pem::PemObject};
+
+    let ca = ca.trim();
+    let ca_path = Path::new(ca);
+    let ca_pem = fs::read(ca_path).map_err(|error| {
+        // Go's `*fs.PathError`: `open <path>: <errno text>`. (This file is also
+        // compiled into a test crate without the `config` module, so the
+        // wording of the common causes is spelled out here.)
+        let cause = match error.kind() {
+            io::ErrorKind::NotFound => "no such file or directory".to_owned(),
+            io::ErrorKind::PermissionDenied => "permission denied".to_owned(),
+            io::ErrorKind::IsADirectory => "is a directory".to_owned(),
+            _ => error.to_string(),
+        };
+        let verb = if error.kind() == io::ErrorKind::IsADirectory {
+            "read"
+        } else {
+            "open"
+        };
+        format!(
+            "http server: read client CA certificate: {verb} {}: {cause}",
+            ca_path.display()
+        )
+    })?;
+    let has_certificate = CertificateDer::pem_slice_iter(&ca_pem).any(|item| item.is_ok());
+    if !has_certificate {
+        return Err(format!(
+            "http server: parse client CA certificate: no valid PEM block found in {ca:?}"
+        ));
+    }
+    symvault_mcp::http::load_tls_server_config(cert, key, None)
+        .map_err(|_| "http server: load server TLS key pair failed".to_owned())?;
+    symvault_mcp::http::load_tls_server_config(cert, key, Some(ca_path))
+        .map_err(|error| format!("http server: configure TLS client authentication: {error}"))
 }
 
 fn validate_tls(
