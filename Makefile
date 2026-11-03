@@ -224,6 +224,26 @@ release-contract-selftest:
 	python3 scripts/rust-port/test_release_contract.py
 	python3 scripts/test_supported_platforms.py
 
+# VALUE-001 value gate (Go-free, stdlib Python; measured and reported, decision
+# D5). Measures stripped release binaries, never builds them: pass the Go
+# release binary and the Rust release binary, e.g.
+#   make value-gate GO_BIN=/path/symvault-go RUST_BIN=target/release/symvault
+# Refuses to run when the host 1-min load average is above 4. Set
+# VALUE_GATE_ENFORCE=1 to make a missed rule exit non-zero.
+GO_BIN ?=
+RUST_BIN ?= target/release/symvault
+VALUE_GATE_OUT ?= target/value-gate/value-gate.json
+VALUE_GATE_FLAGS ?=
+.PHONY: value-gate value-gate-selftest
+value-gate:
+	@test -n "$(GO_BIN)" || { echo "value-gate: set GO_BIN=<Go release binary> (RUST_BIN defaults to $(RUST_BIN))" >&2; exit 2; }
+	python3 -B scripts/rust-port/valuegate.py measure --go "$(GO_BIN)" --rust "$(RUST_BIN)" --out "$(VALUE_GATE_OUT)" $(VALUE_GATE_FLAGS)
+	python3 -B scripts/rust-port/valuegate.py check "$(VALUE_GATE_OUT)" $(if $(VALUE_GATE_ENFORCE),,--report-only)
+
+# Unit tests of the value gate on fake shell-script binaries (no build, no Go).
+value-gate-selftest:
+	python3 -B scripts/rust-port/test_valuegate.py
+
 # Go-oracle fixtures and neutral black-box harness for the staged Rust port.
 PORT_ORACLE_COMMIT ?= caadd5e
 PORT_ORACLE_RELEASE ?= v0.22.1
