@@ -1269,4 +1269,230 @@ mod tests {
         );
         assert_eq!(fs::read(path).unwrap(), before);
     }
+
+    // ---- HTTP-003 expiry boundaries -------------------------------------
+    //
+    // Go compares with `time.Now().After(expiresAt)` everywhere
+    // (`handleOAuthToken` for the code, `oauthClientStore.get`/`cleanupExpired`
+    // for DCR clients): a value is still valid at exactly its expiry and
+    // expired one nanosecond later. Rust's injected `now` makes the boundary
+    // testable; `>` below must stay strict.
+
+    fn approving_state(directory: &std::path::Path) -> OAuthState {
+        OAuthState::new(
+            directory.to_path_buf(),
+            "default".into(),
+            Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
+            Box::new(|_| false),
+        )
+    }
+
+    fn issue_code_at(state: &OAuthState, client_id: &str, at: OffsetDateTime) -> String {
+        let authorization = format!(
+            "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&code_challenge={CHALLENGE}&code_challenge_method=S256"
+        );
+        let OAuthResponse::Redirect(location) = authorize(state, &authorization, at) else {
+            panic!("approved request must redirect");
+        };
+        parse_form(location.split_once('?').unwrap().1)
+            .unwrap()
+            .remove("code")
+            .unwrap()
+    }
+
+    fn exchange(state: &OAuthState, code: &str, at: OffsetDateTime) -> (u16, serde_json::Value) {
+        response_body(token(
+            state,
+            &format!("grant_type=authorization_code&code={code}&code_verifier={VERIFIER}"),
+            at,
+        ))
+    }
+
+    #[test]
+    fn authorization_code_ttl_is_five_minutes_valid_at_the_boundary() {
+        assert_eq!(AUTH_CODE_TTL, Duration::minutes(5));
+        let t0 = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        for (offset, status) in [
+            (Duration::ZERO, 200),
+            (AUTH_CODE_TTL - Duration::nanoseconds(1), 200),
+            (AUTH_CODE_TTL, 200),
+            (AUTH_CODE_TTL + Duration::nanoseconds(1), 400),
+            (AUTH_CODE_TTL + Duration::seconds(1), 400),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let state = approving_state(directory.path());
+            let client_id = register(&state);
+            let code = issue_code_at(&state, &client_id, t0);
+            let (got, body) = exchange(&state, &code, t0 + offset);
+            assert_eq!(got, status, "offset {offset:?}: {body}");
+            if status == 400 {
+                assert_eq!(body, serde_json::json!({"error": "invalid_grant"}));
+                assert!(
+                    fs::read_to_string(directory.path().join(token_registry::TOKEN_REGISTRY_FILE))
+                        .is_err(),
+                    "an expired code must not mint a token"
+                );
+            }
+            // Single use either way: the code was taken before the expiry check.
+            assert_eq!(exchange(&state, &code, t0).0, 400, "offset {offset:?}");
+        }
+    }
+
+    fn browser_state(directory: &std::path::Path) -> OAuthState {
+        OAuthState::new(
+            directory.to_path_buf(),
+            "default".into(),
+            Box::new(|_, _| crate::http::OAuthConsentDecision::Browser),
+            Box::new(|passphrase| passphrase == "approved-passphrase"),
+        )
+    }
+
+    fn open_flow(state: &OAuthState, client_id: &str, at: OffsetDateTime) -> OAuthResponse {
+        let authorization = format!(
+            "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&state=s&code_challenge={CHALLENGE}&code_challenge_method=S256"
+        );
+        authorize(state, &authorization, at)
+    }
+
+    fn flow_id_of(response: OAuthResponse) -> String {
+        let OAuthResponse::Http(page) = response else {
+            panic!("browser consent renders a page");
+        };
+        assert_eq!(page.status, 200);
+        String::from_utf8(page.body)
+            .unwrap()
+            .split("name=\"flow_id\" value=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap()
+            .to_owned()
+    }
+
+    #[test]
+    fn browser_ticket_is_valid_at_exactly_its_ttl_and_expired_one_nanosecond_later() {
+        let t0 = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        for (offset, redirect) in [
+            (Duration::ZERO, true),
+            (AUTH_CODE_TTL, true),
+            (AUTH_CODE_TTL + Duration::nanoseconds(1), false),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let state = browser_state(directory.path());
+            let client_id = register(&state);
+            let flow_id = flow_id_of(open_flow(&state, &client_id, t0));
+            let response = confirm(
+                &state,
+                "application/x-www-form-urlencoded",
+                &format!("flow_id={flow_id}&passphrase=approved-passphrase"),
+                t0 + offset,
+            );
+            match (redirect, response) {
+                (true, OAuthResponse::Redirect(location)) => {
+                    assert!(location.contains("code="), "{location}");
+                }
+                (false, OAuthResponse::Http(response)) => {
+                    assert_eq!(response.status, 400);
+                    assert_eq!(response.body, b"{\"error\":\"invalid_request\"}\n");
+                }
+                (_, other) => panic!("offset {offset:?}: unexpected {:?}", match other {
+                    OAuthResponse::Redirect(location) => location,
+                    OAuthResponse::Http(response) => format!("HTTP {}", response.status),
+                }),
+            }
+        }
+    }
+
+    /// The 256-ticket cap is a Rust hardening with no Go counterpart (Go's
+    /// consent page is stateless: the form carries the request). Pin the
+    /// refusal bytes and that expired tickets are purged strictly after their
+    /// TTL, so a full table recovers exactly then.
+    #[test]
+    fn browser_consent_cap_answers_503_until_tickets_expire_strictly_after_their_ttl() {
+        let t0 = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let state = browser_state(directory.path());
+        let client_id = register(&state);
+        for _ in 0..MAX_BROWSER_CONSENTS {
+            flow_id_of(open_flow(&state, &client_id, t0));
+        }
+        assert_eq!(state.browser_requests.lock().unwrap().len(), MAX_BROWSER_CONSENTS);
+        for at in [t0, t0 + AUTH_CODE_TTL] {
+            let OAuthResponse::Http(full) = open_flow(&state, &client_id, at) else {
+                panic!("a full table answers JSON");
+            };
+            assert_eq!(full.status, 503, "at {at}");
+            assert_eq!(full.body, b"{\"error\":\"server_error\"}\n");
+            assert!(full.headers.contains(&("Content-Type", "application/json")));
+            assert_eq!(state.browser_requests.lock().unwrap().len(), MAX_BROWSER_CONSENTS);
+        }
+        let after = t0 + AUTH_CODE_TTL + Duration::nanoseconds(1);
+        flow_id_of(open_flow(&state, &client_id, after));
+        assert_eq!(state.browser_requests.lock().unwrap().len(), 1, "expired tickets purged");
+    }
+
+    fn set_client_expiry(root: &std::path::Path, client_id: &str, fields: serde_json::Value) {
+        let path = root.join(token_registry::OAUTH_CLIENTS_FILE);
+        let mut file: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let client = file["clients"][client_id].as_object_mut().unwrap();
+        for (key, value) in fields.as_object().unwrap() {
+            client.insert(key.clone(), value.clone());
+        }
+        fs::write(&path, serde_json::to_vec(&file).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn dcr_client_with_expires_at_is_known_until_one_nanosecond_after_it() {
+        let expiry = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        let authorization = |client_id: &str| {
+            format!(
+                "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&code_challenge={CHALLENGE}&code_challenge_method=S256"
+            )
+        };
+        for (offset, known) in [
+            (-Duration::seconds(1), true),
+            (Duration::ZERO, true),
+            (Duration::nanoseconds(1), false),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let state = approving_state(directory.path());
+            let client_id = register(&state);
+            set_client_expiry(
+                directory.path(),
+                &client_id,
+                serde_json::json!({"ttl_seconds": 60, "expires_at": "2027-01-15T08:00:00Z"}),
+            );
+            let OAuthResponse::Redirect(_) = authorize(&state, &authorization(&client_id), expiry - Duration::days(1))
+            else {
+                panic!("a live client authorizes");
+            };
+            let response = authorize(&state, &authorization(&client_id), expiry + offset);
+            match (known, response) {
+                (true, OAuthResponse::Redirect(_)) => {}
+                (false, OAuthResponse::Http(response)) => {
+                    assert_eq!(response.status, 400);
+                    assert!(
+                        String::from_utf8(response.body)
+                            .unwrap()
+                            .contains("unknown client_id; register via POST /oauth/register first")
+                    );
+                }
+                _ => panic!("offset {offset:?} known={known}"),
+            }
+        }
+    }
+
+    /// Go's `ttl_seconds` is metadata only: the deadline is `expires_at`, so a
+    /// record with a TTL and no deadline never expires.
+    #[test]
+    fn dcr_client_ttl_seconds_without_expires_at_never_expires() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = approving_state(directory.path());
+        let client_id = register(&state);
+        set_client_expiry(directory.path(), &client_id, serde_json::json!({"ttl_seconds": 1}));
+        let far = OffsetDateTime::from_unix_timestamp(4_000_000_000).unwrap();
+        issue_code_at(&state, &client_id, far);
+    }
 }
