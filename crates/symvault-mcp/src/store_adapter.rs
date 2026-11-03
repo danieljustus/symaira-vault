@@ -505,7 +505,9 @@ pub struct StoreReadOnlyRuntime {
     allowed_executables: Vec<String>,
     clipboard: Arc<dyn symvault_core::platform::Clipboard>,
     clipboard_clear_cancel: Mutex<Option<mpsc::Sender<()>>>,
-    clipboard_auto_clear_duration: Duration,
+    /// Go reads `clipboard.auto_clear_duration` verbatim: a value <= 0 starts no
+    /// timer and `generate_totp` reports it unchanged, negative included.
+    clipboard_auto_clear_seconds: i64,
     api_transport_options: broker::ApiTransportOptions,
     payment: Option<crate::payment::Enforcer>,
     autotype: Option<Arc<dyn symvault_core::platform::Autotype>>,
@@ -619,7 +621,7 @@ impl StoreReadOnlyRuntime {
             allowed_executables,
             clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
             clipboard_clear_cancel: Mutex::new(None),
-            clipboard_auto_clear_duration: Duration::from_secs(30),
+            clipboard_auto_clear_seconds: 30,
             api_transport_options: broker::ApiTransportOptions::default(),
             payment: None,
             autotype: None,
@@ -701,7 +703,7 @@ impl StoreReadOnlyRuntime {
             allowed_executables,
             clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
             clipboard_clear_cancel: Mutex::new(None),
-            clipboard_auto_clear_duration: Duration::from_secs(30),
+            clipboard_auto_clear_seconds: 30,
             api_transport_options: broker::ApiTransportOptions::default(),
             payment: None,
             autotype: None,
@@ -801,8 +803,17 @@ impl StoreReadOnlyRuntime {
     }
 
     #[must_use]
-    pub fn with_clipboard_auto_clear_duration(mut self, duration: Duration) -> Self {
-        self.clipboard_auto_clear_duration = duration;
+    pub fn with_clipboard_auto_clear_duration(self, duration: Duration) -> Self {
+        self.with_clipboard_auto_clear_seconds(
+            i64::try_from(duration.as_secs()).unwrap_or(i64::MAX),
+        )
+    }
+
+    /// The configured `clipboard.auto_clear_duration` in seconds, unclamped
+    /// (see the field).
+    #[must_use]
+    pub fn with_clipboard_auto_clear_seconds(mut self, seconds: i64) -> Self {
+        self.clipboard_auto_clear_seconds = seconds;
         self
     }
 
@@ -3790,13 +3801,13 @@ impl StoreReadOnlyRuntime {
                 .set(code.as_bytes())
                 .map_err(|error| format!("clipboard copy failed: {error}"))?;
             self.start_clipboard_auto_clear();
-            Ok(i64::try_from(self.clipboard_auto_clear_duration.as_secs()).unwrap_or(i64::MAX))
+            Ok(self.clipboard_auto_clear_seconds)
         };
         self.inner.generate_totp_with(arguments, Some(&copy))
     }
 
     fn start_clipboard_auto_clear(&self) {
-        if self.clipboard_auto_clear_duration.is_zero() {
+        if self.clipboard_auto_clear_seconds <= 0 {
             return;
         }
         let (cancel, receiver) = mpsc::channel();
@@ -3808,7 +3819,7 @@ impl StoreReadOnlyRuntime {
             return;
         }
         let clipboard = Arc::clone(&self.clipboard);
-        let delay = self.clipboard_auto_clear_duration;
+        let delay = Duration::from_secs(self.clipboard_auto_clear_seconds.unsigned_abs());
         let clear_claimed = Arc::new(std::sync::atomic::AtomicBool::new(false));
         #[cfg(unix)]
         let signal_registration = approval_prompt::register_stdio_clipboard_auto_clear(

@@ -3817,11 +3817,7 @@ fn run_get(
                     ));
                 }
             };
-            let str_value = match &value {
-                serde_json::Value::String(s) => s.clone(),
-                serde_json::Value::Null => String::new(),
-                other => other.to_string(),
-            };
+            let str_value = run_commands::format_go_value(&value);
             if !quiet {
                 if length {
                     println!("{}", str_value.len());
@@ -3973,6 +3969,15 @@ fn emit_get_result(
     {
         return Ok(());
     }
+    if let vault_commands::GetResult::Field { value, .. } = &result
+        && matches!(format, "text" | "")
+    {
+        if !quiet {
+            writeln!(stdout, "{}", run_commands::format_go_value(value))
+                .map_err(|error| error.to_string())?;
+        }
+        return Ok(());
+    }
     let result = if format != "text" && !format.is_empty() && !print {
         mask_sensitive(result)
     } else {
@@ -4017,11 +4022,7 @@ fn copy_get_field_to_clipboard(
     if destination == clip::GetDestination::Stdout {
         return Ok(false);
     }
-    let text = match value {
-        serde_json::Value::String(text) => text.clone(),
-        serde_json::Value::Null => String::new(),
-        other => other.to_string(),
-    };
+    let text = run_commands::format_go_value(value);
     let seconds = clip::auto_clear_seconds(section.map(|section| section.auto_clear_duration));
     clip::copy_and_auto_clear(
         environment.clipboard,
@@ -6552,7 +6553,142 @@ mod get_clipboard_wiring_tests {
     }
 
     #[test]
-    fn non_string_values_are_copied_as_json_text() {
+    fn go_recorded_value_formats() {
+        use sha2::{Digest, Sha256};
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/platform/get_clipboard.json"
+        ))
+        .unwrap();
+        let cases = fixture["value_scenarios"].as_array().unwrap();
+        assert_eq!(cases.len(), 84);
+        let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 0\n"));
+        let mut replayed = 0;
+        let mut negative_zero = 0;
+        for case in cases {
+            let name = case["name"].as_str().unwrap();
+            // The value reaches `get` the way a real one does: as a field of
+            // decrypted entry JSON decoded by the store (which, like Go's
+            // float64 decoding, keeps the sign of `-0`).
+            let plaintext = format!(
+                "{{\"data\":{{\"value\":{}}}}}",
+                case["value_json"].as_str().unwrap()
+            );
+            let value = symvault_store::decode_entry_plaintext(plaintext.as_bytes(), "fixture")
+                .unwrap()
+                .data
+                .remove("value")
+                .unwrap();
+            replayed += 1;
+            negative_zero += usize::from(name.ends_with("_negative_zero"));
+            let text = crate::run_commands::format_go_value(&value);
+            if name.starts_with("copy_") {
+                let outcome = run(
+                    vault.path(),
+                    field("value", value),
+                    "text",
+                    false,
+                    true,
+                    false,
+                );
+                assert_eq!(outcome.result, Ok(()), "{name}");
+                assert_eq!(
+                    format!("copy:{}", outcome.clipboard.state.lock().unwrap().0),
+                    case["clipboard_ops"][0].as_str().unwrap(),
+                    "{name}"
+                );
+            } else if name.starts_with("print_") {
+                let outcome = run(
+                    vault.path(),
+                    field("value", value),
+                    "text",
+                    false,
+                    false,
+                    false,
+                );
+                assert_eq!(outcome.stdout, case["stdout"].as_str().unwrap(), "{name}");
+            } else if name.starts_with("length_") {
+                assert_eq!(
+                    format!("{}\n", text.len()),
+                    case["stdout"].as_str().unwrap(),
+                    "{name}"
+                );
+            } else {
+                let digest = Sha256::digest(text.as_bytes())
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
+                if name.starts_with("digest_") {
+                    assert_eq!(
+                        format!("sha256:{}\n", &digest[..12]),
+                        case["stdout"].as_str().unwrap(),
+                        "{name}"
+                    );
+                } else {
+                    let expected: serde_json::Value =
+                        serde_json::from_str(case["stdout"].as_str().unwrap()).unwrap();
+                    assert_eq!(expected["length"], text.len(), "{name}");
+                    assert_eq!(expected["sha256_12"], &digest[..12], "{name}");
+                }
+            }
+        }
+        assert_eq!(
+            replayed, 84,
+            "every recorded value case runs, none is skipped"
+        );
+        assert_eq!(negative_zero, 3, "copy, print and length of -0");
+    }
+
+    /// Go rejects a negative `clipboard.auto_clear_duration` when the command
+    /// opens the vault (exit 6), so `get` never reaches the clipboard with one;
+    /// it does not clamp it. The Rust validator must produce the same message.
+    /// (Rust's vault-open path does not yet run this validator for `get`; that
+    /// gap is tracked in the PLATFORM-001 residuals, not hidden here.)
+    #[test]
+    fn go_rejects_negative_auto_clear_with_the_message_rust_validates() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/platform/get_clipboard.json"
+        ))
+        .unwrap();
+        let rejected = fixture["config_rejected"].as_array().unwrap();
+        assert_eq!(rejected.len(), 3);
+        for case in rejected {
+            let name = case["name"].as_str().unwrap();
+            let seconds = case["auto_clear_seconds"].as_i64().unwrap();
+            assert!(seconds < 0, "{name}");
+            assert_eq!(case["exit_code"], 6, "{name}");
+            assert_eq!(case["clipboard_ops"].as_array().unwrap().len(), 0, "{name}");
+            let vault = vault_with_config(Some(&format!(
+                "clipboard:\n  auto_clear_duration: {seconds}\n"
+            )));
+            let config =
+                symvault_core::config::Config::load(vault.path().join("config.yaml")).unwrap();
+            let errors = config.validate();
+            assert_eq!(errors.len(), 1, "{name}: {errors:?}");
+            assert!(
+                case["stderr"].as_str().unwrap().contains(&errors[0]),
+                "{name}: Go's stderr does not contain {:?}",
+                errors[0]
+            );
+        }
+    }
+
+    #[test]
+    fn negative_zero_needs_the_store_decoder() {
+        // Control for the replay above: a plain serde_json parse loses the sign
+        // of the integer token `-0`, so the cases would pass only by accident
+        // if the store decoder stopped preserving it.
+        let plain: serde_json::Value = serde_json::from_str("-0").unwrap();
+        assert_eq!(crate::run_commands::format_go_value(&plain), "0");
+        let decoded = symvault_store::decode_entry_plaintext(br#"{"data":{"value":-0}}"#, "x")
+            .unwrap()
+            .data
+            .remove("value")
+            .unwrap();
+        assert_eq!(crate::run_commands::format_go_value(&decoded), "-0");
+    }
+
+    #[test]
+    fn non_string_values_are_copied_as_go_text() {
         let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 0\n"));
         let outcome = run(
             vault.path(),

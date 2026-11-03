@@ -94,6 +94,12 @@ func TestGenerateGetClipboardFixture(t *testing.T) {
 	for _, s := range getClipboardScenarios() {
 		out.Scenarios = append(out.Scenarios, runGetClipboardScenario(t, s))
 	}
+	for _, s := range getClipboardValueScenarios() {
+		out.ValueScenarios = append(out.ValueScenarios, runGetClipboardScenario(t, s))
+	}
+	for _, s := range getClipboardConfigRejectedScenarios() {
+		out.ConfigRejected = append(out.ConfigRejected, runGetClipboardScenario(t, s))
+	}
 	out.VerifyCleared = recordVerifyCleared()
 	out.Countdown = recordCountdown()
 
@@ -131,6 +137,18 @@ type getClipboardFixture struct {
 	Scenarios     []getClipboardResult `json:"scenarios"`
 	VerifyCleared []verifyClearedCase  `json:"verify_cleared"`
 	Countdown     []countdownCase      `json:"countdown"`
+	// ValueScenarios freeze `fmt.Sprintf("%v", value)` for non-string field
+	// values (PLATFORM-001-FIDELITY): the entry holds the JSON value in
+	// `password`, stored and re-read through the production JSON codec, so
+	// every number reaches `get` as a float64 like in a real vault.
+	ValueScenarios []getClipboardResult `json:"value_scenarios"`
+	// ConfigRejected (PLATFORM-001-FIDELITY) are `get` runs whose vault config
+	// is rejected before any clipboard use: a negative auto_clear_duration
+	// fails validation when the command opens the vault (the interactive fixer
+	// is offered because the terminal decision is stubbed to true; its prompts
+	// read an empty stdin, so the fix is declined), so Go never copies and never
+	// reaches the negative-duration branch of the countdown.
+	ConfigRejected []getClipboardResult `json:"config_rejected"`
 }
 
 // getClipboardScenario is the recorded input. ReadMode selects what the fake
@@ -150,6 +168,15 @@ type getClipboardScenario struct {
 	ReadError       string `json:"read_error,omitempty"`
 	TimerStubMillis int    `json:"timer_stub_ms,omitempty"`
 	SignalAfterMs   int    `json:"signal_after_ms,omitempty"` // real StartAutoClear + SIGTERM
+	// ValueJSON, when set, is the JSON text of the field value instead of the
+	// string Secret. Length/Digest/Metadata select the matching `get` flag.
+	ValueJSON string `json:"value_json,omitempty"`
+	Length    bool   `json:"length,omitempty"`
+	Digest    bool   `json:"digest,omitempty"`
+	Metadata  bool   `json:"metadata,omitempty"`
+	// SecretRepeat, when positive, repeats Secret that many times in the stored
+	// field (keeps large-payload scenarios small in the fixture).
+	SecretRepeat int `json:"secret_repeat,omitempty"`
 }
 
 type getClipboardResult struct {
@@ -160,6 +187,14 @@ type getClipboardResult struct {
 	Ops                   []string `json:"clipboard_ops"`
 	FinalClipboard        string   `json:"final_clipboard"`
 	StartAutoClearSeconds int      `json:"start_auto_clear_seconds"`
+}
+
+func getClipboardConfigRejectedScenarios() []getClipboardScenario {
+	return []getClipboardScenario{
+		{Name: "negative_auto_clear_config", Secret: "s3cret-neg", AutoClear: -5, Terminal: true, TimerStubMillis: 150, ReadMode: "honest"},
+		{Name: "negative_auto_clear_config_one", Secret: "s3cret-neg", AutoClear: -1, Terminal: true, TimerStubMillis: 150, ReadMode: "honest"},
+		{Name: "negative_auto_clear_config_not_a_terminal", Secret: "s3cret-neg", AutoClear: -5, Terminal: false, ReadMode: "honest"},
+	}
 }
 
 func getClipboardScenarios() []getClipboardScenario {
@@ -182,6 +217,60 @@ func getClipboardScenarios() []getClipboardScenario {
 		{Name: "copy_by_default_false_prints", Secret: "s3cret-nodefault", AutoClear: 1, Terminal: true, CopyByDefault: &f, ReadMode: "honest"},
 		{Name: "json_output_never_clipboard", Secret: "s3cret-json", AutoClear: 1, Terminal: true, JSON: true, ReadMode: "honest"},
 	}
+}
+
+// getClipboardValueScenarios drives every `strValue := fmt.Sprintf("%v", value)`
+// consumer of cmd/crud/get.go with non-string field values: the clipboard copy,
+// the stdout print of a non-terminal, and the length/digest/metadata flags.
+func getClipboardValueScenarios() []getClipboardScenario {
+	values := []struct{ name, json string }{
+		{"null", `null`},
+		{"integer", `42`},
+		{"negative_integer", `-7`},
+		{"zero", `0`},
+		{"negative_zero", `-0`},
+		{"float", `3.14`},
+		{"float_whole", `1.0`},
+		{"float_hundred_thousand", `100000.0`},
+		{"float_one_million", `1000000`},
+		{"float_exp_21", `1e21`},
+		{"float_big_integer", `123456789012345678`},
+		{"float_small", `0.0001`},
+		{"float_tiny", `0.00001`},
+		{"float_tiny_two_digits", `2.5e-7`},
+		{"float_huge", `1.5e300`},
+		{"bool_true", `true`},
+		{"bool_false", `false`},
+		{"empty_array", `[]`},
+		{"empty_object", `{}`},
+		{"array_mixed", `[1,"a",null,true,2.5]`},
+		{"object_sorted_keys", `{"b":1,"a":[1,2],"c":{"z":null,"y":"s"}}`},
+		{"nested", `{"x":{"y":[{"z":null},[],{}]}}`},
+		{"strings_with_spaces", `["a b","","c\nd"]`},
+		{"unicode_key_order", `{"é":1,"e":2,"Z":3,"z":4}`},
+		{"string_control", `"plain string"`},
+		{"string_json_looking", `"{\"a\":1}"`},
+	}
+	var out []getClipboardScenario
+	for _, v := range values {
+		out = append(out,
+			getClipboardScenario{Name: "copy_" + v.name, ValueJSON: v.json, AutoClear: 1, Terminal: true, TimerStubMillis: 150, ReadMode: "honest"},
+			getClipboardScenario{Name: "print_" + v.name, ValueJSON: v.json, AutoClear: 0, Terminal: false, ReadMode: "honest"},
+			getClipboardScenario{Name: "length_" + v.name, ValueJSON: v.json, AutoClear: 0, Terminal: false, Length: true, ReadMode: "honest"},
+		)
+	}
+	for _, name := range []string{"null", "float_exp_21", "object_sorted_keys"} {
+		for _, v := range values {
+			if v.name != name {
+				continue
+			}
+			out = append(out,
+				getClipboardScenario{Name: "digest_" + v.name, ValueJSON: v.json, AutoClear: 0, Terminal: false, Digest: true, ReadMode: "honest"},
+				getClipboardScenario{Name: "metadata_" + v.name, ValueJSON: v.json, AutoClear: 0, Terminal: false, Metadata: true, ReadMode: "honest"},
+			)
+		}
+	}
+	return out
 }
 
 type fakeFixtureClipboard struct {
@@ -224,6 +313,15 @@ func (c *fakeFixtureClipboard) Read() (string, error) {
 
 func runGetClipboardScenario(t *testing.T, s getClipboardScenario) getClipboardResult {
 	t.Helper()
+	return runGetClipboardScenarioWith(t, s, nil)
+}
+
+// runGetClipboardScenarioWith runs one `get` scenario. A nil realClipboard
+// installs the in-memory fake; otherwise crud.GetClipboard is that factory
+// (the production clipboard.DefaultClipboard over fake tools) and the
+// result's clipboard operations stay empty.
+func runGetClipboardScenarioWith(t *testing.T, s getClipboardScenario, realClipboard func() clipboardapp.Clipboard) getClipboardResult {
+	t.Helper()
 	resetCommandTestState()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -241,7 +339,16 @@ func runGetClipboardScenario(t *testing.T, s getClipboardScenario) getClipboardR
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry := &vaultpkg.Entry{Data: map[string]any{"password": s.Secret}}
+	var fieldValue any = s.Secret
+	if s.SecretRepeat > 0 {
+		fieldValue = strings.Repeat(s.Secret, s.SecretRepeat)
+	}
+	if s.ValueJSON != "" {
+		if err := json.Unmarshal([]byte(s.ValueJSON), &fieldValue); err != nil {
+			t.Fatalf("value_json %q: %v", s.ValueJSON, err)
+		}
+	}
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": fieldValue}}
 	if err := vaultpkg.WriteEntry(vaultDir, "fixture-entry", entry, identity.Identity); err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +367,11 @@ func runGetClipboardScenario(t *testing.T, s getClipboardScenario) getClipboardR
 
 	fake := &fakeFixtureClipboard{s: s}
 	oldClipboard := crud.GetClipboard
-	crud.GetClipboard = func() clipboardapp.Clipboard { return fake }
+	if realClipboard == nil {
+		crud.GetClipboard = func() clipboardapp.Clipboard { return fake }
+	} else {
+		crud.GetClipboard = realClipboard
+	}
 	oldDuration := crud.GetAutoClearDurationFunc
 	crud.GetAutoClearDurationFunc = func() int { return s.AutoClear }
 	oldStart := crud.StartAutoClear
@@ -308,6 +419,15 @@ func runGetClipboardScenario(t *testing.T, s getClipboardScenario) getClipboardR
 	args = append(args, "get", "fixture-entry.password")
 	if s.Print {
 		args = append(args, "--print")
+	}
+	if s.Length {
+		args = append(args, "--length")
+	}
+	if s.Digest {
+		args = append(args, "--digest")
+	}
+	if s.Metadata {
+		args = append(args, "--metadata")
 	}
 	var stdout string
 	stderr := captureStderr(func() {

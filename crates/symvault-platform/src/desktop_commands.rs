@@ -24,7 +24,8 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
+use std::time::{Duration, Instant};
 
 /// Environment variable that turns an unavailable focus probe into a refusal.
 pub const STRICT_FOCUS_ENV: &str = "SYMVAULT_AUTOTYPE_STRICT_FOCUS";
@@ -99,6 +100,13 @@ pub fn escape_send_keys_string(text: &str) -> String {
     out
 }
 
+/// Deadline of one macOS pasteboard tool run (`pbcopy`/`pbpaste`), the same
+/// 30 s the previous native adapter used. Go's atotto has none.
+pub const PASTEBOARD_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How often a bounded run looks at its child and pipes.
+const POLL_INTERVAL: Duration = Duration::from_millis(2);
+
 /// Which environment a spawned tool receives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EnvPolicy {
@@ -106,15 +114,83 @@ pub enum EnvPolicy {
     Inherit,
     /// [`AUTOTYPE_ENV_WHITELIST`] only (Go `secrets.PrepareCmd`).
     Whitelist,
+    /// `PATH`, `HOME`, `LANG`, `LC_*` and `__CF_USER_TEXT_ENCODING` only: what
+    /// `pbcopy`/`pbpaste` need to resolve and encode text. Go's atotto passes
+    /// everything; a pasteboard tool gets no credential-bearing variable here
+    /// (declared deviation, as the previous native adapter's `env_clear`).
+    Pasteboard,
+}
+
+impl EnvPolicy {
+    fn passes(self, name: &str) -> bool {
+        match self {
+            Self::Inherit => true,
+            Self::Whitelist => AUTOTYPE_ENV_WHITELIST.contains(&name),
+            Self::Pasteboard => {
+                matches!(name, "PATH" | "HOME" | "LANG" | "__CF_USER_TEXT_ENCODING")
+                    || name.starts_with("LC_")
+            }
+        }
+    }
 }
 
 /// Result of one tool invocation that started.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ToolOutput {
     /// Exit code, or `None` when the tool was ended by a signal.
     pub code: Option<i32>,
     /// Captured stdout when requested, otherwise empty.
     pub stdout: Vec<u8>,
+    /// The signal that ended the tool, when it did not exit by itself (Go's
+    /// `signal: <name>` text needs it).
+    pub signal: Option<i32>,
+    /// Whether that signal left a core dump (Go appends ` (core dumped)`).
+    pub core_dumped: bool,
+}
+
+impl ToolOutput {
+    fn from_status(status: std::process::ExitStatus, stdout: Vec<u8>) -> Self {
+        #[cfg(unix)]
+        let (signal, core_dumped) = {
+            use std::os::unix::process::ExitStatusExt;
+            (status.signal(), status.core_dumped())
+        };
+        #[cfg(not(unix))]
+        let (signal, core_dumped) = (None, false);
+        Self {
+            code: status.code(),
+            stdout,
+            signal,
+            core_dumped,
+        }
+    }
+
+    /// The result of a run that was killed at its deadline: SIGKILL on Unix
+    /// (`signal: killed`), `TerminateProcess`'s exit code 1 elsewhere.
+    fn killed() -> Self {
+        Self {
+            #[cfg(unix)]
+            code: None,
+            #[cfg(unix)]
+            signal: Some(9),
+            #[cfg(not(unix))]
+            code: Some(1),
+            #[cfg(not(unix))]
+            signal: None,
+            stdout: Vec::new(),
+            core_dumped: false,
+        }
+    }
+
+    /// Go's `*exec.ExitError` text for this result.
+    fn status_text(&self) -> String {
+        crate::go_exec::exit_status_text(
+            crate::go_exec::GoOs::host(),
+            self.code,
+            self.signal,
+            self.core_dumped,
+        )
+    }
 }
 
 /// Everything the adapters need from the machine they run on.
@@ -140,8 +216,9 @@ pub trait DesktopHost: Send + Sync {
     /// (Go `exec.Cmd.Stdin`, which ignores a closed pipe), a failed stdin write
     /// is returned at once, as `write |1: <reason>`, without waiting for the
     /// tool, so a tool that exits 0 without reading a payload larger than the
-    /// pipe buffer is still a copy failure. The default delegates to `run` for
-    /// hosts that have no real pipe.
+    /// pipe buffer is still a copy failure. A host with a deadline
+    /// ([`SystemHost::with_timeout`]) kills the tool when it expires. The
+    /// default delegates to `run` for hosts that have no real pipe.
     fn run_write_all(
         &self,
         program: &str,
@@ -187,6 +264,10 @@ pub struct SystemHost {
     path: Option<Vec<PathBuf>>,
     env: Option<HashMap<String, String>>,
     cwd: Option<PathBuf>,
+    /// Deadline of every tool run. `None` waits for ever, like atotto; a
+    /// bounded host also starts each tool in its own process group so that an
+    /// expired run can be killed as a whole.
+    timeout: Option<Duration>,
 }
 
 impl SystemHost {
@@ -202,7 +283,37 @@ impl SystemHost {
             path: Some(path),
             env: Some(env),
             cwd: None,
+            timeout: None,
         }
+    }
+
+    /// A host that keeps the process environment but resolves tools only in
+    /// `path`: the system tools a native adapter wants, however `PATH` is set.
+    #[must_use]
+    pub fn with_search_path(path: Vec<PathBuf>) -> Self {
+        Self {
+            path: Some(path),
+            env: None,
+            cwd: None,
+            timeout: None,
+        }
+    }
+
+    /// The real macOS pasteboard tools: looked up in `/usr/bin` only (so a
+    /// planted `pbcopy` earlier on `PATH` never receives a secret) and bounded
+    /// by [`PASTEBOARD_TIMEOUT`].
+    #[must_use]
+    pub fn pasteboard() -> Self {
+        Self::with_search_path(vec![PathBuf::from("/usr/bin")]).with_timeout(PASTEBOARD_TIMEOUT)
+    }
+
+    /// Bounds every run of this host. When the deadline passes, the tool's
+    /// whole process group is killed and reaped and the run reports Go's text
+    /// for a killed child (`signal: killed`; non-Unix: `exit status 1`).
+    #[must_use]
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
     }
 
     /// Resolves relative `PATH` entries against, and spawns tools in, `cwd`
@@ -301,9 +412,7 @@ impl SystemHost {
         let base = self.base_env();
         let mut passed: Vec<(String, String)> = base
             .iter()
-            .filter(|(key, _)| {
-                env == EnvPolicy::Inherit || AUTOTYPE_ENV_WHITELIST.contains(&key.as_str())
-            })
+            .filter(|(key, _)| env.passes(key))
             .cloned()
             .collect();
         if env == EnvPolicy::Whitelist {
@@ -322,8 +431,136 @@ impl SystemHost {
                 Stdio::null()
             })
             .stderr(Stdio::null());
+        #[cfg(unix)]
+        if self.timeout.is_some() {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
         command.spawn().map_err(|error| error.to_string())
     }
+
+    /// Drives a spawned tool to its end: writes `stdin` and reads stdout on
+    /// helper threads and polls the child, so nothing here can block past the
+    /// host's deadline. With `write_all` (atotto `writeAll`) a failed stdin
+    /// write is returned at once as Go's `write |1: <reason>` and the tool is
+    /// not waited for; otherwise (`exec.Cmd.Stdin`) it is ignored. A run that
+    /// outlives the deadline kills the tool's process group and reaps it.
+    fn drive(
+        &self,
+        mut child: std::process::Child,
+        stdin: &[u8],
+        capture_stdout: bool,
+        write_all: bool,
+    ) -> Result<ToolOutput, String> {
+        let deadline = self.timeout.and_then(|t| Instant::now().checked_add(t));
+        let own_group = deadline.is_some();
+        let (write_tx, write_rx) = mpsc::channel::<std::io::Result<()>>();
+        if let Some(mut pipe) = child.stdin.take() {
+            let data = stdin.to_vec();
+            std::thread::spawn(move || {
+                let result = pipe.write_all(&data);
+                // Close the tool's stdin before reporting.
+                drop(pipe);
+                let _ = write_tx.send(result);
+            });
+        }
+        let read_rx = if capture_stdout {
+            child.stdout.take().map(|mut pipe| {
+                let (tx, rx) = mpsc::channel::<Vec<u8>>();
+                std::thread::spawn(move || {
+                    let mut buffer = Vec::new();
+                    let _ = pipe.read_to_end(&mut buffer);
+                    let _ = tx.send(buffer);
+                });
+                rx
+            })
+        } else {
+            None
+        };
+        let (mut write_done, mut status, mut stdout) = (false, None, None);
+        loop {
+            if !write_done {
+                match write_rx.try_recv() {
+                    Ok(Ok(())) | Err(mpsc::TryRecvError::Disconnected) => write_done = true,
+                    Ok(Err(error)) => {
+                        if write_all {
+                            reap_later(child, deadline, own_group);
+                            return Err(go_pipe_write_error(&error));
+                        }
+                        write_done = true;
+                    }
+                    Err(mpsc::TryRecvError::Empty) => {}
+                }
+            }
+            if status.is_none() {
+                match child.try_wait() {
+                    Ok(found) => status = found,
+                    Err(error) => {
+                        kill_and_reap(&mut child, own_group);
+                        return Err(error.to_string());
+                    }
+                }
+            }
+            if stdout.is_none() {
+                stdout = match &read_rx {
+                    None => Some(Vec::new()),
+                    Some(rx) => match rx.try_recv() {
+                        Ok(bytes) => Some(bytes),
+                        Err(mpsc::TryRecvError::Disconnected) => Some(Vec::new()),
+                        Err(mpsc::TryRecvError::Empty) => None,
+                    },
+                };
+            }
+            if let (Some(status), true, Some(stdout)) = (status, write_done, stdout.as_mut()) {
+                return Ok(ToolOutput::from_status(status, std::mem::take(stdout)));
+            }
+            if deadline.is_some_and(|d| Instant::now() >= d) {
+                kill_and_reap(&mut child, own_group);
+                return Ok(ToolOutput::killed());
+            }
+            std::thread::sleep(POLL_INTERVAL);
+        }
+    }
+}
+
+/// Kills the tool (and, when it leads its own process group, everything it
+/// started) and reaps it. A killed child's `wait` returns at once.
+fn kill_and_reap(child: &mut std::process::Child, own_group: bool) {
+    #[cfg(unix)]
+    if own_group
+        && let Some(pid) = i32::try_from(child.id())
+            .ok()
+            .and_then(rustix::process::Pid::from_raw)
+    {
+        let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
+    }
+    #[cfg(not(unix))]
+    let _ = own_group;
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Hands a tool whose stdin write failed to a thread that reaps it: when it
+/// ends by itself, or at the deadline by a kill. Without a deadline it waits
+/// as long as the tool lives, like Go's leaked process.
+fn reap_later(mut child: std::process::Child, deadline: Option<Instant>, own_group: bool) {
+    std::thread::spawn(move || {
+        let Some(deadline) = deadline else {
+            let _ = child.wait();
+            return;
+        };
+        loop {
+            match child.try_wait() {
+                Ok(None) => {}
+                Ok(Some(_)) | Err(_) => return,
+            }
+            if Instant::now() >= deadline {
+                kill_and_reap(&mut child, own_group);
+                return;
+            }
+            std::thread::sleep(POLL_INTERVAL);
+        }
+    });
 }
 
 fn is_executable(path: &Path) -> bool {
@@ -381,33 +618,8 @@ impl DesktopHost for SystemHost {
         capture_stdout: bool,
         env: EnvPolicy,
     ) -> Result<ToolOutput, String> {
-        let mut child = self.spawn_piped(program, args, capture_stdout, env)?;
-        // Write stdin on its own thread so a tool that never reads cannot wedge
-        // us, and drain stdout so a chatty tool cannot block on a full pipe.
-        let writer = child.stdin.take().map(|mut pipe| {
-            let data = stdin.to_vec();
-            std::thread::spawn(move || {
-                let _ = pipe.write_all(&data);
-            })
-        });
-        let reader = child.stdout.take().map(|mut pipe| {
-            std::thread::spawn(move || {
-                let mut buffer = Vec::new();
-                let _ = pipe.read_to_end(&mut buffer);
-                buffer
-            })
-        });
-        let status = child.wait().map_err(|error| error.to_string())?;
-        if let Some(writer) = writer {
-            let _ = writer.join();
-        }
-        let stdout = reader
-            .map(|reader| reader.join().unwrap_or_default())
-            .unwrap_or_default();
-        Ok(ToolOutput {
-            code: status.code(),
-            stdout,
-        })
+        let child = self.spawn_piped(program, args, capture_stdout, env)?;
+        self.drive(child, stdin, capture_stdout, false)
     }
 
     fn run_write_all(
@@ -417,23 +629,8 @@ impl DesktopHost for SystemHost {
         stdin: &[u8],
         env: EnvPolicy,
     ) -> Result<ToolOutput, String> {
-        let mut child = self.spawn_piped(program, args, false, env)?;
-        let mut pipe = child.stdin.take().expect("stdin was piped");
-        if let Err(error) = pipe.write_all(stdin) {
-            // Go returns here with the child still running and never waits for
-            // it; reap it in the background so it does not stay a zombie.
-            drop(pipe);
-            std::thread::spawn(move || {
-                let _ = child.wait();
-            });
-            return Err(go_pipe_write_error(&error));
-        }
-        drop(pipe);
-        let status = child.wait().map_err(|error| error.to_string())?;
-        Ok(ToolOutput {
-            code: status.code(),
-            stdout: Vec::new(),
-        })
+        let child = self.spawn_piped(program, args, false, env)?;
+        self.drive(child, stdin, false, true)
     }
 }
 
@@ -449,14 +646,6 @@ fn go_pipe_write_error(error: &std::io::Error) -> String {
         text.to_lowercase()
     };
     format!("write |1: {reason}")
-}
-
-/// Go's `*exec.ExitError` text.
-fn exit_status_text(code: Option<i32>) -> String {
-    match code {
-        Some(code) => format!("exit status {code}"),
-        None => "signal: terminated".to_owned(),
-    }
 }
 
 fn failed(message: impl Into<String>) -> PlatformError {
@@ -477,7 +666,7 @@ fn run_checked(
     if output.code == Some(0) {
         Ok(())
     } else {
-        Err(exit_status_text(output.code))
+        Err(output.status_text())
     }
 }
 
@@ -494,7 +683,7 @@ fn run_write_all_checked(
     if output.code == Some(0) {
         Ok(())
     } else {
-        Err(exit_status_text(output.code))
+        Err(output.status_text())
     }
 }
 
@@ -600,7 +789,7 @@ impl CommandClipboard {
             )
             .map_err(failed)?;
         if output.code != Some(0) {
-            return Err(failed(exit_status_text(output.code)));
+            return Err(failed(output.status_text()));
         }
         let mut text = output.stdout;
         if backend.trim_dos && text.len() > 1 {
@@ -619,6 +808,67 @@ impl Clipboard for CommandClipboard {
             &backend.copy[1..],
             text,
             EnvPolicy::Inherit,
+        )
+        .map_err(failed)
+    }
+
+    fn clear(&self) -> Result<(), PlatformError> {
+        self.set(b"")
+    }
+}
+
+/// Go's macOS `clipboard.DefaultClipboard()`: atotto/clipboard v0.1.4 runs
+/// `pbcopy` (text on stdin, `writeAll` semantics) and `pbpaste` (stdout is the
+/// text) and reports the raw `os/exec` error text, e.g. `exit status 3`,
+/// `signal: killed`, `write |1: broken pipe` or `exec: "pbcopy": executable
+/// file not found in $PATH`. There is no tool selection, like atotto.
+///
+/// Two declared deviations: the tools get [`EnvPolicy::Pasteboard`] instead of
+/// the whole environment, and the real host ([`SystemHost::pasteboard`])
+/// bounds each run by [`PASTEBOARD_TIMEOUT`] (atotto never gives up on a hung
+/// tool, which would freeze `get --clip`, MCP, the TUI and the auto-clear): a
+/// run that expires kills the tool's process group, reaps it and reports
+/// `signal: killed`, the text Go prints for a killed child.
+pub struct PasteboardClipboard {
+    host: Arc<dyn DesktopHost>,
+}
+
+impl PasteboardClipboard {
+    #[must_use]
+    pub fn new(host: Arc<dyn DesktopHost>) -> Self {
+        Self { host }
+    }
+
+    /// The real macOS pasteboard tools. Unlike Go, which resolves `pbcopy`
+    /// through `PATH`, they are looked up in `/usr/bin` only, so a planted
+    /// `pbcopy` earlier on `PATH` never receives a secret, and every run is
+    /// bounded (see [`SystemHost::pasteboard`]).
+    #[must_use]
+    pub fn system() -> Self {
+        Self::new(Arc::new(SystemHost::pasteboard()))
+    }
+
+    /// Reads the pasteboard (Go `Clipboard.Read`).
+    pub fn read(&self) -> Result<Vec<u8>, PlatformError> {
+        let output = self
+            .host
+            .run("pbpaste", &[], b"", true, EnvPolicy::Pasteboard)
+            .map_err(failed)?;
+        if output.code != Some(0) {
+            return Err(failed(output.status_text()));
+        }
+        Ok(output.stdout)
+    }
+}
+
+impl Clipboard for PasteboardClipboard {
+    fn set(&self, text: &[u8]) -> Result<(), PlatformError> {
+        run_write_all_checked(
+            self.host.as_ref(),
+            "pbcopy",
+            &[],
+            text,
+            EnvPolicy::Pasteboard,
         )
         .map_err(failed)
     }
@@ -836,6 +1086,7 @@ mod tests {
             Ok(ToolOutput {
                 code: self.code.or(Some(0)),
                 stdout: b"firefox\n".to_vec(),
+                ..ToolOutput::default()
             })
         }
     }
@@ -942,6 +1193,7 @@ mod tests {
                 Ok(ToolOutput {
                     code: Some(1),
                     stdout: Vec::new(),
+                    ..ToolOutput::default()
                 })
             }
         }
@@ -949,6 +1201,31 @@ mod tests {
             .type_text("x")
             .unwrap_err();
         assert_eq!(error.kind, PlatformErrorKind::Unavailable);
+    }
+
+    #[test]
+    fn pasteboard_host_is_bounded_and_its_environment_is_narrow() {
+        assert_eq!(SystemHost::pasteboard().timeout, Some(PASTEBOARD_TIMEOUT));
+        assert_eq!(SystemHost::new().timeout, None);
+        for name in [
+            "PATH",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "__CF_USER_TEXT_ENCODING",
+        ] {
+            assert!(EnvPolicy::Pasteboard.passes(name), "{name}");
+        }
+        for name in [
+            "SYMVAULT_PASSWORD",
+            "AWS_SECRET_ACCESS_KEY",
+            "SSH_AUTH_SOCK",
+            "TMPDIR",
+            "LCX",
+        ] {
+            assert!(!EnvPolicy::Pasteboard.passes(name), "{name}");
+        }
     }
 
     #[test]

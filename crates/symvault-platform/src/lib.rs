@@ -4,6 +4,7 @@
 pub mod approval;
 pub mod desktop_commands;
 pub mod get_clipboard;
+pub mod go_exec;
 mod text_clipboard;
 pub use text_clipboard::{OwnedTextClipboard, native_command_clipboard, native_text_clipboard};
 mod focus;

@@ -1134,24 +1134,7 @@ impl Store {
             Err(error) => return Err(StoreError::Decryption(error.to_string())),
         };
         let result = entry_budget::validate_with_batch(&plaintext, &candidate.logical, batch)
-            .and_then(|()| {
-                serde_json::from_slice::<serde_json::Value>(
-                    keep_negative_zero(&plaintext)
-                        .as_deref()
-                        .map_or(&plaintext[..], |rewritten| &rewritten[..]),
-                )
-                .map_err(|error| StoreError::Entry {
-                    path: candidate.logical.clone(),
-                    detail: error.to_string(),
-                })
-                .and_then(|mut value| {
-                    normalize_entry_data_key(&mut value);
-                    serde_json::from_value(value).map_err(|error| StoreError::Entry {
-                        path: candidate.logical.clone(),
-                        detail: error.to_string(),
-                    })
-                })
-            });
+            .and_then(|()| decode_entry_plaintext(&plaintext, &candidate.logical));
         plaintext.zeroize();
         if result
             .as_ref()
@@ -1227,6 +1210,32 @@ fn normalize_entry_data_key(value: &mut serde_json::Value) {
     {
         fields.insert("data".into(), data);
     }
+}
+
+/// Decodes decrypted entry JSON like the store does for every read: negative
+/// zero survives (Go decodes every number into a `float64`) and a differently
+/// cased `data` key is normalized. `logical` names the entry in error text.
+///
+/// # Errors
+///
+/// Returns [`StoreError::Entry`] when the bytes are not a valid entry.
+pub fn decode_entry_plaintext(plaintext: &[u8], logical: &str) -> Result<Entry, StoreError> {
+    serde_json::from_slice::<serde_json::Value>(
+        keep_negative_zero(plaintext)
+            .as_deref()
+            .map_or(plaintext, |rewritten| &rewritten[..]),
+    )
+    .map_err(|error| StoreError::Entry {
+        path: logical.to_owned(),
+        detail: error.to_string(),
+    })
+    .and_then(|mut value| {
+        normalize_entry_data_key(&mut value);
+        serde_json::from_value(value).map_err(|error| StoreError::Entry {
+            path: logical.to_owned(),
+            detail: error.to_string(),
+        })
+    })
 }
 
 /// `serde_json` with `arbitrary_precision` reads the integer literal `-0` as
