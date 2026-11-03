@@ -1892,6 +1892,7 @@ fn run_cli() -> ExitCode {
             if let Err(error) = &result
                 && !is_not_initialized(error)
                 && !is_config_invalid(error)
+                && !error.starts_with(READ_PASSPHRASE_PREFIX)
             {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -4419,6 +4420,8 @@ fn run_git(
         require_initialized(&vault)?;
         match action {
             "log" => {
+                // Go opens the vault (`cli.WithVaultRaw`) before it reads the history.
+                device::unlock_vault(&vault)?;
                 let commits = history_commands::log(&vault, path, 0)
                     .map_err(|error| format!("cannot get log: {error}"))?;
                 history_commands::write_log(&mut io::stdout().lock(), &commits, quiet)
@@ -5290,6 +5293,11 @@ fn run_mcp(
         // never contains `load config`, which would be rewrapped), so `ExecuteRoot` exits 6
         // with the doctor hint.
         Err(error) if is_config_invalid(&error) => report_config_invalid(&error),
+        // `mcp serve` (HTTP) prompts for the passphrase; an EOF there is an `ExitLocked` error
+        // (exit 4 and the locked hint), which `wrapVaultError` passes through.
+        Err(error) if error.starts_with(READ_PASSPHRASE_PREFIX) => {
+            report_failed_passphrase_read(&error, false).unwrap_or(ExitCode::from(4))
+        }
         Err(error) => {
             print_error_like_go(&error);
             if error.starts_with("vault not initialized") {
@@ -5607,6 +5615,11 @@ fn run_import(
         // load or validate in an `ExitConfigError`: exit 6 and the doctor hint
         // (plain and `--dry-run` alike; the source was parsed first).
         Err(error) if is_config_invalid(&error) => report_config_invalid(&error.lossy()),
+        // `unlockVault` wraps a failed passphrase read (EOF at the prompt, no cached
+        // identity) in an `ExitLocked` error: exit 4 and the locked hint.
+        Err(error) if error.to_string().starts_with(READ_PASSPHRASE_PREFIX) => {
+            report_failed_passphrase_read(&error.lossy(), false).unwrap_or(ExitCode::from(4))
+        }
         // Cobra and the root executor each print a failure of this command.
         // The message is the exact Go byte string: an entry path that is not
         // valid UTF-8 appears in it unchanged.

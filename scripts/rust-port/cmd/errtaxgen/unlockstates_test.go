@@ -114,8 +114,11 @@ func TestUnlockStateInputsCoverEveryStateOnce(t *testing.T) {
 			t.Errorf("%s: %v", in.name, err)
 		}
 	}
-	partial, configOnly := 0, 0
+	partial, configOnly, alsoLocked := 0, 0, 0
 	for _, cmd := range unlockCommands {
+		if cmd.configOnly && cmd.alsoLocked {
+			alsoLocked++
+		}
 		if cmd.partial {
 			partial++
 		}
@@ -127,7 +130,7 @@ func TestUnlockStateInputsCoverEveryStateOnce(t *testing.T) {
 		want := partial
 		switch {
 		case state == stateLocked:
-			want = len(unlockCommands) - configOnly
+			want = len(unlockCommands) - configOnly + alsoLocked
 		case isConfigInvalidState(state):
 			want = partial + configOnly
 		}
@@ -162,35 +165,33 @@ func TestConfigInvalidStatesAppendTheirSectionToTheSeededConfig(t *testing.T) {
 	if isConfigInvalidState(stateEnvDisabled) || isConfigInvalidState(stateLocked) {
 		t.Fatal("only the config-invalid states are config-invalid")
 	}
-	// get runs only where the configuration is refused.
+	// get runs only where the configuration is refused and in the locked vault.
 	for _, in := range unlockStateInputs() {
-		if strings.HasSuffix(in.name, "_get") && !isConfigInvalidState(in.state) {
-			t.Errorf("%s: get runs outside the config-invalid states", in.name)
+		if strings.HasSuffix(in.name, "_get") && !isConfigInvalidState(in.state) && in.state != stateLocked {
+			t.Errorf("%s: get runs outside the config-invalid and locked states", in.name)
 		}
 	}
 }
 
 // `import <file>` is refused when it opens the vault, after it parsed a valid
 // source: the scenarios carry that CSV source and run in the config-invalid
-// states only.
-func TestImportScenariosCarryAValidCSVSourceInTheConfigInvalidStatesOnly(t *testing.T) {
+// states and in the locked vault (an EOF at the passphrase prompt), never in the
+// partial shapes.
+func TestImportScenariosCarryAValidCSVSourceInTheConfigInvalidAndLockedStatesOnly(t *testing.T) {
 	seen := map[string]bool{}
 	for _, in := range unlockStateInputs() {
 		if len(in.args) == 0 || in.args[0] != "import" || len(in.args) < 2 || in.args[1] != importSourceFile {
-			if len(in.files) != 0 {
-				t.Errorf("%s carries files without an import source", in.name)
-			}
 			continue
 		}
 		seen[in.name] = true
-		if !isConfigInvalidState(in.state) {
-			t.Errorf("%s runs outside the config-invalid states", in.name)
+		if !isConfigInvalidState(in.state) && in.state != stateLocked {
+			t.Errorf("%s runs outside the config-invalid and locked states", in.name)
 		}
 		if !strings.HasSuffix(importSourceFile, ".csv") || in.files[importSourceFile] != importSourceFiles[importSourceFile] {
 			t.Errorf("%s: files = %v", in.name, in.files)
 		}
 	}
-	for _, state := range []string{stateConfigClipboardInvalid, stateConfigSyntaxInvalid} {
+	for _, state := range []string{stateConfigClipboardInvalid, stateConfigSyntaxInvalid, stateLocked} {
 		for _, name := range []string{"import_csv", "import_csv_dry_run"} {
 			if !seen["unlock_"+state+"_"+name] {
 				t.Errorf("unlock_%s_%s is not recorded", state, name)
@@ -199,5 +200,23 @@ func TestImportScenariosCarryAValidCSVSourceInTheConfigInvalidStatesOnly(t *test
 	}
 	if !strings.HasPrefix(importSourceFiles[importSourceFile], "title,") {
 		t.Errorf("source = %q", importSourceFiles[importSourceFile])
+	}
+}
+
+// The locked-vault sweep: every vault-opening command Go reaches through
+// cli.WithVault/WithVaultRaw/UnlockVault is recorded with an EOF passphrase prompt.
+func TestLockedSweepRecordsEveryVaultOpeningCommand(t *testing.T) {
+	want := []string{"import_csv", "import_csv_dry_run", "export_csv_yes", "broker", "generate_store",
+		"git_log", "template_generate", "ui", "set_value", "file_get", "file_add", "device_revoke", "mcp_serve_http"}
+	seen := map[string]bool{}
+	for _, in := range unlockStateInputs() {
+		if in.state == stateLocked {
+			seen[in.name] = true
+		}
+	}
+	for _, name := range want {
+		if !seen["unlock_locked_"+name] {
+			t.Errorf("unlock_locked_%s is not recorded", name)
+		}
 	}
 }

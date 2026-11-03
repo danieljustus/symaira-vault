@@ -138,6 +138,10 @@ type unlockCommand struct {
 	configOnly bool
 	// files are written into the working directory before the run.
 	files map[string]string
+	// alsoLocked runs a configOnly command in the locked vault as well: its
+	// passphrase prompt reads EOF, which is an ExitLocked error (exit 4 and the
+	// locked hint).
+	alsoLocked bool
 }
 
 // unlockCommands are the commands that unlock the vault through the prompting
@@ -151,36 +155,51 @@ type unlockCommand struct {
 // prompting path in Go (get is non-interactive, set asks for the username first)
 // and differ for reasons of their own.
 var unlockCommands = []unlockCommand{
-	{"device_pair", []string{"device", "pair"}, true, false, nil},
-	{"device_pair_x", []string{"device", "pair", "x"}, true, false, nil},
-	{"list", []string{"list"}, true, false, nil},
-	{"find", []string{"find", "x"}, false, false, nil},
-	{"add", []string{"add", "x"}, false, false, nil},
-	{"delete", []string{"delete", "x"}, false, false, nil},
-	{"edit", []string{"edit", "x"}, false, false, nil},
-	{"verify", []string{"verify"}, true, false, nil},
-	{"unlock", []string{"unlock"}, true, false, nil},
-	{"migrate_pseudonymize", []string{"migrate", "pseudonymize"}, true, false, nil},
-	{"migrate_pseudonymize_yes", []string{"migrate", "pseudonymize", "--yes"}, true, false, nil},
-	{"recipients_add", []string{"recipients", "add", "x"}, false, false, nil},
-	{"recipients_remove", []string{"recipients", "remove", "x"}, false, false, nil},
-	{"run", []string{"run", "--", "x"}, false, false, nil},
-	{"file_use", []string{"file", "use", seedFileEntry, "x"}, false, false, nil},
-	{"import_review_list", []string{"import", "review", "list"}, false, false, nil},
-	{"import_review_promote", []string{"import", "review", "promote", "x"}, false, false, nil},
-	{"intake_x", []string{"intake", "x"}, false, false, nil},
-	{"get", []string{"get", seedFileEntry}, false, true, nil},
+	{"device_pair", []string{"device", "pair"}, true, false, nil, false},
+	{"device_pair_x", []string{"device", "pair", "x"}, true, false, nil, false},
+	{"list", []string{"list"}, true, false, nil, false},
+	{"find", []string{"find", "x"}, false, false, nil, false},
+	{"add", []string{"add", "x"}, false, false, nil, false},
+	{"delete", []string{"delete", "x"}, false, false, nil, false},
+	{"edit", []string{"edit", "x"}, false, false, nil, false},
+	{"verify", []string{"verify"}, true, false, nil, false},
+	{"unlock", []string{"unlock"}, true, false, nil, false},
+	{"migrate_pseudonymize", []string{"migrate", "pseudonymize"}, true, false, nil, false},
+	{"migrate_pseudonymize_yes", []string{"migrate", "pseudonymize", "--yes"}, true, false, nil, false},
+	{"recipients_add", []string{"recipients", "add", "x"}, false, false, nil, false},
+	{"recipients_remove", []string{"recipients", "remove", "x"}, false, false, nil, false},
+	{"run", []string{"run", "--", "x"}, false, false, nil, false},
+	{"file_use", []string{"file", "use", seedFileEntry, "x"}, false, false, nil, false},
+	{"import_review_list", []string{"import", "review", "list"}, false, false, nil, false},
+	{"import_review_promote", []string{"import", "review", "promote", "x"}, false, false, nil, false},
+	{"intake_x", []string{"intake", "x"}, false, false, nil, false},
+	{"get", []string{"get", seedFileEntry}, false, true, nil, true},
 	// `dynamic generate` opens the vault through cli.WithVault and `mcp serve
 	// --stdio` through ServeUnlockVault (whose wrapVaultError passes an
 	// ExitConfigError unchanged); both refuse a configuration Go does not load.
-	{"dynamic_generate", []string{"dynamic", "generate", "--engine", "x", "--role", "x"}, false, true, nil},
-	{"mcp_serve_stdio", []string{"mcp", "serve", "--stdio", "--agent", "a"}, false, true, nil},
+	{"dynamic_generate", []string{"dynamic", "generate", "--engine", "x", "--role", "x"}, false, true, nil, true},
+	{"mcp_serve_stdio", []string{"mcp", "serve", "--stdio", "--agent", "a"}, false, true, nil, true},
 	// `import <file>` (and --dry-run) parses a valid source first and then opens
 	// the vault through cli.WithVault -> unlockVault, so an invalid configuration
 	// is refused only there: exit 6 and the doctor hint, like every other
-	// WithVault command.
-	{"import_csv", []string{"import", importSourceFile}, false, true, importSourceFiles},
-	{"import_csv_dry_run", []string{"import", importSourceFile, "--dry-run"}, false, true, importSourceFiles},
+	// WithVault command, and a passphrase prompt that reads EOF in the locked
+	// vault is an ExitLocked error (exit 4 and the locked hint).
+	{"import_csv", []string{"import", importSourceFile}, false, true, importSourceFiles, true},
+	{"import_csv_dry_run", []string{"import", importSourceFile, "--dry-run"}, false, true, importSourceFiles, true},
+	// The remaining vault-opening commands, in the locked vault only: each one
+	// reaches cli.WithVault/WithVaultRaw/UnlockVault after its own argument
+	// handling, so an EOF at the passphrase prompt is an ExitLocked error.
+	{"export_csv_yes", []string{"export", "--format", "csv", "--yes"}, false, false, nil, false},
+	{"broker", []string{"broker"}, false, false, nil, false},
+	{"generate_store", []string{"generate", "--store", "x"}, false, false, nil, false},
+	{"git_log", []string{"git", "log"}, false, false, nil, false},
+	{"template_generate", []string{"template", "generate", "--type", "env"}, false, false, nil, false},
+	{"ui", []string{"ui"}, false, false, nil, false},
+	{"set_value", []string{"set", "x", "--value", "v", "--force"}, false, false, nil, false},
+	{"file_get", []string{"file", "get", seedFileEntry, "--out", "o"}, false, false, nil, false},
+	{"file_add", []string{"file", "add", "x", "--field", "f", "--from", importSourceFile}, false, false, importSourceFiles, false},
+	{"device_revoke", []string{"device", "revoke", "x"}, false, false, nil, false},
+	{"mcp_serve_http", []string{"mcp", "serve"}, false, false, nil, false},
 }
 
 // unlockStateInputs runs unlockCommands in every unlock state: all of them in
@@ -190,7 +209,7 @@ func unlockStateInputs() []scenarioInput {
 	var out []scenarioInput
 	for _, state := range unlockStates {
 		for _, cmd := range unlockCommands {
-			if cmd.configOnly && !isConfigInvalidState(state) {
+			if cmd.configOnly && !isConfigInvalidState(state) && !(cmd.alsoLocked && state == stateLocked) {
 				continue
 			}
 			if state != stateLocked && !cmd.partial && !cmd.configOnly {
