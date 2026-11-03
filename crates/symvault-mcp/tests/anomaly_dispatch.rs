@@ -215,14 +215,14 @@ impl Session {
 
     /// Sends `arguments` verbatim, for JSON that `serde_json::Value` cannot hold (1e400).
     fn call_raw(&mut self, tool: &str, arguments: &str) -> Value {
+        let call = format!(
+            r#"{{"jsonrpc":"2.0","id":777,"method":"tools/call","params":{{"name":{},"arguments":{arguments}}}}}"#,
+            json!(tool)
+        );
         let input = format!(
-            "{}\n{}\n{}\n",
+            "{}\n{}\n{call}\n",
             r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"probe","version":"1.0"},"capabilities":{}}}"#,
             r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
-            format!(
-                r#"{{"jsonrpc":"2.0","id":777,"method":"tools/call","params":{{"name":{},"arguments":{arguments}}}}}"#,
-                json!(tool)
-            ),
         );
         let out = run_stream(&input, &mut self.handler).expect("stream dispatch");
         serde_json::from_str(out.last().expect("tool response")).expect("response JSON")
