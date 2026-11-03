@@ -1100,10 +1100,11 @@ AREA_KDF_MIGRATION_TESTS := 10
 # crate-local API template drift guard `apitemplate_assets_sync`, which stays a
 # passing test, early return, once the Go copy is deleted), 339 at the
 # local/integ2 merge (MCP audit ids, policy BuildContext, OAuth expiry, HTTP
-# drain and token-registry overlay tests); the
+# drain and token-registry overlay tests), 346 at fc806ff4 (approval proof window,
+# scope boundary, sharing corpus and clipboard auto-clear replays); the
 # gate asserts the real count, so a shrunken run still fails. Raise it together
 # with the new tests (and the workflows' constant when they run again).
-AREA_MCP_TEST_COUNT := 339
+AREA_MCP_TEST_COUNT := 346
 
 .PHONY: area-oracle-runner
 area-oracle-runner:
