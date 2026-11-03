@@ -1,15 +1,21 @@
 //! Differential test: `template generate` with custom
 //! `~/.config/symvault/templates/<kind>.tmpl` files, Go binary vs native.
-//! Requires `SYMVAULT_GO_BINARY`; every scenario uses its own disposable HOME.
+//! The Go answers (stdout, stderr, status and the `--output` file) are replayed
+//! from `testdata/port/cli-transcripts/template_custom_differential.json`; every
+//! scenario uses its own disposable HOME.
+
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
 
 fn command(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .env_remove("SYMVAULT_PROFILE")
         .env("HOME", home)
@@ -20,9 +26,8 @@ fn command(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
         .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
         .env("CI", "1")
-        .current_dir(home)
-        .output()
-        .expect("run CLI")
+        .current_dir(home);
+    go_oracle::output(&mut command).expect("run CLI")
 }
 
 fn assert_success(output: &Output, what: &str) {
@@ -99,14 +104,27 @@ const SCENARIOS: &[Scenario] = &[
     },
 ];
 
-fn setup() -> (PathBuf, PathBuf, PathBuf, tempfile::TempDir) {
-    let go = PathBuf::from(env::var_os("SYMVAULT_GO_BINARY").expect("SYMVAULT_GO_BINARY"));
+fn setup(
+    test: &str,
+) -> (
+    go_oracle::GoOracle,
+    PathBuf,
+    PathBuf,
+    PathBuf,
+    tempfile::TempDir,
+) {
+    let oracle = go_oracle::GoOracle::begin(
+        "template_custom_differential",
+        test,
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let native = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let tmp = tempfile::Builder::new()
         .prefix("symvault-template-custom-")
         .tempdir()
         .expect("tempdir");
-    (go, native, tmp.path().to_path_buf(), tmp)
+    (oracle, go, native, tmp.path().to_path_buf(), tmp)
 }
 
 fn seed(native: &Path, root: &Path, home: &Path) {
@@ -158,11 +176,7 @@ fn comparable_stderr(raw: &[u8], home: &Path) -> String {
 
 #[test]
 fn custom_templates_match_go_cli() {
-    if env::var_os("SYMVAULT_GO_BINARY").is_none() {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    }
-    let (go, native, base, _guard) = setup();
+    let (oracle, go, native, base, _guard) = setup("custom_templates_match_go_cli");
     let root = base.join("vault");
     let home = base.join("home");
     fs::create_dir_all(&home).unwrap();
@@ -247,15 +261,13 @@ fn custom_templates_match_go_cli() {
         }
     }
     assert_eq!(executed, SCENARIOS.len() * refs.len() * 4);
+    assert_eq!(oracle.calls(), executed);
 }
 
 #[test]
 fn unreadable_custom_template_directory_matches_go() {
-    if env::var_os("SYMVAULT_GO_BINARY").is_none() {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    }
-    let (go, native, base, _guard) = setup();
+    let (oracle, go, native, base, _guard) =
+        setup("unreadable_custom_template_directory_matches_go");
     let root = base.join("vault");
     let home = base.join("home");
     fs::create_dir_all(&home).unwrap();
@@ -280,4 +292,5 @@ fn unreadable_custom_template_directory_matches_go() {
         "stderr"
     );
     assert_eq!(native_out.status.code(), go_out.status.code(), "exit");
+    assert_eq!(oracle.calls(), 1);
 }

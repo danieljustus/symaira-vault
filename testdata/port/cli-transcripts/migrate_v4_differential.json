@@ -1,0 +1,281 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "migrate_v4_matches_go_assignments_and_stays_idempotent": {
+      "seeds": [
+        {
+          "name": "fixture-go",
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "go",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n[user]\n\tname = Symaira Vault\n\temail = symvault@example.com\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go/.git/description",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "Unnamed repository; edit this file 'description' to name the repository.\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go/.git/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go/.git/info/exclude",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n/.symvault-rust\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go/.gitignore",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go/.symvault-rust",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"schema\": 1,\n  \"kind\": \"rust-created\",\n  \"created_at\": \"2026-11-03T23:42:51.303735Z\",\n  \"vault_id\": \"10def28afb6ff3c1e7e94a6d1c1d12cb30ae165e33b3c931f395ff067c936665\"\n}\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: false\nvaultDir: <ROOT:0>/go\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "go/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIG1RUW03SjR1RHhtQkNiWTJPTGhvWEEgdD0zLG09NjU1MzYscD00CnZiWUt4TmtzRU85M0JtQXE1eUgyUnl4bzBmSlB4anBvOFpNeTl3VzMydE40djVnWFJCdDFrQm5BSEdRCi0+IGBWX0BALWdyZWFzZQpWSU5pS2NzYjFhMjByOUpreXd5RjB3TUZWWlR2YUxSSmFIUXl2aUpTME5ndExrenVYVEhvbDh3Ci0tLSBkSDVZMEJqRk1CN05tUUxaZllDVFlrNHZjV1BldU9xc2svWlRRQ21ZdndrCslleNGySAtUxSKvIFnZHAhDal2q0287wCV+Ocd733szxS4So5s/YcHP1KBQQN4K/CjCQHEMOiTBK531tmrwlJzjUwNipZ3zRU9TuNStXez+BIBg3jTfXI+FAYLN/pxKtodPRqVcV+hmAfY="
+              }
+            }
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "key": "4c1b9141b38fb1d1efff54a032c5d8d33e4298a56161aebfd1cfbb941d5b7509",
+          "request": {
+            "args": [
+              "migrate",
+              "v4",
+              "--dry-run",
+              "--vault",
+              "<ROOT:0>/go"
+            ],
+            "env": {
+              "CI": "1",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "migrate-v4-differential",
+              "SYMVAULT_TEST_KEYRING": "memory"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Found 7 agent profile(s) without tier fields:\n  opencode → admin\n  cli → standard\n  default → safe\n  claude-code → admin\n  codex → admin\n  hermes → admin\n  openclaw → admin\nDry-run: no changes written.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d511c1ec1d7bba4ccc76c93b018b8d1b7ae2bd742d27ee8737a6332df3315449",
+          "request": {
+            "args": [
+              "migrate",
+              "v4",
+              "-y",
+              "--vault",
+              "<ROOT:0>/go"
+            ],
+            "env": {
+              "CI": "1",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "migrate-v4-differential",
+              "SYMVAULT_TEST_KEYRING": "memory"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Found 7 agent profile(s) without tier fields:\n  default → safe\n  claude-code → admin\n  codex → admin\n  hermes → admin\n  openclaw → admin\n  opencode → admin\n  cli → standard\nBackup created: <ROOT:0>/go/config.yaml.v3-backup-1793749372\nMigrated 7 agent profile(s) to v4.0 format.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "go/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        tier: admin\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        tier: standard\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\n    codex:\n        tier: admin\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        tier: safe\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        tier: admin\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        tier: admin\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        tier: admin\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/go\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "go/config.yaml.v3-backup-1793749372",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: false\nvaultDir: <ROOT:0>/go\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "d511c1ec1d7bba4ccc76c93b018b8d1b7ae2bd742d27ee8737a6332df3315449",
+          "request": {
+            "args": [
+              "migrate",
+              "v4",
+              "-y",
+              "--vault",
+              "<ROOT:0>/go"
+            ],
+            "env": {
+              "CI": "1",
+              "NO_COLOR": "1",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "migrate-v4-differential",
+              "SYMVAULT_TEST_KEYRING": "memory"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "All profiles already have tier fields.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

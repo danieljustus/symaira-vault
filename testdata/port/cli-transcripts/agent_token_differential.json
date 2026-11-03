@@ -1,0 +1,234 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "agent_token_list_matches_go_plaintext_registry": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "e2d71885f912598ecc966df40e96066d7e89763225a0191185124689d153f047",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "token",
+              "list",
+              "missing"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "No tokens found for agent \"missing\".\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ea4bc64ef62005ab81a333120347cd3e46cfcfe9c7cdf9a468fa8d1c576440a4",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "token",
+              "list",
+              "alpha"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "ID                     LABEL            AGENT          TOOLS                        EXPIRES AT           STATUS\ntok-active             Work             alpha          list_entries, get_entry      2099-01-01 00:00     active\ntok-revoked            -                alpha                                       never                revoked\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7604f9c6797a72801e701592880e90f7ecc0fe233604fe876c7136dd1339e214",
+          "request": {
+            "args": [
+              "--quiet",
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "token",
+              "list",
+              "alpha"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0c37f1cbd10b10a92eba3d7f9c9967e448613f07c31cd567224f39af69b15bdb",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "token",
+              "list",
+              "beta"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "ID                     LABEL            AGENT          TOOLS                        EXPIRES AT           STATUS\ntok-other              Other            beta           *                            never                active\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "5a534540c9a3615a1dde430c7a0be0b3a52d344c5b4492227464b5a97b4afb9c",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "token",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "ID                     LABEL            AGENT          TOOLS                        EXPIRES AT           STATUS\n                       -                -                                           never                active\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "agent_token_list_rejects_malformed_registry_like_go": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "ea4bc64ef62005ab81a333120347cd3e46cfcfe9c7cdf9a468fa8d1c576440a4",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "token",
+              "list",
+              "alpha"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: load token registry: parse token registry: unexpected end of JSON input\nError: load token registry: parse token registry: unexpected end of JSON input\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

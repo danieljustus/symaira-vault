@@ -1,0 +1,858 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+    "go_version": "go1.26.10",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "set_auth_method_and_tools_list_match_the_go_oracle": {
+      "seeds": [
+        {
+          "name": "go-template-vault",
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "home",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "template-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "template-vault/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "template-vault/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "template-vault/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "template-vault/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "template-vault/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "template-vault/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "template-vault/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "template-vault/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "template-vault/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "template-vault/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "template-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    adm:\n        tier: admin\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        requireApproval: false\n    mgr:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        requireApproval: false\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/template-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "template-vault/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "template-vault/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIHBxRVE2N0dvVTF5RE9DeEwzc052SkEgdD0zLG09NjU1MzYscD00CjUyeUdMd21KWk5rSnNaMzA1a0VpakdNcHhtSWluNFhrcGFRWkFTazB4WkNGTGxwR1hKT1FMWWVYOFNVCi0tLSAwMDdxRWpka3ZSejZPbGFMdnAwUlZsbTJFVFBjaEtEYkk0RlFQdS9sUmRRCuoHR3OTH+qBoDJcS/I1Z4lCgf92BRs/hvP48Je48Oklmj5MsERnMD+OC0cAk7YVyY2SGrT3wrnJpNDEz9PP5P3Jcd71EJNFah9+Su14DTRHqQgFhAmsU2ixA51r/2v2I1aL0/lSAD0iwiY="
+              }
+            },
+            {
+              "root": 0,
+              "path": "tmp",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            }
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "key": "8440278d458770560e4b9d7a4ce0a1eb9aef85e71182695f1fb1863dd760fa96",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:1>/vault",
+              "mcp",
+              "--stdio",
+              "--agent",
+              "mgr"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/home",
+              "LC_ALL": "C",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "differential-passphrase-1",
+              "SYMVAULT_SECUREUI": "none",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:1>/tmp",
+              "TZ": "UTC",
+              "USERPROFILE": "<ROOT:1>/home",
+              "XDG_CONFIG_HOME": "<ROOT:1>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:1>/home/.local/share"
+            },
+            "cwd": "<ROOT:1>",
+            "stdin": {
+              "text": "{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"},\"protocolVersion\":\"2025-03-26\"}}\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n{\"id\":3,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{},\"name\":\"get_auth_status\"}}\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"{\\\"cache\\\":{\\\"backend\\\":\\\"memory\\\",\\\"persistent\\\":false,\\\"message\\\":\\\"OS keyring unavailable. Sessions are stored in process memory only.\\\"},\\\"method\\\":\\\"passphrase\\\",\\\"touchIDAvailable\\\":false}\",\"type\":\"text\"}],\"isError\":false}}\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 1,
+              "path": "vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 1,
+              "path": "vault/audit-mgr.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 1,
+              "path": "vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    adm:\n        tier: admin\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    mgr:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        exposeValueTools: true\n        requireApproval: false\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/template-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 1,
+              "path": "vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA1dUlvMEF0bytwcVdYbVA3V010aW9Fa3dadmx0S0s0R0RuVEZPVjhUNkY4ClZzeDIrOHAwTFh2TmI2elZkdVFWNzREMjlFZUhWY1N2RStXNDBRM1d0TnMKLS0tIG44QXRMd0N0VGZweEg4dW5wUWxVTGtMNVZpd2g1QkdVS2RsU1NXWUlwRlUKGmrnYujSX5JZlPqHOjr3uhlPm/tfFyaTZHIBmz2Sx/i2t/3i+6YGFxuvfom88U3YIXshh025d4sWokbQy2zpTowQ4iJ+j5MIRytcCzkYUB/JXktGS1HM9giALmWCDMq++MDJm3LYDyOSOX+vB4u+qYi1FP1C01KeRF/uZn5JHIb50ZvTHOE7vw4LMQ1bGIyuLpQw1CdAJIx0"
+              }
+            }
+          ]
+        },
+        {
+          "key": "bdaf20576ce64bb0249963f80abd0f709ab16f871be35fa98607b1246a46e992",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:2>/vault",
+              "mcp",
+              "--stdio",
+              "--agent",
+              "mgr"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:2>/home",
+              "LC_ALL": "C",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "differential-passphrase-1",
+              "SYMVAULT_SECUREUI": "none",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:2>/tmp",
+              "TZ": "UTC",
+              "USERPROFILE": "<ROOT:2>/home",
+              "XDG_CONFIG_HOME": "<ROOT:2>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:2>/home/.local/share"
+            },
+            "cwd": "<ROOT:2>",
+            "stdin": {
+              "text": "{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"},\"protocolVersion\":\"2025-03-26\"}}\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n{\"id\":2,\"jsonrpc\":\"2.0\",\"method\":\"tools/list\"}\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"description\":\"Return recent audit events for this agent\",\"inputSchema\":{\"properties\":{\"limit\":{\"description\":\"Maximum number of events to return (default 50, max 100)\",\"type\":\"number\"}},\"type\":\"object\"},\"name\":\"symaira_audit_self\",\"readOnlyHint\":true},{\"description\":\"Search entries by query string\",\"inputSchema\":{\"properties\":{\"query\":{\"description\":\"Search query\",\"type\":\"string\"}},\"required\":[\"query\"],\"type\":\"object\"},\"name\":\"find_entries\",\"readOnlyHint\":true},{\"description\":\"Generate a secure password\",\"inputSchema\":{\"properties\":{\"length\":{\"description\":\"Password length\",\"type\":\"number\"},\"symbols\":{\"description\":\"Include symbols. Default: true.\",\"type\":\"boolean\"}},\"type\":\"object\"},\"name\":\"generate_password\",\"readOnlyHint\":true},{\"description\":\"Get metadata for a vault entry. Returns type, usage hints, and field names without secret values. Use get_entry_value to retrieve actual values.\",\"inputSchema\":{\"properties\":{\"include_value\":{\"description\":\"When true, returns the full entry with secret values. Default: false.\",\"type\":\"boolean\"},\"path\":{\"description\":\"Entry path\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"name\":\"get_entry\",\"readOnlyHint\":true},{\"description\":\"Get metadata for a vault entry without retrieving sensitive data\",\"inputSchema\":{\"properties\":{\"path\":{\"description\":\"Entry path\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"name\":\"get_entry_metadata\",\"readOnlyHint\":true},{\"description\":\"Return Symaira Vault MCP server health information\",\"inputSchema\":{\"properties\":{},\"type\":\"object\"},\"name\":\"health\",\"readOnlyHint\":true},{\"description\":\"Discover tools by intent matching. Returns tools whose name or description matches the intent.\",\"inputSchema\":{\"properties\":{\"intent\":{\"description\":\"Natural language intent or keyword to search for\",\"type\":\"string\"},\"return\":{\"description\":\"Output format: \\\"spec\\\" (full tool specs) or \\\"names\\\" (just tool names). Default: \\\"spec\\\".\",\"type\":\"string\"}},\"required\":[\"intent\"],\"type\":\"object\"},\"name\":\"symaira_search\",\"readOnlyHint\":true},{\"description\":\"Set a field on an entry (requires write scope)\",\"destructiveHint\":true,\"inputSchema\":{\"properties\":{\"field\":{\"description\":\"Field name\",\"type\":\"string\"},\"force\":{\"description\":\"Skip password strength validation. Default: false.\",\"type\":\"boolean\"},\"path\":{\"description\":\"Entry path\",\"type\":\"string\"},\"value\":{\"description\":\"Field value\",\"type\":\"string\"}},\"required\":[\"path\",\"field\",\"value\"],\"type\":\"object\"},\"name\":\"set_entry_field\"},{\"description\":\"Return the agent profile, available/unavailable tools, quotas, and vault status\",\"inputSchema\":{\"properties\":{},\"type\":\"object\"},\"name\":\"symaira_whoami\",\"readOnlyHint\":true}]}}\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 2,
+              "path": "vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 2,
+              "path": "vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 2,
+              "path": "vault/audit-mgr.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 2,
+              "path": "vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    adm:\n        tier: admin\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    mgr:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        exposeValueTools: true\n        requireApproval: false\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/template-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 2,
+              "path": "vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBFNGlPNXZsaERJNUdJQkkvMzQ3QVorVzFtUGJUdjJoVWxXd0xYMVI5VEcwCjVSN1A4RWdnNTV0TTgyM0hZTWpQbzdXNHU4MHZnWEp0blFXeVdwTGU2Mm8KLS0tIFB6Y001TldMMkJhTzRjb0ZxVDhwNEV1YXJFckJyaFFBT1VsUjJjcEcxT2MKAfFZT/oMfzUlt8XeqfnA3KuqXuuIJQv1rwERSCo9d3dLBvCMGv4PcXszG+GuFRpktGI30LzxQVfIYKWItbR/VWZ0fP7s+AGpo4IhaarFSZWUNcf358JgfW5hTMKiheXsxKufL/4vtfVl2rgd8/dY/221JSM4NGzvHE6J5eTkbXRWqRCITstEeTg+fwQ5w9a6V4y+SytpzWDn"
+              }
+            }
+          ]
+        },
+        {
+          "key": "0f3ea592009f5989e13c8dd13a16928a550bc0870475dd5fc344e997ce7401d6",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:4>/vault",
+              "mcp",
+              "--stdio",
+              "--agent",
+              "adm"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:4>/home",
+              "LC_ALL": "C",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "differential-passphrase-1",
+              "SYMVAULT_SECUREUI": "none",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:4>/tmp",
+              "TZ": "UTC",
+              "USERPROFILE": "<ROOT:4>/home",
+              "XDG_CONFIG_HOME": "<ROOT:4>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:4>/home/.local/share"
+            },
+            "cwd": "<ROOT:4>",
+            "stdin": {
+              "text": "{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"},\"protocolVersion\":\"2025-03-26\"}}\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n{\"id\":2,\"jsonrpc\":\"2.0\",\"method\":\"tools/list\"}\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"description\":\"Return recent audit events for this agent\",\"inputSchema\":{\"properties\":{\"limit\":{\"description\":\"Maximum number of events to return (default 50, max 100)\",\"type\":\"number\"}},\"type\":\"object\"},\"name\":\"symaira_audit_self\",\"readOnlyHint\":true},{\"description\":\"Search entries by query string\",\"inputSchema\":{\"properties\":{\"query\":{\"description\":\"Search query\",\"type\":\"string\"}},\"required\":[\"query\"],\"type\":\"object\"},\"name\":\"find_entries\",\"readOnlyHint\":true},{\"description\":\"Generate a secure password\",\"inputSchema\":{\"properties\":{\"length\":{\"description\":\"Password length\",\"type\":\"number\"},\"symbols\":{\"description\":\"Include symbols. Default: true.\",\"type\":\"boolean\"}},\"type\":\"object\"},\"name\":\"generate_password\",\"readOnlyHint\":true},{\"description\":\"Get metadata for a vault entry. Returns type, usage hints, and field names without secret values. Use get_entry_value to retrieve actual values.\",\"inputSchema\":{\"properties\":{\"include_value\":{\"description\":\"When true, returns the full entry with secret values. Default: false.\",\"type\":\"boolean\"},\"path\":{\"description\":\"Entry path\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"name\":\"get_entry\",\"readOnlyHint\":true},{\"description\":\"Get metadata for a vault entry without retrieving sensitive data\",\"inputSchema\":{\"properties\":{\"path\":{\"description\":\"Entry path\",\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"name\":\"get_entry_metadata\",\"readOnlyHint\":true},{\"description\":\"Return Symaira Vault MCP server health information\",\"inputSchema\":{\"properties\":{},\"type\":\"object\"},\"name\":\"health\",\"readOnlyHint\":true},{\"description\":\"Discover tools by intent matching. Returns tools whose name or description matches the intent.\",\"inputSchema\":{\"properties\":{\"intent\":{\"description\":\"Natural language intent or keyword to search for\",\"type\":\"string\"},\"return\":{\"description\":\"Output format: \\\"spec\\\" (full tool specs) or \\\"names\\\" (just tool names). Default: \\\"spec\\\".\",\"type\":\"string\"}},\"required\":[\"intent\"],\"type\":\"object\"},\"name\":\"symaira_search\",\"readOnlyHint\":true},{\"description\":\"Set a field on an entry (requires write scope)\",\"destructiveHint\":true,\"inputSchema\":{\"properties\":{\"field\":{\"description\":\"Field name\",\"type\":\"string\"},\"force\":{\"description\":\"Skip password strength validation. Default: false.\",\"type\":\"boolean\"},\"path\":{\"description\":\"Entry path\",\"type\":\"string\"},\"value\":{\"description\":\"Field value\",\"type\":\"string\"}},\"required\":[\"path\",\"field\",\"value\"],\"type\":\"object\"},\"name\":\"set_entry_field\"},{\"description\":\"Return the agent profile, available/unavailable tools, quotas, and vault status\",\"inputSchema\":{\"properties\":{},\"type\":\"object\"},\"name\":\"symaira_whoami\",\"readOnlyHint\":true}]}}\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 4,
+              "path": "vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 4,
+              "path": "vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 4,
+              "path": "vault/audit-adm.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 4,
+              "path": "vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    adm:\n        tier: admin\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    mgr:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        exposeValueTools: true\n        requireApproval: false\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/template-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 4,
+              "path": "vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBDR0hlOEoxcGp0aWpKMUtZazIyVDR6Q0ZvYi9aYTFnRFVNNWcyd3dndW13CjFOZ3JLUUVxN3BiS05GUk1mUHJxSFNRQUVrQXRoM2tZMVI1N2xVSGZiUm8KLS0tIEhFby93bWFxeVpHUXZYQktNUldWNk94MUtNRmV4bkZpaS9hL2lSczFMRU0K9VSWsOLZT8R/grf1x6571zAeBbrvhQnhFPwCTjNe3JgEmrHY7/Mgd2Emv9T7osS+RNXlGU7wOulpHa0om5PiPt7Vgi9/KZUfSR4t68vL+F1nLJXMqUUerEXglEdU5gTBLtRhpoL5xDY7das5/hIbY4QYwKWTirLRsveG/n5fiUiDGxkpB9O2XM8MCY8VS5FxMf1ARDMUW1M="
+              }
+            }
+          ]
+        },
+        {
+          "key": "f1be9142289418c2371c02a59c8a63207454a7e769f05d941652d3e8c243d92a",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:6>/vault",
+              "mcp",
+              "--stdio",
+              "--agent",
+              "cli"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:6>/home",
+              "LC_ALL": "C",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "differential-passphrase-1",
+              "SYMVAULT_SECUREUI": "none",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:6>/tmp",
+              "TZ": "UTC",
+              "USERPROFILE": "<ROOT:6>/home",
+              "XDG_CONFIG_HOME": "<ROOT:6>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:6>/home/.local/share"
+            },
+            "cwd": "<ROOT:6>",
+            "stdin": {
+              "text": "{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"},\"protocolVersion\":\"2025-03-26\"}}\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n{\"id\":3,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{\"method\":\"passphrase\"},\"name\":\"set_auth_method\"}}\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"error\":{\"message\":\"agent \\\"cli\\\" cannot manage Symaira Vault configuration\",\"code\":-32603},\"jsonrpc\":\"2.0\",\"id\":3}\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 6,
+              "path": "vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 6,
+              "path": "vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 6,
+              "path": "vault/audit-cli.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\"ts\":\"2026-11-03T23:46:07Z\",\"agent\":\"cli\",\"action\":\"auth_config_denied\",\"path\":\"\\u003cconfig\\u003e\",\"transport\":\"stdio\",\"reason\":\"auth_config_denied\",\"req_id\":\"9358892ef2c0708e\",\"sess_id\":\"a6e786a09ea9266257a59cae8c241461\",\"kid\":\"4d27f6f5\",\"hmac\":\"4a2172e938472a8ff29b3921a0d0bc2883e385e53498c761b0bffdd412ff9b08\",\"ok\":false}\n"
+              }
+            },
+            {
+              "root": 6,
+              "path": "vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    adm:\n        tier: admin\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    mgr:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        exposeValueTools: true\n        requireApproval: false\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/template-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 6,
+              "path": "vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBsSktGTUtQT3REM3lqN1VyWjJCZkhSZGNtYXRlYzJIWkc5Z1REMGtTTUFjClFjUm05bHRmU0VCVzlONGVpcXJNSXY4WGpla2JTeHRPUmtNNjcvRjlSSFEKLS0tIC8zb2NjK2IzUUtoZ3dJeUtsdkxzWlJScUZzRmJ2OHhnM1piZW5BakV1cXMKhrEAVzwB5/sLeFwHOU3Scc4DcFjPpglQ3yOE23/1RYLjRf6yIEegjR8OEh0m21jF6gtv0km/25cq6xo2++GLzv9Dzf+wh6OHLVPNH9NpQTUU0tPVk0WtAr0IW2OaNgoMiDAmTGwA5/ta+gEiFusxcwZC/Mb1u4+rzRstGjcTc50ajkWSKzXZGRNmwZD8UbTqmps/VL8xJAV5"
+              }
+            }
+          ]
+        },
+        {
+          "key": "853a2c906ae637763f00d76b3368a2653ec5d11f7747e0b40de9ac5d3fcb9c9f",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:8>/vault",
+              "mcp",
+              "--stdio",
+              "--agent",
+              "mgr"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:8>/home",
+              "LC_ALL": "C",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "differential-passphrase-1",
+              "SYMVAULT_SECUREUI": "none",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:8>/tmp",
+              "TZ": "UTC",
+              "USERPROFILE": "<ROOT:8>/home",
+              "XDG_CONFIG_HOME": "<ROOT:8>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:8>/home/.local/share"
+            },
+            "cwd": "<ROOT:8>",
+            "stdin": {
+              "text": "{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"},\"protocolVersion\":\"2025-03-26\"}}\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n{\"id\":3,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{},\"name\":\"set_auth_method\"}}\n{\"id\":4,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{\"method\":7},\"name\":\"set_auth_method\"}}\n{\"id\":5,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{\"method\":\"bogus\"},\"name\":\"set_auth_method\"}}\n{\"id\":6,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{\"method\":\"  BOGUS \"},\"name\":\"set_auth_method\"}}\n{\"id\":7,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{\"method\":null},\"name\":\"set_auth_method\"}}\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"missing string argument \\\"method\\\"\",\"type\":\"text\"}],\"isError\":true}}\n{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"content\":[{\"text\":\"argument \\\"method\\\" is not a string\",\"type\":\"text\"}],\"isError\":true}}\n{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"content\":[{\"text\":\"invalid authMethod \\\"bogus\\\" (valid: passphrase, touchid)\",\"type\":\"text\"}],\"isError\":true}}\n{\"jsonrpc\":\"2.0\",\"id\":6,\"result\":{\"content\":[{\"text\":\"invalid authMethod \\\"  BOGUS \\\" (valid: passphrase, touchid)\",\"type\":\"text\"}],\"isError\":true}}\n{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"text\":\"argument \\\"method\\\" is not a string\",\"type\":\"text\"}],\"isError\":true}}\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 8,
+              "path": "vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 8,
+              "path": "vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 8,
+              "path": "vault/audit-mgr.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 8,
+              "path": "vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    adm:\n        tier: admin\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    mgr:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        exposeValueTools: true\n        requireApproval: false\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/template-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 8,
+              "path": "vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBDWm51NXk5cVJ1N3pBOEc0citSNGdzQUJObGJRREo1WC82VGdWYVhqSDJNCnBoSldTdmJWaGF2QXpwTGNkaDFIenlIR3dxYkhaMWo2dU1nSjgvaFZLY1EKLS0tIERvRk5xWkxWQkRWb1lBKzQzbTl4TExlcmpQb0VOQ3JBUVI2Uk5HbHB2N2cKDLYaBKUENMNa7bR93vaIAqRFgIk+J9AILB2bt2hejfgEq6TYNBrWzYrZH093/T75JZZVYq3yVE0Gtlu2Jwd5yBB/EkJBMbjHdmb8/fCq7g1cu9RJwf2tFiKPHGa79W5roYM2A9Yohc/KKfsXhqC+0tKr2le54+KQ1sy0oxZSdUHYdHPbaRovzn5PHjfSk2a/KBope+Blkhpj"
+              }
+            }
+          ]
+        },
+        {
+          "key": "7aae71f7540310624fb8358b9bb9f41f55b6da5a2eee21bc5abbdf3d70fed271",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:10>/vault",
+              "mcp",
+              "--stdio",
+              "--agent",
+              "mgr"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:10>/home",
+              "LC_ALL": "C",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "differential-passphrase-1",
+              "SYMVAULT_SECUREUI": "none",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:10>/tmp",
+              "TZ": "UTC",
+              "USERPROFILE": "<ROOT:10>/home",
+              "XDG_CONFIG_HOME": "<ROOT:10>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:10>/home/.local/share"
+            },
+            "cwd": "<ROOT:10>",
+            "stdin": {
+              "text": "{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"},\"protocolVersion\":\"2025-03-26\"}}\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n{\"id\":3,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{\"method\":\"touchid\"},\"name\":\"set_auth_method\"}}\n{\"id\":4,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{\"method\":\"Touch-ID\"},\"name\":\"set_auth_method\"}}\n{\"id\":5,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{\"method\":\"biometrics\"},\"name\":\"set_auth_method\"}}\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"Touch ID is not available in this Symaira Vault build or on this Mac\",\"type\":\"text\"}],\"isError\":true}}\n{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"content\":[{\"text\":\"Touch ID is not available in this Symaira Vault build or on this Mac\",\"type\":\"text\"}],\"isError\":true}}\n{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"content\":[{\"text\":\"Touch ID is not available in this Symaira Vault build or on this Mac\",\"type\":\"text\"}],\"isError\":true}}\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 10,
+              "path": "vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 10,
+              "path": "vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 10,
+              "path": "vault/audit-mgr.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 10,
+              "path": "vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    adm:\n        tier: admin\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    mgr:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        exposeValueTools: true\n        requireApproval: false\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/template-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 10,
+              "path": "vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB6dElXVmpOUUdBVjc5RkM0a3VYd1pXQW5qTno1UUtUalVxcmdDK2dJd0hNCmZuczdtT1VPV3NLUWRFWlpNWmtRdHJXYlV0elhGNXByNnZJQXRtemNyL3MKLS0tIFY1RytGekJxWEdyWncxS20wZXROUVFueUVWYmtGVUdiRVh1K2xrQ25QMDAKf4zbf1jOl8CpOujPPh70kmCxU2s/GrhgzDiYBLOGZXOnEQWF7FEyvma5hsQjlhIRPuOmmHN9CQqhh2hAJi+RN8+xELwrIymvaMT3mbAJT8ST3/5RAe5d93LFwD6R4zk8ak5MUoE77oINNMcWftZwdoBGSbo0spzz6w24ZwR2oCZ8LlDbZIsnaiPGgGyUjfqDB3Ciakk1zJaK"
+              }
+            }
+          ]
+        },
+        {
+          "key": "dc74e7b481ce50872d24d936ae030f23e0ae1cbe6da549b79660926bade9e253",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:12>/vault",
+              "mcp",
+              "--stdio",
+              "--agent",
+              "mgr"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:12>/home",
+              "LC_ALL": "C",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "differential-passphrase-1",
+              "SYMVAULT_SECUREUI": "none",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:12>/tmp",
+              "TZ": "UTC",
+              "USERPROFILE": "<ROOT:12>/home",
+              "XDG_CONFIG_HOME": "<ROOT:12>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:12>/home/.local/share"
+            },
+            "cwd": "<ROOT:12>",
+            "stdin": {
+              "text": "{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"},\"protocolVersion\":\"2025-03-26\"}}\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n{\"id\":3,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{\"method\":\"passphrase\"},\"name\":\"set_auth_method\"}}\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"Auth method set to passphrase\",\"type\":\"text\"}],\"isError\":false}}\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 12,
+              "path": "vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 12,
+              "path": "vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 12,
+              "path": "vault/audit-mgr.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\"ts\":\"2026-11-03T23:46:08Z\",\"agent\":\"mgr\",\"action\":\"auth_config\",\"path\":\"\\u003cconfig\\u003e\",\"transport\":\"stdio\",\"req_id\":\"2f55433355158f46\",\"sess_id\":\"ab3272163ccee0c3e4967d59c6befd02\",\"kid\":\"48328b13\",\"hmac\":\"18dddd0d8d9770a5ada2375d58dbd8eb777c80321d04e770277f2f1b30def334\",\"ok\":true}\n"
+              }
+            },
+            {
+              "root": 12,
+              "path": "vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    adm:\n        tier: admin\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    mgr:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        exposeValueTools: true\n        requireApproval: false\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nmcp: {}\nvaultDir: <ROOT:0>/template-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 12,
+              "path": "vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBLOUZVUDkrTEV2dEJLRHRPY291WTIrRDJ3bFAzODVuaFFTaktNRk9sUGprCnFoMDlaL0FOVU00UDZQdktLdytvRCsvSkQwQjlCbTYxaVJqTWxyOWtpZUUKLS0tIHFGWndVZXE4MW43OXBiRkpYQU5peUtoSGtJc2o0c1B2TU85cDl4VVVVZG8KawzdupwZ7wNB2oEFkqVVAraFCUIo6NVLOxMpcps0q62n3ergT5driBSlqolwjsuEVdM/tVk5u1hYf3fPJTa30t2/Cr0XBWqMkTpzAU7hJUWE94QfjW8r8hGPj4Wn6QO80y1DqKE2H5jFv16DeXtk4CaKePQaJ55phVlcC8yYAQHjqI5rVcSfVeOMQx6u9pVc48eWtnBx0Gr1"
+              }
+            }
+          ]
+        },
+        {
+          "key": "4341d27ca8d875ac24adf121fdbdf8f3cd54b983636fa620d3008f4fa5599fbb",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:14>/vault",
+              "mcp",
+              "--stdio",
+              "--agent",
+              "mgr"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:14>/home",
+              "LC_ALL": "C",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "differential-passphrase-1",
+              "SYMVAULT_SECUREUI": "none",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:14>/tmp",
+              "TZ": "UTC",
+              "USERPROFILE": "<ROOT:14>/home",
+              "XDG_CONFIG_HOME": "<ROOT:14>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:14>/home/.local/share"
+            },
+            "cwd": "<ROOT:14>",
+            "stdin": {
+              "text": "{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"},\"protocolVersion\":\"2025-03-26\"}}\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n{\"id\":3,\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"arguments\":{\"method\":\" \"},\"name\":\"set_auth_method\"}}\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"Auth method set to passphrase\",\"type\":\"text\"}],\"isError\":false}}\n"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 14,
+              "path": "vault/.lock",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 14,
+              "path": "vault/.symvault-migrated",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            },
+            {
+              "root": 14,
+              "path": "vault/audit-mgr.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\"ts\":\"2026-11-03T23:46:09Z\",\"agent\":\"mgr\",\"action\":\"auth_config\",\"path\":\"\\u003cconfig\\u003e\",\"transport\":\"stdio\",\"req_id\":\"ba1a35e22c8507b8\",\"sess_id\":\"8db12542bf56b4adeeb6d1b6330db80b\",\"kid\":\"d278e61f\",\"hmac\":\"6ce70d66e669801cf48e34591381873b8f2dc0fa5f16c9ef4820753aafc9b454\",\"ok\":true}\n"
+              }
+            },
+            {
+              "root": 14,
+              "path": "vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    adm:\n        tier: admin\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: false\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: true\n        requireApproval: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    mgr:\n        approvalMode: none\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        exposeValueTools: true\n        requireApproval: false\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: false\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull: true\n    auto_pull_interval: 10s\nmcp: {}\nvaultDir: <ROOT:0>/template-vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 14,
+              "path": "vault/manifest.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAzaER2T254NUxKaE80a00ya3N5S2taOFBJOGFGbnpFOFFLS1J5czF5VURZCjg4bkpJeWJldkNjVlNQSzFSQ3JEazEzWVp3T3g4UjdUa0pyalpaSll5eTAKLS0tIEdEbUhGNE0wQmtHb040TDZ6SGlIUHhVc285NFlnejhJOWEvTG9YTXUzUlkK+TvC9DfOltTl6mMXzRsTmnWKGx1bri8IaMrEXKcnc+E7n+tKsXEXhgoZgn9KLT/46oDhfhRKi1mz/oXOiXv3TCAmQuDAMCnIFkyiH+WrmavRl8l49LltHeo6ybKAgevvQBYKDMCpFEWprkJiUIj4+YWu2kNMfZN01a4eDDldoRPMtXD1CF4VLoqvsDBgrBzi3F7pl0wNZp2w"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

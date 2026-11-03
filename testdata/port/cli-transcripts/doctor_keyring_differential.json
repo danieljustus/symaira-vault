@@ -1,0 +1,304 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "tests": {
+    "differential_doctor_keyring_checks_in_forced_memory_states": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "333f48bdb73c0e6db8c284dbe5271be4e9b4222e52fc00b8940544c1e32d887e",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--json",
+              "--no-network",
+              "--only",
+              "session.cache,session.keyring,audit.keyring.orphans"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"
+            },
+            "cwd": "<ROOT:0>/root",
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"session.cache\",\n      \"name\": \"Session cache\",\n      \"status\": \"warn\",\n      \"message\": \"session cache uses in-memory backend (not persistent)\",\n      \"hint\": \"install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.keyring.orphans\",\n      \"name\": \"Orphaned audit HMAC keys in OS keychain\",\n      \"status\": \"ok\",\n      \"message\": \"keychain enumeration skipped in test/CI environment\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.keyring\",\n      \"name\": \"Session keyring roundtrip\",\n      \"status\": \"warn\",\n      \"message\": \"OS keyring persistence not verified in test/CI environment (in-memory backend active)\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 2,\n    \"fail\": 0,\n    \"total\": 3\n  }\n}\n"
+            },
+            "stderr": {
+              "text": "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=tok-20261103-c294741a).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy tok-20261103-c294741a\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/.symvault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/.symvault/device-sessions.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{}"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/mcp-tokens.json",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "{\n  \"version\": 2,\n  \"tokens\": {\n    \"tok-20261103-c294741a\": {\n      \"id\": \"tok-20261103-c294741a\",\n      \"label\": \"legacy (auto-migrated, unscoped)\",\n      \"hash\": \"f1c2374c065a3b2cf43cb64a6d5abb2f2be06452fda463bbaf6cdb2e6f0c9904\",\n      \"prefix\": \"3868\",\n      \"allowed_tools\": [\n        \"*\"\n      ],\n      \"agent_name\": \"legacy\",\n      \"created_at\": \"2026-11-03T23:42:25.946429Z\",\n      \"revoked\": false\n    }\n  }\n}\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "941af86891870c74954ecf9bee145f8e3edf9a14be1489bfb9f20e718f864dd5",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--no-network",
+              "--only",
+              "session.cache,session.keyring,audit.keyring.orphans"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"
+            },
+            "cwd": "<ROOT:0>/root",
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Symaira Vault Doctor — Vault: <ROOT:0>/root\n\n ⚠  Session cache                            session cache uses in-memory backend (not persistent)\n    → install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\n ✓  Orphaned audit HMAC keys in OS keychain  keychain enumeration skipped in test/CI environment\n ⚠  Session keyring roundtrip                OS keyring persistence not verified in test/CI environment (in-memory backend active)\n\nScore: 1/3 OK · 2 warning(s)\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "52435512fcf6512506835cb82fcd49b9c72534b90d559649eb7f7153e7d97afd",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--json",
+              "--no-network",
+              "--only",
+              "session.cache,session.keyring,audit.keyring.orphans"
+            ],
+            "env": {
+              "GITHUB_ACTIONS": "true",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"
+            },
+            "cwd": "<ROOT:0>/root",
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"session.cache\",\n      \"name\": \"Session cache\",\n      \"status\": \"warn\",\n      \"message\": \"session cache uses in-memory backend (not persistent)\",\n      \"hint\": \"install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.keyring.orphans\",\n      \"name\": \"Orphaned audit HMAC keys in OS keychain\",\n      \"status\": \"ok\",\n      \"message\": \"keychain enumeration skipped in test/CI environment\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.keyring\",\n      \"name\": \"Session keyring roundtrip\",\n      \"status\": \"warn\",\n      \"message\": \"OS keyring persistence not verified in test/CI environment (in-memory backend active)\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 2,\n    \"fail\": 0,\n    \"total\": 3\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7d70b10ea7790d464cab576be5bdc7b596090870f4ce7d6aa54879a5c5180ac0",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--no-network",
+              "--only",
+              "session.cache,session.keyring,audit.keyring.orphans"
+            ],
+            "env": {
+              "GITHUB_ACTIONS": "true",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"
+            },
+            "cwd": "<ROOT:0>/root",
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Symaira Vault Doctor — Vault: <ROOT:0>/root\n\n ⚠  Session cache                            session cache uses in-memory backend (not persistent)\n    → install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\n ✓  Orphaned audit HMAC keys in OS keychain  keychain enumeration skipped in test/CI environment\n ⚠  Session keyring roundtrip                OS keyring persistence not verified in test/CI environment (in-memory backend active)\n\nScore: 1/3 OK · 2 warning(s)\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e89991277c8d7748b51701a60866c9984a85af76de2f64860354f2ca93ddaa76",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--json",
+              "--no-network",
+              "--only",
+              "session.cache,session.keyring,audit.keyring.orphans"
+            ],
+            "env": {
+              "HEADLESS": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"
+            },
+            "cwd": "<ROOT:0>/root",
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"session.cache\",\n      \"name\": \"Session cache\",\n      \"status\": \"warn\",\n      \"message\": \"session cache uses in-memory backend (not persistent)\",\n      \"hint\": \"install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.keyring.orphans\",\n      \"name\": \"Orphaned audit HMAC keys in OS keychain\",\n      \"status\": \"ok\",\n      \"message\": \"keychain enumeration skipped in test/CI environment\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.keyring\",\n      \"name\": \"Session keyring roundtrip\",\n      \"status\": \"warn\",\n      \"message\": \"OS keyring persistence not verified in test/CI environment (in-memory backend active)\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 2,\n    \"fail\": 0,\n    \"total\": 3\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b5649d9bd887d021ea7605fd3d6a1da4b6d18bfd8e56c03abd4f89d946118026",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--no-network",
+              "--only",
+              "session.cache,session.keyring,audit.keyring.orphans"
+            ],
+            "env": {
+              "HEADLESS": "1",
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"
+            },
+            "cwd": "<ROOT:0>/root",
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Symaira Vault Doctor — Vault: <ROOT:0>/root\n\n ⚠  Session cache                            session cache uses in-memory backend (not persistent)\n    → install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\n ✓  Orphaned audit HMAC keys in OS keychain  keychain enumeration skipped in test/CI environment\n ⚠  Session keyring roundtrip                OS keyring persistence not verified in test/CI environment (in-memory backend active)\n\nScore: 1/3 OK · 2 warning(s)\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0c501c28a33e7d3086e1652cc9dd907c8536ec768c1a2ad46fc0dea3a2c6b1d4",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--json",
+              "--no-network",
+              "--only",
+              "session.cache,session.keyring,audit.keyring.orphans"
+            ],
+            "env": {
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+              "SYMVAULT_TEST_KEYRING": "memory"
+            },
+            "cwd": "<ROOT:0>/root",
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\n  \"schema_version\": \"1.0\",\n  \"vault_dir\": \"<ROOT:0>/root\",\n  \"results\": [\n    {\n      \"id\": \"session.cache\",\n      \"name\": \"Session cache\",\n      \"status\": \"warn\",\n      \"message\": \"session cache uses in-memory backend (not persistent)\",\n      \"hint\": \"install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"audit.keyring.orphans\",\n      \"name\": \"Orphaned audit HMAC keys in OS keychain\",\n      \"status\": \"ok\",\n      \"message\": \"keychain enumeration skipped in test/CI environment\",\n      \"fixable\": false\n    },\n    {\n      \"id\": \"session.keyring\",\n      \"name\": \"Session keyring roundtrip\",\n      \"status\": \"warn\",\n      \"message\": \"OS keyring persistence not verified in test/CI environment (in-memory backend active)\",\n      \"fixable\": false\n    }\n  ],\n  \"score\": {\n    \"ok\": 1,\n    \"warn\": 2,\n    \"fail\": 0,\n    \"total\": 3\n  }\n}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f0b6d7f2209a66967ce793bb70aafd19d7b5c8158580c4b909893b7a676dc4b1",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/root",
+              "doctor",
+              "--no-network",
+              "--only",
+              "session.cache,session.keyring,audit.keyring.orphans"
+            ],
+            "env": {
+              "HOME": "<ROOT:1>/root",
+              "NO_COLOR": "1",
+              "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+              "SYMVAULT_TEST_KEYRING": "memory"
+            },
+            "cwd": "<ROOT:0>/root",
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Symaira Vault Doctor — Vault: <ROOT:0>/root\n\n ⚠  Session cache                            session cache uses in-memory backend (not persistent)\n    → install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions\n ✓  Orphaned audit HMAC keys in OS keychain  keychain enumeration skipped in test/CI environment\n ⚠  Session keyring roundtrip                OS keyring persistence not verified in test/CI environment (in-memory backend active)\n\nScore: 1/3 OK · 2 warning(s)\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

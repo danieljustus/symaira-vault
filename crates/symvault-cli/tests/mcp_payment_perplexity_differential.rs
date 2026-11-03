@@ -7,9 +7,13 @@
 //! paths are covered by the Go-recorded fixtures in
 //! `crates/symvault-mcp/tests/{prepare_payment,perplexity}_contract.rs`.
 //!
-//! Set `SYMVAULT_GO_BINARY` to a `CGO_ENABLED=0` build of the pinned oracle.
+//! The Go answers (a `CGO_ENABLED=0` build of the pinned oracle) are replayed
+//! from `testdata/port/cli-transcripts/mcp_payment_perplexity_differential.json`.
 
 #![cfg(unix)]
+
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
@@ -17,10 +21,14 @@ mod test_temp_root;
 use serde_json::{Value, json};
 use std::{
     env, fs,
-    io::Write,
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Command, Output},
 };
+
+/// Go oracle: the last commit that carries the Go sources (`CGO_ENABLED=0`
+/// build, so no Touch ID); the tool catalog (`run_command` file inputs) of the
+/// older config-cli oracle differs.
+const ORACLE_COMMIT: &str = "c069d3f2b17d704525cedc1bd42840cc6a3e9896";
 
 fn temporary_root(name: &str) -> test_temp_root::TempRoot {
     test_temp_root::TempRoot::missing(&format!("symvault-pp-differential-{name}-"))
@@ -47,10 +55,7 @@ fn base_command(binary: &Path, root: &Path, home: &Path) -> Command {
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    base_command(binary, root, home)
-        .args(args)
-        .output()
-        .expect("run CLI")
+    go_oracle::output(base_command(binary, root, home).args(args)).expect("run CLI")
 }
 
 fn assert_success(output: &Output, label: &str) {
@@ -85,24 +90,33 @@ fn profile(name: &str, extra: &str) -> String {
     )
 }
 
-/// Prepares one disposable vault: Rust `init`, Go `import` of payment cards
-/// (the same cross-binary seeding `run_differential` relies on), then a
-/// profile set covering every approval mode and a payment policy.
-fn prepare_vault(rust: &Path, go: &Path, root: &Path, home: &Path, perplexity: &str) {
+/// Prepares one disposable vault: Rust `init` (random keys: frozen as a seed),
+/// Go `import` of payment cards (a recorded Go call whose vault delta is
+/// replayed; the same cross-binary seeding `run_differential` relies on), then
+/// a profile set covering every approval mode and a payment policy.
+fn prepare_vault(
+    oracle: &go_oracle::GoOracle,
+    rust: &Path,
+    go: &Path,
+    root: &Path,
+    home: &Path,
+    perplexity: &str,
+) {
     fs::create_dir_all(home).unwrap();
     for directory in ["config", "data", "cache"] {
         fs::create_dir_all(home.join(directory)).unwrap();
     }
     let vault = root.to_str().unwrap();
-    assert_success(
-        &run(
+    if let Some(init) = oracle.seed("init", &[root, home], || {
+        run(
             rust,
             &["--vault", vault, "init", "--auth", "passphrase"],
             root,
             home,
-        ),
-        "init",
-    );
+        )
+    }) {
+        assert_success(&init, "init");
+    }
     let export = home.join("bitwarden.json");
     fs::write(&export, BITWARDEN_EXPORT).unwrap();
     assert_success(
@@ -168,27 +182,16 @@ fn frames(calls: &[Value], include_all: bool) -> String {
 }
 
 fn mcp(binary: &Path, root: &Path, home: &Path, agent: &str, input: &str) -> Output {
-    let mut child = base_command(binary, root, home)
-        .args([
-            "--vault",
-            root.to_str().unwrap(),
-            "mcp",
-            "--stdio",
-            "--agent",
-            agent,
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn mcp");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
-    child.wait_with_output().expect("mcp output")
+    let mut command = base_command(binary, root, home);
+    command.args([
+        "--vault",
+        root.to_str().unwrap(),
+        "mcp",
+        "--stdio",
+        "--agent",
+        agent,
+    ]);
+    go_oracle::output_with_input(&mut command, Some(input.as_bytes())).expect("mcp output")
 }
 
 /// Audit actions as the audit log recorded them (timestamps/HMACs vary).
@@ -306,11 +309,12 @@ fn visa(merchant: &str, amount: &str, currency: &str) -> Value {
 
 #[test]
 fn prepare_payment_and_perplexity_match_go_for_non_interactive_cases() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "mcp_payment_perplexity_differential",
+        "prepare_payment_and_perplexity_match_go_for_non_interactive_cases",
+        Some(ORACLE_COMMIT),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
 
     // (config fragment, cases). Each group gets its own vault pair so the
@@ -431,8 +435,8 @@ fn prepare_payment_and_perplexity_match_go_for_non_interactive_cases() {
         let rust_root = temporary_root(&format!("rust-{index}"));
         let go_home = temporary_root(&format!("go-home-{index}"));
         let rust_home = temporary_root(&format!("rust-home-{index}"));
-        prepare_vault(&rust, &go, &go_root, &go_home, perplexity);
-        prepare_vault(&rust, &go, &rust_root, &rust_home, perplexity);
+        prepare_vault(&oracle, &rust, &go, &go_root, &go_home, perplexity);
+        prepare_vault(&oracle, &rust, &go, &rust_root, &rust_home, perplexity);
 
         // One stdio session per agent keeps the profile under test explicit.
         let mut agents: Vec<&str> = cases.iter().map(|(agent, _)| agent.as_str()).collect();
@@ -508,22 +512,27 @@ fn prepare_payment_and_perplexity_match_go_for_non_interactive_cases() {
         executed >= 44,
         "too few differential calls executed: {executed}"
     );
+    eprintln!(
+        "mcp_payment_perplexity: {} Go calls replayed",
+        oracle.calls()
+    );
 }
 
 #[test]
 fn tools_list_with_all_tools_is_byte_identical_and_names_the_three_tools() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "mcp_payment_perplexity_differential",
+        "tools_list_with_all_tools_is_byte_identical_and_names_the_three_tools",
+        Some(ORACLE_COMMIT),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let go_root = temporary_root("list-go");
     let rust_root = temporary_root("list-rust");
     let go_home = temporary_root("list-go-home");
     let rust_home = temporary_root("list-rust-home");
-    prepare_vault(&rust, &go, &go_root, &go_home, "");
-    prepare_vault(&rust, &go, &rust_root, &rust_home, "");
+    prepare_vault(&oracle, &rust, &go, &go_root, &go_home, "");
+    prepare_vault(&oracle, &rust, &go, &rust_root, &rust_home, "");
     let input = frames(&[], true);
     for agent in ["deny", "readonly", "standard"] {
         let go_output = mcp(&go, &go_root, &go_home, agent, &input);
@@ -554,4 +563,5 @@ fn tools_list_with_all_tools_is_byte_identical_and_names_the_three_tools() {
             "{agent}: prepare_payment visibility follows the tier block"
         );
     }
+    assert_eq!(oracle.calls(), 2 + 3);
 }

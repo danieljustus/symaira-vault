@@ -20,17 +20,22 @@
 //! stdin/stdout are the pty, stderr is a pipe so it can be compared on its
 //! own. A small embedded `python3 -I` driver owns the pty; it answers the Go
 //! TUI's startup terminal queries (OSC 11 background colour, CSI 6n cursor
-//! position). The suite skips with a message when `SYMVAULT_GO_BINARY` is
-//! unset and fails (never skips) when it is set but unusable.
+//! position). The Go side of every scenario was recorded once from the pinned
+//! oracle (`testdata/port/cli-observations/add_form_differential.json`) and is
+//! replayed; a missing recording fails the test.
+
+#[path = "common/go_oracle_ext.rs"]
+mod go_oracle_ext;
 
 use std::{
     collections::BTreeMap,
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
     thread,
 };
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use symvault_crypto::{SecretBytes, decrypt_identity};
 use symvault_store::Store;
@@ -39,6 +44,8 @@ const BINARY: &str = env!("CARGO_BIN_EXE_symvault");
 const PASSPHRASE: &str = "Tr0ub4dor&3-xyz-correct";
 const ENTRY: &str = "e1";
 const MIN_SCENARIOS: usize = 37;
+/// Pinned Go oracle (a `CGO_ENABLED=0` build of this commit).
+const ORACLE_COMMIT: &str = "fca3f89401833b5e14ec4ec74ef736b0f63bca74";
 
 /// Pty driver: spawns the binary on a pty (stdin/stdout) with stderr on a pipe,
 /// plays the keystroke script and prints one JSON result object.
@@ -282,7 +289,7 @@ const SCENARIOS: &[Scenario] = &[
 ];
 
 /// What one run produced.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Run {
     rc: i64,
     timeout: bool,
@@ -364,19 +371,6 @@ fn differences(go: &Run, rust: &Run) -> Vec<String> {
         rust.entry.to_string(),
     );
     out
-}
-
-fn oracle() -> Option<PathBuf> {
-    let Some(raw) = env::var_os("SYMVAULT_GO_BINARY") else {
-        println!("skipping add-form differential: SYMVAULT_GO_BINARY is not set");
-        return None;
-    };
-    let path = PathBuf::from(raw);
-    assert!(
-        path.is_file(),
-        "SYMVAULT_GO_BINARY is set but is not a file: {path:?}"
-    );
-    Some(path)
 }
 
 fn env_for(root: &Path) -> BTreeMap<String, String> {
@@ -529,9 +523,11 @@ fn run_scenario(binary: &Path, tag: &str, scenario: &Scenario) -> Run {
 
 #[test]
 fn add_form_matches_the_go_oracle() {
-    let Some(go) = oracle() else {
-        return;
-    };
+    let observations = go_oracle_ext::Observations::begin(
+        "add_form_differential",
+        "add_form_matches_the_go_oracle",
+        Some(ORACLE_COMMIT),
+    );
     let python = Command::new("python3")
         .args(["-I", "--version"])
         .output()
@@ -543,13 +539,18 @@ fn add_form_matches_the_go_oracle() {
     let mut failures = Vec::new();
     for scenario in SCENARIOS {
         let (go_run, rust_run) = thread::scope(|scope| {
-            let go_run = scope.spawn(|| run_scenario(&go, "go", scenario));
+            let go_run = scope.spawn(|| {
+                observations.observe(scenario.name, |go| {
+                    serde_json::to_value(run_scenario(go, "go", scenario)).expect("go run json")
+                })
+            });
             let rust_run = scope.spawn(|| run_scenario(&rust, "rust", scenario));
             (
                 go_run.join().expect("go scenario"),
                 rust_run.join().expect("rust scenario"),
             )
         });
+        let go_run: Run = serde_json::from_value(go_run).expect("recorded Go run");
         let mut problems = differences(&go_run, &rust_run);
         for (side, run) in [("go", &go_run), ("rust", &rust_run)] {
             if run.timeout {
@@ -577,6 +578,7 @@ fn add_form_matches_the_go_oracle() {
         failures.len(),
         failures.join("\n")
     );
+    assert_eq!(observations.count(), compared);
     println!("add-form differential: {compared} scenarios compared, all equal");
 }
 

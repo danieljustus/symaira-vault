@@ -1,5 +1,8 @@
 #![cfg(unix)]
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
@@ -14,7 +17,8 @@ fn temporary_root(name: &str) -> test_temp_root::TempRoot {
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join("config"))
@@ -23,9 +27,8 @@ fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
         .env("SYMVAULT_VAULT", root)
         .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("CI", "1")
-        .output()
-        .expect("run CLI")
+        .env("CI", "1");
+    go_oracle::output(&mut command).expect("run CLI")
 }
 
 fn assert_success(output: &Output, command: &str) {
@@ -40,11 +43,12 @@ fn assert_success(output: &Output, command: &str) {
 
 #[test]
 fn edit_matches_go_editor_json_roundtrip_and_cleans_private_temp_file() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "edit_differential",
+        "edit_matches_go_editor_json_roundtrip_and_cleans_private_temp_file",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("home");
     let root = temporary_root("vault");
@@ -52,19 +56,23 @@ fn edit_matches_go_editor_json_roundtrip_and_cleans_private_temp_file() {
     fs::create_dir_all(&home).expect("home");
     fs::create_dir_all(&fixture_dir).expect("fixtures");
 
-    let init = run(
-        &rust_binary,
-        &[
-            "--vault",
-            root.to_str().unwrap(),
-            "init",
-            "--auth",
-            "passphrase",
-        ],
-        &root,
-        &home,
-    );
-    assert_success(&init, "Rust init");
+    // `init` generates random keys: frozen as a seed for replay.
+    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+        run(
+            &rust_binary,
+            &[
+                "--vault",
+                root.to_str().unwrap(),
+                "init",
+                "--auth",
+                "passphrase",
+            ],
+            &root,
+            &home,
+        )
+    }) {
+        assert_success(&init, "Rust init");
+    }
 
     let set = run(
         &go_binary,
@@ -178,6 +186,7 @@ fn edit_matches_go_editor_json_roundtrip_and_cleans_private_temp_file() {
     assert_eq!(go_get.stdout, b"edited-by-rust\n");
     assert_eq!(rust_get.stdout, go_get.stdout);
 
+    assert_eq!(oracle.calls(), 3);
     let _ = fs::remove_dir_all(&home);
     let _ = fs::remove_dir_all(&root);
     let _ = fs::remove_dir_all(&fixture_dir);
