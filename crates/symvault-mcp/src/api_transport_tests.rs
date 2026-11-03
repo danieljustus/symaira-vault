@@ -514,3 +514,84 @@ fn actual_dns_https_verifies_chain_hostname_and_redacts_positive_control() {
         }
     }
 }
+
+/// ADR 0034 item 13 (MCP-003/BROKER-002): the `execute_api_request` transport
+/// returns a 302 to the caller and never contacts the redirect target, so the
+/// credential cannot reach a second authority. Go follows the redirect
+/// (`internal/ssrf/ssrf.go`); this is a ratified, Rust-only pin.
+#[test]
+fn execute_api_request_transport_returns_302_without_following_redirect() {
+    let target_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let target_address = target_listener.local_addr().unwrap();
+    target_listener.set_nonblocking(true).unwrap();
+    let origin_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_address = origin_listener.local_addr().unwrap();
+    assert_ne!(origin_address, target_address);
+
+    let location = format!("http://{target_address}/safe/landed");
+    let response_location = location.clone();
+    let origin = thread::spawn(move || {
+        // Serve exactly one connection; a followed redirect would target the
+        // other listener, so a second origin hit is also counted below.
+        let (mut stream, _) = origin_listener.accept().unwrap();
+        let request = read_request(&mut stream);
+        let body = "moved";
+        write!(
+            stream,
+            "HTTP/1.1 302 Found\r\nLocation: {response_location}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+        request
+    });
+
+    let request_headers = BTreeMap::from([(
+        "Authorization".to_string(),
+        "Bearer redirect-canary".to_string(),
+    )]);
+    let response = execute_http_for_api(
+        &template(format!("http://{origin_address}"), true),
+        "GET",
+        "/safe/item",
+        &format!("http://{origin_address}/safe/item"),
+        &request_headers,
+        b"",
+        ApiResponseBounds {
+            timeout: Duration::from_secs(10),
+            response_limit: API_RESPONSE_LIMIT,
+            context: RequestContext::default(),
+            options: &ApiTransportOptions::default(),
+        },
+    )
+    .expect("a redirect response is returned, not an error");
+
+    assert_eq!(response.status, 302);
+    assert_eq!(response.body, b"moved");
+    assert_eq!(
+        response
+            .headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case("location"))
+            .map(|(_, value)| value.as_str()),
+        Some(location.as_str())
+    );
+    let origin_request = origin.join().unwrap();
+    assert!(origin_request.starts_with("GET /safe/item HTTP/1.1\r\n"));
+    assert!(origin_request.contains("authorization: Bearer redirect-canary\r\n"));
+
+    // Give a (wrongly) followed redirect time to connect; the target must see
+    // no connection at all, hence no request and no credential.
+    let deadline = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < deadline {
+        match target_listener.accept() {
+            Ok((mut stream, _)) => {
+                let request = read_request(&mut stream);
+                panic!("redirect target received a request: {request}");
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("accept failed: {error}"),
+        }
+    }
+}

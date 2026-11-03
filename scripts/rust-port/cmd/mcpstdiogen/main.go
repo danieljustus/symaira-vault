@@ -286,6 +286,11 @@ func caseInputs() []struct{ name, why, input string } {
 			`{"jsonrpc":"2.0","id":123456789012345678901234567890,"method":"ping"}` + "\n",
 		},
 		{
+			"duplicate_key_inside_params",
+			"ADR 0034 item 15: a key duplicated inside params (not the envelope) is resolved last-wins by encoding/json, so initialize negotiates the SECOND protocolVersion (2025-03-26) although 2024-11-05 came first. The port matches (last-wins as well); only duplicated ENVELOPE keys are rejected (see the divergences). ADR 0034 item 15 expected -32602 here; measured, the port does not reject it",
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","protocolVersion":"2025-03-26"}}` + "\n",
+		},
+		{
 			"interleaved_valid_and_invalid",
 			"a hostile client cannot desynchronise the stream: every frame is answered in order regardless of the failures between them",
 			ping + "\n" + "garbage\n" + `{"jsonrpc":"2.0","id":2,"method":"ping"}` + "\n" + "[]\n" + `{"jsonrpc":"2.0","id":3,"method":"ping"}` + "\n",

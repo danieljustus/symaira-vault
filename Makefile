@@ -1147,10 +1147,13 @@ AREA_KDF_MIGRATION_TESTS := 10
 # scope boundary, sharing corpus and clipboard auto-clear replays), 354 on
 # local/device-approvals (device-token approvals replay: 4 tests, plus 4 unit
 # tests in approval.rs), 369 at local/integ5 after local/http-ratelimit (limiter
-# unit tests and the 5 http_ratelimit tests; measured: 52 result lines, 0 failed); the
+# unit tests and the 5 http_ratelimit tests; measured: 52 result lines, 0 failed),
+# 371 at local/pin-tests (the execute_api_request 302 pin in api_transport_tests.rs
+# and the duplicate-key-inside-params pin in stdio_hygiene_contract.rs; measured
+# 52 result lines, 0 failed, 0 ignored); the
 # gate asserts the real count, so a shrunken run still fails. Raise it together
 # with the new tests (and the workflows' constant when they run again).
-AREA_MCP_TEST_COUNT := 369
+AREA_MCP_TEST_COUNT := 371
 
 .PHONY: area-oracle-runner
 area-oracle-runner:
@@ -1322,6 +1325,7 @@ MCP_NAMED_TESTS := \
 	cancelled_dns_releases_the_actual_owned_udp_socket \
 	cancelling_pending_api_headers_closes_upstream_and_joins \
 	progressing_api_body_still_reaches_absolute_deadline \
+	execute_api_request_transport_returns_302_without_following_redirect \
 	actual_dns_https_verifies_chain_hostname_and_redacts_positive_control \
 	protocol_context_cancels_actual_encrypted_api_request
 mcp-named-tests:
@@ -1881,7 +1885,7 @@ mcp-prompts-differential: mcp-ordered-fixtures-check
 .PHONY: zip-errors-differential
 zip-errors-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/zipgen -check
-	$(CARGO) test -p symvault-sync --test zip_errors_contract --test zip_limit_contract --locked
+	$(CARGO) test -p symvault-sync --test zip_errors_contract --test zip_limit_contract --test zip_nonutf8_name_pin --locked
 
 .PHONY: cxf-import-differential
 cxf-import-differential:

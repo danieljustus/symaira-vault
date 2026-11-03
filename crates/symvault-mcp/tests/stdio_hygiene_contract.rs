@@ -392,3 +392,48 @@ fn duplicate_keys_are_rejected_fail_closed() {
         "a duplicated key must not be silently resolved to the last occurrence"
     );
 }
+
+/// ADR 0034 item 15 (MCP-004), measured: a key duplicated inside `params` is
+/// NOT rejected. The oracle's encoding/json resolves it last-wins (recorded
+/// from the real transport as case `duplicate_key_inside_params`: initialize
+/// negotiates the second `protocolVersion`) and the port does exactly the
+/// same, so this is parity and not a divergence. The ADR's expected `-32602`
+/// for this shape does not hold at the pinned revision.
+#[test]
+fn duplicate_key_inside_params_is_last_wins_like_go_not_invalid_params() {
+    let fx = load();
+    let case = fx
+        .cases
+        .iter()
+        .find(|c| c.name == "duplicate_key_inside_params")
+        .expect("the corpus must carry the Go-recorded duplicate-in-params case");
+    assert_eq!(case.frames.len(), 1);
+    assert!(
+        case.frames[0].get("error").is_none()
+            && case.frames[0]["result"]["protocolVersion"] == "2025-03-26",
+        "Go must still answer with the LAST protocolVersion: {}",
+        case.stdout_raw
+    );
+    assert!(!case.runtime_text_masked);
+
+    let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+    let written = run_stream(&case.input, &mut handler).expect("rust transport ran");
+    assert_eq!(as_stdout(&written), case.stdout_raw);
+    let parsed: serde_json::Value = serde_json::from_str(&written[0]).expect("answer is JSON");
+    assert_eq!(parsed["result"]["protocolVersion"], "2025-03-26");
+    assert!(
+        parsed.get("error").is_none(),
+        "a duplicate inside params is not -32602 here: {parsed}"
+    );
+
+    // The envelope-level duplicate stays rejected, so the two shapes are
+    // distinguished by this pair of tests and not collapsed into one rule.
+    let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+    let envelope = run_stream(
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"id\":2,\"method\":\"ping\"}\n",
+        &mut handler,
+    )
+    .expect("rust transport ran");
+    let envelope: serde_json::Value = serde_json::from_str(&envelope[0]).expect("answer is JSON");
+    assert_eq!(envelope["error"]["code"], -32700);
+}
