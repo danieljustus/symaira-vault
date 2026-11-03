@@ -337,65 +337,131 @@ pub fn negotiate_protocol_version(requested: &str) -> &str {
 /// Extracts the requested protocol version from an `initialize` params value,
 /// reproducing `encoding/json`'s decoding of the oracle's `InitializeParams`.
 ///
-/// Three of its behaviors are load-bearing and none of them are serde defaults:
+/// Go walks the object member by member, duplicates included, and every
+/// member that selects a field is stored into it. None of this is a serde
+/// default:
 ///
 ///   - `null` is a no-op against any target, so `"params": null` and
-///     `"protocolVersion": null` both leave the zero value and negotiate to the
-///     latest version. serde would reject both, refusing the handshake to a
-///     client sending entirely legal JSON-RPC.
-///   - Field names match case-insensitively when no exact match exists, so
-///     `PROTOCOLVERSION` selects a real version. serde would ignore the key and
-///     silently negotiate a *different* version than the oracle.
-///   - `clientInfo` is typed `*ClientInfo`, so a non-object there is an error.
-///     Ignoring it would make this port more permissive than the oracle, which
-///     is the wrong direction.
+///     `"protocolVersion": null` both leave the zero value and negotiate to
+///     the latest version, and a `null` that follows a real version leaves
+///     that version in place. serde would reject the former two.
+///   - Field names match per member, exact first and case-insensitively
+///     otherwise, so `PROTOCOLVERSION` selects the field and, when several
+///     spellings are present, the LAST member in document order supplies the
+///     value.
+///   - A plain duplicate is therefore last-wins, but a member of the wrong
+///     type fails the whole decode (`encoding/json` records the first
+///     `UnmarshalTypeError` and still returns it), whatever its position:
+///     `{"protocolVersion":123,"protocolVersion":"2025-03-26"}` is `-32602`.
+///     Collapsing the object into a map first would silently turn that into
+///     a success.
+///   - `clientInfo` is typed `*ClientInfo`, so a non-object there is an error
+///     and so is a wrong-typed `name`/`version` inside it. Ignoring either
+///     would make this port more permissive than the oracle.
 ///
 /// `capabilities` is a `json.RawMessage` in the oracle and accepts anything.
 fn requested_protocol_version(params: &RawValue) -> Result<String, String> {
     let value: serde_json::Value =
         serde_json::from_str(params.get()).map_err(|err| err.to_string())?;
 
-    let object = match &value {
+    match &value {
         serde_json::Value::Null => return Ok(String::new()),
-        serde_json::Value::Object(map) => map,
+        serde_json::Value::Object(_) => {}
         other => {
             return Err(format!(
                 "json: cannot unmarshal {} into Go value of type server.InitializeParams",
                 go_kind(other)
             ));
         }
-    };
+    }
 
-    // Go prefers an exact field match and falls back to a case-insensitive one.
-    let lookup = |name: &str| -> Option<&serde_json::Value> {
-        object.get(name).or_else(|| {
-            object
-                .iter()
-                .find(|(key, _)| key.eq_ignore_ascii_case(name))
-                .map(|(_, v)| v)
-        })
-    };
-
-    if let Some(client_info) = lookup("clientInfo") {
-        match client_info {
-            serde_json::Value::Null | serde_json::Value::Object(_) => {}
-            other => {
-                return Err(format!(
-                    "json: cannot unmarshal {} into Go struct field InitializeParams.clientInfo of type server.ClientInfo",
-                    go_kind(other)
-                ));
+    let mut version = String::new();
+    for (key, raw) in go_object_members(params.get())? {
+        if go_field_matches(&key, "clientInfo") {
+            let info: serde_json::Value =
+                serde_json::from_str(raw.get()).map_err(|err| err.to_string())?;
+            match info {
+                serde_json::Value::Null => {}
+                serde_json::Value::Object(_) => {
+                    for (inner_key, inner_raw) in go_object_members(raw.get())? {
+                        for field in ["name", "version"] {
+                            if !go_field_matches(&inner_key, field) {
+                                continue;
+                            }
+                            let inner: serde_json::Value = serde_json::from_str(inner_raw.get())
+                                .map_err(|err| err.to_string())?;
+                            if !matches!(
+                                inner,
+                                serde_json::Value::Null | serde_json::Value::String(_)
+                            ) {
+                                return Err(format!(
+                                    "json: cannot unmarshal {} into Go struct field ClientInfo.{field} of type string",
+                                    go_kind(&inner)
+                                ));
+                            }
+                        }
+                    }
+                }
+                other => {
+                    return Err(format!(
+                        "json: cannot unmarshal {} into Go struct field InitializeParams.clientInfo of type server.ClientInfo",
+                        go_kind(&other)
+                    ));
+                }
+            }
+        } else if go_field_matches(&key, "protocolVersion") {
+            let member: serde_json::Value =
+                serde_json::from_str(raw.get()).map_err(|err| err.to_string())?;
+            match member {
+                serde_json::Value::Null => {}
+                serde_json::Value::String(requested) => version = requested,
+                other => {
+                    return Err(format!(
+                        "json: cannot unmarshal {} into Go struct field InitializeParams.protocolVersion of type string",
+                        go_kind(&other)
+                    ));
+                }
             }
         }
     }
+    Ok(version)
+}
 
-    match lookup("protocolVersion") {
-        None | Some(serde_json::Value::Null) => Ok(String::new()),
-        Some(serde_json::Value::String(version)) => Ok(version.clone()),
-        Some(other) => Err(format!(
-            "json: cannot unmarshal {} into Go struct field InitializeParams.protocolVersion of type string",
-            go_kind(other)
-        )),
+/// Splits one JSON object into its members in document order, duplicates
+/// preserved. `serde_json::Value`/`Map` would keep only the last of a repeated
+/// key, which is exactly the information `encoding/json` decoding depends on.
+fn go_object_members(text: &str) -> Result<Vec<(String, Box<RawValue>)>, String> {
+    use serde::de::{Deserializer as _, MapAccess, Visitor};
+
+    struct Members;
+    impl<'de> Visitor<'de> for Members {
+        type Value = Vec<(String, Box<RawValue>)>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a JSON object")
+        }
+
+        fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
+            let mut members = Vec::new();
+            while let Some(entry) = map.next_entry::<String, Box<RawValue>>()? {
+                members.push(entry);
+            }
+            Ok(members)
+        }
     }
+
+    serde_json::Deserializer::from_str(text)
+        .deserialize_map(Members)
+        .map_err(|err| err.to_string())
+}
+
+/// `encoding/json` field selection for an ASCII field name: case-insensitive,
+/// where the two non-ASCII runes in Go's simple-fold classes for ASCII letters
+/// (U+017F long s, U+212A Kelvin sign) also match.
+fn go_field_matches(key: &str, field: &str) -> bool {
+    key.replace('\u{17F}', "s")
+        .replace('\u{212A}', "k")
+        .eq_ignore_ascii_case(field)
 }
 
 /// Go's name for a JSON value's kind, as it appears in decoder errors. The text

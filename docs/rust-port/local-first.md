@@ -159,7 +159,7 @@ Where the gate differs from the hosted workflows:
   and wrong values). Logs are checked the same way (`log-ok` with exact name
   prefixes, `--sum-passed`, `N passed; 0 failed; 0 ignored` totals; `go-json`
   names; `gaps --exact-path/--min-paths`). One value differs from the workflows:
-  the `symvault-mcp --all-targets` total is 371 (`AREA_MCP_TEST_COUNT`), the
+  the `symvault-mcp --all-targets` total is 373 (`AREA_MCP_TEST_COUNT`), the
   workflows still say 246, which the tree outgrew; raise the constant when
   tests are added. `native_os` must equal the host's (the workflows accepted
   any of the three).

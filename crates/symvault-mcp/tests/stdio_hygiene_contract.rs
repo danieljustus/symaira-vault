@@ -437,3 +437,115 @@ fn duplicate_key_inside_params_is_last_wins_like_go_not_invalid_params() {
     let envelope: serde_json::Value = serde_json::from_str(&envelope[0]).expect("answer is JSON");
     assert_eq!(envelope["error"]["code"], -32700);
 }
+
+/// MCP-004-DUP: how `encoding/json` treats duplicated and wrong-typed members
+/// inside `params`, recorded from the real Go transport and replayed here.
+/// A plain duplicate is last-wins (above); a WRONG-TYPED earlier duplicate
+/// fails the whole decode with `-32602`, `null` is a no-op that keeps an
+/// earlier value, and case variants of one name all land in the same field in
+/// document order. Each case is asserted against both the recorded Go frame
+/// and the Rust output, so neither side can drift alone.
+#[test]
+fn duplicate_and_wrong_typed_params_members_follow_encoding_json() {
+    enum Expect {
+        /// The last frame is a result carrying this negotiated version.
+        Version(&'static str),
+        /// The last frame is a JSON-RPC error with this code and message.
+        Error(i64, &'static str),
+    }
+    let expectations = [
+        ("duplicate_key_inside_params", Expect::Version("2025-03-26")),
+        (
+            "duplicate_params_wrong_typed_first",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "duplicate_params_wrong_typed_last",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "duplicate_params_null_after_string_keeps_string",
+            Expect::Version("2024-11-05"),
+        ),
+        (
+            "duplicate_params_case_variants_last_member_wins",
+            Expect::Version("2025-03-26"),
+        ),
+        (
+            "duplicate_params_case_variants_exact_last",
+            Expect::Version("2025-03-26"),
+        ),
+        (
+            "duplicate_params_clientinfo_wrong_typed_then_null",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "clientinfo_inner_member_wrong_typed",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "clientinfo_inner_duplicate_wrong_typed_first",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "clientinfo_inner_duplicate_plain_is_accepted",
+            Expect::Version("2025-03-26"),
+        ),
+        (
+            "prompts_get_duplicate_name_wrong_typed_first",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "prompts_get_duplicate_name_null_keeps_name",
+            Expect::Error(-32602, "Unknown prompt: nope"),
+        ),
+        (
+            "prompts_get_duplicate_arguments_merge",
+            Expect::Error(-32602, "Missing required argument: to_agent"),
+        ),
+        (
+            "prompts_get_duplicate_arguments_wrong_typed_value_first",
+            Expect::Error(-32602, "Invalid params"),
+        ),
+        (
+            "prompts_get_duplicate_arguments_null_clears",
+            Expect::Error(-32602, "Missing required argument: query"),
+        ),
+    ];
+
+    let fx = load();
+    for (name, expect) in expectations {
+        let case = fx
+            .cases
+            .iter()
+            .find(|c| c.name == name)
+            .unwrap_or_else(|| panic!("the corpus must carry the Go-recorded case {name}"));
+
+        let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+        let written = run_stream(&case.input, &mut handler).expect("rust transport ran");
+        let rust_frames: Vec<serde_json::Value> = written
+            .iter()
+            .map(|line| serde_json::from_str(line).expect("answer is JSON"))
+            .collect();
+        assert_eq!(rust_frames.len(), case.frames.len(), "{name}: frame count");
+
+        for (side, last) in [
+            ("Go", case.frames.last().expect("recorded frame")),
+            ("Rust", rust_frames.last().expect("rust frame")),
+        ] {
+            match &expect {
+                Expect::Version(version) => {
+                    assert!(last.get("error").is_none(), "{name}: {side}: {last}");
+                    assert_eq!(
+                        last["result"]["protocolVersion"], *version,
+                        "{name}: {side}"
+                    );
+                }
+                Expect::Error(code, message) => {
+                    assert_eq!(last["error"]["code"], *code, "{name}: {side}: {last}");
+                    assert_eq!(last["error"]["message"], *message, "{name}: {side}");
+                }
+            }
+        }
+    }
+}

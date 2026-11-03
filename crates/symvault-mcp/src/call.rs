@@ -2494,3 +2494,32 @@ mod scope_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod params_duplicate_tests {
+    use super::parse_params;
+
+    /// Expected values were measured against Go's `encoding/json` decoding of
+    /// `struct{Name string; Arguments json.RawMessage}` (the oracle's tools/call
+    /// params): a wrong-typed `name` fails the decode wherever it sits, `null`
+    /// is a no-op that keeps an earlier value, case variants all land in the
+    /// same field, and a repeated `arguments` is last-wins.
+    #[test]
+    fn duplicate_members_follow_encoding_json() {
+        assert!(parse_params(Some(r#"{"name":5,"name":"x"}"#)).is_err());
+        assert!(parse_params(Some(r#"{"name":"x","name":5}"#)).is_err());
+
+        let (name, _) = parse_params(Some(r#"{"name":"x","name":null}"#)).expect("null is a no-op");
+        assert_eq!(name, "x");
+
+        let (name, _) =
+            parse_params(Some(r#"{"name":"a","NAME":"b"}"#)).expect("case variants decode");
+        assert_eq!(name, "b");
+
+        let (_, arguments) = parse_params(Some(
+            r#"{"name":"x","arguments":{"a":1},"arguments":{"b":2}}"#,
+        ))
+        .expect("duplicate arguments decode");
+        assert_eq!(arguments, serde_json::json!({"b": 2}));
+    }
+}

@@ -213,6 +213,14 @@ func canonical(obj map[string]json.RawMessage) (json.RawMessage, error) {
 
 const ping = `{"jsonrpc":"2.0","id":1,"method":"ping"}`
 
+func initializeFrame(params string) string {
+	return `{"jsonrpc":"2.0","id":1,"method":"initialize","params":` + params + `}` + "\n"
+}
+
+func promptsGetFrame(params string) string {
+	return `{"jsonrpc":"2.0","id":2,"method":"prompts/get","params":` + params + `}` + "\n"
+}
+
 func caseInputs() []struct{ name, why, input string } {
 	return []struct{ name, why, input string }{
 		{
@@ -287,8 +295,78 @@ func caseInputs() []struct{ name, why, input string } {
 		},
 		{
 			"duplicate_key_inside_params",
-			"ADR 0034 item 15: a key duplicated inside params (not the envelope) is resolved last-wins by encoding/json, so initialize negotiates the SECOND protocolVersion (2025-03-26) although 2024-11-05 came first. The port matches (last-wins as well); only duplicated ENVELOPE keys are rejected (see the divergences). ADR 0034 item 15 expected -32602 here; measured, the port does not reject it",
-			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","protocolVersion":"2025-03-26"}}` + "\n",
+			"ADR 0034 item 15: a plain duplicate key inside params (not the envelope) is last-wins in encoding/json, so initialize negotiates the SECOND protocolVersion (2025-03-26) although 2024-11-05 came first. The port is last-wins as well, so this is parity and not a divergence; only duplicated ENVELOPE keys are rejected (see the divergences). The wrong-typed-duplicate shapes below are where encoding/json fails the whole decode",
+			initializeFrame(`{"protocolVersion":"2024-11-05","protocolVersion":"2025-03-26"}`),
+		},
+		{
+			"duplicate_params_wrong_typed_first",
+			"MCP-004-DUP: protocolVersion 123 then a valid string. encoding/json records the first UnmarshalTypeError and returns it even though a later valid member follows, so this is -32602 and not a negotiated 2025-03-26",
+			initializeFrame(`{"protocolVersion":123,"protocolVersion":"2025-03-26"}`),
+		},
+		{
+			"duplicate_params_wrong_typed_last",
+			"a valid protocolVersion followed by a wrong-typed duplicate is -32602 as well: the error does not depend on which duplicate is last",
+			initializeFrame(`{"protocolVersion":"2025-03-26","protocolVersion":123}`),
+		},
+		{
+			"duplicate_params_null_after_string_keeps_string",
+			"null is a no-op against a string target, so a trailing protocolVersion:null does NOT reset an earlier real version: 2024-11-05 is negotiated, where a naive last-wins would negotiate the latest version",
+			initializeFrame(`{"protocolVersion":"2024-11-05","protocolVersion":null}`),
+		},
+		{
+			"duplicate_params_case_variants_last_member_wins",
+			"member names are matched case-insensitively per member and every matching member is stored, so the LAST one in document order wins even when it is the inexact spelling (2025-03-26 here, not the exact-case 2024-11-05)",
+			initializeFrame(`{"protocolVersion":"2024-11-05","PROTOCOLVERSION":"2025-03-26"}`),
+		},
+		{
+			"duplicate_params_case_variants_exact_last",
+			"mirror of the previous case: the exact spelling comes last and wins",
+			initializeFrame(`{"PROTOCOLVERSION":"2024-11-05","protocolVersion":"2025-03-26"}`),
+		},
+		{
+			"duplicate_params_clientinfo_wrong_typed_then_null",
+			"a wrong-typed clientInfo is an error even when a later clientInfo:null follows",
+			initializeFrame(`{"clientInfo":5,"clientInfo":null,"protocolVersion":"2025-03-26"}`),
+		},
+		{
+			"clientinfo_inner_member_wrong_typed",
+			"ClientInfo.name is a string: a number there fails the whole initialize decode",
+			initializeFrame(`{"clientInfo":{"name":1},"protocolVersion":"2025-03-26"}`),
+		},
+		{
+			"clientinfo_inner_duplicate_wrong_typed_first",
+			"a duplicate inside clientInfo follows the same rule: the wrong-typed earlier member fails the decode although a valid one follows",
+			initializeFrame(`{"clientInfo":{"name":1,"name":"ok"},"protocolVersion":"2025-03-26"}`),
+		},
+		{
+			"clientinfo_inner_duplicate_plain_is_accepted",
+			"a plain duplicate inside clientInfo is last-wins and harmless",
+			initializeFrame(`{"clientInfo":{"name":"a","name":"b","version":null},"protocolVersion":"2025-03-26"}`),
+		},
+		{
+			"prompts_get_duplicate_name_wrong_typed_first",
+			"prompts/get decodes name as a string: 5 followed by a valid name still fails the decode (-32602 Invalid params)",
+			initializeFrame(`{}`) + promptsGetFrame(`{"name":5,"name":"find-and-use","arguments":{"query":"x"}}`),
+		},
+		{
+			"prompts_get_duplicate_name_null_keeps_name",
+			"a trailing name:null is a no-op and does not erase the earlier name: the error names the retained prompt (Unknown prompt: nope) instead of reporting a missing name",
+			initializeFrame(`{}`) + promptsGetFrame(`{"name":"nope","name":null}`),
+		},
+		{
+			"prompts_get_duplicate_arguments_merge",
+			"arguments is a map[string]string: duplicate arguments objects MERGE rather than replace, so the path from the first object survives and the first missing required argument is to_agent (a replace would report path)",
+			initializeFrame(`{}`) + promptsGetFrame(`{"name":"share-credential","arguments":{"path":"p"},"arguments":{"zzz":"1"}}`),
+		},
+		{
+			"prompts_get_duplicate_arguments_wrong_typed_value_first",
+			"a non-string value in the first arguments object fails the decode although the second object is clean",
+			initializeFrame(`{}`) + promptsGetFrame(`{"name":"find-and-use","arguments":{"query":1},"arguments":{"query":"x"}}`),
+		},
+		{
+			"prompts_get_duplicate_arguments_null_clears",
+			"arguments:null after a populated object sets the map to nil, so the required query is gone",
+			initializeFrame(`{}`) + promptsGetFrame(`{"name":"find-and-use","arguments":{"query":"x"},"arguments":null}`),
 		},
 		{
 			"interleaved_valid_and_invalid",
@@ -482,7 +560,7 @@ func main() {
 		Bounds:                  bounds,
 		Divergences: []divergence{{
 			Name:                "duplicate_object_keys_last_wins",
-			OracleBehavior:      "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A key duplicated inside params is -32602 here rather than -32700, and a duplicate inside an id or an unknown top-level key is still accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. The tool-call payload an intermediary would audit is therefore NOT yet covered; closing it belongs with MCP-002/003.",
+			OracleBehavior:      "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A plain duplicate key INSIDE params is last-wins in both the oracle and the port (cases duplicate_key_inside_params and duplicate_params_*), and a wrong-typed earlier duplicate there fails the decode with -32602 in both, as encoding/json does; neither is a divergence. A duplicate inside an id or an unknown top-level key is also accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. Duplicates nested inside tools/call arguments are carried as raw bytes to the tool layer in both implementations and are covered by the MCP-002/003 fixtures, not here.",
 			OracleStdoutB64Note: strings.TrimSuffix(dupOut, "\n"),
 			RustBehavior:        "Rust answers -32700 and does not dispatch the frame.",
 			Rationale:           "serde rejects duplicate struct fields and the adjudication keeps that rather than relaxing it to match. Last-wins is the classic duplicate-key smuggling shape: an intermediary that logs, audits or applies policy to a frame reads the first occurrence while the server acts on the last, so the two disagree about what was requested. SymVault has exactly such a policy and audit layer, which makes this security-relevant rather than cosmetic. Rejecting is the stricter side, and the migration contract names duplicate keys as a case to decide deliberately rather than inherit. Recorded, not silent; reversing it is a coordinator decision.",

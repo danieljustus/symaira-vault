@@ -10,7 +10,7 @@
       "internal/mcp/transport/transport.go"
     ],
     "source_digest": "cd7ac18db2a0ac61ad051e25b22253b97b7e207317bc28ba869365503e2acae2",
-    "generator_digest": "91059e48cf620487a014d1540176baab06e610ca46e5b70e3545790c40c0d816"
+    "generator_digest": "9ae55b6eb95704e8cc40fca8e5b49f8295078ce9f80d8bbca0cfd767509dc540"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-fixture",
@@ -241,7 +241,7 @@
     },
     {
       "name": "duplicate_key_inside_params",
-      "why": "ADR 0034 item 15: a key duplicated inside params (not the envelope) is resolved last-wins by encoding/json, so initialize negotiates the SECOND protocolVersion (2025-03-26) although 2024-11-05 came first. The port matches (last-wins as well); only duplicated ENVELOPE keys are rejected (see the divergences). ADR 0034 item 15 expected -32602 here; measured, the port does not reject it",
+      "why": "ADR 0034 item 15: a plain duplicate key inside params (not the envelope) is last-wins in encoding/json, so initialize negotiates the SECOND protocolVersion (2025-03-26) although 2024-11-05 came first. The port is last-wins as well, so this is parity and not a divergence; only duplicated ENVELOPE keys are rejected (see the divergences). The wrong-typed-duplicate shapes below are where encoding/json fails the whole decode",
       "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"protocolVersion\":\"2025-03-26\"}}\n",
       "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
       "frames": [
@@ -260,6 +260,363 @@
             "protocolVersion": "2025-03-26",
             "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
           }
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "duplicate_params_wrong_typed_first",
+      "why": "MCP-004-DUP: protocolVersion 123 then a valid string. encoding/json records the first UnmarshalTypeError and returns it even though a later valid member follows, so this is -32602 and not a negotiated 2025-03-26",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":123,\"protocolVersion\":\"2025-03-26\"}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field InitializeParams.protocolVersion of type string\",\"message\":\"Invalid params\",\"code\":-32602},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32602,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Invalid params"
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "duplicate_params_wrong_typed_last",
+      "why": "a valid protocolVersion followed by a wrong-typed duplicate is -32602 as well: the error does not depend on which duplicate is last",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"protocolVersion\":123}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field InitializeParams.protocolVersion of type string\",\"message\":\"Invalid params\",\"code\":-32602},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32602,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Invalid params"
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "duplicate_params_null_after_string_keeps_string",
+      "why": "null is a no-op against a string target, so a trailing protocolVersion:null does NOT reset an earlier real version: 2024-11-05 is negotiated, where a naive last-wins would negotiate the latest version",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"protocolVersion\":null}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2024-11-05\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2024-11-05",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "duplicate_params_case_variants_last_member_wins",
+      "why": "member names are matched case-insensitively per member and every matching member is stored, so the LAST one in document order wins even when it is the inexact spelling (2025-03-26 here, not the exact-case 2024-11-05)",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"PROTOCOLVERSION\":\"2025-03-26\"}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2025-03-26",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "duplicate_params_case_variants_exact_last",
+      "why": "mirror of the previous case: the exact spelling comes last and wins",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"PROTOCOLVERSION\":\"2024-11-05\",\"protocolVersion\":\"2025-03-26\"}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2025-03-26",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "duplicate_params_clientinfo_wrong_typed_then_null",
+      "why": "a wrong-typed clientInfo is an error even when a later clientInfo:null follows",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":5,\"clientInfo\":null,\"protocolVersion\":\"2025-03-26\"}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field InitializeParams.clientInfo of type server.ClientInfo\",\"message\":\"Invalid params\",\"code\":-32602},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32602,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Invalid params"
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "clientinfo_inner_member_wrong_typed",
+      "why": "ClientInfo.name is a string: a number there fails the whole initialize decode",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":1},\"protocolVersion\":\"2025-03-26\"}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field ClientInfo.clientInfo.name of type string\",\"message\":\"Invalid params\",\"code\":-32602},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32602,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Invalid params"
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "clientinfo_inner_duplicate_wrong_typed_first",
+      "why": "a duplicate inside clientInfo follows the same rule: the wrong-typed earlier member fails the decode although a valid one follows",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":1,\"name\":\"ok\"},\"protocolVersion\":\"2025-03-26\"}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field ClientInfo.clientInfo.name of type string\",\"message\":\"Invalid params\",\"code\":-32602},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32602,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Invalid params"
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "clientinfo_inner_duplicate_plain_is_accepted",
+      "why": "a plain duplicate inside clientInfo is last-wins and harmless",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"a\",\"name\":\"b\",\"version\":null},\"protocolVersion\":\"2025-03-26\"}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2025-03-26",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "prompts_get_duplicate_name_wrong_typed_first",
+      "why": "prompts/get decodes name as a string: 5 followed by a valid name still fails the decode (-32602 Invalid params)",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"prompts/get\",\"params\":{\"name\":5,\"name\":\"find-and-use\",\"arguments\":{\"query\":\"x\"}}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field .name of type string\",\"message\":\"Invalid params\",\"code\":-32602},\"jsonrpc\":\"2.0\",\"id\":2}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "error": {
+            "code": -32602,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Invalid params"
+          },
+          "id": 2,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "prompts_get_duplicate_name_null_keeps_name",
+      "why": "a trailing name:null is a no-op and does not erase the earlier name: the error names the retained prompt (Unknown prompt: nope) instead of reporting a missing name",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"prompts/get\",\"params\":{\"name\":\"nope\",\"name\":null}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"error\":{\"message\":\"Unknown prompt: nope\",\"code\":-32602},\"jsonrpc\":\"2.0\",\"id\":2}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "error": {
+            "message": "Unknown prompt: nope",
+            "code": -32602
+          },
+          "id": 2,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "prompts_get_duplicate_arguments_merge",
+      "why": "arguments is a map[string]string: duplicate arguments objects MERGE rather than replace, so the path from the first object survives and the first missing required argument is to_agent (a replace would report path)",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"prompts/get\",\"params\":{\"name\":\"share-credential\",\"arguments\":{\"path\":\"p\"},\"arguments\":{\"zzz\":\"1\"}}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"error\":{\"message\":\"Missing required argument: to_agent\",\"code\":-32602},\"jsonrpc\":\"2.0\",\"id\":2}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "error": {
+            "message": "Missing required argument: to_agent",
+            "code": -32602
+          },
+          "id": 2,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "prompts_get_duplicate_arguments_wrong_typed_value_first",
+      "why": "a non-string value in the first arguments object fails the decode although the second object is clean",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"prompts/get\",\"params\":{\"name\":\"find-and-use\",\"arguments\":{\"query\":1},\"arguments\":{\"query\":\"x\"}}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field .arguments of type string\",\"message\":\"Invalid params\",\"code\":-32602},\"jsonrpc\":\"2.0\",\"id\":2}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "error": {
+            "code": -32602,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Invalid params"
+          },
+          "id": 2,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "prompts_get_duplicate_arguments_null_clears",
+      "why": "arguments:null after a populated object sets the map to nil, so the required query is gone",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"prompts/get\",\"params\":{\"name\":\"find-and-use\",\"arguments\":{\"query\":\"x\"},\"arguments\":null}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n{\"error\":{\"message\":\"Missing required argument: query\",\"code\":-32602},\"jsonrpc\":\"2.0\",\"id\":2}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "error": {
+            "message": "Missing required argument: query",
+            "code": -32602
+          },
+          "id": 2,
+          "jsonrpc": "2.0"
         }
       ],
       "runtime_text_masked": false
@@ -362,7 +719,7 @@
   "divergences": [
     {
       "name": "duplicate_object_keys_last_wins",
-      "oracle_behavior": "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A key duplicated inside params is -32602 here rather than -32700, and a duplicate inside an id or an unknown top-level key is still accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. The tool-call payload an intermediary would audit is therefore NOT yet covered; closing it belongs with MCP-002/003.",
+      "oracle_behavior": "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A plain duplicate key INSIDE params is last-wins in both the oracle and the port (cases duplicate_key_inside_params and duplicate_params_*), and a wrong-typed earlier duplicate there fails the decode with -32602 in both, as encoding/json does; neither is a divergence. A duplicate inside an id or an unknown top-level key is also accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. Duplicates nested inside tools/call arguments are carried as raw bytes to the tool layer in both implementations and are covered by the MCP-002/003 fixtures, not here.",
       "oracle_stdout_note": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}",
       "rust_behavior": "Rust answers -32700 and does not dispatch the frame.",
       "rationale": "serde rejects duplicate struct fields and the adjudication keeps that rather than relaxing it to match. Last-wins is the classic duplicate-key smuggling shape: an intermediary that logs, audits or applies policy to a frame reads the first occurrence while the server acts on the last, so the two disagree about what was requested. SymVault has exactly such a policy and audit layer, which makes this security-relevant rather than cosmetic. Rejecting is the stricter side, and the migration contract names duplicate keys as a case to decide deliberately rather than inherit. Recorded, not silent; reversing it is a coordinator decision."
