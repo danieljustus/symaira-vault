@@ -495,6 +495,7 @@ def http_replay(r):
     sys.path.insert(0, str(HERE))
     import http_replay_contract as driver
     driver_sha(r, "http_replay_contract.py")
+    eq(r["oracle_commit"], driver.ORACLE, "oracle_commit")
     need(isinstance(r["port"], int), "port")
     names = [name for name, *_ in driver.cases(r["port"], REPLAY_TOKENS)]
     eq(len(names), 276, "driver case count")
@@ -525,6 +526,7 @@ def http_token(r):
     sys.path.insert(0, str(HERE))
     import http_token_contract as driver
     driver_sha(r, "http_token_contract.py")
+    eq(r["oracle_commit"], driver.ORACLE, "oracle_commit")
     need(isinstance(r["port"], int), "port")
     raws, body = driver.token_registry()
     names = [name for name, _ in driver.token_cases(r["port"], raws)]

@@ -259,7 +259,7 @@ def good_http_replay():
     go, rust = replay_cases.synthetic()
     identical, declared, semantic, interim_only = replay_cases.replay.compare(go, rust, replay_cases.PORT)
     assert (len(identical), len(declared), len(semantic), len(interim_only)) == (194, 71, 8, 2)
-    return base(port=replay_cases.PORT, driver_sha256=driver_sha("http_replay_contract.py"),
+    return base(port=replay_cases.PORT, driver_sha256=driver_sha("http_replay_contract.py"), oracle_commit=token_driver.ORACLE,
                 go={"rows": go, "processes": procs()}, rust={"rows": rust, "processes": procs()},
                 declared_differences=[{"case": d["case"], "decision": d["decision"]} for d in declared],
                 identical_cases=194, semantic_cases=8, interim_only_cases=[{"case": d["case"]} for d in interim_only])
@@ -297,7 +297,7 @@ def good_http_token():
                "revoke_latency": 2.2, "recovered_latency": 2.0, "after_corruption": 200}
     steps = [[f"step-{i}", 200 if i % 2 else 401] for i in range(21)]
     stale = [{"mode": mode, "revoked_token_status": 401, "other_token_status": 200} for mode in ("corrupt", "delete")]
-    return base(port=4242, driver_sha256=driver_sha("http_token_contract.py"), token_cases=180, startup=startup,
+    return base(port=4242, driver_sha256=driver_sha("http_token_contract.py"), oracle_commit=token_driver.ORACLE, token_cases=180, startup=startup,
                 go={"rows": rows, "process": dict(process)}, rust={"rows": copy.deepcopy(rows), "process": dict(process)},
                 dynamic={"go": dict(dynamic), "rust": dict(dynamic)}, duplicate_reload={"go": steps, "rust": copy.deepcopy(steps)},
                 stale_revocation={"go": stale, "rust": copy.deepcopy(stale)})
@@ -528,6 +528,7 @@ class ReceiptProfiles(unittest.TestCase):
             ("http-replay", lambda r: r.update(semantic_cases=7)),
             ("http-replay", lambda r: r["interim_only_cases"].pop()),
             ("http-replay", lambda r: r.update(driver_sha256="0" * 64)),
+            ("http-replay", lambda r: r.update(oracle_commit="0" * 40)),
             ("http-replay", lambda r: r.update(port="4242")),
             ("http-replay", lambda r: r["go"]["processes"].pop()),
             ("http-replay", lambda r: r["rust"]["processes"][0].update(output_capture_complete=False)),
@@ -539,6 +540,7 @@ class ReceiptProfiles(unittest.TestCase):
             ("http-token", lambda r: r["startup"].reverse()),
             ("http-token", lambda r: r.update(token_cases=179)),
             ("http-token", lambda r: r.update(driver_sha256="1" * 64)),
+            ("http-token", lambda r: r.update(oracle_commit="1" * 40)),
             ("http-token", lambda r: r["go"]["rows"].pop()),
             ("http-token", lambda r: r["rust"]["rows"][5]["responses"][0].update(code=500, status_line="HTTP/1.1 500 X")),
             ("http-token", lambda r: r["rust"]["process"].update(disposal="graceful")),
