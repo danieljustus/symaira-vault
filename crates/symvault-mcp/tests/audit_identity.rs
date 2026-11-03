@@ -12,7 +12,9 @@ use symvault_mcp::{ProtocolHandler, ReadOnlyRuntimeConfig, read_only_tool_names,
 use symvault_store::{Store, audit::RotationConfig};
 use tempfile::TempDir;
 
-fn fixture_vault(keyring: &MemoryKeyring) -> (
+fn fixture_vault(
+    keyring: &MemoryKeyring,
+) -> (
     TempDir,
     symvault_crypto::Identity,
     Arc<Mutex<symvault_store::audit::Logger>>,
@@ -96,7 +98,10 @@ fn rows(audit: &Arc<Mutex<symvault_store::audit::Logger>>) -> Vec<Value> {
 
 fn is_hex(value: &Value, len: usize) -> bool {
     value.as_str().is_some_and(|text| {
-        text.len() == len && text.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        text.len() == len
+            && text
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
     })
 }
 
@@ -105,7 +110,11 @@ fn stdio_rows_carry_session_and_request_ids_but_no_token_id() {
     let keyring = MemoryKeyring::new();
     let (root, identity, audit) = fixture_vault(&keyring);
     let mut session = handler(&root, identity, audit.clone(), "fixture", "stdio");
-    call(&mut session, "get_entry_metadata", r#"{"path":"missing/x"}"#);
+    call(
+        &mut session,
+        "get_entry_metadata",
+        r#"{"path":"missing/x"}"#,
+    );
     call(&mut session, "list_entries", "{}");
     let rows = rows(&audit);
     assert!(rows.len() >= 2, "rows: {rows:?}");
@@ -168,7 +177,11 @@ fn scoped_token_id_is_stamped_on_denials_drift_and_successes() {
     assert!(legacy_row.get("token_id").is_none(), "{legacy_row}");
     let sessions: std::collections::BTreeSet<_> =
         rows.iter().map(|row| row["sess_id"].to_string()).collect();
-    assert_eq!(sessions.len(), 1, "sessions share the runtime's id: {rows:?}");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "sessions share the runtime's id: {rows:?}"
+    );
     for row in &rows {
         assert!(is_hex(&row["req_id"], 16), "{row}");
     }
@@ -193,7 +206,10 @@ fn rows_with_ids_keep_a_valid_hmac_chain() {
         .expect("audit key");
     let keys = std::collections::BTreeMap::from([(kid.clone(), key)]);
     let result = symvault_store::audit::verify_jsonl(text.as_bytes(), &keys, &kid);
-    assert!(result.valid && result.verified >= 2 && result.tampered == 0, "{result:?}");
+    assert!(
+        result.valid && result.verified >= 2 && result.tampered == 0,
+        "{result:?}"
+    );
     // Dropping the id from a row breaks the chain: the ids are HMAC input.
     let stripped = text.replace("\"token_id\":\"tok-chain\",", "");
     let broken = symvault_store::audit::verify_jsonl(stripped.as_bytes(), &keys, &kid);

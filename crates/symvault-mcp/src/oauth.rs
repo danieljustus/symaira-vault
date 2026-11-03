@@ -1396,10 +1396,13 @@ mod tests {
                     assert_eq!(response.status, 400);
                     assert_eq!(response.body, b"{\"error\":\"invalid_request\"}\n");
                 }
-                (_, other) => panic!("offset {offset:?}: unexpected {:?}", match other {
-                    OAuthResponse::Redirect(location) => location,
-                    OAuthResponse::Http(response) => format!("HTTP {}", response.status),
-                }),
+                (_, other) => panic!(
+                    "offset {offset:?}: unexpected {:?}",
+                    match other {
+                        OAuthResponse::Redirect(location) => location,
+                        OAuthResponse::Http(response) => format!("HTTP {}", response.status),
+                    }
+                ),
             }
         }
     }
@@ -1417,7 +1420,10 @@ mod tests {
         for _ in 0..MAX_BROWSER_CONSENTS {
             flow_id_of(open_flow(&state, &client_id, t0));
         }
-        assert_eq!(state.browser_requests.lock().unwrap().len(), MAX_BROWSER_CONSENTS);
+        assert_eq!(
+            state.browser_requests.lock().unwrap().len(),
+            MAX_BROWSER_CONSENTS
+        );
         for at in [t0, t0 + AUTH_CODE_TTL] {
             let OAuthResponse::Http(full) = open_flow(&state, &client_id, at) else {
                 panic!("a full table answers JSON");
@@ -1425,11 +1431,18 @@ mod tests {
             assert_eq!(full.status, 503, "at {at}");
             assert_eq!(full.body, b"{\"error\":\"server_error\"}\n");
             assert!(full.headers.contains(&("Content-Type", "application/json")));
-            assert_eq!(state.browser_requests.lock().unwrap().len(), MAX_BROWSER_CONSENTS);
+            assert_eq!(
+                state.browser_requests.lock().unwrap().len(),
+                MAX_BROWSER_CONSENTS
+            );
         }
         let after = t0 + AUTH_CODE_TTL + Duration::nanoseconds(1);
         flow_id_of(open_flow(&state, &client_id, after));
-        assert_eq!(state.browser_requests.lock().unwrap().len(), 1, "expired tickets purged");
+        assert_eq!(
+            state.browser_requests.lock().unwrap().len(),
+            1,
+            "expired tickets purged"
+        );
     }
 
     fn set_client_expiry(root: &std::path::Path, client_id: &str, fields: serde_json::Value) {
@@ -1464,8 +1477,11 @@ mod tests {
                 &client_id,
                 serde_json::json!({"ttl_seconds": 60, "expires_at": "2027-01-15T08:00:00Z"}),
             );
-            let OAuthResponse::Redirect(_) = authorize(&state, &authorization(&client_id), expiry - Duration::days(1))
-            else {
+            let OAuthResponse::Redirect(_) = authorize(
+                &state,
+                &authorization(&client_id),
+                expiry - Duration::days(1),
+            ) else {
                 panic!("a live client authorizes");
             };
             let response = authorize(&state, &authorization(&client_id), expiry + offset);
@@ -1491,7 +1507,11 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let state = approving_state(directory.path());
         let client_id = register(&state);
-        set_client_expiry(directory.path(), &client_id, serde_json::json!({"ttl_seconds": 1}));
+        set_client_expiry(
+            directory.path(),
+            &client_id,
+            serde_json::json!({"ttl_seconds": 1}),
+        );
         let far = OffsetDateTime::from_unix_timestamp(4_000_000_000).unwrap();
         issue_code_at(&state, &client_id, far);
     }

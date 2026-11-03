@@ -794,10 +794,11 @@ impl ProtocolHandler {
         };
         // Go mints the request id at the top of `executeTool`; every audit row
         // of this call (denials included) carries it and the token id.
-        let _audit_scope = audit_identity::CallAuditScope::enter(audit_identity::CallAuditIdentity {
-            token_id: self.token_id.clone().unwrap_or_default(),
-            request_id: audit_identity::generate_request_id(),
-        });
+        let _audit_scope =
+            audit_identity::CallAuditScope::enter(audit_identity::CallAuditIdentity {
+                token_id: self.token_id.clone().unwrap_or_default(),
+                request_id: audit_identity::generate_request_id(),
+            });
         if let Err(result) =
             runtime.authorize_with_token_scope(&name, &arguments, token_denied, registry_drift)
         {
