@@ -1192,7 +1192,10 @@ AREA_KDF_MIGRATION_TESTS := 10
 # measured: 415 passed, 0 failed).
 # +14 from local/pin-tests (302 redirect pin, duplicate/wrong-typed params, go_params
 # walker, exact InitializeParams error text); measured at the integ6 merge.
-AREA_MCP_TEST_COUNT := 429
+# 438 from local/mcp-envelope (+9: 5 envelope.rs unit tests, 4 stdio_hygiene_contract
+# tests for the Go-recorded envelope members, the duplicate probes and the HTTP
+# replay; measured: 438 passed, 0 failed over 55 result lines).
+AREA_MCP_TEST_COUNT := 438
 
 .PHONY: area-oracle-runner
 area-oracle-runner:

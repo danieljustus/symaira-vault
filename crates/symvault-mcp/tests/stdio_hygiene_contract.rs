@@ -15,7 +15,16 @@ struct Fixture {
     max_accepted_nesting_depth: usize,
     cases: Vec<Case>,
     bounds: Vec<Bounds>,
+    duplicate_envelope_probes: Vec<DuplicateProbe>,
     divergences: Vec<Divergence>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DuplicateProbe {
+    name: String,
+    why: String,
+    input: String,
+    oracle_stdout_raw: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -314,6 +323,7 @@ fn corpus_is_not_empty() {
     assert!(fx.cases.len() >= 15, "corpus shrank unexpectedly");
     assert_eq!(fx.bounds.len(), 9);
     assert_eq!(fx.divergences.len(), 2);
+    assert_eq!(fx.duplicate_envelope_probes.len(), 8);
 }
 
 /// The nesting bound is asserted at both sides of the measured boundary, so a
@@ -698,4 +708,222 @@ fn lone_surrogates_and_deep_params_are_accepted_like_go() {
             "{name}: Rust vs Go bytes"
         );
     }
+}
+
+/// MCP-004-ENV: the envelope members follow `encoding/json` (null no-ops,
+/// case-insensitive names with the U+017F fold, first type error wins). The
+/// replay in `hostile_frames_match_go_oracle` is only meaningful if these
+/// recorded shapes are really in the corpus, so pin their presence and the
+/// oracle answers that distinguish Go from a derived serde decode.
+#[test]
+fn envelope_member_semantics_are_in_the_replayed_corpus() {
+    let fx = load();
+    let answer = |name: &str| -> String {
+        fx.cases
+            .iter()
+            .find(|c| c.name == name)
+            .unwrap_or_else(|| panic!("corpus lost case {name}"))
+            .stdout_raw
+            .clone()
+    };
+    // Null members are no-ops: an Invalid Request, never a parse error.
+    assert!(answer("envelope_method_null_is_noop").contains("\"code\":-32600"));
+    assert!(answer("envelope_jsonrpc_null_is_noop").contains("jsonrpc must be 2.0"));
+    assert!(answer("envelope_id_null_is_a_present_id").contains("\"id\":null"));
+    // Case-folded names select the member.
+    for name in [
+        "envelope_method_uppercase_key",
+        "envelope_method_titlecase_key",
+        "envelope_jsonrpc_titlecase_key",
+        "envelope_jsonrpc_uppercase_key",
+        "envelope_escaped_method_key",
+    ] {
+        assert_eq!(
+            answer(name),
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+            "{name}"
+        );
+    }
+    assert!(answer("envelope_id_uppercase_key").contains("\"id\":9"));
+    for name in [
+        "envelope_params_uppercase_key",
+        "envelope_params_long_s_literal_key",
+        "envelope_params_long_s_escaped_key",
+    ] {
+        assert!(
+            answer(name).contains("\"protocolVersion\":\"2024-11-05\""),
+            "{name}"
+        );
+    }
+    // The Kelvin sign folds to k but no envelope member contains one.
+    assert!(
+        answer("envelope_kelvin_sign_does_not_select_an_envelope_member")
+            .contains("method is required")
+    );
+    // A wrong-typed member fails the decode wherever its duplicate sits.
+    for name in [
+        "envelope_method_wrong_typed_earlier_duplicate_case_variant",
+        "envelope_method_wrong_typed_later_duplicate_case_variant",
+        "envelope_jsonrpc_wrong_typed_earlier_duplicate",
+    ] {
+        assert!(answer(name).contains("\"code\":-32700"), "{name}");
+    }
+}
+
+/// ADR 0032 row 4 extended to case variants and `null` duplicates: every frame
+/// below is ACCEPTED by `encoding/json` (the answer is recorded from the real
+/// transport) and REJECTED here with `-32700`, never dispatched. Each probe is
+/// asserted from both sides so neither the recorded oracle behavior nor the
+/// fail-closed rejection can drift unnoticed.
+#[test]
+fn duplicate_envelope_members_are_rejected_fail_closed() {
+    let fx = load();
+    assert!(!fx.duplicate_envelope_probes.is_empty());
+    for probe in &fx.duplicate_envelope_probes {
+        assert!(
+            !probe.oracle_stdout_raw.contains("\"code\":-32700"),
+            "probe {}: the oracle must accept it, otherwise it belongs in cases ({})",
+            probe.name,
+            probe.why
+        );
+        let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+        let written = run_stream(&probe.input, &mut handler).expect("rust transport ran");
+        assert_eq!(
+            written.len(),
+            probe.input.lines().count(),
+            "probe {}: every input line is answered",
+            probe.name
+        );
+        let first: serde_json::Value = serde_json::from_str(&written[0]).expect("answer is JSON");
+        assert_eq!(
+            first["error"]["code"], -32700,
+            "probe {}: a repeated envelope member must be refused ({})",
+            probe.name, probe.why
+        );
+        assert!(
+            first.get("id").is_none(),
+            "probe {}: no id to echo",
+            probe.name
+        );
+        // The refusal is specific to the repeat: the first spelling alone is
+        // dispatched. A probe whose single-member form were also refused
+        // would only prove the parser is broken.
+        if probe.name == "duplicate_method_case_variant_last_wins" {
+            let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+            let single = run_stream(
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"METHOD\":\"ping\"}\n",
+                &mut handler,
+            )
+            .expect("rust transport ran");
+            assert_eq!(single, vec![r#"{"jsonrpc":"2.0","id":1,"result":{}}"#]);
+        }
+    }
+}
+
+/// Posts one frame body through the HTTP adapter with a fresh handler.
+fn http_post(fx: &Fixture, body: &str) -> symvault_mcp::http::HttpResponse {
+    let mut handler = ProtocolHandler::new(&fx.server_name, &fx.server_version);
+    symvault_mcp::http::handle_request(
+        symvault_mcp::http::HttpRequest {
+            method: "POST",
+            path: "/mcp",
+            content_type: "application/json",
+            accept: "application/json, text/event-stream",
+            protocol_version: "",
+            body,
+        },
+        &mut handler,
+    )
+    .expect("http adapter ran")
+}
+
+/// The single-line body of a recorded frame, when it is one.
+fn single_frame(input: &str) -> Option<&str> {
+    let body = input.strip_suffix('\n')?;
+    (!body.contains('\n')).then_some(body)
+}
+
+/// MCP-004-ENV, HTTP side. Go's HTTP handler decodes into the same
+/// `transport.Message` and calls the same `HandleMessage` as the stdio loop,
+/// minus the stdio `jsonrpc`/`method` guards, so the envelope outcomes the
+/// stdio generator recorded from the real transport are also the HTTP
+/// oracle for the decode: a frame Go's decoder rejects is a 400 here, and a
+/// frame that reaches the handler is answered with the recorded bytes. A
+/// dedicated Go-recorded HTTP generator exists (`http001initgen`), but it can
+/// only be regenerated in its frozen historical checkout, so its 27-case
+/// corpus is not extended; this replay is the HTTP coverage for the envelope.
+#[test]
+fn http_envelope_decode_follows_the_recorded_go_envelope_outcomes() {
+    let fx = load();
+    let mut replayed = 0;
+    let mut rejected = 0;
+    let mut dispatched = 0;
+    for case in fx.cases.iter().filter(|c| c.name.starts_with("envelope_")) {
+        let Some(body) = single_frame(&case.input) else {
+            continue;
+        };
+        let response = http_post(&fx, body);
+        let go_rejects = case.stdout_raw.contains("\"code\":-32700");
+        let guard_failed = case.stdout_raw.contains("jsonrpc must be 2.0")
+            || case.stdout_raw.contains("method is required");
+        replayed += 1;
+        if go_rejects {
+            rejected += 1;
+            assert_eq!(
+                response.status, 400,
+                "case {}: Go's decoder rejects it, so HTTP answers 400 ({})",
+                case.name, case.why
+            );
+        } else if guard_failed {
+            // Only the stdio loop has these guards; HTTP dispatches the
+            // decoded message, so the decode itself must have succeeded.
+            assert_ne!(
+                response.status, 400,
+                "case {}: Go decodes it, so HTTP must not reject it as invalid JSON ({})",
+                case.name, case.why
+            );
+        } else {
+            dispatched += 1;
+            assert_eq!(response.status, 200, "case {}", case.name);
+            assert_eq!(
+                String::from_utf8(response.body).expect("utf-8"),
+                case.stdout_raw,
+                "case {}: HTTP answer differs from the recorded Go answer ({})",
+                case.name,
+                case.why
+            );
+        }
+    }
+    assert!(
+        replayed >= 30 && rejected >= 8 && dispatched >= 14,
+        "the HTTP replay went vacuous: {replayed} replayed, {rejected} rejected, {dispatched} dispatched"
+    );
+}
+
+/// HTTP keeps Go's own last-wins for repeated envelope members (only the stdio
+/// loop rejects them by ADR 0032 row 4), so every single-line duplicate probe
+/// is answered with exactly the bytes the Go transport recorded.
+#[test]
+fn http_envelope_duplicates_resolve_last_wins_like_go() {
+    let fx = load();
+    let mut replayed = 0;
+    for probe in &fx.duplicate_envelope_probes {
+        let Some(body) = single_frame(&probe.input) else {
+            continue;
+        };
+        replayed += 1;
+        let response = http_post(&fx, body);
+        assert_eq!(response.status, 200, "probe {}", probe.name);
+        assert_eq!(
+            String::from_utf8(response.body).expect("utf-8"),
+            probe.oracle_stdout_raw,
+            "probe {}: HTTP differs from the recorded Go answer ({})",
+            probe.name,
+            probe.why
+        );
+    }
+    assert_eq!(
+        replayed, 7,
+        "the single-line duplicate probes were not all replayed"
+    );
 }

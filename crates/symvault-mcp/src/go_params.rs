@@ -127,6 +127,16 @@ fn hex4(bytes: &[u8], at: usize) -> Option<u32> {
     Some(value)
 }
 
+/// `encoding/json` field selection for an ASCII field name: case-insensitive,
+/// where the two non-ASCII runes in Go's simple-fold classes for ASCII letters
+/// (U+017F long s, U+212A Kelvin sign) also match. `key` is the already
+/// unquoted member name.
+pub(crate) fn go_field_matches(key: &str, field: &str) -> bool {
+    key.replace('\u{17F}', "s")
+        .replace('\u{212A}', "k")
+        .eq_ignore_ascii_case(field)
+}
+
 /// Decodes a JSON string token (quotes included) the way `encoding/json`'s
 /// `unquote` does. A surrogate half that does not form a pair becomes U+FFFD,
 /// and the escape after a lone high half is not consumed.

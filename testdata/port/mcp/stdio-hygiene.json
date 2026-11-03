@@ -10,7 +10,7 @@
       "internal/mcp/transport/transport.go"
     ],
     "source_digest": "cd7ac18db2a0ac61ad051e25b22253b97b7e207317bc28ba869365503e2acae2",
-    "generator_digest": "405f115480fdb3db2a84b72965b6098997d42973148e11eb9cb705de29bc1a83"
+    "generator_digest": "7d15d552e52ca0b32914d2d8a23ce10842180cdb7071fbc2f20daf75a5ee6ac5"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-fixture",
@@ -830,6 +830,651 @@
       "runtime_text_masked": false
     },
     {
+      "name": "envelope_method_null_is_noop",
+      "why": "MCP-004-ENV: a null envelope member is a no-op in encoding/json, not a type error. method:null leaves method empty, so the request is -32600 method is required where a strict serde String decode answers -32700",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":null}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"method is required\",\"message\":\"Invalid Request\",\"code\":-32600},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "data": "method is required",
+            "message": "Invalid Request",
+            "code": -32600
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_method_null_notification_is_silent",
+      "why": "method:null with no id is a notification with an empty method; the handler ignores it and nothing is written",
+      "input": "{\"jsonrpc\":\"2.0\",\"method\":null}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_jsonrpc_null_is_noop",
+      "why": "jsonrpc:null leaves jsonrpc empty, so the frame is -32600 jsonrpc must be 2.0 (echoing the id), not a -32700 parse error",
+      "input": "{\"jsonrpc\":null,\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"jsonrpc must be 2.0\",\"message\":\"Invalid Request\",\"code\":-32600},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "data": "jsonrpc must be 2.0",
+            "message": "Invalid Request",
+            "code": -32600
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_id_null_is_a_present_id",
+      "why": "id:null is a four-byte RawMessage, not an absent id: the frame is a request and the answer echoes id null",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":null,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":null,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": null,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_all_members_null_except_jsonrpc",
+      "why": "every other envelope member null: method stays empty and params/result stay RawMessage null; with an id present this is -32600 method is required",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":null,\"params\":null}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"method is required\",\"message\":\"Invalid Request\",\"code\":-32600},\"jsonrpc\":\"2.0\",\"id\":7}\n",
+      "frames": [
+        {
+          "error": {
+            "data": "method is required",
+            "message": "Invalid Request",
+            "code": -32600
+          },
+          "id": 7,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_method_uppercase_key",
+      "why": "MCP-004-ENV: encoding/json matches envelope member names case-insensitively, so \"METHOD\" selects method",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"METHOD\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_method_titlecase_key",
+      "why": "\"Method\" selects method",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"Method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_jsonrpc_titlecase_key",
+      "why": "\"Jsonrpc\" selects jsonrpc, so the version check passes",
+      "input": "{\"Jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_jsonrpc_uppercase_key",
+      "why": "\"JSONRPC\" selects jsonrpc",
+      "input": "{\"JSONRPC\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_id_uppercase_key",
+      "why": "\"ID\" selects id and the answer carries it under the canonical lowercase name",
+      "input": "{\"jsonrpc\":\"2.0\",\"ID\":9,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":9,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 9,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_id_titlecase_key_null",
+      "why": "\"Id\":null is a present null id selected case-insensitively",
+      "input": "{\"jsonrpc\":\"2.0\",\"Id\":null,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":null,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": null,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_params_uppercase_key",
+      "why": "\"PARAMS\" selects params: initialize negotiates 2024-11-05 from it",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"PARAMS\":{\"protocolVersion\":\"2024-11-05\"}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2024-11-05\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2024-11-05",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_params_long_s_literal_key",
+      "why": "U+017F (long s) is in the simple-fold class of s, so a key spelled with it selects params; the raw rune is used here",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"paramſ\":{\"protocolVersion\":\"2024-11-05\"}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2024-11-05\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2024-11-05",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_params_long_s_escaped_key",
+      "why": "the same fold through a \\u017f escape: member names are unquoted before matching",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"param\\u017f\":{\"protocolVersion\":\"2024-11-05\"}}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2024-11-05\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            },
+            "protocolVersion": "2024-11-05",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_kelvin_sign_does_not_select_an_envelope_member",
+      "why": "U+212A (Kelvin sign) folds to k, but no envelope member name contains k, so a key built from it selects nothing: method stays empty and the request is -32600",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"K\":\"x\",\"method\":null}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"method is required\",\"message\":\"Invalid Request\",\"code\":-32600},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "data": "method is required",
+            "message": "Invalid Request",
+            "code": -32600
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_escaped_method_key",
+      "why": "member names are unquoted before matching: \"\\u006dethod\" selects method",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"\\u006dethod\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_near_miss_key_is_unknown",
+      "why": "a key that merely resembles a member (accented e, trailing space) selects nothing, so the method is missing",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"méthod\":\"ping\",\"method \":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"method is required\",\"message\":\"Invalid Request\",\"code\":-32600},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "data": "method is required",
+            "message": "Invalid Request",
+            "code": -32600
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_method_wrong_typed",
+      "why": "a non-string method is an UnmarshalTypeError: -32700",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":5}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field Message.method of type string\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_method_wrong_typed_uppercase_key",
+      "why": "the case-folded key is typed exactly like the exact one: METHOD:5 is -32700",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"METHOD\":5}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field Message.method of type string\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_jsonrpc_wrong_typed",
+      "why": "a non-string jsonrpc is an UnmarshalTypeError: -32700, not the -32600 version error",
+      "input": "{\"jsonrpc\":2,\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field Message.jsonrpc of type string\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_method_wrong_typed_earlier_duplicate_case_variant",
+      "why": "a wrong-typed earlier member fails the decode although a later valid case variant follows, so this is -32700 and not a dispatched ping",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":5,\"METHOD\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field Message.method of type string\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_method_wrong_typed_later_duplicate_case_variant",
+      "why": "a wrong-typed later case variant fails the decode as well: -32700",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"METHOD\":\"ping\",\"method\":5}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field Message.method of type string\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_jsonrpc_wrong_typed_earlier_duplicate",
+      "why": "jsonrpc:2 then a valid jsonrpc is still -32700",
+      "input": "{\"jsonrpc\":2,\"JSONRPC\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field Message.jsonrpc of type string\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_method_array_value",
+      "why": "an array method is -32700",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":[\"ping\"]}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal array into Go struct field Message.method of type string\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_id_object_is_echoed_compact",
+      "why": "id is a RawMessage: an object id is accepted, compacted and echoed whatever its shape",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\": { \"a\" : [1, 2] },\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":{\"a\":[1,2]},\"result\":{}}\n",
+      "frames": [
+        {
+          "id": {
+            "a": [
+              1,
+              2
+            ]
+          },
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_params_wrong_type_ignored_by_ping",
+      "why": "params is a RawMessage: ping never decodes it, so a scalar there is harmless",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"params\":5}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_result_member_makes_a_response",
+      "why": "a RESULT member is matched case-insensitively but the frame has no method, so the transport answers -32600 method is required before the handler can treat it as a response; the second line is the normal ping answer",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"RESULT\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"method is required\",\"message\":\"Invalid Request\",\"code\":-32600},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "error": {
+            "data": "method is required",
+            "message": "Invalid Request",
+            "code": -32600
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        },
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_result_null_makes_a_response",
+      "why": "result:null is a present RawMessage, so the handler classifies the frame as a response and returns nothing; the transport then answers Internal error (-32603) with the id, then the second line is the normal ping answer",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"result\":null}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"message\":\"Internal error\",\"code\":-32603},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "error": {
+            "message": "Internal error",
+            "code": -32603
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        },
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_error_null_is_not_a_response",
+      "why": "error:null leaves the error pointer nil, so the request is dispatched normally",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":null}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_error_empty_object_makes_a_response",
+      "why": "error:{} (matched case-insensitively) is a non-nil RPCError with zero fields, since its members are optional to encoding/json; the handler classifies the frame as a response and the transport answers Internal error (-32603), then the normal ping answer",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"ERROR\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"message\":\"Internal error\",\"code\":-32603},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "error": {
+            "message": "Internal error",
+            "code": -32603
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        },
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_error_wrong_typed",
+      "why": "a non-object error is -32700",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":5}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field Message.error of type transport.RPCError\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_error_code_wrong_typed",
+      "why": "RPCError.Code is an int: a string there fails the decode (-32700)",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":{\"code\":\"x\",\"message\":\"m\"}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal string into Go struct field RPCError.error.code of type int\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_error_code_fraction",
+      "why": "RPCError.Code is an int: 1.5 is an UnmarshalTypeError (-32700)",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":{\"code\":1.5}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number 1.5 into Go struct field RPCError.error.code of type int\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_error_code_beyond_i32_is_accepted",
+      "why": "Go's int is 64-bit: a code beyond i32 decodes fine, so the frame is a response (Internal error -32603 from the transport), then the normal ping answer; an i32-typed port would answer -32700",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":{\"code\":3000000000,\"message\":\"m\"}}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"message\":\"Internal error\",\"code\":-32603},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "error": {
+            "message": "Internal error",
+            "code": -32603
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        },
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_error_message_wrong_typed_case_variant",
+      "why": "RPCError members are case-insensitive too: MESSAGE:5 is an UnmarshalTypeError (-32700)",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"error\":{\"MESSAGE\":5}}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal number into Go struct field RPCError.error.message of type string\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "envelope_lone_surrogate_in_uppercase_method_key_value",
+      "why": "a lone surrogate in the value of a case-folded method key is U+FFFD, exactly as for the exact key",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"METHOD\":\"a\\uD800b\"}\n",
+      "stdout_raw": "{\"error\":{\"message\":\"Method not found: a�b\",\"code\":-32601},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "message": "Method not found: a�b",
+            "code": -32601
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "envelope_lone_surrogate_in_unknown_key",
+      "why": "a lone surrogate escape in an unknown envelope member name decodes to U+FFFD and selects nothing; the frame is dispatched, where a serde String key rejects the escape and would answer -32700",
+      "input": "{\"\\uDC00\":1,\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
       "name": "interleaved_valid_and_invalid",
       "why": "a hostile client cannot desynchronise the stream: every frame is answered in order regardless of the failures between them",
       "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\ngarbage\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n[]\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}\n",
@@ -987,6 +1632,56 @@
       "input_bytes": 40046,
       "stdout_raw": "{\"error\":{\"data\":\"invalid character '[' exceeded max depth\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
       "masked": true
+    }
+  ],
+  "duplicate_envelope_probes": [
+    {
+      "name": "duplicate_method_case_variant_last_wins",
+      "why": "method then METHOD: encoding/json stores both and the LAST wins (nope), so this is Method not found: nope although the first spelling was ping",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"METHOD\":\"nope\"}\n",
+      "oracle_stdout_raw": "{\"error\":{\"message\":\"Method not found: nope\",\"code\":-32601},\"jsonrpc\":\"2.0\",\"id\":1}\n"
+    },
+    {
+      "name": "duplicate_method_null_after_value_keeps_value",
+      "why": "a trailing method:null is a no-op, so the earlier ping is dispatched",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"method\":null}\n",
+      "oracle_stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n"
+    },
+    {
+      "name": "duplicate_method_null_before_value",
+      "why": "method:null then ping is dispatched as ping",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":null,\"method\":\"ping\"}\n",
+      "oracle_stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n"
+    },
+    {
+      "name": "duplicate_id_case_variant_last_wins",
+      "why": "id then ID: the LAST spelling's value is echoed (2)",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"ID\":2,\"method\":\"ping\"}\n",
+      "oracle_stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}\n"
+    },
+    {
+      "name": "duplicate_id_null_after_value",
+      "why": "a RawMessage takes null as a value, so a trailing id:null REPLACES the earlier id (unlike a string member) and the answer echoes null",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"id\":null,\"method\":\"ping\"}\n",
+      "oracle_stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":null,\"result\":{}}\n"
+    },
+    {
+      "name": "duplicate_jsonrpc_null_after_value_keeps_value",
+      "why": "a trailing jsonrpc:null in another case is a no-op, so the version stays 2.0",
+      "input": "{\"jsonrpc\":\"2.0\",\"JSONRPC\":null,\"id\":1,\"method\":\"ping\"}\n",
+      "oracle_stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n"
+    },
+    {
+      "name": "duplicate_params_case_variant_last_wins",
+      "why": "params then PARAMS on initialize: the LAST object is the one decoded (2025-03-26)",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\"},\"PARAMS\":{\"protocolVersion\":\"2025-03-26\"}}\n",
+      "oracle_stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symvault\",\"version\":\"0.0.0-fixture\"},\"protocolVersion\":\"2025-03-26\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+    },
+    {
+      "name": "duplicate_error_member_last_wins_inside_error_object",
+      "why": "a duplicated RPCError member (CODE after code) is accepted last-wins: the frame is a response (Internal error -32603 from the transport), then a normal ping is answered",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":1,\"CODE\":2},\"method\":\"ping\"}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "oracle_stdout_raw": "{\"error\":{\"message\":\"Internal error\",\"code\":-32603},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n"
     }
   ],
   "divergences": [
