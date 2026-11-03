@@ -108,6 +108,7 @@ struct Fixture {
     doctor_ids: Vec<String>,
     cases: Vec<Case>,
     open_divergences: Vec<OpenDivergence>,
+    loader_warning_counts: LoaderWarningCounts,
 }
 
 /// Cases whose Go output the native CLI must reproduce byte for byte.
@@ -1686,4 +1687,199 @@ fn native_nesting_limit_is_256_levels() {
             );
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct LoaderWarningCounts {
+    runs_per_case: usize,
+    config: String,
+    cases: Vec<LoaderWarningRun>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoaderWarningRun {
+    command: String,
+    args: Vec<String>,
+    layout: String,
+    go_min: usize,
+    go_max: usize,
+    #[serde(default)]
+    go_race: String,
+    go_sites: Vec<String>,
+}
+
+/// What the native CLI prints for the same runs: `(command, layout) -> count`.
+///
+/// Go re-reads `config.yaml` at several seams that Rust does not repeat (see
+/// `go_sites` in the fixture): the root `PersistentPreRunE` and the command's
+/// own `VaultPath` both load the global config (so a default-location vault
+/// warns twice more), and every vault operation (`List`, `ReadEntry`,
+/// `FindWithOptions`, `VerifyManifestIntegrity`) loads the vault config once
+/// again, in addition to a background index build. Rust loads the global
+/// config once (`resolve_vault`) and the vault config twice (`config::fix` and
+/// the unlock), exactly Go's `resolveConfig` and `vault.Open`; only `get`
+/// reads the vault config a third time, like Go's `ReadEntry`.
+const NATIVE_WARNING_COUNTS: &[(&str, &str, usize)] = &[
+    ("list", "vault_env", 2),
+    ("list", "legacy_default", 3),
+    ("get", "vault_env", 3),
+    ("get", "legacy_default", 4),
+    ("find", "vault_env", 2),
+    ("find", "legacy_default", 3),
+    ("verify", "vault_env", 2),
+    ("verify", "legacy_default", 3),
+    ("recipients list", "vault_env", 0),
+    ("recipients list", "legacy_default", 1),
+    ("lock", "vault_env", 0),
+    ("lock", "legacy_default", 1),
+    ("generate", "vault_env", 0),
+    ("generate", "legacy_default", 0),
+    ("agent list", "vault_env", 1),
+    ("agent list", "legacy_default", 2),
+];
+
+const ENV_WHITELIST_WARNING: &str = "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead\n";
+
+/// Runs `symvault` in a throw-away HOME (no real keychain: the session cache is
+/// in memory under `CI=1`) and returns `(exit code, stderr)`.
+fn run_isolated(root: &Path, vault_env: Option<&Path>, args: &[&str]) -> (i32, String) {
+    let home = root.join("home");
+    fs::create_dir_all(&home).expect("create isolated home");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_symvault"));
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with("SYMVAULT_") {
+            command.env_remove(name);
+        }
+    }
+    command
+        .current_dir(root)
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("XDG_CONFIG_HOME", root.join("xdg-config"))
+        .env("XDG_DATA_HOME", root.join("xdg-data"))
+        .env("XDG_CACHE_HOME", root.join("xdg-cache"))
+        .env("CI", "1")
+        .env("NO_COLOR", "1")
+        .env("SYMVAULT_PASSPHRASE", "loader-warning-count")
+        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+        .stdin(std::process::Stdio::null())
+        .args(args);
+    if let Some(vault) = vault_env {
+        command.env("SYMVAULT_VAULT", vault);
+    }
+    let output = command.output().expect("run symvault");
+    (
+        output.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
+
+fn native_warning_count(row: &LoaderWarningRun, config: &str) -> usize {
+    let sandbox = Sandbox::new();
+    let root: &Path = &sandbox.root;
+    let home = root.join("home");
+    let (vault, vault_env) = match row.layout.as_str() {
+        "vault_env" => (home.join("vault"), Some(home.join("vault"))),
+        "legacy_default" => {
+            let vault = home.join(".symvault");
+            fs::create_dir_all(&vault).expect("legacy vault directory");
+            (vault, None)
+        }
+        other => panic!("unknown layout {other}"),
+    };
+    let init_dir = vault.to_string_lossy().into_owned();
+    let init: Vec<&str> = if vault_env.is_some() {
+        vec!["init", &init_dir]
+    } else {
+        vec!["init"]
+    };
+    for step in [
+        init,
+        vec!["add", "demo/entry", "--value", "demo-value-1234"],
+    ] {
+        let (code, stderr) = run_isolated(root, vault_env.as_deref(), &step);
+        assert_eq!(code, 0, "setup {step:?}: {stderr}");
+    }
+    let config_path = vault.join("config.yaml");
+    let mut text = fs::read_to_string(&config_path).expect("read vault config");
+    text.push_str(config);
+    fs::write(&config_path, text).expect("append the deprecated key");
+    let args: Vec<&str> = row.args.iter().map(String::as_str).collect();
+    let (code, stderr) = run_isolated(root, vault_env.as_deref(), &args);
+    assert_eq!(code, 0, "{} ({}): {stderr}", row.command, row.layout);
+    stderr.matches(ENV_WHITELIST_WARNING).count()
+}
+
+/// ADR 0034 item 9 says ordinary commands print the loader warning as often as
+/// Go. They do not, and this pins what is true. Go's recorded bounds
+/// (`loader_warning_counts`, from the pinned oracle) come from re-reading the
+/// config at seams Rust does not repeat; the native counts are pinned exactly,
+/// the rows where Go and Rust agree must lie inside Go's bounds, and every
+/// other row must stay below Go's minimum (an open divergence: fewer
+/// duplicate deprecation lines, no other output differs). A native change that
+/// closes or widens a gap fails here and must update the table and the
+/// matrix row together.
+#[test]
+fn native_loader_warning_counts_are_pinned_against_go() {
+    let fixture = fixture();
+    let counts = &fixture.loader_warning_counts;
+    assert_eq!(counts.config, "envWhitelist: [a]\n");
+    assert_eq!(counts.runs_per_case, 8);
+    assert_eq!(counts.cases.len(), NATIVE_WARNING_COUNTS.len());
+    let (mut equal, mut fewer) = (0, 0);
+    for (row, (command, layout, native_expected)) in counts.cases.iter().zip(NATIVE_WARNING_COUNTS)
+    {
+        assert_eq!(
+            (row.command.as_str(), row.layout.as_str()),
+            (*command, *layout)
+        );
+        assert!(row.go_min <= row.go_max);
+        assert_eq!(
+            row.go_race.is_empty(),
+            row.go_min == row.go_max,
+            "{command}/{layout}: a range exists only where a goroutine read races the exit"
+        );
+        assert_eq!(
+            row.go_sites.len(),
+            row.go_min,
+            "{command}/{layout}: every certain site prints once; the race adds at most one"
+        );
+        let native = native_warning_count(row, &counts.config);
+        assert_eq!(native, *native_expected, "{command}/{layout}: native count");
+        if (row.go_min..=row.go_max).contains(&native) {
+            equal += 1;
+        } else {
+            assert!(
+                native < row.go_min,
+                "{command}/{layout}: native {native} must stay below Go's {}..={}",
+                row.go_min,
+                row.go_max
+            );
+            fewer += 1;
+        }
+    }
+    // `get` with the vault given explicitly (Rust's own entry read is the
+    // operation-level load), recipients list, lock and generate with the vault
+    // given explicitly, and both agent list rows, agree; the other ten print
+    // fewer duplicates.
+    assert_eq!((equal, fewer), (6, 10));
+}
+
+#[test]
+fn warning_count_pin_tells_a_match_from_a_gap() {
+    // The comparison used above: inside Go's bounds is a match, below is the
+    // recorded gap, above would be a new divergence.
+    let gap = |native: usize, min: usize, max: usize| {
+        if (min..=max).contains(&native) {
+            "match"
+        } else if native < min {
+            "fewer"
+        } else {
+            "more"
+        }
+    };
+    assert_eq!(gap(2, 3, 4), "fewer");
+    assert_eq!(gap(3, 3, 4), "match");
+    assert_eq!(gap(5, 3, 4), "more");
+    assert_eq!(gap(1, 1, 1), "match");
 }

@@ -29,6 +29,7 @@ struct Fixture {
     source_hash: String,
     generator_hash: String,
     scenarios: Vec<Scenario>,
+    colour_scenarios: Vec<Scenario>,
     verify_cleared: Vec<VerifyCase>,
     countdown: Vec<CountdownCase>,
 }
@@ -55,6 +56,12 @@ struct Scenario {
     timer_stub_ms: u64,
     #[serde(default)]
     signal_after_ms: u64,
+    /// The CLIContext colour mode of a forced-colour scenario.
+    #[serde(default)]
+    color: String,
+    /// A `--color` argv flag (read by Go after the colour decision).
+    #[serde(default)]
+    color_flag: String,
     stdout: String,
     stderr: String,
     exit_code: i32,
@@ -349,6 +356,8 @@ fn real_clock_counts_down_and_clears() {
         timer_stub_ms: 0,
         signal_after_ms: 0,
         stdout: String::new(),
+        color: String::new(),
+        color_flag: String::new(),
         stderr: String::new(),
         exit_code: 0,
         clipboard_ops: Vec::new(),
@@ -722,4 +731,145 @@ fn blocked_stderr_does_not_delay_the_signal_clear() {
         "{text:?}"
     );
     assert!(!text.contains("blocked-signal-secret"));
+}
+
+/// Removes `ESC [ ... m` sequences (all lipgloss emits here).
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::new();
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' && chars.peek() == Some(&'[') {
+            for d in chars.by_ref() {
+                if d == 'm' {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The text of every `ESC[..m ... ESC[0m` run in `text`.
+fn coloured_runs(text: &str) -> Vec<String> {
+    let mut runs = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("\u{1b}[") {
+        let after = &rest[start..];
+        let open_end = after.find('m').expect("sgr start") + 1;
+        let body = &after[open_end..];
+        let close = body.find("\u{1b}[0m").expect("sgr reset");
+        runs.push(body[..close].to_owned());
+        rest = &body[close + 4..];
+    }
+    runs
+}
+
+/// ADR 0034 item 21 (ratified): Go styles the `cliout` lines of `get` with
+/// lipgloss on a colour stderr; Rust writes plain text. The Go side is the
+/// `colour_scenarios` of `get_clipboard.json` (colour decision forced on,
+/// lipgloss pinned to true colour). The pin is exact: Rust's bytes equal Go's
+/// bytes with the escape sequences removed, Go's coloured runs are precisely
+/// the hint, the failed-clear warning and the final `Error:` line (not the
+/// countdown, `[clipboard cleared]` or the not-cleared warning, which Go
+/// prints plain), and Rust never emits an escape. Where Go itself is plain
+/// (colour off, or only the `--color always` flag, which Go reads after it
+/// has decided), the bytes must be identical, escapes or not.
+#[test]
+fn colour_is_the_only_difference_on_cliout_lines() {
+    let fixture = fixture();
+    assert_eq!(fixture.colour_scenarios.len(), 8);
+    let (mut coloured, mut plain) = (0, 0);
+    let mut runs_seen = std::collections::BTreeSet::new();
+    for s in &fixture.colour_scenarios {
+        let mut clock = VirtualClock::new();
+        if s.timer_stub_ms > 0 {
+            clock.wake_at = Some(Duration::from_millis(s.timer_stub_ms));
+        }
+        let clipboard = FakeClipboard::new(s);
+        let mut stderr = Vec::new();
+        let result = copy_and_auto_clear(
+            &clipboard,
+            &s.secret,
+            s.auto_clear_seconds,
+            &clock,
+            &mut stderr,
+        );
+        let mut rust = String::from_utf8(stderr).expect("utf-8 stderr");
+        let exit_code = match result {
+            Ok(()) => 0,
+            Err(error) => {
+                rust = format!("Error: {error}\nError: {error}\n");
+                i32::from(CopyError::EXIT_CODE)
+            }
+        };
+        assert_eq!(exit_code, s.exit_code, "{} exit", s.name);
+        assert_eq!(s.stdout, "", "{} stdout", s.name);
+        assert_eq!(
+            clipboard.state.lock().unwrap().1,
+            s.clipboard_ops,
+            "{} clipboard ops",
+            s.name
+        );
+        assert!(!rust.contains('\u{1b}'), "{} Rust wrote an escape", s.name);
+        assert_eq!(
+            rust,
+            strip_ansi(&s.stderr),
+            "{} stderr modulo colour",
+            s.name
+        );
+        if s.stderr.contains('\u{1b}') {
+            coloured += 1;
+            assert_eq!(s.color, "always", "{}", s.name);
+            assert_ne!(
+                rust, s.stderr,
+                "{} must differ from Go only by colour",
+                s.name
+            );
+            for run in coloured_runs(&s.stderr) {
+                assert!(
+                    run == "[copied to clipboard]"
+                        || run.starts_with("Warning: failed to clear clipboard: ")
+                        || run.starts_with("Error: copy to clipboard: "),
+                    "{}: unexpected coloured run {run:?}",
+                    s.name
+                );
+                runs_seen.insert(run.split(':').next().unwrap().to_owned());
+            }
+        } else {
+            plain += 1;
+            assert!(
+                s.color == "never" || s.color_flag == "always",
+                "{}: Go printed no colour although it was asked for",
+                s.name
+            );
+            assert_eq!(rust, s.stderr, "{} plain controls are byte-equal", s.name);
+        }
+    }
+    // Six coloured scenarios cover all three line kinds; two controls stay plain.
+    assert_eq!((coloured, plain), (6, 2));
+    assert_eq!(
+        runs_seen.into_iter().collect::<Vec<_>>(),
+        ["Error", "Warning", "[copied to clipboard]"]
+    );
+}
+
+/// The pin's own helpers: the stripped Go line is what Rust must print, and
+/// the coloured Go line must carry the escape Rust must not.
+#[test]
+fn colour_pin_helpers_tell_coloured_from_plain() {
+    let fixture = fixture();
+    let go = &fixture
+        .colour_scenarios
+        .iter()
+        .find(|s| s.name == "colour_always_cleared")
+        .unwrap()
+        .stderr;
+    assert!(go.starts_with("\u{1b}[38;5;82m[copied to clipboard]\u{1b}[0m\n"));
+    let plain = strip_ansi(go);
+    assert!(plain.starts_with("[copied to clipboard]\n"));
+    assert_eq!(coloured_runs(go), ["[copied to clipboard]"]);
+    assert_ne!(*go, plain);
+    assert_eq!(strip_ansi("a\u{1b}[1;31mb\u{1b}[0mc"), "abc");
 }

@@ -24,6 +24,11 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
 cd "$repo_root"
 export GOWORK=off
+# macOS TMPDIR ends in '/'. Sandboxes created under it would keep a doubled
+# separator that the CLI's cleaned paths never contain (#1474); the frozen
+# corpus then reports "fixture is stale" for every path that embeds the root.
+while case ${TMPDIR:-} in ?*/) true ;; *) false ;; esac; do TMPDIR=${TMPDIR%/}; done
+[ -z "${TMPDIR:-}" ] || export TMPDIR
 export GOTOOLCHAIN=${GO_TOOLCHAIN:-go1.26.6}
 recorded_goos=darwin
 host_goos=$(uname -s | tr '[:upper:]' '[:lower:]')

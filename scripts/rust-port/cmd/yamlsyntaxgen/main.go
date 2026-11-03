@@ -153,6 +153,11 @@ type fixture struct {
 	DoctorIDs       []string         `json:"doctor_ids"`
 	Cases           []fixtureCase    `json:"cases"`
 	OpenDivergences []openDivergence `json:"open_divergences"`
+	// LoaderWarningCounts (PLATFORM/CLI-005, ADR 0034 item 9): how often the
+	// pinned Go CLI prints the `envWhitelist` deprecation warning for one
+	// ordinary command. Go re-reads config.yaml at several unrelated seams, and
+	// every read warns.
+	LoaderWarningCounts loaderWarningCounts `json:"loader_warning_counts"`
 }
 
 type input struct {
@@ -707,12 +712,17 @@ func main() {
 	if err != nil {
 		fatal("build open divergences: %v", err)
 	}
+	warningCounts, err := buildLoaderWarningCounts(*goBinary)
+	if err != nil {
+		fatal("build loader warning counts: %v", err)
+	}
 	content, err := marshalJSON(fixture{
-		SchemaVersion:   1,
-		Oracle:          oracle{commitLabel, resolved, releaseLabel, sources, sourceDigest, generatorDigest},
-		DoctorIDs:       doctorIDs,
-		Cases:           cases,
-		OpenDivergences: divergences,
+		SchemaVersion:       1,
+		Oracle:              oracle{commitLabel, resolved, releaseLabel, sources, sourceDigest, generatorDigest},
+		DoctorIDs:           doctorIDs,
+		Cases:               cases,
+		OpenDivergences:     divergences,
+		LoaderWarningCounts: warningCounts,
 	})
 	if err != nil {
 		fatal("marshal fixture: %v", err)
@@ -1282,6 +1292,167 @@ func repositoryRoot() (string, error) {
 		return "", fmt.Errorf("locate generator")
 	}
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..")), nil
+}
+
+// loaderWarningRun is one ordinary command whose stderr is counted for the
+// `envWhitelist is deprecated` line.
+type loaderWarningRun struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+	// Layout is where the vault lives: "vault_env" selects it through
+	// SYMVAULT_VAULT (the global config is never read to find it),
+	// "legacy_default" is the existing ~/.symvault directory, whose config.yaml
+	// is the global config and the vault config at once.
+	Layout string `json:"layout"`
+	// GoMin and GoMax bound the count over repeated runs. They differ only
+	// where Go builds the in-memory search index on a goroutine that may not
+	// finish before the process exits (`go_race`); the generator fails when a
+	// run falls outside them.
+	GoMin int `json:"go_min"`
+	GoMax int `json:"go_max"`
+	// GoRace names the optional goroutine read when GoMax > GoMin.
+	GoRace string `json:"go_race,omitempty"`
+	// GoSites are the config reads that print, in order, from an
+	// instrumented build of the pinned sources (runtime.Callers in warnf);
+	// they document the bounds and are not measured by the generator.
+	GoSites []string `json:"go_sites"`
+}
+
+type loaderWarningCounts struct {
+	Note   string             `json:"note"`
+	Runs   int                `json:"runs_per_case"`
+	Config string             `json:"config"`
+	Cases  []loaderWarningRun `json:"cases"`
+}
+
+const (
+	siteRootPreRun   = "internal/cli.NewRootCmd PersistentPreRunE (cli.go:289) -> VaultPath -> config.Load(global config) [reads only when the vault is not given by --vault/SYMVAULT_VAULT]"
+	siteOwnVaultPath = "the command's own VaultPath (WithVault/WithVaultRaw/WithVaultForScripting or the command body) -> config.Load(global config) [same condition]"
+	siteResolve      = "internal/cli.resolveConfig (unlockVault) -> config.Load(vault config)"
+	siteOpen         = "internal/vault.Open (OpenWithPassphrase) -> config.Load(vault config)"
+	siteOpList       = "internal/vault.List -> listWithBudget -> loadVaultConfig -> config.Load(vault config)"
+	siteOpGet        = "internal/vault.ReadEntry -> readEntryInner -> loadVaultConfig -> config.Load(vault config)"
+	siteOpFind       = "internal/vault.FindWithOptions -> listWithBudget -> loadVaultConfig -> config.Load(vault config)"
+	siteOpVerify     = "internal/vault.VerifyManifestIntegrity -> loadVaultConfig -> config.Load(vault config)"
+	siteRace         = "internal/vault.EncryptedIndex.BuildMemoryOnly -> buildIndex -> listWithBudget -> loadVaultConfig -> config.Load(vault config), on a goroutine: printed only when it finishes before the process exits"
+)
+
+func loaderWarningTable() []loaderWarningRun {
+	unlock := []string{siteResolve, siteOpen}
+	vaultEnv := func(command string, args []string, min, max int, race string, sites ...string) loaderWarningRun {
+		return loaderWarningRun{Command: command, Args: args, Layout: "vault_env", GoMin: min, GoMax: max, GoRace: race, GoSites: sites}
+	}
+	legacy := func(command string, args []string, min, max int, race string, sites ...string) loaderWarningRun {
+		return loaderWarningRun{Command: command, Args: args, Layout: "legacy_default", GoMin: min, GoMax: max, GoRace: race, GoSites: sites}
+	}
+	global := []string{siteRootPreRun, siteOwnVaultPath}
+	join := func(parts ...[]string) []string {
+		var out []string
+		for _, part := range parts {
+			out = append(out, part...)
+		}
+		return out
+	}
+	op := func(site string) []string { return []string{site} }
+	return []loaderWarningRun{
+		vaultEnv("list", []string{"list"}, 3, 4, siteRace, join(unlock, op(siteOpList))...),
+		legacy("list", []string{"list"}, 5, 6, siteRace, join(global, unlock, op(siteOpList))...),
+		vaultEnv("get", []string{"get", "demo/entry.password", "--print"}, 3, 4, siteRace, join(unlock, op(siteOpGet))...),
+		legacy("get", []string{"get", "demo/entry.password", "--print"}, 5, 6, siteRace, join(global, unlock, op(siteOpGet))...),
+		vaultEnv("find", []string{"find", "demo"}, 3, 4, siteRace, join(unlock, op(siteOpFind))...),
+		legacy("find", []string{"find", "demo"}, 5, 6, siteRace, join(global, unlock, op(siteOpFind))...),
+		vaultEnv("verify", []string{"verify"}, 3, 4, siteRace, join(unlock, op(siteOpVerify))...),
+		legacy("verify", []string{"verify"}, 5, 6, siteRace, join(global, unlock, op(siteOpVerify))...),
+		vaultEnv("recipients list", []string{"recipients", "list"}, 0, 0, ""),
+		legacy("recipients list", []string{"recipients", "list"}, 2, 2, "", global...),
+		vaultEnv("lock", []string{"lock"}, 0, 0, ""),
+		legacy("lock", []string{"lock"}, 2, 2, "", global...),
+		vaultEnv("generate", []string{"generate"}, 0, 0, ""),
+		legacy("generate", []string{"generate"}, 1, 1, "", siteRootPreRun),
+		// agent list is annotated requires-vault=false: no PreRun read, and
+		// the command loads its own config twice in the legacy layout.
+		vaultEnv("agent list", []string{"agent", "list"}, 1, 1, "", "cmd/mcp.newAgentListCmd -> config.Load(vault config)"),
+		legacy("agent list", []string{"agent", "list"}, 2, 2, "", "cmd/mcp.newAgentListCmd -> config.Load(global config)", "cmd/mcp.newAgentListCmd -> config.Load(vault config)"),
+	}
+}
+
+const loaderWarningRuns = 8
+
+func buildLoaderWarningCounts(goBinary string) (loaderWarningCounts, error) {
+	out := loaderWarningCounts{
+		Note:   "Number of `envWhitelist is deprecated ...` lines on stderr for one run of the command, with `envWhitelist: [a]` appended to the vault config after the vault was initialized and one entry added. Go re-reads config.yaml at every seam listed in go_sites and every read warns; the per-operation reads (vault.List, ReadEntry, FindWithOptions, VerifyManifestIntegrity) and the second global read are incidental to Go's structure. Counts are bounds over repeated runs, not single observations.",
+		Runs:   loaderWarningRuns,
+		Config: "envWhitelist: [a]\n",
+	}
+	for _, row := range loaderWarningTable() {
+		for run := 0; run < loaderWarningRuns; run++ {
+			count, err := countLoaderWarnings(goBinary, row)
+			if err != nil {
+				return out, err
+			}
+			if count < row.GoMin || count > row.GoMax {
+				return out, fmt.Errorf("%s (%s) printed the envWhitelist warning %d times, outside the declared bounds [%d, %d]", row.Command, row.Layout, count, row.GoMin, row.GoMax)
+			}
+		}
+		if row.GoSites == nil {
+			row.GoSites = []string{}
+		}
+		out.Cases = append(out.Cases, row)
+	}
+	return out, nil
+}
+
+// countLoaderWarnings builds a fresh vault with the oracle, appends the
+// deprecated key to its config and counts the warning lines of one run.
+func countLoaderWarnings(goBinary string, row loaderWarningRun) (int, error) {
+	box, err := newSandbox()
+	if err != nil {
+		return 0, err
+	}
+	home := filepath.Join(box.root, "home")
+	vault := filepath.Join(home, "vault")
+	box.env = append(box.env,
+		"SYMVAULT_PASSPHRASE=loader-warning-count", "SYMVAULT_ALLOW_ENV_PASSPHRASE=1", "SYMVAULT_TEST_KEYRING=memory")
+	args := []string{"init"}
+	switch row.Layout {
+	case "vault_env":
+		args = append(args, vault)
+		box.env = append(box.env, "SYMVAULT_VAULT="+vault)
+	case "legacy_default":
+		vault = filepath.Join(home, ".symvault")
+		if mkErr := os.MkdirAll(vault, 0o700); mkErr != nil {
+			return 0, errors.Join(mkErr, box.close())
+		}
+	default:
+		return 0, errors.Join(fmt.Errorf("unknown layout %q", row.Layout), box.close())
+	}
+	for _, step := range [][]string{args, {"add", "demo/entry", "--value", "demo-value-1234"}} {
+		code, _, stderr, runErr := runOracle(goBinary, box, step)
+		if runErr != nil || code != 0 {
+			return 0, errors.Join(fmt.Errorf("setup %v: exit %d %v %q", step, code, runErr, stderr), box.close())
+		}
+	}
+	configPath := filepath.Join(vault, "config.yaml")
+	// #nosec G304 G302 -- fixed path inside this case's private sandbox.
+	f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return 0, errors.Join(err, box.close())
+	}
+	if _, werr := f.WriteString("envWhitelist: [a]\n"); werr != nil {
+		return 0, errors.Join(werr, f.Close(), box.close())
+	}
+	if cerr := f.Close(); cerr != nil {
+		return 0, errors.Join(cerr, box.close())
+	}
+	code, _, stderr, err := runOracle(goBinary, box, row.Args)
+	if err != nil {
+		return 0, errors.Join(err, box.close())
+	}
+	if code != 0 {
+		return 0, errors.Join(fmt.Errorf("%s exited %d: %q", row.Command, code, stderr), box.close())
+	}
+	count := strings.Count(string(stderr), "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead\n")
+	return count, box.close()
 }
 
 func marshalJSON(value any) ([]byte, error) {

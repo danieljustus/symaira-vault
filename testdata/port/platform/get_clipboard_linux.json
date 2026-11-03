@@ -24,7 +24,7 @@
       "cmd/get_clipboard_fixture_generator_test.go",
       "cmd/test_helpers_test.go"
     ],
-    "generator_hash": "2d5cc4132d362a12a12e31bbadb6da99eb09ece162e3070b8c71f5ecd02dd636"
+    "generator_hash": "5b5a1046bc58ca22e76251cdf1e8314227cc3c25d5305f5749a9f662c8da5c97"
   },
   "note": "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) on GOOS=linux with the production clipboard.DefaultClipboard() (atotto/clipboard command backend, selected at process start from PATH and WAYLAND_DISPLAY) and fake POSIX-shell tools on a disposable PATH; only the terminal decision and the auto-clear timer are stubbed, as in get_clipboard.json. source_hash is the digest of source_files, identical in the working tree and in commit_sha (the generator fails otherwise); go_version names the pinned oracle toolchain, the capture itself may run on a newer Go inside a Linux container.",
   "script_placeholders": [

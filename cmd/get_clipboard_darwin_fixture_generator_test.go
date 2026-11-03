@@ -55,6 +55,11 @@ type darwinScenario struct {
 	// CopyFailOnCall limits a failing Copy behaviour to the nth pbcopy call
 	// (2 = the clear); 0 means every call.
 	CopyFailOnCall int `json:"copy_fail_on_call,omitempty"`
+	// ToolStderr is a message the failing fake tool writes to its own stderr
+	// just before it fails (ADR 0034 item 23: a real pbcopy explains itself on
+	// stderr). atotto v0.1.4 never connects the tool's stderr, so Go's error
+	// text must stay `exit status N` / `signal: ...` and never contain it.
+	ToolStderr string `json:"tool_stderr,omitempty"`
 }
 
 type darwinCall struct {
@@ -270,6 +275,11 @@ func getClipboardDarwinScenarios() []darwinScenario {
 	add(darwinScenario{Name: "paste_signal_kill", Paste: "signal:KILL"})
 	add(darwinScenario{Name: "paste_missing", Paste: "missing"})
 	add(darwinScenario{Name: "paste_missing_and_clear_exit_3", Copy: "exit:3", CopyFailOnCall: 2, Paste: "missing"})
+	// A real pbcopy/pbpaste says why it failed on stderr (ADR 0034 item 23).
+	add(darwinScenario{Name: "copy_exit_1_tool_stderr", Copy: "exit:1", ToolStderr: "pbcopy: unable to connect to the pasteboard server"})
+	add(darwinScenario{Name: "copy_signal_kill_tool_stderr", Copy: "signal:KILL", ToolStderr: "pbcopy: terminated by the window server"})
+	add(darwinScenario{Name: "clear_exit_3_tool_stderr", Copy: "exit:3", CopyFailOnCall: 2, ToolStderr: "pbcopy: pasteboard is locked"})
+	add(darwinScenario{Name: "paste_exit_1_tool_stderr", Paste: "exit:1", ToolStderr: "pbpaste: no pasteboard available"})
 	return out
 }
 
@@ -298,6 +308,9 @@ func renderPbcopy(s darwinScenario) string {
 	case "signal":
 		failure = "kill -s " + arg + " $$"
 	}
+	if failure != "" && s.ToolStderr != "" {
+		failure = "printf '%s\\n' '" + s.ToolStderr + "' >&2; " + failure
+	}
 	if failure != "" {
 		if s.CopyFailOnCall > 0 {
 			fmt.Fprintf(&b, "if [ \"$n\" = %d ]; then %s; fi\n", s.CopyFailOnCall, failure)
@@ -320,8 +333,14 @@ func renderPbpaste(s darwinScenario) string {
 	kind, arg, _ := strings.Cut(s.Paste, ":")
 	switch kind {
 	case "exit":
+		if s.ToolStderr != "" {
+			fmt.Fprintf(&b, "printf '%%s\\n' '%s' >&2\n", s.ToolStderr)
+		}
 		fmt.Fprintf(&b, "exit %s\n", arg)
 	case "signal":
+		if s.ToolStderr != "" {
+			fmt.Fprintf(&b, "printf '%%s\\n' '%s' >&2\n", s.ToolStderr)
+		}
 		fmt.Fprintf(&b, "kill -s %s $$\n", arg)
 	default:
 		b.WriteString("/bin/cat \"$REC/clip\" 2>/dev/null\n")

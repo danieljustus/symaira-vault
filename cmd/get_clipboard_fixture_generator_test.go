@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	crud "github.com/danieljustus/symaira-vault/cmd/crud"
 	"github.com/danieljustus/symaira-vault/internal/cli"
 	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
@@ -100,6 +101,9 @@ func TestGenerateGetClipboardFixture(t *testing.T) {
 	for _, s := range getClipboardConfigRejectedScenarios() {
 		out.ConfigRejected = append(out.ConfigRejected, runGetClipboardScenario(t, s))
 	}
+	for _, s := range getClipboardColourScenarios() {
+		out.ColourScenarios = append(out.ColourScenarios, runGetClipboardScenario(t, s))
+	}
 	out.VerifyCleared = recordVerifyCleared()
 	out.Countdown = recordCountdown()
 
@@ -149,6 +153,13 @@ type getClipboardFixture struct {
 	// read an empty stdin, so the fix is declined), so Go never copies and never
 	// reaches the negative-duration branch of the countdown.
 	ConfigRejected []getClipboardResult `json:"config_rejected"`
+	// ColourScenarios (PLATFORM-001 residual (3), ADR 0034 item 21) are `get`
+	// runs with `--color` forced and lipgloss pinned to a true-colour profile,
+	// so the two `cliout` lines (hint, warning) carry real ANSI escapes. Every
+	// other scenario in this file runs with NO_COLOR=1 and records plain text.
+	// The Rust port writes those lines without escapes (ratified); the replay
+	// strips the escapes from Go's bytes and compares the rest.
+	ColourScenarios []getClipboardResult `json:"colour_scenarios"`
 }
 
 // getClipboardScenario is the recorded input. ReadMode selects what the fake
@@ -177,6 +188,15 @@ type getClipboardScenario struct {
 	// SecretRepeat, when positive, repeats Secret that many times in the stored
 	// field (keeps large-payload scenarios small in the fixture).
 	SecretRepeat int `json:"secret_repeat,omitempty"`
+	// Color, when set, is the CLIContext colour mode (what an interactive
+	// stderr in `auto` mode resolves to) and lipgloss is pinned to its
+	// true-colour profile for the run: the host test process has no terminal,
+	// so lipgloss would otherwise strip every escape itself.
+	Color string `json:"color,omitempty"`
+	// ColorFlag is passed as `--color <value>` on argv. ExecuteRoot hands the
+	// colour mode to cliout before cobra parses argv (the same ordering that
+	// makes --quiet ineffective), so the flag alone changes nothing.
+	ColorFlag string `json:"color_flag,omitempty"`
 }
 
 type getClipboardResult struct {
@@ -194,6 +214,26 @@ func getClipboardConfigRejectedScenarios() []getClipboardScenario {
 		{Name: "negative_auto_clear_config", Secret: "s3cret-neg", AutoClear: -5, Terminal: true, TimerStubMillis: 150, ReadMode: "honest"},
 		{Name: "negative_auto_clear_config_one", Secret: "s3cret-neg", AutoClear: -1, Terminal: true, TimerStubMillis: 150, ReadMode: "honest"},
 		{Name: "negative_auto_clear_config_not_a_terminal", Secret: "s3cret-neg", AutoClear: -5, Terminal: false, ReadMode: "honest"},
+	}
+}
+
+// getClipboardColourScenarios force the colour decision of cliout
+// (`--color always`) on the clipboard lines of `get`: the hint
+// `[copied to clipboard]` (cliout.Hintf, green) and the warnings
+// (cliout.Warnf, yellow) for a clear that failed or left the secret behind.
+// `never` and the `--color always` argv flag are the controls: with the colour
+// decision off, or with only the flag (read after cliout decided), the same run
+// is plain although lipgloss has its colour profile.
+func getClipboardColourScenarios() []getClipboardScenario {
+	return []getClipboardScenario{
+		{Name: "colour_always_cleared", Secret: "s3cret-col1", AutoClear: 1, Terminal: true, TimerStubMillis: 150, ReadMode: "honest", Color: "always"},
+		{Name: "colour_always_auto_clear_disabled", Secret: "s3cret-col0", AutoClear: 0, Terminal: true, ReadMode: "honest", Color: "always"},
+		{Name: "colour_always_history_manager_restores_secret", Secret: "s3cret-colh", AutoClear: 1, Terminal: true, TimerStubMillis: 150, ReadMode: "restore_secret", Color: "always"},
+		{Name: "colour_always_clear_fails", Secret: "s3cret-colc", AutoClear: 1, Terminal: true, TimerStubMillis: 150, ClearError: "clear boom", ReadMode: "honest", Color: "always"},
+		{Name: "colour_always_verify_read_error", Secret: "s3cret-colr", AutoClear: 1, Terminal: true, TimerStubMillis: 150, ReadMode: "error", ReadError: "paste tool exploded", Color: "always"},
+		{Name: "colour_always_copy_fails", Secret: "s3cret-colf", AutoClear: 1, Terminal: true, CopyError: "no clipboard utilities", ReadMode: "honest", Color: "always"},
+		{Name: "colour_never_cleared", Secret: "s3cret-coln", AutoClear: 1, Terminal: true, TimerStubMillis: 150, ReadMode: "honest", Color: "never"},
+		{Name: "colour_flag_always_is_read_too_late", Secret: "s3cret-colg", AutoClear: 1, Terminal: true, TimerStubMillis: 150, ReadMode: "honest", Color: "auto", ColorFlag: "always"},
 	}
 }
 
@@ -410,6 +450,26 @@ func runGetClipboardScenarioWith(t *testing.T, s getClipboardScenario, realClipb
 	})
 
 	var args []string
+	if s.Color != "" {
+		// 0 is termenv.TrueColor; the module is only an indirect dependency, so
+		// the constant is not imported (the colour decision itself is cliout's).
+		previous := lipgloss.ColorProfile()
+		lipgloss.SetColorProfile(0)
+		// The theme colours are adaptive; a host terminal must not be queried.
+		previousDark := lipgloss.HasDarkBackground()
+		lipgloss.SetHasDarkBackground(true)
+		t.Cleanup(func() {
+			lipgloss.SetColorProfile(previous)
+			lipgloss.SetHasDarkBackground(previousDark)
+		})
+		ctx := cli.NewCLIContext()
+		ctx.ColorMode = s.Color
+		ctx.OsExit = cli.OsExit
+		cli.ActiveContext = ctx
+	}
+	if s.ColorFlag != "" {
+		args = append(args, "--color", s.ColorFlag)
+	}
 	if s.Quiet {
 		args = append(args, "--quiet")
 	}

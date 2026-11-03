@@ -49,6 +49,8 @@ struct Scenario {
     auto_clear_seconds: i64,
     copy: String,
     paste: String,
+    #[serde(default)]
+    tool_stderr: String,
     pbcopy_script: Option<String>,
     pbpaste_script: Option<String>,
     stdout: String,
@@ -158,13 +160,13 @@ fn fixture_is_go_darwin_derived() {
     for digest in [&fixture.source_hash, &fixture.generator_hash] {
         assert!(digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
     }
-    assert_eq!(fixture.scenarios.len(), 23);
+    assert_eq!(fixture.scenarios.len(), 27);
 }
 
 #[test]
 fn get_matches_go_pasteboard_error_text() {
     let fixture = fixture();
-    let (mut failed, mut warned, mut cleared, mut signals) = (0, 0, 0, 0);
+    let (mut failed, mut warned, mut cleared, mut signals, mut explained) = (0, 0, 0, 0, 0);
     for s in &fixture.scenarios {
         let sandbox = Sandbox::new(&s.name);
         let bin = sandbox.0.join("bin");
@@ -216,6 +218,25 @@ fn get_matches_go_pasteboard_error_text() {
         assert_eq!(s.stdout, "", "{} stdout", s.name);
         assert_eq!(read_calls(&rec), s.tool_calls, "{} tool calls", s.name);
         assert!(!stderr.contains(&s.secret), "{} leaked the secret", s.name);
+        // ADR 0034 item 23: a real pbcopy/pbpaste explains a failure on its own
+        // stderr. atotto v0.1.4 never connects it, so Go's recorded text is the
+        // bare `exit status N` / `signal: ...` and Rust must not surface the
+        // tool's message either (the ratified difference is only that Rust
+        // *could*; at this revision the texts are equal, which is pinned here).
+        if !s.tool_stderr.is_empty() {
+            explained += 1;
+            assert!(
+                !s.stderr.contains(&s.tool_stderr) && !stderr.contains(&s.tool_stderr),
+                "{} surfaced the tool's own stderr message",
+                s.name
+            );
+            let script = s.pbcopy_script.iter().chain(s.pbpaste_script.iter());
+            assert!(
+                script.into_iter().any(|text| text.contains(&s.tool_stderr)),
+                "{} fake tool never writes the recorded message",
+                s.name
+            );
+        }
         failed += usize::from(exit_code != 0);
         warned += usize::from(s.stderr.contains("Warning:"));
         cleared += usize::from(s.stderr.contains("[clipboard cleared]"));
@@ -223,13 +244,60 @@ fn get_matches_go_pasteboard_error_text() {
     }
     // A vacuous pass is impossible: every outcome class was replayed.
     assert_eq!(
-        failed, 14,
-        "copy failures: three exit codes, missing, eight signals, two closed stdin"
+        failed, 16,
+        "copy failures: three exit codes, missing, eight signals, two closed stdin, \
+         and two with the tool's own stderr message"
     );
-    assert_eq!(warned, 8, "clear failures and unreadable pasteboards");
-    assert_eq!(cleared, 3);
     assert_eq!(
-        signals, 11,
-        "eight copy signals, one clear signal, two paste signals"
+        warned, 10,
+        "clear failures and unreadable pasteboards (two more with a tool message)"
     );
+    assert_eq!(cleared, 4);
+    assert_eq!(
+        signals, 12,
+        "eight copy signals, one clear signal, two paste signals, one killed copy with a message"
+    );
+    assert_eq!(
+        explained, 4,
+        "copy exit, copy signal, clear exit and paste exit, each with a stderr message"
+    );
+}
+
+/// ADR 0034 item 23, second half: atotto v0.1.4 leaves the tool's stderr
+/// unconnected (`/dev/null`), so a message a real `pbcopy` writes there is
+/// never seen by anyone. The replay above compares only the error *text*; this
+/// re-runs it in a child process with stderr piped and requires that none of
+/// the recorded tool messages reaches the process's own stderr (an inherited
+/// child stderr would print them there without changing the text).
+#[test]
+fn tool_messages_never_reach_the_process_stderr() {
+    let fixture = fixture();
+    let messages: Vec<&str> = fixture
+        .scenarios
+        .iter()
+        .filter(|s| !s.tool_stderr.is_empty())
+        .map(|s| s.tool_stderr.as_str())
+        .collect();
+    assert_eq!(messages.len(), 4, "the recorded tool messages");
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "get_matches_go_pasteboard_error_text",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .output()
+        .expect("re-run the replay in a child process");
+    assert!(
+        output.status.success(),
+        "child replay failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for message in messages {
+        assert!(
+            !stderr.contains(message),
+            "the tool's stderr reached the process stderr: {message}"
+        );
+    }
 }
