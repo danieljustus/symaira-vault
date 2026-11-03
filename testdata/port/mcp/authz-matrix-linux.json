@@ -11,7 +11,7 @@
     "seed": "scripts/rust-port/mcp_process_seed.go.txt",
     "seed_sha256": "d2b0eb2ab8bb3b676525efe328121adc744d5f51ca14fecdbf8b748f0523fea3",
     "generator": "scripts/rust-port/mcp_authz_matrix.py",
-    "generator_sha256": "4b6ef7d97574b3bb3c6b68fa0e283485aff0d6592094a6586ae113fb799f02a2",
+    "generator_sha256": "20778cce6c2124cc30ddfcc30e4457745ff76186a6bb1e34354d0fa5f1e6b253",
     "compiler": {
       "version": "go1.26.6",
       "goos": "linux"

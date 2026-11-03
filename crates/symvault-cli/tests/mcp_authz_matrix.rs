@@ -58,6 +58,38 @@ fn expected_declared(goos: &str) -> BTreeMap<&'static str, usize> {
     }
 }
 
+/// Inverse of the only rewrites the MCP output sanitizer applies to a generated
+/// password (`</name...>` -> `</ name... >`, `-->` -> `-- >`); counterpart of the
+/// recorder's `undo_mcp_sanitizer`. The password alphabet has no space, so every
+/// space comes from the sanitizer and the original length is exact; any other
+/// space or character stays in the measured text. Without it about 1 password in
+/// 8,700 is longer than 16 and the masked length flakes against the frozen one.
+fn undo_mcp_sanitizer(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while !rest.is_empty() {
+        if let Some(after) = rest.strip_prefix("</ ") {
+            let inner_len = after.find([' ', '>']).unwrap_or(after.len());
+            if inner_len > 0 && after[inner_len..].starts_with(" >") {
+                out.push_str("</");
+                out.push_str(&after[..inner_len]);
+                out.push('>');
+                rest = &after[inner_len + 2..];
+                continue;
+            }
+        }
+        if let Some(after) = rest.strip_prefix("-- >") {
+            out.push_str("-->");
+            rest = after;
+            continue;
+        }
+        let ch = rest.chars().next().unwrap();
+        out.push(ch);
+        rest = &rest[ch.len_utf8()..];
+    }
+    out
+}
+
 /// Rust-side counterpart of the recorder's `normalize`/`mask`: only the
 /// disposable HOME prefix, nested JSON text (compared as JSON), the host Touch
 /// ID capability and the two documented random/audit-trail results are
@@ -100,7 +132,7 @@ fn normalize(value: &Value, home: &str, tool: &str) -> Value {
         let replacement = match tool {
             "generate_password" => Some(json!({
                 "masked": "random_password",
-                "length": text.as_str().unwrap_or_default().chars().count()
+                "length": undo_mcp_sanitizer(text.as_str().unwrap_or_default()).chars().count()
             })),
             "symaira_audit_self" => Some(json!({
                 "masked": "audit_rows",
@@ -431,4 +463,64 @@ fn authorization_matrix_fixtures_differ_only_in_oracle_platform() {
     };
     assert_eq!(strip(&darwin), strip(&linux));
     assert_ne!(darwin["oracle"], linux["oracle"]);
+}
+
+/// Regression for the recorder flake: the sanitizer rewrites `-->` and `</x...>`
+/// inside a generated password, which made the masked length 17+ for about 1 in
+/// 8,700 passwords. The mask must report the original length, while a genuinely
+/// wrong length or a foreign space stays visible.
+#[test]
+fn authorization_matrix_password_mask_ignores_sanitizer_rewrites() {
+    let masked_length = |text: &str| {
+        let response = json!({"jsonrpc": "2.0", "id": 134, "result": {
+            "content": [{"type": "text", "text": text}], "isError": false}});
+        normalize(&response, "/tmp/home", "generate_password")
+            .pointer("/result/content/0/text/length")
+            .cloned()
+            .unwrap()
+    };
+    // Recorded from the pinned Go oracle: (original, sanitizeMCPText(original)).
+    for (original, sanitized) in [
+        ("Ab3-->kLmN9pQrSt", "Ab3-- >kLmN9pQrSt"),
+        ("x</ab>Zk3mNpQrStU", "x</ ab >Zk3mNpQrStU"),
+        ("q</_x2345678923>9", "q</ _x2345678923 >9"),
+        ("plainPassw0rd234", "plainPassw0rd234"),
+    ] {
+        assert_eq!(
+            symvault_mcp::render::sanitize_for_mcp(original),
+            sanitized,
+            "Rust sanitizer matches the Go recording"
+        );
+        assert_eq!(masked_length(sanitized), json!(original.chars().count()));
+        assert_eq!(undo_mcp_sanitizer(sanitized), original);
+    }
+    // Property: every sanitized password maps back to its original, including
+    // hostile mixes of `-`, `<`, `/`, `>` and name characters.
+    let mut state = 0x5eed_u64;
+    let mut next = move || {
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        (state >> 33) as usize
+    };
+    let hostile: Vec<char> = "-->-->-<</>>/abz_".chars().collect();
+    let password: Vec<char> = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%^&*()-_=+[]{}|;:,.<>?/~"
+        .chars()
+        .collect();
+    let mut rewritten = 0;
+    for trial in 0..20_000 {
+        let alphabet = if trial % 2 == 1 { &hostile } else { &password };
+        let length = [1, 8, 16, 17, 40][next() % 5];
+        let original: String = (0..length).map(|_| alphabet[next() % alphabet.len()]).collect();
+        let sanitized = symvault_mcp::render::sanitize_for_mcp(&original);
+        rewritten += usize::from(sanitized != original);
+        assert_eq!(undo_mcp_sanitizer(&sanitized), original);
+        assert_eq!(masked_length(&sanitized), json!(length));
+    }
+    assert!(rewritten > 1000, "the property must exercise rewrites");
+    // Negative controls: not a loosened comparison.
+    assert_eq!(masked_length("abcdefghjkmnpqrs"), json!(16));
+    assert_eq!(masked_length("abcdefghjkmnpqrst"), json!(17));
+    assert_eq!(masked_length("abcdefghjkmnpqrs "), json!(17));
+    assert_eq!(masked_length("abcdefghjk-- mnpq"), json!(17));
 }
