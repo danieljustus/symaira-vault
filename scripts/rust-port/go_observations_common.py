@@ -98,6 +98,14 @@ def save(contract, observations, *, oracle_commit, version, args, goos=None, mat
     return target
 
 
+def existing_material(contract, goos=None):
+    """The committed material of this contract, or None (capture mints it then)."""
+    try:
+        return json.loads(path(contract, goos).read_bytes()).get("material")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def load(contract, *, oracle_commit=None, goos=None):
     """Return the committed document for this host; missing or foreign means failure."""
     goos = goos or host_goos()
@@ -185,6 +193,33 @@ def mint_tls_identities(root, scratch):
         os.chmod(key, 0o600)
         os.chmod(certificate, 0o600)
     return sorted(p.name for p in root.iterdir())
+
+
+def mint_api_chain(root, scratch):
+    """ca.pem / leaf.pem / leaf-key.pem of the API transport contract (what the Go
+    probe's `cert` mode wrote): a CA and a P-256 leaf valid for dns-api.example.test."""
+    root, scratch = Path(root), Path(scratch)
+    scratch.mkdir(parents=True, exist_ok=True)
+    ca_ext, leaf_ext = scratch / "ca.cnf", scratch / "leaf.cnf"
+    header = "[req]\ndistinguished_name=dn\nprompt=no\n[dn]\nCN=x\n[v3]\n"
+    ca_ext.write_text(header + "basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n")
+    leaf_ext.write_text(header + "basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\n"
+                        "subjectAltName=DNS:dns-api.example.test\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n")
+
+    def run(*command):
+        done = subprocess.run([str(x) for x in command], capture_output=True)
+        assert done.returncode == 0, (command[:3], done.stderr.decode(errors="replace")[-1500:])
+
+    key_options = ["-algorithm", "EC", "-pkeyopt", "ec_paramgen_curve:P-256", "-pkeyopt", "ec_param_enc:named_curve"]
+    run("openssl", "genpkey", *key_options, "-out", scratch / "ca.key")
+    run("openssl", "genpkey", *key_options, "-out", root / "leaf-key.pem")
+    run("openssl", "req", "-x509", "-new", "-sha256", "-key", scratch / "ca.key", "-subj", "/CN=public native API fixture CA",
+        "-days", "1", "-config", ca_ext, "-extensions", "v3", "-out", root / "ca.pem")
+    run("openssl", "req", "-new", "-key", root / "leaf-key.pem", "-subj", "/CN=dns-api.example.test", "-out", scratch / "leaf.csr")
+    run("openssl", "x509", "-req", "-sha256", "-in", scratch / "leaf.csr", "-CA", root / "ca.pem", "-CAkey", scratch / "ca.key",
+        "-set_serial", 2, "-days", "1", "-extfile", leaf_ext, "-extensions", "v3", "-out", root / "leaf.pem")
+    for name in ("ca.pem", "leaf.pem", "leaf-key.pem"):
+        os.chmod(root / name, 0o600)
 
 
 def first_difference(left, right, where="$"):

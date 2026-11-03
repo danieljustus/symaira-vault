@@ -1413,7 +1413,7 @@ api-transport-contract:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_api_transport_contract.py -v
 	$(CARGO) build -p symvault-mcp --example api_transport_probe --locked
 	mkdir -p "$(AREA_BIN)" && cp -f "$(AREA_PROBES)/api_transport_probe" "$(AREA_BIN)/"
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/api_transport_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/api_transport_contract.py \
 		--rust-probe "$(AREA_BIN)/api_transport_probe" \
 		--receipt "$(AREA_EVIDENCE)/native-api-transport.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-api-transport.json" --profile api-transport
@@ -2264,6 +2264,7 @@ reencrypt-journal-differential:
 .PHONY: go-observations-capture-other go-observations-selftest
 GO_OBS_CAPTURE := $(AREA_ENV) $(AREA_GO) $(AREA_PYTHON)
 go-observations-capture-other:
+	$(GO_OBS_CAPTURE) scripts/rust-port/api_transport_contract.py --capture-go
 	$(GO_OBS_CAPTURE) scripts/rust-port/connect_contract.py --capture-go
 	$(GO_OBS_CAPTURE) scripts/rust-port/egress_contract.py --capture-go
 
