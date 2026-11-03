@@ -183,6 +183,9 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
   10000 and 10001 levels (about 10 s at 10000 on this machine), so the 256 limit is
   specific to `config get`/`config set`. At 10001 Go refuses and `validate` accepts: a
   further difference that this ratification does not cover and that is not recorded.
+- Update (local/nest, maintainer default of ADR 0035: Go parity): the loader now enforces Go's two
+  limits of 10000 (`go_yaml_depth`) and is pinned by 26 Go-recorded `nest_*` cases; only `config get` /
+  `config set` between 257 and 10000 flow levels remain refused by `yaml_edit` (two open divergences).
 
 **7. `profiles: {x: null}`.**
 - Rows: CLI-005. Also recorded as Go bug 7 in `upstream-go-bugs.md`.

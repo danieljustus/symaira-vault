@@ -71,10 +71,21 @@ pub fn syntax_error_text(error: &serde_yaml_ng::Error) -> Option<String> {
 /// later document of the stream is not an error of this call.
 #[must_use]
 pub fn first_document_syntax_error(bytes: &[u8]) -> Option<String> {
+    // yaml.v3's scanner refuses more than 10000 open flow collections or
+    // nested block collections; libyaml, and so `serde_yaml_ng`, has no such
+    // limit. Whichever failure comes first in the stream is the one Go reports.
+    let depth = crate::go_yaml_depth::first_violation(bytes);
     let mut documents = serde_yaml_ng::Deserializer::from_slice(bytes);
-    let first = documents.next()?;
-    let error = IgnoredAny::deserialize(first).err()?;
-    syntax_error_text(&error).or_else(|| unknown_anchor_text(&error, bytes))
+    let found = documents.next().and_then(|first| {
+        let error = IgnoredAny::deserialize(first).err()?;
+        let text = syntax_error_text(&error).or_else(|| unknown_anchor_text(&error, bytes))?;
+        Some((error.location().map(|mark| mark.index()), text))
+    });
+    match (depth, found) {
+        (Some(violation), Some((Some(index), text))) if index < violation.offset => Some(text),
+        (Some(violation), _) => Some(violation.message()),
+        (None, found) => found.map(|(_, text)| text),
+    }
 }
 
 /// Whether Go's `Decoder.Decode(&yaml.Node{})` accepts `document`, a document

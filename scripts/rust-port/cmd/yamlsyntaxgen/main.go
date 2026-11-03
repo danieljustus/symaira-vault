@@ -271,7 +271,8 @@ func inputs() []input {
 	all = append(all, decodeInputs()...)
 	all = append(all, loadInputs()...)
 	all = append(all, sectionInputs()...)
-	return append(all, residInputs()...)
+	all = append(all, residInputs()...)
+	return append(all, nestingInputs()...)
 }
 
 // decodeInputs are documents that parse but that yaml.v3 cannot decode into the
@@ -419,6 +420,63 @@ func residInputs() []input {
 		{"resid_warn_then_loader_rejection", "loader", "Go prints the warning and then rejects the document", lines("envWhitelist: [a]", "mcp:", "  bind: ''")},
 		{"resid_warn_then_validation_error", "loader", "Go prints the warning, then validate reports the audit error", lines("envWhitelist: [a]", "audit:", "  maxSizeMb: 0")},
 		{"resid_warn_not_when_decode_fails", "loader", "a document that does not decode warns about nothing", lines("envWhitelist: [a]", "mcp:", "  port: abc")},
+	}
+}
+
+func nestingFlowSequence(n int) []byte {
+	return bytes.Join([][]byte{[]byte("a: "), []byte(strings.Repeat("[", n)), []byte(strings.Repeat("]", n)), []byte("\n")}, nil)
+}
+
+// nestingEditReason explains the get/set gap of the nesting open divergences.
+const nestingEditReason = "config get and config set parse the document with yaml_edit 0.3.3, whose parser refuses collections nested deeper than MAX_FLOW_DEPTH = 256 ('Collection nested too deeply (limit 256)'); " +
+	"Go reads and rewrites them (re-encoding the flow sequence wrapped at its emitter width). The loader itself (validate, doctor, every Config::load caller) accepts these documents like Go. " +
+	"Closing this needs a node editor without that bound or a port of yaml.v3's emitter wrapping."
+
+// nestingInputs freeze the two limits of yaml.v3's scanner (scannerc.go):
+// `max_flow_level` bounds the open flow collections and `max_indents` the
+// block indentation stack, each at 10000 and counted separately, and both fail
+// with the scanner problem `exceeded max depth of 10000`. libyaml has no such
+// limit, so the native CLI needs its own check (ADR 0034 item 6, ADR 0035).
+//
+// Every rejected case sits one level beyond the limit and its accepted twin
+// exactly on it. The accepted flow documents are class "accepted"; the block
+// ones are not mappings, so Go accepts the scan and rejects the document in
+// its typed decode (class "loader"), which is how the boundary shows up.
+func nestingInputs() []input {
+	rep := func(unit string, n int) []byte { return []byte(strings.Repeat(unit, n)) }
+	cat := func(parts ...[]byte) []byte { return bytes.Join(parts, nil) }
+	flowSeq := nestingFlowSequence
+	flowMap := func(n int) []byte { return cat([]byte("a: "), rep("{k: ", n), []byte("1"), rep("}", n), []byte("\n")) }
+	blockSeq := func(n int) []byte { return cat(rep("- ", n), []byte("x\n")) }
+	explicitKey := func(n int) []byte { return cat(rep("? ", n), []byte("x\n")) }
+	seqThenMapping := func(dashes int) []byte { return cat(rep("- ", dashes), []byte("k: x\n")) }
+	return []input{
+		{"nest_flow_sequence_257", "accepted", "257 nested flow sequences: past yaml_edit's limit of 256, well inside Go's 10000", flowSeq(257)},
+		{"nest_flow_sequence_10000", "accepted", "exactly max_flow_level (10000) nested flow sequences", flowSeq(10000)},
+		{"nest_flow_sequence_10001", "scanner", "one flow sequence past max_flow_level: `exceeded max depth of 10000`, no line on the first line", flowSeq(10001)},
+		{"nest_flow_sequence_20000", "scanner", "twice max_flow_level", flowSeq(20000)},
+		{"nest_flow_mapping_10001", "scanner", "one flow mapping past max_flow_level", flowMap(10001)},
+		{"nest_flow_sequence_10001_on_line_three", "scanner", "the failing bracket on the third line: the message carries `line 3`", cat([]byte("a: 1\nb: 2\nc: "), rep("[", 10001), rep("]", 10001), []byte("\n"))},
+		{"nest_flow_sequence_10001_unterminated", "scanner", "the depth failure comes before the end-of-input failure of a sequence that is never closed", cat([]byte("a: "), rep("[", 10001), []byte("\n"))},
+		{"nest_flow_sequence_after_document_start", "scanner", "an explicit `---` line before the deep flow sequence: `line 2`", cat([]byte("---\na: "), rep("[", 10001), rep("]", 10001), []byte("\n"))},
+		{"nest_error_before_depth", "scanner", "a mapping-value error on line 2 is reached before the 10001st bracket and wins", cat([]byte("a: 1\nb: c: d\nx: "), rep("[", 10001), rep("]", 10001), []byte("\n"))},
+		{"nest_depth_before_error", "scanner", "the 10001st bracket is reached before the mapping-value error on the next line", cat([]byte("x: "), rep("[", 10001), rep("]", 10001), []byte("\nb: c: d\n"))},
+		{"nest_block_sequence_10000", "loader", "exactly max_indents (10000) compact block sequence entries: the scan passes, the typed decode rejects the root sequence", blockSeq(10000)},
+		{"nest_block_sequence_10001", "scanner", "one block sequence entry past max_indents", blockSeq(10001)},
+		{"nest_block_explicit_key_10000", "loader", "exactly 10000 compact explicit keys", explicitKey(10000)},
+		{"nest_block_explicit_key_10001", "scanner", "one explicit key past max_indents", explicitKey(10001)},
+		{"nest_block_mapping_after_9999_dashes", "loader", "9999 sequence entries and a block mapping: 10000 indentation levels", seqThenMapping(9999)},
+		{"nest_block_mapping_after_10000_dashes", "scanner", "10000 sequence entries and a block mapping: the mapping is the 10001st level", seqThenMapping(10000)},
+		{"nest_counters_are_independent", "loader", "9999 block levels plus 10000 flow levels: each counter stays within its own limit", cat(rep("- ", 9999), rep("[", 10000), rep("]", 10000), []byte("\n"))},
+		{"nest_block_over_with_flow_inside", "scanner", "10001 block levels, so the flow sequence after them is never reached", cat(rep("- ", 10001), []byte("[]\n"))},
+		{"nest_brackets_in_double_quotes", "accepted", "10001 brackets inside a double-quoted scalar are text", cat([]byte("a: \""), rep("[", 10001), []byte("\"\n"))},
+		{"nest_brackets_in_single_quotes", "accepted", "10001 brackets inside a single-quoted scalar are text", cat([]byte("a: '"), rep("{", 10001), []byte("'\n"))},
+		{"nest_brackets_in_comment", "accepted", "10001 brackets in a comment are text", cat([]byte("a: 1 # "), rep("[", 10001), []byte("\n"))},
+		{"nest_brackets_in_block_scalar", "accepted", "10001 brackets in a literal block scalar are text", cat([]byte("a: |\n  "), rep("[", 10001), []byte("\n"))},
+		{"nest_brackets_in_plain_scalar", "accepted", "a plain scalar that does not start with a bracket may contain them", cat([]byte("a: x"), rep("[", 10001), []byte("\n"))},
+		{"nest_second_document_too_deep", "accepted", "a trailing document that fails to scan is not counted, so the stream is one document", cat([]byte("a: 1\n---\nx: "), rep("[", 10001), rep("]", 10001), []byte("\n"))},
+		{"nest_second_document_at_limit", "loader", "a trailing document that scans (10000 levels) is a second document and is rejected as such", cat([]byte("a: 1\n---\nx: "), rep("[", 10000), rep("]", 10000), []byte("\n"))},
+		{"nest_many_sequence_entries", "accepted", "10001 flat sequence entries under a key are not nesting", cat([]byte("a:\n"), rep("  - [x]\n", 10001))},
 	}
 }
 
@@ -664,6 +722,14 @@ func openInputs() []openEntry {
 		// ADR 0034 item 9: the loader warning is printed once per config load.
 		{input{"completion_loader_warnings", "accepted", "the deprecated envWhitelist key in the global config, read by shell completion", []byte("envWhitelist: [FOO]\n")},
 			kindWording, []string{"complete_get", "completion_bash"}, "Go loads the global config at startup for __complete and for completion <shell> (the root's vault-path resolution), so the deprecation warning is printed twice for __complete get '' and once for completion bash; the native completion path loads only what the completer needs: once and not at all. Exit status and stdout are equal (completion bash is compared by its sha256)"},
+		// Nesting between yaml_edit's limit and Go's (ADR 0034 item 6): the loader
+		// accepts these documents like Go (nest_flow_sequence_257 and _10000 in
+		// the corpus); `config get` and `config set` read and rewrite the node
+		// tree with yaml_edit, which refuses collections nested deeper than 256.
+		{input{"nest_get_set_flow_sequence_257", "accepted", "257 nested flow sequences: Go reads and rewrites them, yaml_edit refuses beyond 256", nestingFlowSequence(257)},
+			kindBehavior, []string{"get", "set"}, nestingEditReason},
+		{input{"nest_get_set_flow_sequence_10000", "accepted", "10000 nested flow sequences: Go reads and rewrites them (up to max_flow_level), yaml_edit refuses beyond 256", nestingFlowSequence(10000)},
+			kindBehavior, []string{"get", "set"}, nestingEditReason},
 	}
 }
 

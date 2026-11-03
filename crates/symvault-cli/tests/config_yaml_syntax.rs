@@ -112,10 +112,10 @@ struct Fixture {
 }
 
 /// Cases whose Go output the native CLI must reproduce byte for byte.
-const MATCHING_CASES: usize = 250;
+const MATCHING_CASES: usize = 276;
 /// Comparisons the replay executes: every recorded config observation, one
 /// `doctor` run per case and the `agent list` runs.
-const REPLAYED_COMPARISONS: usize = 960;
+const REPLAYED_COMPARISONS: usize = 1062;
 /// The `load_*` cases (CONFIG-LOAD-001): what the loader and validator accept
 /// or reject once the bytes parse as YAML.
 const LOAD_CASES: usize = 90;
@@ -123,7 +123,9 @@ const LOAD_CASES: usize = 90;
 /// each kind of scalar and how the section merge treats it.
 const SECTION_CASES: usize = 58;
 /// Inputs on which the native CLI is known to differ from Go.
-const OPEN_DIVERGENCES: usize = 33;
+const OPEN_DIVERGENCES: usize = 35;
+/// The `nest_*` cases (ADR 0034 item 6): yaml.v3's two scanner limits of 10000.
+const NEST_CASES: usize = 26;
 
 fn fixture() -> Fixture {
     const CONTENT: &[u8] = include_bytes!("../../../testdata/port/cli/config-yaml-syntax.json");
@@ -1882,4 +1884,180 @@ fn warning_count_pin_tells_a_match_from_a_gap() {
     assert_eq!(gap(3, 3, 4), "match");
     assert_eq!(gap(5, 3, 4), "more");
     assert_eq!(gap(1, 1, 1), "match");
+}
+
+/// ADR 0034 item 6 / ADR 0035: yaml.v3's scanner stops at 10000 open flow
+/// collections and at 10000 nested block collections (two separate counters),
+/// with the scanner problem `exceeded max depth of 10000`. The native loader
+/// used to read 10001 levels in full. The replay above compares every
+/// `nest_*` command byte for byte; this test pins what that comparison has to
+/// show, so a corpus that quietly lost its boundary pairs cannot pass.
+#[test]
+fn nesting_limit_boundaries_are_pinned_to_go() {
+    let fixture = fixture();
+    let nest: Vec<&Case> = fixture
+        .cases
+        .iter()
+        .filter(|case| case.name.starts_with("nest_"))
+        .collect();
+    assert_eq!(nest.len(), NEST_CASES);
+    let case = |name: &str| -> &Case {
+        nest.iter()
+            .copied()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("{name} is not part of the corpus"))
+    };
+    let validate = |name: &str| -> &Observation {
+        case(name)
+            .observations
+            .iter()
+            .find(|observation| observation.command == "validate")
+            .unwrap_or_else(|| panic!("{name} records no validate run"))
+    };
+    const LIMIT: &str = "exceeded max depth of 10000";
+
+    // Exactly on the limit: the scan passes (flow documents validate; the block
+    // ones are rejected by the typed decode, not by the scanner).
+    for name in ["nest_flow_sequence_257", "nest_flow_sequence_10000"] {
+        assert_eq!(validate(name).exit_code, 0, "{name}");
+    }
+    for name in [
+        "nest_block_sequence_10000",
+        "nest_block_explicit_key_10000",
+        "nest_block_mapping_after_9999_dashes",
+        "nest_counters_are_independent",
+    ] {
+        let observation = validate(name);
+        assert_eq!(observation.exit_code, 6, "{name}");
+        assert!(!observation.stderr.contains(LIMIT), "{name}");
+        assert!(observation.stderr.contains("unmarshal"), "{name}");
+    }
+    // One past it: the scanner problem, with the line only past the first.
+    for (name, line) in [
+        ("nest_flow_sequence_10001", None),
+        ("nest_flow_sequence_20000", None),
+        ("nest_flow_mapping_10001", None),
+        ("nest_flow_sequence_10001_unterminated", None),
+        ("nest_depth_before_error", None),
+        ("nest_block_sequence_10001", None),
+        ("nest_block_explicit_key_10001", None),
+        ("nest_block_mapping_after_10000_dashes", None),
+        ("nest_block_over_with_flow_inside", None),
+        ("nest_flow_sequence_10001_on_line_three", Some(3)),
+        ("nest_flow_sequence_after_document_start", Some(2)),
+    ] {
+        let observation = validate(name);
+        assert_eq!(observation.exit_code, 6, "{name}");
+        let wording = match line {
+            None => format!("yaml: {LIMIT}"),
+            Some(line) => format!("yaml: line {line}: {LIMIT}"),
+        };
+        assert!(
+            observation.stderr.contains(&wording),
+            "{name}: {:?}",
+            observation.stderr
+        );
+        // Go's own `get` and `set` stop at the same scanner failure.
+        for command in ["get", "set"] {
+            let run = case(name)
+                .observations
+                .iter()
+                .find(|observation| observation.command == command)
+                .unwrap_or_else(|| panic!("{name} records no {command} run"));
+            assert_eq!(run.exit_code, 6, "{name} {command}");
+            assert!(run.stderr.contains(&wording), "{name} {command}");
+        }
+    }
+    // The failure that comes first in the stream wins.
+    assert!(
+        validate("nest_error_before_depth")
+            .stderr
+            .contains("line 2: mapping values are not allowed")
+    );
+    // Brackets that are text, flat documents and a trailing document that fails
+    // to scan are not nesting.
+    for name in [
+        "nest_brackets_in_double_quotes",
+        "nest_brackets_in_single_quotes",
+        "nest_brackets_in_comment",
+        "nest_brackets_in_block_scalar",
+        "nest_brackets_in_plain_scalar",
+        "nest_many_sequence_entries",
+        "nest_second_document_too_deep",
+    ] {
+        assert_eq!(validate(name).exit_code, 0, "{name}");
+    }
+    assert!(
+        validate("nest_second_document_at_limit")
+            .stderr
+            .contains("more than one YAML document")
+    );
+
+    // The native CLI reproduces the refusals (the full replay above runs every
+    // recorded command of every `nest_*` case, the 10000-level acceptances
+    // included; they take seconds each in a debug build, so only the cheap
+    // rejections are repeated here).
+    for name in [
+        "nest_flow_sequence_10001",
+        "nest_flow_sequence_10001_on_line_three",
+        "nest_block_sequence_10001",
+        "nest_error_before_depth",
+    ] {
+        let case = case(name);
+        let bytes = decode_hex(&case.config_hex);
+        for observation in &case.observations {
+            assert!(
+                run_config_observation(&bytes, observation).is_none(),
+                "{} {}",
+                case.name,
+                observation.command
+            );
+        }
+    }
+}
+
+/// The 257..10000 flow range is open only for `config get` and `config set`:
+/// both read the node tree with yaml_edit (256 levels), while the loader
+/// accepts those documents. The divergence is recorded with Go's bytes.
+#[test]
+fn nesting_between_256_and_10000_is_open_only_for_get_and_set() {
+    let fixture = fixture();
+    let names: Vec<&str> = fixture
+        .open_divergences
+        .iter()
+        .map(|divergence| divergence.name.as_str())
+        .filter(|name| name.starts_with("nest_"))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "nest_get_set_flow_sequence_257",
+            "nest_get_set_flow_sequence_10000"
+        ]
+    );
+    for divergence in fixture
+        .open_divergences
+        .iter()
+        .filter(|divergence| divergence.name.starts_with("nest_"))
+    {
+        assert_eq!(divergence.kind, "behavior");
+        let commands: Vec<&str> = divergence
+            .observations
+            .iter()
+            .map(|observation| observation.command.as_str())
+            .collect();
+        assert_eq!(commands, ["get", "set"]);
+        let set = &divergence.observations[1];
+        assert_eq!(set.exit_code, 0, "Go rewrites the nested document");
+        assert_eq!(set.config_unchanged, Some(false));
+        let bytes = decode_hex(&divergence.config_hex);
+        let difference = open_divergence_differences(divergence, &fixture.doctor_ids);
+        assert!(
+            difference.iter().any(|(command, _)| command == "set"),
+            "{}: set now matches Go; promote the case",
+            divergence.name
+        );
+        // The loader side of the same document is part of the matching corpus.
+        assert!(bytes.starts_with(b"a: ["));
+    }
 }
