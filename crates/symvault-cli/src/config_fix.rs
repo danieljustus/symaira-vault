@@ -119,6 +119,37 @@ pub(crate) fn fix(
     }
 }
 
+/// Go's `resolveConfig` (`internal/cli/unlock.go`), the first step of every vault open:
+/// load `config.yaml`, validate it, and refuse a configuration that fails either. A
+/// non-interactive open (`get` once stdin is not a terminal, `mcp serve --stdio`) returns
+/// the load error, else the validation errors joined by newlines. An interactive open
+/// offers the repair flow of `InteractiveFixConfig` and re-enters the loop after an
+/// editor session. The caller treats a missing file as the default configuration.
+pub(crate) fn resolve(path: &Path, interactive: bool) -> Result<(), String> {
+    loop {
+        let (loaded, load_error) = match load(path) {
+            Ok(loaded) => (Some(loaded), None),
+            Err(error) => (None, Some(error)),
+        };
+        let errors = loaded.as_ref().map(validate).unwrap_or_default();
+        if load_error.is_none() && errors.is_empty() {
+            return Ok(());
+        }
+        if !interactive {
+            return Err(load_error.unwrap_or_else(|| errors.join("\n")));
+        }
+        let Some(mut loaded) = loaded else {
+            report_errors(path, load_error.as_deref(), None);
+            run_editor_fix(path)?;
+            continue;
+        };
+        match interactive_fix(path, &mut loaded, &errors.join("\n"))? {
+            Fixed::Repaired(_) => return Ok(()),
+            Fixed::Edited => {}
+        }
+    }
+}
+
 enum Fixed {
     /// Auto-fixes were saved and the file now validates.
     Repaired(Box<Loaded>),
@@ -712,5 +743,50 @@ mod tests {
     fn look_path_rejects_directories_and_missing_names() {
         assert!(look_path("/definitely/not/a/real/editor").is_none());
         assert!(look_path("/tmp").is_none());
+    }
+
+    fn config_file(text: &str) -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.yaml");
+        fs::write(&path, text).expect("write config");
+        (dir, path)
+    }
+
+    /// PLATFORM-001: Go's `resolveConfig` refuses a negative `clipboard.auto_clear_duration`
+    /// when it opens the vault. A non-interactive open returns the validation text unchanged.
+    #[test]
+    fn a_negative_auto_clear_duration_fails_a_non_interactive_open() {
+        let (_dir, path) = config_file("clipboard:\n  auto_clear_duration: -5\n");
+        assert_eq!(
+            resolve(&path, false),
+            Err(
+                "clipboard.autoClearDuration: must be non-negative (configure \
+                 clipboard.autoClearDuration in config.yaml)"
+                    .to_owned()
+            )
+        );
+        // The boundary and the default are accepted.
+        for text in [
+            "clipboard:\n  auto_clear_duration: 0\n",
+            "clipboard:\n  auto_clear_duration: 30\n",
+            "vaultDir: x\n",
+        ] {
+            let (_dir, path) = config_file(text);
+            assert_eq!(resolve(&path, false), Ok(()), "{text}");
+        }
+    }
+
+    /// A file that does not load fails the open with the load error, and every validation
+    /// error is reported (joined by newlines) before the open continues.
+    #[test]
+    fn a_config_that_does_not_load_fails_a_non_interactive_open() {
+        let (_dir, path) = config_file("clipboard: [\n");
+        let error = resolve(&path, false).expect_err("syntax error");
+        assert!(error.starts_with("yaml: "), "{error}");
+        let (_dir, path) =
+            config_file("clipboard:\n  auto_clear_duration: -1\naudit:\n  maxSizeMb: -1\n");
+        let error = resolve(&path, false).expect_err("two validation errors");
+        assert_eq!(error.lines().count(), 2, "{error}");
+        assert!(error.starts_with("audit.maxFileSize"), "{error}");
     }
 }

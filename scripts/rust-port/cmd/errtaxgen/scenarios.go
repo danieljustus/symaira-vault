@@ -114,6 +114,7 @@ type extraSections struct {
 	runFileUse       []scenarioCase
 	unlockStates     []scenarioCase
 	typedFlags       []scenarioCase
+	bareDash         []scenarioCase
 }
 
 // Seams for tests of main; production always uses the defaults.
@@ -656,8 +657,12 @@ func buildExtraSections(goBinary, output string, newSeed bool) (extraSections, e
 	if err != nil {
 		return extraSections{}, err
 	}
+	dash, err := recordScenarios(goBinary, seed, bareDashInputs())
+	if err != nil {
+		return extraSections{}, err
+	}
 	sort.SliceStable(inventory, func(i, j int) bool { return inventory[i].Path < inventory[j].Path })
-	return extraSections{nilArgs: inventory, seed: seed, extraPositionals: extra, exclusions: scenarioExclusions, hostDependent: scenarioHostDependence, serviceManager: serviceManagerCommands, runFileUse: forwarded, unlockStates: unlock, typedFlags: typed}, nil
+	return extraSections{nilArgs: inventory, seed: seed, extraPositionals: extra, exclusions: scenarioExclusions, hostDependent: scenarioHostDependence, serviceManager: serviceManagerCommands, runFileUse: forwarded, unlockStates: unlock, typedFlags: typed, bareDash: dash}, nil
 }
 
 // firstDifference names the first line that differs between two observations.

@@ -172,6 +172,7 @@ struct Fixture {
     run_file_use_argv: Vec<ScenarioCase>,
     unlock_states: Vec<ScenarioCase>,
     typed_flags: Vec<ScenarioCase>,
+    bare_dash: Vec<ScenarioCase>,
 }
 
 const USAGE_CASES: usize = 159;
@@ -189,10 +190,15 @@ const RUN_FILE_USE_ARGV_PER_STATE: usize = 82;
 /// The typed-flag section (CLI-003): values pflag accepts and the command then uses.
 const TYPED_FLAGS_UNINITIALIZED: usize = 8;
 const TYPED_FLAGS_INITIALIZED: usize = 132;
+/// The bare-dash section (CLI-005): a lone `-` that cobra's command resolution skips and
+/// pflag counts, `--` and flag-only invocations that leave the root to print its help,
+/// and the help topic walk.
+const BARE_DASH_UNINITIALIZED: usize = 72;
+const BARE_DASH_INITIALIZED: usize = 11;
 /// The unlock-state section: commands that unlock the vault, in the settled vault
 /// without the environment passphrase (`locked`, EOF at the prompt) and in the
 /// vault shapes that miss `config.yaml` or `identity.age`.
-const UNLOCK_STATES: [(&str, usize); 7] = [
+const UNLOCK_STATES: [(&str, usize); 9] = [
     ("locked", 18),
     ("identity_only", 7),
     ("config_only", 7),
@@ -200,9 +206,17 @@ const UNLOCK_STATES: [(&str, usize); 7] = [
     ("config_only_locked", 7),
     ("config_only_env_disabled", 7),
     ("env_disabled", 7),
+    ("config_clipboard_invalid", 12),
+    ("config_syntax_invalid", 12),
 ];
 /// Appended to the seeded `config.yaml` of the `*env_disabled` states.
 const ENV_DISABLED_CONFIG_SUFFIX: &str = "security:\n    disable_env_passphrase: true\n";
+/// Appended to the seeded `config.yaml` of the config-invalid states (PLATFORM-001): a
+/// negative `clipboard.auto_clear_duration` fails the validation, an unterminated flow
+/// sequence fails the load. Go refuses both when it resolves the configuration to open
+/// the vault.
+const CLIPBOARD_INVALID_CONFIG_SUFFIX: &str = "clipboard:\n    auto_clear_duration: -5\n";
+const SYNTAX_INVALID_CONFIG_SUFFIX: &str = "clipboard: [\n";
 const KNOWN_DIVERGENT_UNINITIALIZED: usize = 0;
 const KNOWN_DIVERGENT_INITIALIZED: usize = 0;
 /// Scenarios of the host-dependent commands (`mcp|serve install|status`, three
@@ -384,6 +398,17 @@ struct RunOutput {
     stderr: String,
     /// `tool argv...` per call, sandbox root normalized, in call order.
     calls: Vec<String>,
+    /// Every seeded `config.yaml` as `(path, bytes before the run, bytes after it)`; `None`
+    /// is a file that does not exist.
+    configs: Vec<ConfigSnapshot>,
+}
+
+/// One seeded `config.yaml` around a run.
+#[derive(Clone, Debug)]
+struct ConfigSnapshot {
+    path: String,
+    before: Option<Vec<u8>>,
+    after: Option<Vec<u8>>,
 }
 
 const HOST_TOOLS_DIR: &str = ".host-tools";
@@ -497,6 +522,15 @@ fn run_scenario_full(
         fs::write(path, content).expect("write disposable file");
     }
     install_host_tools(&root);
+    let config_paths: Vec<&str> = seed
+        .iter()
+        .filter(|entry| entry.kind == "file" && entry.path.ends_with("/config.yaml"))
+        .map(|entry| entry.path.as_str())
+        .collect();
+    let configs_before: Vec<Option<Vec<u8>>> = config_paths
+        .iter()
+        .map(|path| fs::read(root.join(path)).ok())
+        .collect();
     let mut command = Command::new(env!("CARGO_BIN_EXE_symvault"));
     for (name, _) in std::env::vars_os() {
         if name.to_string_lossy().starts_with("SYMVAULT_") {
@@ -533,11 +567,21 @@ fn run_scenario_full(
         refused.is_empty(),
         "{args:?} reached host tools that no scenario may use: {refused:?}"
     );
+    let configs = config_paths
+        .iter()
+        .zip(configs_before)
+        .map(|(path, before)| ConfigSnapshot {
+            path: (*path).to_owned(),
+            before,
+            after: fs::read(root.join(path)).ok(),
+        })
+        .collect();
     RunOutput {
         code: output.status.code().unwrap_or(-1),
         stdout: normalize(&output.stdout),
         stderr: normalize(&output.stderr),
         calls,
+        configs,
     }
 }
 
@@ -715,6 +759,7 @@ fn state_shape(state: &str) -> (bool, &'static [&'static str], bool) {
         "config_only_locked" => (true, &["identity.age"], false),
         "config_only_env_disabled" => (true, &["identity.age"], true),
         "env_disabled" => (true, &[], true),
+        "config_clipboard_invalid" | "config_syntax_invalid" => (true, &[], true),
         other => panic!("unknown scenario state {other}"),
     }
 }
@@ -738,13 +783,16 @@ fn run_case_full(case: &ScenarioCase, seed: &[SeedFile]) -> RunOutput {
     } else {
         Vec::new()
     };
-    if matches!(
-        case.state.as_str(),
-        "config_only_env_disabled" | "env_disabled"
-    ) {
+    let suffix = match case.state.as_str() {
+        "config_only_env_disabled" | "env_disabled" => Some(ENV_DISABLED_CONFIG_SUFFIX),
+        "config_clipboard_invalid" => Some(CLIPBOARD_INVALID_CONFIG_SUFFIX),
+        "config_syntax_invalid" => Some(SYNTAX_INVALID_CONFIG_SUFFIX),
+        _ => None,
+    };
+    if let Some(suffix) = suffix {
         for entry in &mut seed {
             if entry.kind == "file" && entry.path.ends_with("/config.yaml") {
-                entry.data.push_str(ENV_DISABLED_CONFIG_SUFFIX);
+                entry.data.push_str(suffix);
             }
         }
     }
@@ -791,6 +839,33 @@ fn host_call_failure(case: &ScenarioCase, calls: &[String], recorded_here: bool)
     }
 }
 
+/// PLATFORM-001: a configuration Go refuses is reported, never repaired or rewritten, so
+/// the refused `config.yaml` must be byte-identical after the run (the interactive repair
+/// prompts reach EOF and are declined).
+fn config_rewrite_failure(case: &ScenarioCase, run: &RunOutput) -> Option<String> {
+    if !matches!(
+        case.state.as_str(),
+        "config_clipboard_invalid" | "config_syntax_invalid"
+    ) {
+        return None;
+    }
+    if run.configs.is_empty() {
+        return Some(format!("{} seeded no config.yaml to snapshot", case.name));
+    }
+    run.configs
+        .iter()
+        .find(|config| config.before.is_none() || config.before != config.after)
+        .map(|config| {
+            format!(
+                "{} changed {} on a refused configuration\n  before: {:?}\n  after:  {:?}",
+                case.name,
+                config.path,
+                config.before.as_deref().map(String::from_utf8_lossy),
+                config.after.as_deref().map(String::from_utf8_lossy)
+            )
+        })
+}
+
 /// Whether `case` can be compared on this host.
 fn runs_on_this_host(case: &ScenarioCase) -> bool {
     case.platforms.is_empty() || case.platforms.iter().any(|platform| platform == host_os())
@@ -826,6 +901,7 @@ fn replay_scenarios(
         }
         let run = run_case_full(case, seed);
         failures.extend(host_call_failure(case, &run.calls, compare_calls));
+        failures.extend(config_rewrite_failure(case, &run));
         let actual = (run.code, run.stdout, run.stderr);
         if known_divergence(&case.name, state).is_some() {
             match pinned.get(&case.name) {
@@ -916,6 +992,16 @@ fn fixture_provenance_and_counts() {
     assert_eq!(
         fixture.typed_flags.len(),
         TYPED_FLAGS_UNINITIALIZED + TYPED_FLAGS_INITIALIZED
+    );
+    for (state, count) in [
+        ("uninitialized", BARE_DASH_UNINITIALIZED),
+        ("initialized", BARE_DASH_INITIALIZED),
+    ] {
+        assert_eq!(in_state(&fixture.bare_dash, state), count, "{state}");
+    }
+    assert_eq!(
+        fixture.bare_dash.len(),
+        BARE_DASH_UNINITIALIZED + BARE_DASH_INITIALIZED
     );
     assert!(!fixture.vault_seed.is_empty());
 }
@@ -1467,6 +1553,169 @@ fn mutated_typed_flag_expectation_is_detected() {
     assert_eq!(failures.len(), 2, "{failures:?}");
 }
 
+/// CLI-005: a lone `-` is skipped by cobra's command resolution and counted by pflag
+/// (`- list`, `share - list`), `--` ends the resolution so the root prints its help, and a
+/// root with only persistent flags prints it too.
+#[test]
+fn native_cli_matches_go_bare_dash_uninitialized() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    let replay = replay_scenarios(&fixture, &fixture.bare_dash, "uninitialized", &mut failures);
+    assert_eq!(
+        replay,
+        Replay {
+            replayed: BARE_DASH_UNINITIALIZED,
+            skipped: 0
+        }
+    );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[cfg(unix)]
+#[test]
+fn native_cli_matches_go_bare_dash_initialized() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    let replay = replay_scenarios(&fixture, &fixture.bare_dash, "initialized", &mut failures);
+    assert_eq!(
+        replay,
+        Replay {
+            replayed: BARE_DASH_INITIALIZED,
+            skipped: 0
+        }
+    );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The recorded bare-dash cases really exercise each class (a generator that silently
+/// dropped one would leave the replay green).
+#[test]
+fn bare_dash_section_records_every_class() {
+    let fixture = fixture();
+    let case = |name: &str| {
+        fixture
+            .bare_dash
+            .iter()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("{name} is not recorded"))
+    };
+    let names: std::collections::BTreeSet<&str> = fixture
+        .bare_dash
+        .iter()
+        .map(|case| case.name.as_str())
+        .collect();
+    assert_eq!(names.len(), fixture.bare_dash.len(), "duplicate names");
+    for case in &fixture.bare_dash {
+        assert!(case.name.starts_with("dash_"), "{}", case.name);
+        assert!(
+            case.name.ends_with(&format!("_{}", case.state)),
+            "{}",
+            case.name
+        );
+        assert!(
+            case.platforms.is_empty(),
+            "{} compares everywhere",
+            case.name
+        );
+        assert!(case.host_tool_calls.is_empty(), "{}", case.name);
+    }
+    // The root is not runnable: no command, a lone dash or everything after `--` is its help.
+    let help = &case("dash_root_no_args_uninitialized").observation;
+    assert_eq!(help.exit_code, 0);
+    assert!(help.stdout.starts_with("Quick Start:\n"), "{}", help.stdout);
+    assert!(help.stderr.is_empty());
+    for name in [
+        "dash_root_json_only_uninitialized",
+        "dash_root_output_xml_only_uninitialized",
+        "dash_root_dash_uninitialized",
+        "dash_root_double_dash_uninitialized",
+        "dash_root_two_dashes_uninitialized",
+        "dash_root_output_xml_then_dash_uninitialized",
+        "dash_after_double_dash_command_uninitialized",
+        "dash_after_double_dash_command_with_arg_uninitialized",
+        "dash_after_double_dash_flag_uninitialized",
+        "dash_after_double_dash_version_flag_uninitialized",
+        "dash_after_double_dash_help_flag_uninitialized",
+        "dash_dash_then_double_dash_command_uninitialized",
+        "dash_dash_before_help_uninitialized",
+        "dash_help_dash_uninitialized",
+    ] {
+        let observation = &case(name).observation;
+        assert_eq!(observation.exit_code, 0, "{name}");
+        assert_eq!(observation.stdout, help.stdout, "{name}");
+        assert!(observation.stderr.is_empty(), "{name}");
+    }
+    // A dash before the command does not hide it: list runs and stops at the vault check.
+    let list = &case("dash_dash_before_list_uninitialized").observation;
+    assert_eq!(list.exit_code, 3);
+    assert!(
+        list.stderr.contains("vault not initialized"),
+        "{}",
+        list.stderr
+    );
+    // ... and pflag counts it: two arguments for get, three for config get.
+    for name in [
+        "dash_dash_before_get_name_uninitialized",
+        "dash_dash_inside_config_get_uninitialized",
+        "dash_two_dashes_before_list_uninitialized",
+    ] {
+        let observation = &case(name).observation;
+        assert_eq!(observation.exit_code, 1, "{name}");
+        assert!(observation.stderr.contains("arg(s), received 2"), "{name}");
+    }
+    // The dash is a group's positional only when the group has no such subcommand.
+    let group = &case("dash_dash_inside_group_list_initialized").observation;
+    assert_eq!(group.stdout, "No share grants found.\n");
+    let group_help = &case("dash_dash_inside_group_only_uninitialized").observation;
+    assert!(
+        group_help
+            .stdout
+            .starts_with("List and revoke secret share grants")
+    );
+    // The help topic walk skips the dash; an unknown topic names it.
+    let topic = &case("dash_help_dash_command_uninitialized").observation;
+    assert!(
+        topic.stdout.starts_with("List password entries"),
+        "{}",
+        topic.stdout
+    );
+    let unknown = &case("dash_help_unknown_topic_dash_uninitialized").observation;
+    assert!(
+        unknown.stderr.starts_with("Unknown help topic [`foo` `-`]"),
+        "{}",
+        unknown.stderr
+    );
+    // The dash stays out of the way of the flags that follow it.
+    let version = &case("dash_dash_after_version_then_json_uninitialized").observation;
+    assert!(
+        version.stdout.starts_with("{\"tool\":\"symvault\""),
+        "{}",
+        version.stdout
+    );
+}
+
+/// Negative control: a changed expectation of the bare-dash section is reported.
+#[test]
+fn mutated_bare_dash_expectation_is_detected() {
+    let fixture = fixture();
+    let case = fixture
+        .bare_dash
+        .iter()
+        .find(|case| case.name == "dash_dash_before_list_uninitialized")
+        .expect("case");
+    let actual = run_case(case, &fixture.vault_seed);
+    let mut failures = Vec::new();
+    record_difference(&case.name, &case.observation, actual.clone(), &mut failures);
+    assert!(failures.is_empty(), "{failures:?}");
+    let mut tampered = case.observation.clone();
+    tampered.exit_code = 1;
+    record_difference(&case.name, &tampered, actual.clone(), &mut failures);
+    tampered = case.observation.clone();
+    tampered.stderr = tampered.stderr.replace("not initialized", "initialized");
+    record_difference(&case.name, &tampered, actual, &mut failures);
+    assert_eq!(failures.len(), 2, "{failures:?}");
+}
+
 #[test]
 fn token_value_normalizer_rewrites_only_the_random_parts() {
     let mut stdout = "Token created successfully.\n  ID:    tok-20261103-9dc781fc\n  Expires: 2026-11-04T06:48:37Z\n\nRaw token (copy now \u{2014} shown once): 7cc5ce8b\n  Tools: tok-1-x, tok-20261103-ZZZZZZZZ\n".to_string();
@@ -1513,6 +1762,161 @@ fn native_cli_matches_go_unlock_states() {
         summary.join("; "),
         details.join("\n")
     );
+}
+
+/// PLATFORM-001: Go resolves the configuration before it opens the vault and refuses one
+/// that does not load or validate (`configuration is invalid: ...`, exit 6, the doctor
+/// hint). The recorded refusals really name the cause, interactively (the repair prompts
+/// reach EOF and abort) and for `get`, which never prompts once stdin is not a terminal.
+#[test]
+fn config_invalid_states_record_the_refusal() {
+    let fixture = fixture();
+    let case = |name: &str| {
+        fixture
+            .unlock_states
+            .iter()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("{name} is not recorded"))
+    };
+    let hint = "Run 'symvault doctor' to diagnose and fix configuration issues.\n";
+    for state in ["config_clipboard_invalid", "config_syntax_invalid"] {
+        let in_state: Vec<&ScenarioCase> = fixture
+            .unlock_states
+            .iter()
+            .filter(|case| case.state == state)
+            .collect();
+        assert_eq!(in_state.len(), 12, "{state}");
+        for case in in_state {
+            let observation = &case.observation;
+            assert_eq!(observation.exit_code, 6, "{}", case.name);
+            // Only `import --dry-run` reports before it opens the vault: the format and the
+            // CSV mapping of the source it parsed.
+            if case.name.ends_with("_import_csv_dry_run") {
+                assert_eq!(
+                    observation.stdout,
+                    "Import format: csv\nCSV mapping: notes=notes, otp=otp, password=password, title=title, url=url, username=username\n",
+                    "{}",
+                    case.name
+                );
+            } else {
+                assert!(observation.stdout.is_empty(), "{}", case.name);
+            }
+            assert!(observation.stderr.ends_with(hint), "{}", case.name);
+            assert!(
+                observation
+                    .stderr
+                    .contains("Error: configuration is invalid: "),
+                "{}",
+                case.name
+            );
+        }
+    }
+    // A negative auto-clear duration is a validation error; the interactive commands are
+    // offered the repair and decline it, `get` reports the validation text.
+    let list = &case("unlock_config_clipboard_invalid_list").observation;
+    assert!(list.stderr.contains("Field 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): "), "{}", list.stderr);
+    assert!(
+        list.stderr.contains("configuration fix aborted by user"),
+        "{}",
+        list.stderr
+    );
+    let get = &case("unlock_config_clipboard_invalid_get").observation;
+    assert!(get.stderr.contains("Error: configuration is invalid: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\n"), "{}", get.stderr);
+    assert!(!get.stderr.contains("Apply this fix"), "{}", get.stderr);
+    // A syntax error is a load error: the report names it, `get` returns it.
+    let list = &case("unlock_config_syntax_invalid_list").observation;
+    assert!(
+        list.stderr.contains("  \u{2717} Load error: yaml: line "),
+        "{}",
+        list.stderr
+    );
+    let get = &case("unlock_config_syntax_invalid_get").observation;
+    assert!(
+        get.stderr
+            .contains("Error: configuration is invalid: yaml: line "),
+        "{}",
+        get.stderr
+    );
+    // `dynamic generate` opens through cli.WithVault (interactive repair prompt, declined at
+    // EOF); `mcp serve --stdio` resolves non-interactively and reports the cause. Both are
+    // ExitConfigError and reach the doctor hint.
+    for state in ["config_clipboard_invalid", "config_syntax_invalid"] {
+        let dynamic = &case(&format!("unlock_{state}_dynamic_generate")).observation;
+        assert!(
+            dynamic
+                .stderr
+                .contains("Error: configuration is invalid: configuration fix aborted by user\n"),
+            "{}",
+            dynamic.stderr
+        );
+        let serve = &case(&format!("unlock_{state}_mcp_serve_stdio")).observation;
+        assert!(
+            !serve.stderr.contains("fix aborted by user")
+                && !serve.stderr.contains("Apply this fix"),
+            "{}",
+            serve.stderr
+        );
+    }
+    // `import <file>` (plain and --dry-run) parses the valid source first and is refused when
+    // it opens the vault through cli.WithVault: exit 6 and the doctor hint, like every other
+    // command, not a plain exit 1.
+    for state in ["config_clipboard_invalid", "config_syntax_invalid"] {
+        for name in ["import_csv", "import_csv_dry_run"] {
+            let import = case(&format!("unlock_{state}_{name}"));
+            assert_eq!(import.observation.args[..2], ["import", "source.csv"]);
+            assert_eq!(import.files.len(), 1, "{}", import.name);
+            assert!(
+                import.files.contains_key("source.csv"),
+                "{}: no CSV source file",
+                import.name
+            );
+            assert_eq!(import.observation.exit_code, 6, "{}", import.name);
+            assert!(
+                import.observation.stderr.ends_with(hint),
+                "{}",
+                import.observation.stderr
+            );
+        }
+    }
+    // The refusal comes before the passphrase policy and the vault check: the locked and
+    // identity-less shapes of the same commands are recorded elsewhere with other exits.
+    assert_ne!(
+        case("unlock_locked_list").observation.exit_code,
+        list.exit_code
+    );
+}
+
+/// Negative control: a replay that stops refusing the configuration is reported.
+#[cfg(unix)]
+#[test]
+fn mutated_config_refusal_is_detected() {
+    let fixture = fixture();
+    let case = fixture
+        .unlock_states
+        .iter()
+        .find(|case| case.name == "unlock_config_clipboard_invalid_get")
+        .expect("case");
+    let run = run_case_full(case, &fixture.vault_seed);
+    let actual = (run.code, run.stdout.clone(), run.stderr.clone());
+    let mut failures = Vec::new();
+    record_difference(&case.name, &case.observation, actual.clone(), &mut failures);
+    assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(config_rewrite_failure(case, &run), None);
+    // A native open that accepted the configuration would exit 0 without the refusal.
+    let mut accepted = actual;
+    accepted.0 = 0;
+    accepted.2 = String::new();
+    record_difference(&case.name, &case.observation, accepted, &mut failures);
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    // A native open that repaired the refused file in place would change its bytes.
+    let mut repaired = run.clone();
+    repaired.configs[0].after = Some(b"clipboard:\n    auto_clear_duration: 30s\n".to_vec());
+    assert!(
+        config_rewrite_failure(case, &repaired).is_some_and(|failure| failure.contains("changed")),
+    );
+    let mut deleted = run;
+    deleted.configs[0].after = None;
+    assert!(config_rewrite_failure(case, &deleted).is_some());
 }
 
 /// The partial vault shapes really miss their file, and the scenarios only name
