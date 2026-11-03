@@ -803,13 +803,13 @@ differential-go-selftest:
 		--left ./$(BINARY_NAME) --right ./$(BINARY_NAME) --cases $(PORT_CLI_CASES)
 
 crypto-differential:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cryptogen \
-		--check --output testdata/port/crypto/age-kdf.json
+	python3 scripts/rust-port/go_observations_common.py replay-checked crypto-fixture --file testdata/port/crypto/age-kdf.json
 	$(CARGO) test -p symvault-crypto --all-features --locked
 	@mkdir -p target/crypto
 	$(CARGO) run -p symvault-crypto --example crypto_emit --locked > target/crypto/rust-output.txt
 	python3 scripts/rust-port/go_observations_common.py verify-attestation crypto-differential
-	$(MAKE) crypto-fuzz-smoke
+	# crypto-fuzz-smoke fuzzes the Go implementation only: it is not part of the Go-free gate and goes
+	# away with ./internal/crypto.
 
 crypto-fuzz-smoke:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) GO=$(GO) ./scripts/go-fuzz-target.sh -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=3s -timeout=30s ./internal/crypto
@@ -1005,7 +1005,7 @@ audit-fixtures-generate:
 	UPDATE_AUDIT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
 
 audit-fixtures-check:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
+	python3 scripts/rust-port/go_observations_common.py replay-checked audit-fixture --file testdata/port/audit/audit.json
 
 audit-differential: audit-fixtures-check
 	@set -eu; rm -rf target/audit; mkdir -p target/audit
@@ -1039,8 +1039,7 @@ ffi-fixtures-generate:
 		$(FFI_GENERATE_FLAGS) --output testdata/port/ffi/mobilebind.json
 
 ffi-fixtures-check:
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mobilebindgen \
-		--check --output testdata/port/ffi/mobilebind.json
+	python3 scripts/rust-port/go_observations_common.py replay-checked ffi-fixture --file testdata/port/ffi/mobilebind.json
 
 ffi-differential: ffi-fixtures-check
 	# Fixture replay and C ABI tests run live; the Go-decrypts-Rust interop direction (interop.rs, which
@@ -2285,6 +2284,9 @@ go-observations-capture-other-tests:
 	$(GO_OBS_HELPER) capture-go-json read-policy-go -- $(GO) test -race -json ./internal/vault ./internal/template ./internal/mcp/server -run TestResourcePolicy -count=1
 	$(GO_OBS_HELPER_HTTP) capture-go-json store-live --env SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" -- $(GO) test ./internal/vault -run '^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance|TestEncryptedIndexBuildEmptyGoRust)$$' -count=1 -timeout=15m -json
 	$(GO_OBS_HELPER_HTTP) capture-go-json store-observations -- $(GO) test -race ./scripts/rust-port/cmd/storegen -count=1 -json
+	$(GO_OBS_HELPER_HTTP) capture-checked audit-fixture --file testdata/port/audit/audit.json -- $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
+	$(GO_OBS_HELPER_HTTP) capture-checked crypto-fixture --file testdata/port/crypto/age-kdf.json -- $(GO) run ./scripts/rust-port/cmd/cryptogen --check --output testdata/port/crypto/age-kdf.json
+	$(GO_OBS_HELPER_HTTP) capture-checked ffi-fixture --file testdata/port/ffi/mobilebind.json -- $(GO) run ./scripts/rust-port/cmd/mobilebindgen --check --output testdata/port/ffi/mobilebind.json
 	$(GO_OBS_HELPER_HTTP) capture-checked store-observations-fixture --file testdata/port/store/store.json -- $(GO) run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json
 	$(GO_OBS_HELPER_HTTP) capture-go-json sync-observations-syncgen -- $(GO) test -race ./scripts/rust-port/cmd/syncgen -count=1 -json
 	$(GO_OBS_HELPER_HTTP) capture-go-json sync-observations-backup -- $(GO) test -race ./cmd/admin -run '^TestCreateBackup_NormalizesTarMemberSeparators$$' -count=1 -json
