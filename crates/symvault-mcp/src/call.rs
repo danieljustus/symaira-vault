@@ -2042,11 +2042,11 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         if self.config.allowed_paths.is_empty() {
             return false;
         }
-        let path = normalize_scope_path(path);
+        let path = go_scope_path(path);
         self.config.allowed_paths.iter().any(|allowed| {
             allowed == "*"
-                || path == normalize_scope_path(allowed)
-                || path.starts_with(&format!("{}/", normalize_scope_path(allowed)))
+                || path == go_scope_path(allowed)
+                || path.starts_with(&format!("{}/", go_scope_path(allowed)))
         })
     }
 }
@@ -2270,6 +2270,39 @@ fn is_redacted_field(field: &str, patterns: &[String]) -> bool {
                 .strip_suffix(".*")
                 .is_some_and(|prefix| field.starts_with(&format!("{prefix}.")))
     })
+}
+
+/// Go's `normalizeScopePath` (`path.Clean(strings.TrimSpace(filepath.ToSlash(p)))`,
+/// with `.` mapped to the empty string), used for the allowed-path boundary.
+///
+/// Unlike [`normalize_scope_path`], which builds store-relative entry paths, this
+/// keeps a leading `/` and a `..` that climbs above a relative path, so
+/// `/prod/a` and `../prod/a` stay outside an allowed `prod`, as in Go. Only
+/// Windows turns `\` into `/` (`filepath.ToSlash` is the identity elsewhere).
+pub(crate) fn go_scope_path(path: &str) -> String {
+    let trimmed = path.trim();
+    let slashed = if cfg!(windows) {
+        trimmed.replace('\\', "/")
+    } else {
+        trimmed.to_owned()
+    };
+    let rooted = slashed.starts_with('/');
+    let mut components: Vec<&str> = Vec::new();
+    for component in slashed.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                if components.last().is_some_and(|last| *last != "..") {
+                    components.pop();
+                } else if !rooted {
+                    components.push("..");
+                }
+            }
+            value => components.push(value),
+        }
+    }
+    let joined = components.join("/");
+    if rooted { format!("/{joined}") } else { joined }
 }
 
 pub(crate) fn normalize_scope_path(path: &str) -> String {

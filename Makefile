@@ -1997,6 +1997,20 @@ api-templates-fixtures-check:
 api-templates-differential: api-templates-fixtures-check
 	$(CARGO) test -p symvault-mcp --test api_templates_contract --locked
 
+# MCP-003: Go-recorded request_share/approve_share/revoke_share/list_shares corpus
+# (testdata/port/mcp/tools-sharing.json) driven through the real Go protocol
+# handler over a seeded share store. The check is non-writing and needs the
+# pinned toolchain (GOWORK=off); generation is the explicit -generate target.
+.PHONY: mcp-sharing-fixtures-check mcp-sharing-fixtures-generate mcp-sharing-differential
+mcp-sharing-fixtures-check:
+	SYMAIRA_CHECK_MCP_SHARING_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPSharingFixture$$' -count=1
+
+mcp-sharing-fixtures-generate:
+	SYMAIRA_GENERATE_MCP_SHARING_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPSharingFixture$$' -count=1
+
+mcp-sharing-differential: mcp-sharing-fixtures-check
+	$(CARGO) test -p symvault-mcp --test tools_sharing_contract --locked
+
 mcp-execute-api-request-fixtures-check: mcp-ordered-fixtures-check
 
 mcp-execute-api-request-differential: mcp-execute-api-request-fixtures-check mcp-execute-api-policy-differential
@@ -2067,7 +2081,7 @@ mcp-write-tty-approval-fixtures-check: mcp-ordered-fixtures-check
 mcp-write-tty-approval-differential: mcp-write-tty-approval-fixtures-check
 	$(CARGO) test -p symvault-mcp --test write_tty_approval_contract --locked
 
-mcp-call-fixtures-check: mcp-copy-clipboard-fixtures-check mcp-secure-input-fixtures-check mcp-execute-api-https-fixtures-check mcp-execute-with-secret-fixtures-check mcp-write-tty-approval-fixtures-check mcp-execute-api-request-fixtures-check api-templates-fixtures-check
+mcp-call-fixtures-check: mcp-copy-clipboard-fixtures-check mcp-secure-input-fixtures-check mcp-execute-api-https-fixtures-check mcp-execute-with-secret-fixtures-check mcp-write-tty-approval-fixtures-check mcp-execute-api-request-fixtures-check api-templates-fixtures-check mcp-sharing-fixtures-check
 
 # Historical fixtures stay immutable. Execute the reviewed approval lifetime
 # generator on both source references; compare every behavior and identity field.
@@ -2083,7 +2097,7 @@ mcp-ordered-fixtures-check: mcp-oracle-controls
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)"
 
 mcp-call-differential: mcp-call-fixtures-check mcp-authz-differential policy-context-differential mcp-copy-clipboard-differential mcp-secure-input-differential mcp-execute-api-https-differential mcp-execute-with-secret-differential mcp-write-tty-approval-differential mcp-execute-api-request-differential api-templates-differential
-	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --test tools_secret_unseal --locked
+	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --test tools_secret_unseal --test tools_sharing_contract --locked
 
 # MCP-002/MCP-003: Go-recorded tools/call outcome of every tool under 22 agent
 # profiles and three token scopes, replayed through the production CLI assembly.
