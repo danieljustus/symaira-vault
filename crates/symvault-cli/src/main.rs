@@ -6562,15 +6562,24 @@ mod get_clipboard_wiring_tests {
         let cases = fixture["value_scenarios"].as_array().unwrap();
         assert_eq!(cases.len(), 84);
         let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 0\n"));
+        let mut replayed = 0;
+        let mut negative_zero = 0;
         for case in cases {
             let name = case["name"].as_str().unwrap();
-            // serde_json currently discards the sign of the integer token -0.
-            // Keep these three cases open until the storage decoder preserves it.
-            if name.ends_with("_negative_zero") {
-                continue;
-            }
-            let value: serde_json::Value =
-                serde_json::from_str(case["value_json"].as_str().unwrap()).unwrap();
+            // The value reaches `get` the way a real one does: as a field of
+            // decrypted entry JSON decoded by the store (which, like Go's
+            // float64 decoding, keeps the sign of `-0`).
+            let plaintext = format!(
+                "{{\"data\":{{\"value\":{}}}}}",
+                case["value_json"].as_str().unwrap()
+            );
+            let value = symvault_store::decode_entry_plaintext(plaintext.as_bytes(), "fixture")
+                .unwrap()
+                .data
+                .remove("value")
+                .unwrap();
+            replayed += 1;
+            negative_zero += usize::from(name.ends_with("_negative_zero"));
             let text = crate::run_commands::format_go_value(&value);
             if name.starts_with("copy_") {
                 let outcome = run(
@@ -6622,6 +6631,60 @@ mod get_clipboard_wiring_tests {
                 }
             }
         }
+        assert_eq!(
+            replayed, 84,
+            "every recorded value case runs, none is skipped"
+        );
+        assert_eq!(negative_zero, 3, "copy, print and length of -0");
+    }
+
+    /// Go rejects a negative `clipboard.auto_clear_duration` when the command
+    /// opens the vault (exit 6), so `get` never reaches the clipboard with one;
+    /// it does not clamp it. The Rust validator must produce the same message.
+    /// (Rust's vault-open path does not yet run this validator for `get`; that
+    /// gap is tracked in the PLATFORM-001 residuals, not hidden here.)
+    #[test]
+    fn go_rejects_negative_auto_clear_with_the_message_rust_validates() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/platform/get_clipboard.json"
+        ))
+        .unwrap();
+        let rejected = fixture["config_rejected"].as_array().unwrap();
+        assert_eq!(rejected.len(), 3);
+        for case in rejected {
+            let name = case["name"].as_str().unwrap();
+            let seconds = case["auto_clear_seconds"].as_i64().unwrap();
+            assert!(seconds < 0, "{name}");
+            assert_eq!(case["exit_code"], 6, "{name}");
+            assert_eq!(case["clipboard_ops"].as_array().unwrap().len(), 0, "{name}");
+            let vault = vault_with_config(Some(&format!(
+                "clipboard:\n  auto_clear_duration: {seconds}\n"
+            )));
+            let config =
+                symvault_core::config::Config::load(vault.path().join("config.yaml")).unwrap();
+            let errors = config.validate();
+            assert_eq!(errors.len(), 1, "{name}: {errors:?}");
+            assert!(
+                case["stderr"].as_str().unwrap().contains(&errors[0]),
+                "{name}: Go's stderr does not contain {:?}",
+                errors[0]
+            );
+        }
+    }
+
+    #[test]
+    fn negative_zero_needs_the_store_decoder() {
+        // Control for the replay above: a plain serde_json parse loses the sign
+        // of the integer token `-0`, so the cases would pass only by accident
+        // if the store decoder stopped preserving it.
+        let plain: serde_json::Value = serde_json::from_str("-0").unwrap();
+        assert_eq!(crate::run_commands::format_go_value(&plain), "0");
+        let decoded = symvault_store::decode_entry_plaintext(br#"{"data":{"value":-0}}"#, "x")
+            .unwrap()
+            .data
+            .remove("value")
+            .unwrap();
+        assert_eq!(crate::run_commands::format_go_value(&decoded), "-0");
     }
 
     #[test]

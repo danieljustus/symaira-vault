@@ -261,6 +261,7 @@ impl DesktopHost for ModelHost {
             "paste" => Ok(ToolOutput {
                 code: Some(self.exit),
                 stdout: self.paste_output.clone(),
+                ..ToolOutput::default()
             }),
             "focus" => {
                 let mut n = self.focus_calls.lock().unwrap();
@@ -269,11 +270,13 @@ impl DesktopHost for ModelHost {
                 Ok(ToolOutput {
                     code: Some(self.focus_exit),
                     stdout: format!("{class}\n").into_bytes(),
+                    ..ToolOutput::default()
                 })
             }
             _ => Ok(ToolOutput {
                 code: Some(self.exit),
                 stdout: Vec::new(),
+                ..ToolOutput::default()
             }),
         }
     }
@@ -1042,6 +1045,7 @@ fn windows_autotype_composes_escape_and_wrapper_over_stdin() {
             Ok(ToolOutput {
                 code: Some(0),
                 stdout: b"notepad\n".to_vec(),
+                ..ToolOutput::default()
             })
         }
     }

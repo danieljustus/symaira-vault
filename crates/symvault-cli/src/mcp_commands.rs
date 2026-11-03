@@ -141,14 +141,12 @@ pub fn run(
     let root = vault.as_ref();
     let config = Config::load(root.join("config.yaml"))
         .map_err(|error| format!("load vault config: {error}"))?;
-    let clipboard_auto_clear_duration = Duration::from_secs(
-        config
-            .clipboard
-            .as_ref()
-            .map(|clipboard| clipboard.auto_clear_duration)
-            .unwrap_or(30)
-            .max(0) as u64,
-    );
+    // Go hands the configured value to the handlers unchanged (a negative one
+    // starts no timer and is reported as is by `generate_totp`).
+    let clipboard_auto_clear_seconds = config
+        .clipboard
+        .as_ref()
+        .map_or(30, |clipboard| clipboard.auto_clear_duration);
     let clipboard = clipboard_backend();
     let (touch_id_available, backend, persistent, message) = status();
     // Go clears a stale TLS discovery record for every transport before
@@ -335,7 +333,7 @@ pub fn run(
                 &auth_method,
                 &runtime_status,
                 Some(approval_queue_for_agent.clone()),
-                clipboard_auto_clear_duration,
+                clipboard_auto_clear_seconds,
                 clipboard.clone(),
             )
         };
@@ -394,7 +392,7 @@ pub fn run(
             config.effective_auth_method().as_str(),
             &(touch_id_available, backend, persistent, message),
             None,
-            clipboard_auto_clear_duration,
+            clipboard_auto_clear_seconds,
             clipboard,
         )
         .map_err(|error| format!("failed to create MCP server: {error}"))?;
@@ -890,7 +888,7 @@ fn build_handler(
     auth_method: &str,
     runtime_status: &(bool, String, bool, String),
     approval_queue: Option<Arc<symvault_mcp::approval::ApprovalQueue>>,
-    clipboard_auto_clear_duration: Duration,
+    clipboard_auto_clear_seconds: i64,
     clipboard: Arc<dyn Clipboard>,
 ) -> Result<ProtocolHandler, String> {
     let audit = symvault_store::audit::open_with_keyring(
@@ -918,7 +916,7 @@ fn build_handler(
             .map_err(|error| format!("create MCP runtime: {error}"))?
             .with_grant_signing_key(signing_key)
             .with_command_executor(command_executor)
-            .with_clipboard_auto_clear_duration(clipboard_auto_clear_duration);
+            .with_clipboard_auto_clear_seconds(clipboard_auto_clear_seconds);
     let config_path = root.join("config.yaml");
     let mut runtime = runtime
         .with_clipboard(clipboard)
@@ -971,7 +969,7 @@ pub fn build_handler_for_contract_test(
         auth_method,
         runtime_status,
         None,
-        Duration::from_secs(30),
+        30,
         clipboard_backend(),
     )
 }

@@ -1,0 +1,171 @@
+{
+  "commit": "5229f9490cd25c22adb641677546a57802417304",
+  "source_files": [
+    "go.mod",
+    "go.sum",
+    "internal/ui/tui.go",
+    "internal/ui/tui_commands.go",
+    "internal/ui/tui_view.go",
+    "internal/clipboard/clipboard.go"
+  ],
+  "source_hash": "e6192004d1bc0aa90fc8c84e716e0968b45d6d5aeca14354d34bc0ea22ada3d5",
+  "generator_hash": "768be657a9003d202b506abefc4353d6c29d789ac633548126118bd44bf4c3a9",
+  "note": "Recorded from the production TUIModel.Update/statusView with the package's writeClipboard seam; no real clipboard was touched.",
+  "failures": [
+    {
+      "name": "copy_exit_status_3",
+      "kind": "copy",
+      "cause": "exit status 3",
+      "status_line": "copy to clipboard: exit status 3"
+    },
+    {
+      "name": "copy_signal_killed",
+      "kind": "copy",
+      "cause": "signal: killed",
+      "status_line": "copy to clipboard: signal: killed"
+    },
+    {
+      "name": "copy_signal_terminated",
+      "kind": "copy",
+      "cause": "signal: terminated",
+      "status_line": "copy to clipboard: signal: terminated"
+    },
+    {
+      "name": "copy_missing_pbcopy",
+      "kind": "copy",
+      "cause": "exec: \"pbcopy\": executable file not found in $PATH",
+      "status_line": "copy to clipboard: exec: \"pbcopy\": executable file not found in $PATH"
+    },
+    {
+      "name": "copy_broken_pipe",
+      "kind": "copy",
+      "cause": "write |1: broken pipe",
+      "status_line": "copy to clipboard: write |1: broken pipe"
+    },
+    {
+      "name": "copy_missing_linux_tools",
+      "kind": "copy",
+      "cause": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "status_line": "copy to clipboard: No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set."
+    },
+    {
+      "name": "clear_exit_status_3",
+      "kind": "clear",
+      "cause": "exit status 3",
+      "status_line": "exit status 3"
+    },
+    {
+      "name": "clear_signal_killed",
+      "kind": "clear",
+      "cause": "signal: killed",
+      "status_line": "signal: killed"
+    },
+    {
+      "name": "clear_signal_terminated",
+      "kind": "clear",
+      "cause": "signal: terminated",
+      "status_line": "signal: terminated"
+    },
+    {
+      "name": "clear_missing_pbcopy",
+      "kind": "clear",
+      "cause": "exec: \"pbcopy\": executable file not found in $PATH",
+      "status_line": "exec: \"pbcopy\": executable file not found in $PATH"
+    },
+    {
+      "name": "clear_broken_pipe",
+      "kind": "clear",
+      "cause": "write |1: broken pipe",
+      "status_line": "write |1: broken pipe"
+    },
+    {
+      "name": "clear_missing_linux_tools",
+      "kind": "clear",
+      "cause": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "status_line": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set."
+    },
+    {
+      "name": "quit_clear_exit_status_3",
+      "kind": "quit_clear",
+      "cause": "exit status 3",
+      "status_line": "exit status 3"
+    },
+    {
+      "name": "quit_clear_signal_killed",
+      "kind": "quit_clear",
+      "cause": "signal: killed",
+      "status_line": "signal: killed"
+    },
+    {
+      "name": "quit_clear_signal_terminated",
+      "kind": "quit_clear",
+      "cause": "signal: terminated",
+      "status_line": "signal: terminated"
+    },
+    {
+      "name": "quit_clear_missing_pbcopy",
+      "kind": "quit_clear",
+      "cause": "exec: \"pbcopy\": executable file not found in $PATH",
+      "status_line": "exec: \"pbcopy\": executable file not found in $PATH"
+    },
+    {
+      "name": "quit_clear_broken_pipe",
+      "kind": "quit_clear",
+      "cause": "write |1: broken pipe",
+      "status_line": "write |1: broken pipe"
+    },
+    {
+      "name": "quit_clear_missing_linux_tools",
+      "kind": "quit_clear",
+      "cause": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "status_line": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set."
+    }
+  ],
+  "auto_clear_seconds": [
+    {
+      "name": "no_config",
+      "config": "none",
+      "seconds": 30
+    },
+    {
+      "name": "no_clipboard_section",
+      "config": "no_clipboard",
+      "seconds": 30
+    },
+    {
+      "name": "default_30",
+      "config": "value",
+      "duration": 30,
+      "seconds": 30
+    },
+    {
+      "name": "zero_disables",
+      "config": "value",
+      "seconds": 0
+    },
+    {
+      "name": "one",
+      "config": "value",
+      "duration": 1,
+      "seconds": 1
+    },
+    {
+      "name": "positive",
+      "config": "value",
+      "duration": 45,
+      "seconds": 45
+    },
+    {
+      "name": "negative_one_falls_back",
+      "config": "value",
+      "duration": -1,
+      "seconds": 30
+    },
+    {
+      "name": "negative_five_falls_back",
+      "config": "value",
+      "duration": -5,
+      "seconds": 30
+    }
+  ]
+}

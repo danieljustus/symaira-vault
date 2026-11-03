@@ -1,0 +1,573 @@
+{
+  "commit": "5229f9490cd25c22adb641677546a57802417304",
+  "goos": "darwin",
+  "go_version": "go1.26.6",
+  "atotto_clipboard_version": "v0.1.4",
+  "source_files": [
+    "go.mod",
+    "go.sum",
+    "cmd/crud/get.go",
+    "internal/clipboard/clipboard.go",
+    "internal/clipboard/clipboard_signal_unix.go",
+    "internal/clipboard/interface.go",
+    "internal/clipboard/provider.go",
+    "internal/clipboard/system_clipboard.go",
+    "internal/ui/cliout/cliout.go"
+  ],
+  "source_hash": "f9d7e86a493ff328e91980879e24cf3b022d26a974331ffa15717080d34735eb",
+  "generator_hash": "a7350d68af26b6d0235bec3ba20032d28aae8052b069f0371f3d47cafd36f796",
+  "note": "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) with clipboard.DefaultClipboard() (atotto v0.1.4 pbcopy/pbpaste) over POSIX-shell fake tools on a disposable PATH; no real pasteboard was touched.",
+  "darwin_signal_names_executed": {
+    "0": "signal 0",
+    "1": "hangup",
+    "10": "bus error",
+    "11": "segmentation fault",
+    "12": "bad system call",
+    "13": "broken pipe",
+    "14": "alarm clock",
+    "15": "terminated",
+    "16": "urgent I/O condition",
+    "17": "suspended (signal)",
+    "18": "suspended",
+    "19": "continued",
+    "2": "interrupt",
+    "20": "child exited",
+    "21": "stopped (tty input)",
+    "22": "stopped (tty output)",
+    "23": "I/O possible",
+    "24": "cputime limit exceeded",
+    "25": "filesize limit exceeded",
+    "26": "virtual timer expired",
+    "27": "profiling timer expired",
+    "28": "window size changes",
+    "29": "information request",
+    "3": "quit",
+    "30": "user defined signal 1",
+    "31": "user defined signal 2",
+    "32": "signal 32",
+    "33": "signal 33",
+    "34": "signal 34",
+    "35": "signal 35",
+    "36": "signal 36",
+    "37": "signal 37",
+    "38": "signal 38",
+    "39": "signal 39",
+    "4": "illegal instruction",
+    "40": "signal 40",
+    "5": "trace/BPT trap",
+    "6": "abort trap",
+    "7": "EMT trap",
+    "8": "floating point exception",
+    "9": "killed"
+  },
+  "linux_signal_names_extracted_not_executed": {
+    "1": "hangup",
+    "10": "user defined signal 1",
+    "11": "segmentation fault",
+    "12": "user defined signal 2",
+    "13": "broken pipe",
+    "14": "alarm clock",
+    "15": "terminated",
+    "16": "stack fault",
+    "17": "child exited",
+    "18": "continued",
+    "19": "stopped (signal)",
+    "2": "interrupt",
+    "20": "stopped",
+    "21": "stopped (tty input)",
+    "22": "stopped (tty output)",
+    "23": "urgent I/O condition",
+    "24": "CPU time limit exceeded",
+    "25": "file size limit exceeded",
+    "26": "virtual timer expired",
+    "27": "profiling timer expired",
+    "28": "window changed",
+    "29": "I/O possible",
+    "3": "quit",
+    "30": "power failure",
+    "31": "bad system call",
+    "4": "illegal instruction",
+    "5": "trace/breakpoint trap",
+    "6": "aborted",
+    "7": "bus error",
+    "8": "floating point exception",
+    "9": "killed"
+  },
+  "scenarios": [
+    {
+      "name": "cleared_honest",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "ok",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        },
+        {
+          "tool": "pbpaste",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "copy_exit_1",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "exit:1",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nexit 1\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: exit status 1\nError: copy to clipboard: exit status 1\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_exit_3",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "exit:3",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nexit 3\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: exit status 3\nError: copy to clipboard: exit status 3\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_exit_127",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "exit:127",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nexit 127\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: exit status 127\nError: copy to clipboard: exit status 127\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_missing",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "missing",
+      "paste": "ok",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: exec: \"pbcopy\": executable file not found in $PATH\nError: copy to clipboard: exec: \"pbcopy\": executable file not found in $PATH\n",
+      "exit_code": 1,
+      "tool_calls": []
+    },
+    {
+      "name": "copy_signal_hup",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "signal:HUP",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nkill -s HUP $$\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: signal: hangup\nError: copy to clipboard: signal: hangup\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_signal_int",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "signal:INT",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nkill -s INT $$\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: signal: interrupt\nError: copy to clipboard: signal: interrupt\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_signal_quit",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "signal:QUIT",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nkill -s QUIT $$\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: signal: quit\nError: copy to clipboard: signal: quit\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_signal_kill",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "signal:KILL",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nkill -s KILL $$\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: signal: killed\nError: copy to clipboard: signal: killed\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_signal_usr1",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "signal:USR1",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nkill -s USR1 $$\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: signal: user defined signal 1\nError: copy to clipboard: signal: user defined signal 1\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_signal_usr2",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "signal:USR2",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nkill -s USR2 $$\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: signal: user defined signal 2\nError: copy to clipboard: signal: user defined signal 2\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_signal_alrm",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "signal:ALRM",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nkill -s ALRM $$\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: signal: alarm clock\nError: copy to clipboard: signal: alarm clock\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_signal_term",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "signal:TERM",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nkill -s TERM $$\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: signal: terminated\nError: copy to clipboard: signal: terminated\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_large_payload_tool_closes_stdin_exit_0",
+      "secret": "0123456789abcdef",
+      "secret_repeat": 60000,
+      "auto_clear_seconds": 1,
+      "copy": "closes_stdin:0",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\nexec 0<&-\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: write |1: broken pipe\nError: copy to clipboard: write |1: broken pipe\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "copy_large_payload_tool_closes_stdin_exit_1",
+      "secret": "0123456789abcdef",
+      "secret_repeat": 60000,
+      "auto_clear_seconds": 1,
+      "copy": "closes_stdin:1",
+      "paste": "ok",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\nexec 0<&-\nexit 1\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: write |1: broken pipe\nError: copy to clipboard: write |1: broken pipe\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "clear_exit_3",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "exit:3",
+      "paste": "ok",
+      "copy_fail_on_call": 2,
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nif [ \"$n\" = 2 ]; then exit 3; fi\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] Warning: failed to clear clipboard: exit status 3\n\r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        },
+        {
+          "tool": "pbpaste",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "clear_signal_term",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "signal:TERM",
+      "paste": "ok",
+      "copy_fail_on_call": 2,
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nif [ \"$n\" = 2 ]; then kill -s TERM $$; fi\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] Warning: failed to clear clipboard: signal: terminated\n\r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        },
+        {
+          "tool": "pbpaste",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "paste_exit_1",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "ok",
+      "paste": "exit:1",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\nexit 1\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \rWarning: exit status 1 — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        },
+        {
+          "tool": "pbpaste",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "paste_exit_2",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "ok",
+      "paste": "exit:2",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\nexit 2\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \rWarning: exit status 2 — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        },
+        {
+          "tool": "pbpaste",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "paste_signal_term",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "ok",
+      "paste": "signal:TERM",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\nkill -s TERM $$\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \rWarning: signal: terminated — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        },
+        {
+          "tool": "pbpaste",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "paste_signal_kill",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "ok",
+      "paste": "signal:KILL",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\nkill -s KILL $$\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \rWarning: signal: killed — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        },
+        {
+          "tool": "pbpaste",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "paste_missing",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "ok",
+      "paste": "missing",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nexit 0\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \rWarning: exec: \"pbpaste\": executable file not found in $PATH — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "paste_missing_and_clear_exit_3",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "exit:3",
+      "paste": "missing",
+      "copy_fail_on_call": 2,
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nif [ \"$n\" = 2 ]; then exit 3; fi\nexit 0\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] Warning: failed to clear clipboard: exit status 3\n\rWarning: exec: \"pbpaste\": executable file not found in $PATH — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        }
+      ]
+    }
+  ]
+}

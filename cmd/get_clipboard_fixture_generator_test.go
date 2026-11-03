@@ -97,6 +97,9 @@ func TestGenerateGetClipboardFixture(t *testing.T) {
 	for _, s := range getClipboardValueScenarios() {
 		out.ValueScenarios = append(out.ValueScenarios, runGetClipboardScenario(t, s))
 	}
+	for _, s := range getClipboardConfigRejectedScenarios() {
+		out.ConfigRejected = append(out.ConfigRejected, runGetClipboardScenario(t, s))
+	}
 	out.VerifyCleared = recordVerifyCleared()
 	out.Countdown = recordCountdown()
 
@@ -139,6 +142,13 @@ type getClipboardFixture struct {
 	// `password`, stored and re-read through the production JSON codec, so
 	// every number reaches `get` as a float64 like in a real vault.
 	ValueScenarios []getClipboardResult `json:"value_scenarios"`
+	// ConfigRejected (PLATFORM-001-FIDELITY) are `get` runs whose vault config
+	// is rejected before any clipboard use: a negative auto_clear_duration
+	// fails validation when the command opens the vault (the interactive fixer
+	// is offered because the terminal decision is stubbed to true; its prompts
+	// read an empty stdin, so the fix is declined), so Go never copies and never
+	// reaches the negative-duration branch of the countdown.
+	ConfigRejected []getClipboardResult `json:"config_rejected"`
 }
 
 // getClipboardScenario is the recorded input. ReadMode selects what the fake
@@ -164,6 +174,9 @@ type getClipboardScenario struct {
 	Length    bool   `json:"length,omitempty"`
 	Digest    bool   `json:"digest,omitempty"`
 	Metadata  bool   `json:"metadata,omitempty"`
+	// SecretRepeat, when positive, repeats Secret that many times in the stored
+	// field (keeps large-payload scenarios small in the fixture).
+	SecretRepeat int `json:"secret_repeat,omitempty"`
 }
 
 type getClipboardResult struct {
@@ -174,6 +187,14 @@ type getClipboardResult struct {
 	Ops                   []string `json:"clipboard_ops"`
 	FinalClipboard        string   `json:"final_clipboard"`
 	StartAutoClearSeconds int      `json:"start_auto_clear_seconds"`
+}
+
+func getClipboardConfigRejectedScenarios() []getClipboardScenario {
+	return []getClipboardScenario{
+		{Name: "negative_auto_clear_config", Secret: "s3cret-neg", AutoClear: -5, Terminal: true, TimerStubMillis: 150, ReadMode: "honest"},
+		{Name: "negative_auto_clear_config_one", Secret: "s3cret-neg", AutoClear: -1, Terminal: true, TimerStubMillis: 150, ReadMode: "honest"},
+		{Name: "negative_auto_clear_config_not_a_terminal", Secret: "s3cret-neg", AutoClear: -5, Terminal: false, ReadMode: "honest"},
+	}
 }
 
 func getClipboardScenarios() []getClipboardScenario {
@@ -292,6 +313,15 @@ func (c *fakeFixtureClipboard) Read() (string, error) {
 
 func runGetClipboardScenario(t *testing.T, s getClipboardScenario) getClipboardResult {
 	t.Helper()
+	return runGetClipboardScenarioWith(t, s, nil)
+}
+
+// runGetClipboardScenarioWith runs one `get` scenario. A nil realClipboard
+// installs the in-memory fake; otherwise crud.GetClipboard is that factory
+// (the production clipboard.DefaultClipboard over fake tools) and the
+// result's clipboard operations stay empty.
+func runGetClipboardScenarioWith(t *testing.T, s getClipboardScenario, realClipboard func() clipboardapp.Clipboard) getClipboardResult {
+	t.Helper()
 	resetCommandTestState()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -310,6 +340,9 @@ func runGetClipboardScenario(t *testing.T, s getClipboardScenario) getClipboardR
 		t.Fatal(err)
 	}
 	var fieldValue any = s.Secret
+	if s.SecretRepeat > 0 {
+		fieldValue = strings.Repeat(s.Secret, s.SecretRepeat)
+	}
 	if s.ValueJSON != "" {
 		if err := json.Unmarshal([]byte(s.ValueJSON), &fieldValue); err != nil {
 			t.Fatalf("value_json %q: %v", s.ValueJSON, err)
@@ -334,7 +367,11 @@ func runGetClipboardScenario(t *testing.T, s getClipboardScenario) getClipboardR
 
 	fake := &fakeFixtureClipboard{s: s}
 	oldClipboard := crud.GetClipboard
-	crud.GetClipboard = func() clipboardapp.Clipboard { return fake }
+	if realClipboard == nil {
+		crud.GetClipboard = func() clipboardapp.Clipboard { return fake }
+	} else {
+		crud.GetClipboard = realClipboard
+	}
 	oldDuration := crud.GetAutoClearDurationFunc
 	crud.GetAutoClearDurationFunc = func() int { return s.AutoClear }
 	oldStart := crud.StartAutoClear

@@ -1904,12 +1904,26 @@ desktop-differential: autotype-escape-fixtures-check desktop-linux-fixtures-ci
 .PHONY: get-clipboard-fixtures-check get-clipboard-fixtures-generate get-clipboard-differential
 get-clipboard-fixtures-check:
 	SYMVAULT_GET_CLIPBOARD_FIXTURE=check GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGenerateGetClipboardFixture$$' -count=1
+	SYMVAULT_TUI_CLIPBOARD_FIXTURE=check GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/ui -run '^TestGenerateTUIClipboardFixture$$' -count=1
+	SYMAIRA_CHECK_MCP_CLIPBOARD_AUTO_CLEAR_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPClipboardAutoClearFixture$$' -count=1
+	@if [ "$$(uname -s)" = Darwin ]; then \
+	  SYMVAULT_GET_CLIPBOARD_FIXTURE=check GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGenerateGetClipboardDarwinFixture$$' -count=1; \
+	else \
+	  echo "NOTE get_clipboard_darwin.json: the macOS pasteboard oracle is only regenerated on macOS; the Rust replay (macOS only) reads it as recorded."; \
+	fi
 
 get-clipboard-fixtures-generate:
 	SYMVAULT_GET_CLIPBOARD_FIXTURE=write GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGenerateGetClipboardFixture$$' -count=1
+	SYMVAULT_TUI_CLIPBOARD_FIXTURE=write GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/ui -run '^TestGenerateTUIClipboardFixture$$' -count=1
+	SYMAIRA_GENERATE_MCP_CLIPBOARD_AUTO_CLEAR_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPClipboardAutoClearFixture$$' -count=1
+	@if [ "$$(uname -s)" = Darwin ]; then \
+	  SYMVAULT_GET_CLIPBOARD_FIXTURE=write GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGenerateGetClipboardDarwinFixture$$' -count=1; \
+	fi
 
 get-clipboard-differential: get-clipboard-fixtures-check
-	$(CARGO) test -p symvault-platform --test get_clipboard_contract --locked
+	$(CARGO) test -p symvault-platform --test get_clipboard_contract --test get_clipboard_darwin_contract --locked
+	$(CARGO) test -p symvault-mcp --test clipboard_auto_clear_contract --locked
+	$(CARGO) test -p symvault-cli --bin symvault --locked -- get_clipboard_wiring_tests tui::
 
 # PLATFORM-WIRE-001: the clipboard Go really uses on Linux (atotto command
 # backend, tool choice fixed in that package's init() from PATH and

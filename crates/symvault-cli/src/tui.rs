@@ -112,19 +112,22 @@ impl Drop for TerminalMode {
     }
 }
 
+/// Go `TUIModel.autoClearSeconds`: the configured duration unless it is negative
+/// (or there is no clipboard section), then the 30 second default. 0 keeps the
+/// copy until quit.
+pub(crate) fn auto_clear_seconds(configured: Option<i64>) -> u64 {
+    configured
+        .and_then(|seconds| u64::try_from(seconds).ok())
+        .unwrap_or(30)
+}
+
 pub fn run(root: &Path, identity: &Identity) -> Result<(), String> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err("ui requires an interactive terminal".into());
     }
     let config =
         symvault_core::config::Config::load(root.join("config.yaml")).map_err(|e| e.to_string())?;
-    let ttl = config.clipboard.as_ref().map_or(30, |c| {
-        if c.auto_clear_duration < 0 {
-            30
-        } else {
-            c.auto_clear_duration as u64
-        }
-    });
+    let ttl = auto_clear_seconds(config.clipboard.as_ref().map(|c| c.auto_clear_duration));
     let clipboard = symvault_platform::native_text_clipboard();
     let mut model = Model::new(root, identity, clipboard, Duration::from_secs(ttl))?;
     let stopping = Arc::new(AtomicBool::new(false));
@@ -605,22 +608,22 @@ impl<'a> Model<'a> {
     fn copy(&mut self, text: &[u8], message: String) {
         match self.clipboard.copy(text, self.clipboard_ttl) {
             Ok(()) => self.status = message,
-            Err(_) => self.status = "Copy failed: native clipboard unavailable".into(),
+            // Go shows the error itself (`m.err`), never the `Copy failed` label.
+            Err(error) => self.status = format!("copy to clipboard: {}", error.message),
         }
     }
     fn tick(&mut self) {
         if let Some(result) = self.clipboard.take_clear_result() {
-            self.status = if result.is_ok() {
-                "Clipboard cleared"
-            } else {
-                "Clipboard clear failed"
-            }
-            .into();
+            self.status = match result {
+                Ok(()) => "Clipboard cleared".into(),
+                // Go shows the bare clipboard error, not `Clipboard clear failed`.
+                Err(error) => error.message,
+            };
         }
     }
     fn clear_clipboard(&mut self) {
-        if self.clipboard.clear().is_err() {
-            self.status = "Clipboard clear failed".into();
+        if let Err(error) = self.clipboard.clear() {
+            self.status = error.message;
         }
     }
     fn draw(&self, frame: &mut Frame) {
@@ -978,6 +981,105 @@ mod tests {
         drop(rows);
         m.tick();
         assert_eq!(m.status, "Clipboard cleared");
+    }
+    /// A clipboard whose `set` and/or `clear` fail with Go's error text.
+    struct FailingClipboard {
+        set_error: Option<String>,
+        clear_error: Option<String>,
+    }
+    impl Clipboard for FailingClipboard {
+        fn set(&self, _text: &[u8]) -> Result<(), symvault_core::platform::PlatformError> {
+            self.set_error.as_ref().map_or(Ok(()), |message| {
+                Err(symvault_core::platform::PlatformError {
+                    kind: symvault_core::platform::PlatformErrorKind::Failed,
+                    message: message.clone(),
+                })
+            })
+        }
+        fn clear(&self) -> Result<(), symvault_core::platform::PlatformError> {
+            self.clear_error.as_ref().map_or(Ok(()), |message| {
+                Err(symvault_core::platform::PlatformError {
+                    kind: symvault_core::platform::PlatformErrorKind::Failed,
+                    message: message.clone(),
+                })
+            })
+        }
+    }
+    /// PLATFORM-001-FIDELITY: the Go TUI shows `copy to clipboard: <cause>` for a
+    /// failed copy and the bare cause for a failed clear (the error replaces the
+    /// `Copy failed` / `Clipboard clear failed` labels), and clamps a negative
+    /// auto-clear to 30 s. Recorded by `internal/ui/tui_clipboard_fixture_generator_test.go`.
+    #[test]
+    fn go_recorded_clipboard_failure_text_and_auto_clear_seconds() {
+        let recorded: Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/platform/tui_clipboard.json"
+        ))
+        .unwrap();
+        let failures = recorded["failures"].as_array().unwrap();
+        assert_eq!(failures.len(), 18);
+        let (root, id) = fixture();
+        let mut kinds = [0, 0, 0];
+        for case in failures {
+            let name = case["name"].as_str().unwrap();
+            let cause = case["cause"].as_str().unwrap().to_owned();
+            let expected = case["status_line"].as_str().unwrap();
+            match case["kind"].as_str().unwrap() {
+                "copy" => {
+                    let clipboard = Arc::new(FailingClipboard {
+                        set_error: Some(cause),
+                        clear_error: None,
+                    });
+                    let mut m =
+                        Model::new(root.path(), &id, clipboard, Duration::from_secs(30)).unwrap();
+                    m.copy_selected();
+                    assert_eq!(m.status, expected, "{name}");
+                    kinds[0] += 1;
+                }
+                "clear" => {
+                    let clipboard = Arc::new(FailingClipboard {
+                        set_error: None,
+                        clear_error: Some(cause),
+                    });
+                    let mut m =
+                        Model::new(root.path(), &id, clipboard, Duration::from_millis(5)).unwrap();
+                    m.copy_selected();
+                    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+                    while m.status != expected && std::time::Instant::now() < deadline {
+                        m.tick();
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    assert_eq!(m.status, expected, "{name}");
+                    kinds[1] += 1;
+                }
+                "quit_clear" => {
+                    let clipboard = Arc::new(FailingClipboard {
+                        set_error: None,
+                        clear_error: Some(cause),
+                    });
+                    let mut m = Model::new(root.path(), &id, clipboard, Duration::ZERO).unwrap();
+                    m.copy_selected();
+                    m.clear_clipboard();
+                    assert_eq!(m.status, expected, "{name}");
+                    kinds[2] += 1;
+                }
+                other => panic!("unknown kind {other}"),
+            }
+        }
+        assert_eq!(kinds, [6, 6, 6]);
+        let cases = recorded["auto_clear_seconds"].as_array().unwrap();
+        assert_eq!(cases.len(), 8);
+        for case in cases {
+            let configured = match case["config"].as_str().unwrap() {
+                "value" => Some(case["duration"].as_i64().unwrap_or(0)),
+                _ => None,
+            };
+            assert_eq!(
+                auto_clear_seconds(configured),
+                case["seconds"].as_u64().unwrap(),
+                "{}",
+                case["name"]
+            );
+        }
     }
     #[test]
     fn all_sensitive_fields_and_terminal_escape_surfaces_remain_masked() {

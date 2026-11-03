@@ -8,7 +8,7 @@
     "internal/ui/cliout/cliout.go"
   ],
   "source_hash": "0ca868c0001f9a72b7414ca3003199777d4987f5dab6289c2d420cff05d9bb60",
-  "generator_hash": "26ad62f0ab7db4828ef67cf9738535906454eb5b655066e8cd2a71c1f9e56aec",
+  "generator_hash": "54a924edc9e3dcc2a828b2884cdd84c7e0ab0b474b5dda7befbe00f7143290f8",
   "note": "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) with an in-memory clipboard; no host clipboard or credential was used.",
   "scenarios": [
     {
@@ -2075,6 +2075,58 @@
       "stdout": "{\"length\":35,\"sha256_12\":\"b49223070daf\"}\n",
       "stderr": "",
       "exit_code": 0,
+      "clipboard_ops": [],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 0
+    }
+  ],
+  "config_rejected": [
+    {
+      "name": "negative_auto_clear_config",
+      "secret": "s3cret-neg",
+      "auto_clear_seconds": -5,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "timer_stub_ms": 150,
+      "stdout": "",
+      "stderr": "Configuration error detected in /fixture/vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "exit_code": 6,
+      "clipboard_ops": [],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 0
+    },
+    {
+      "name": "negative_auto_clear_config_one",
+      "secret": "s3cret-neg",
+      "auto_clear_seconds": -1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "timer_stub_ms": 150,
+      "stdout": "",
+      "stderr": "Configuration error detected in /fixture/vault/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: configuration is invalid: configuration fix aborted by user\nError: configuration is invalid: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "exit_code": 6,
+      "clipboard_ops": [],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 0
+    },
+    {
+      "name": "negative_auto_clear_config_not_a_terminal",
+      "secret": "s3cret-neg",
+      "auto_clear_seconds": -5,
+      "stdout_terminal": false,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "stdout": "",
+      "stderr": "Error: configuration is invalid: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: configuration is invalid: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+      "exit_code": 6,
       "clipboard_ops": [],
       "final_clipboard": "",
       "start_auto_clear_seconds": 0

@@ -109,12 +109,45 @@ pub enum EnvPolicy {
 }
 
 /// Result of one tool invocation that started.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ToolOutput {
     /// Exit code, or `None` when the tool was ended by a signal.
     pub code: Option<i32>,
     /// Captured stdout when requested, otherwise empty.
     pub stdout: Vec<u8>,
+    /// The signal that ended the tool, when it did not exit by itself (Go's
+    /// `signal: <name>` text needs it).
+    pub signal: Option<i32>,
+    /// Whether that signal left a core dump (Go appends ` (core dumped)`).
+    pub core_dumped: bool,
+}
+
+impl ToolOutput {
+    fn from_status(status: std::process::ExitStatus, stdout: Vec<u8>) -> Self {
+        #[cfg(unix)]
+        let (signal, core_dumped) = {
+            use std::os::unix::process::ExitStatusExt;
+            (status.signal(), status.core_dumped())
+        };
+        #[cfg(not(unix))]
+        let (signal, core_dumped) = (None, false);
+        Self {
+            code: status.code(),
+            stdout,
+            signal,
+            core_dumped,
+        }
+    }
+
+    /// Go's `*exec.ExitError` text for this result.
+    fn status_text(&self) -> String {
+        crate::go_exec::exit_status_text(
+            crate::go_exec::GoOs::host(),
+            self.code,
+            self.signal,
+            self.core_dumped,
+        )
+    }
 }
 
 /// Everything the adapters need from the machine they run on.
@@ -201,6 +234,17 @@ impl SystemHost {
         Self {
             path: Some(path),
             env: Some(env),
+            cwd: None,
+        }
+    }
+
+    /// A host that keeps the process environment but resolves tools only in
+    /// `path`: the system tools a native adapter wants, however `PATH` is set.
+    #[must_use]
+    pub fn with_search_path(path: Vec<PathBuf>) -> Self {
+        Self {
+            path: Some(path),
+            env: None,
             cwd: None,
         }
     }
@@ -404,10 +448,7 @@ impl DesktopHost for SystemHost {
         let stdout = reader
             .map(|reader| reader.join().unwrap_or_default())
             .unwrap_or_default();
-        Ok(ToolOutput {
-            code: status.code(),
-            stdout,
-        })
+        Ok(ToolOutput::from_status(status, stdout))
     }
 
     fn run_write_all(
@@ -430,10 +471,7 @@ impl DesktopHost for SystemHost {
         }
         drop(pipe);
         let status = child.wait().map_err(|error| error.to_string())?;
-        Ok(ToolOutput {
-            code: status.code(),
-            stdout: Vec::new(),
-        })
+        Ok(ToolOutput::from_status(status, Vec::new()))
     }
 }
 
@@ -449,14 +487,6 @@ fn go_pipe_write_error(error: &std::io::Error) -> String {
         text.to_lowercase()
     };
     format!("write |1: {reason}")
-}
-
-/// Go's `*exec.ExitError` text.
-fn exit_status_text(code: Option<i32>) -> String {
-    match code {
-        Some(code) => format!("exit status {code}"),
-        None => "signal: terminated".to_owned(),
-    }
 }
 
 fn failed(message: impl Into<String>) -> PlatformError {
@@ -477,7 +507,7 @@ fn run_checked(
     if output.code == Some(0) {
         Ok(())
     } else {
-        Err(exit_status_text(output.code))
+        Err(output.status_text())
     }
 }
 
@@ -494,7 +524,7 @@ fn run_write_all_checked(
     if output.code == Some(0) {
         Ok(())
     } else {
-        Err(exit_status_text(output.code))
+        Err(output.status_text())
     }
 }
 
@@ -600,7 +630,7 @@ impl CommandClipboard {
             )
             .map_err(failed)?;
         if output.code != Some(0) {
-            return Err(failed(exit_status_text(output.code)));
+            return Err(failed(output.status_text()));
         }
         let mut text = output.stdout;
         if backend.trim_dos && text.len() > 1 {
@@ -621,6 +651,56 @@ impl Clipboard for CommandClipboard {
             EnvPolicy::Inherit,
         )
         .map_err(failed)
+    }
+
+    fn clear(&self) -> Result<(), PlatformError> {
+        self.set(b"")
+    }
+}
+
+/// Go's macOS `clipboard.DefaultClipboard()`: atotto/clipboard v0.1.4 runs
+/// `pbcopy` (text on stdin, `writeAll` semantics) and `pbpaste` (stdout is the
+/// text) with the whole inherited environment and reports the raw
+/// `os/exec` error text, e.g. `exit status 3`, `signal: killed`,
+/// `write |1: broken pipe` or `exec: "pbcopy": executable file not found in
+/// $PATH`. There is no tool selection and no timeout, like atotto.
+pub struct PasteboardClipboard {
+    host: Arc<dyn DesktopHost>,
+}
+
+impl PasteboardClipboard {
+    #[must_use]
+    pub fn new(host: Arc<dyn DesktopHost>) -> Self {
+        Self { host }
+    }
+
+    /// The real macOS pasteboard tools. Unlike Go, which resolves `pbcopy`
+    /// through `PATH`, they are looked up in `/usr/bin` only, so a planted
+    /// `pbcopy` earlier on `PATH` never receives a secret.
+    #[must_use]
+    pub fn system() -> Self {
+        Self::new(Arc::new(SystemHost::with_search_path(vec![PathBuf::from(
+            "/usr/bin",
+        )])))
+    }
+
+    /// Reads the pasteboard (Go `Clipboard.Read`).
+    pub fn read(&self) -> Result<Vec<u8>, PlatformError> {
+        let output = self
+            .host
+            .run("pbpaste", &[], b"", true, EnvPolicy::Inherit)
+            .map_err(failed)?;
+        if output.code != Some(0) {
+            return Err(failed(output.status_text()));
+        }
+        Ok(output.stdout)
+    }
+}
+
+impl Clipboard for PasteboardClipboard {
+    fn set(&self, text: &[u8]) -> Result<(), PlatformError> {
+        run_write_all_checked(self.host.as_ref(), "pbcopy", &[], text, EnvPolicy::Inherit)
+            .map_err(failed)
     }
 
     fn clear(&self) -> Result<(), PlatformError> {
@@ -836,6 +916,7 @@ mod tests {
             Ok(ToolOutput {
                 code: self.code.or(Some(0)),
                 stdout: b"firefox\n".to_vec(),
+                ..ToolOutput::default()
             })
         }
     }
@@ -942,6 +1023,7 @@ mod tests {
                 Ok(ToolOutput {
                     code: Some(1),
                     stdout: Vec::new(),
+                    ..ToolOutput::default()
                 })
             }
         }
