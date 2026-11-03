@@ -12,40 +12,80 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
+        lib = pkgs.lib;
+
+        # `symvault version` prints this string. SYMVAULT_VERSION is the only
+        # stamp the Rust CLI reads (option_env! in crates/symvault-cli/src/main.rs).
+        # Tagged releases are built by GoReleaser/cargo, not through this flake, so
+        # the flake build is identified by the flake revision.
+        version = "0.0.0-${self.shortRev or self.dirtyShortRev or "unknown"}";
+
+        # Only what the Cargo workspace needs: keeps the derivation hash stable
+        # across docs/client/Go changes. testdata/port is a real build input:
+        # crates/symvault-cli embeds testdata/port/cli/{artifacts,command-tree}.json
+        # (the Go-compatible completions/man-page/command-tree data) via include_str!.
+        src = lib.fileset.toSource {
+          root = ./.;
+          fileset = lib.fileset.unions [
+            ./Cargo.toml
+            ./Cargo.lock
+            ./rust-toolchain.toml
+            ./crates
+            ./third_party/argon2
+            ./testdata/port
+          ];
+        };
       in
       {
-        packages.default = pkgs.buildGoModule {
+        packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "symvault";
-          version = self.version or "dev";
+          inherit version src;
 
-          src = ./.;
-          subPackages = [ "." ];
+          # Cargo.lock pins every crate. The one git dependency
+          # (symaira-core-version @ symaira-corekit) is fetched by rev from the
+          # lock file, so no per-crate outputHashes are needed.
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+            allowBuiltinFetchGit = true;
+          };
 
-          # The canonical CI suite already runs before this package gate. The
-          # tests are intentionally host-oriented (`/bin/echo`, Git/SSH, TTYs)
-          # and cannot run inside Nix's pure build sandbox.
-          doCheck = false;
-
-          # Resolved via `go mod vendor; nix hash path --sri vendor/`
-          vendorHash = "sha256-CvaWxZhJzPFXE5kYAhmTBBssQftu5QswQGWvp0BPT8s=";
-
-          # Disable CGO for Linux — reduces distributability and is not needed
-          # (keyring integration requires CGO only on darwin).
-          env.CGO_ENABLED = "0";
-
-          ldflags = [
-            "-s"
-            "-w"
-            "-X main.version=${self.version or "dev"}"
-            "-X main.commit=${self.rev or "unknown"}"
-            "-X main.date=unknown"
+          # Same selection as the release builds (.goreleaser.yml): only the CLI.
+          cargoBuildFlags = [
+            "-p"
+            "symvault-cli"
+            "--bin"
+            "symvault"
           ];
 
-          postInstall = ''
-            mv "$out/bin/symaira-vault" "$out/bin/symvault"
-          '';
+          env.SYMVAULT_VERSION = version;
 
-          meta = with pkgs.lib; {
+          # The canonical CI suite runs before this package gate. The tests are
+          # host-oriented (Git/SSH, TTYs, keyrings) and cannot run in Nix's pure
+          # build sandbox.
+          doCheck = false;
+
+          nativeBuildInputs = [
+            pkgs.installShellFiles
+            pkgs.makeWrapper
+          ];
+
+          # git is a hard runtime dependency
+          # (docs/adr/0033-git-binary-runtime-dependency.md).
+          postInstall =
+            lib.optionalString (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform) ''
+              installShellCompletion --cmd symvault \
+                --bash <($out/bin/symvault completion bash) \
+                --zsh <($out/bin/symvault completion zsh) \
+                --fish <($out/bin/symvault completion fish)
+              mkdir -p manpages
+              $out/bin/symvault generate manpages manpages
+              installManPage manpages/*.1
+            ''
+            + ''
+              wrapProgram "$out/bin/symvault" --prefix PATH : ${lib.makeBinPath [ pkgs.git ]}
+            '';
+
+          meta = with lib; {
             description = "Modern CLI password manager with age encryption";
             homepage = "https://github.com/danieljustus/symaira-vault";
             license = licenses.asl20;
@@ -61,10 +101,12 @@
 
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
-            go
-            gopls
-            gotools
-            go-tools
+            cargo
+            rustc
+            clippy
+            rustfmt
+            rust-analyzer
+            git
           ];
         };
       }

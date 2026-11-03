@@ -227,6 +227,9 @@ jobs:
         with:
           sarif_file: gosec.sarif
 
+  # Job id and display name are kept: they are a required status check. The flake
+  # builds the Rust CLI from Cargo.lock (rustPlatform.buildRustPackage); there is
+  # no vendorHash to verify any more.
   flake-vendorhash:
     name: Flake vendorHash
     needs: [changes]
@@ -238,32 +241,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
-
-      - name: Verify flake.nix vendorHash matches go.mod/go.sum
-        run: |
-          EXPECTED=$(grep -oP 'vendorHash\s*=\s*"\K[^"]+' flake.nix)
-          if [ -z "$EXPECTED" ]; then
-            echo "FAIL: could not find vendorHash in flake.nix"
-            exit 1
-          fi
-          go mod vendor
-          ACTUAL=$(nix --extra-experimental-features 'nix-command flakes' hash path --sri vendor/)
-          rm -rf vendor
-          echo "flake.nix vendorHash: $EXPECTED"
-          echo "computed vendorHash:  $ACTUAL"
-          if [ "$EXPECTED" != "$ACTUAL" ]; then
-            echo "FAIL: flake.nix vendorHash is stale — update it to $ACTUAL"
-            exit 1
-          fi
-          echo "PASS: flake.nix vendorHash matches the current go.mod/go.sum tree"
 
       - name: Build and run Nix flake
         run: |

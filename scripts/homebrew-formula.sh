@@ -2,6 +2,11 @@
 # Render Formula/symvault.rb for danieljustus/homebrew-tap.
 # Usage: scripts/homebrew-formula.sh VERSION CHECKSUMS_FILE
 #
+# The archives are the Rust release archives built by .goreleaser.yml
+# (symaira-vault_VERSION_<os>_<arch>.tar.gz wrapping symvault, completions/ and
+# docs/man/). SYMVAULT_RELEASE_BASE_URL overrides the download location, e.g.
+# file:///abs/dir to validate a formula against locally built archives.
+#
 # Replaces GoReleaser's deprecated `brews` publisher. Its successor
 # (`homebrew_casks`) would turn the CLI into a quarantined cask, and `brews`
 # always wrote `version "X"`, which the tap's strict audit rejects as redundant
@@ -10,7 +15,7 @@ set -euo pipefail
 
 version="${1:?version}"
 checksums="${2:?checksums file}"
-base="https://github.com/danieljustus/symaira-vault/releases/download/v${version}"
+base="${SYMVAULT_RELEASE_BASE_URL:-https://github.com/danieljustus/symaira-vault/releases/download/v${version}}"
 
 sha() {
   local file="symaira-vault_${version}_$1.tar.gz" sum
@@ -76,7 +81,18 @@ ${linux_arm64}
   end
 
   test do
-    system bin/"symvault", "version"
+    assert_match version.to_s, shell_output("#{bin}/symvault version")
+
+    # Real vault round trip in an isolated vault dir (the default location is
+    # platform specific, so pin it with SYMVAULT_VAULT and assert the files).
+    ENV["SYMVAULT_VAULT"] = (testpath/"vault").to_s
+    ENV["SYMVAULT_ALLOW_ENV_PASSPHRASE"] = "1"
+    ENV["SYMVAULT_PASSPHRASE"] = "brew-test-passphrase-123"
+    system bin/"symvault", "init"
+    assert_path_exists testpath/"vault/identity.age"
+    pipe_output("#{bin}/symvault set brew.password --stdin-value", "Xk9-brew-Battery\n")
+    assert_path_exists testpath/"vault/entries/brew.age"
+    assert_equal "Xk9-brew-Battery", shell_output("#{bin}/symvault get brew.password").strip
   end
 end
 EOF

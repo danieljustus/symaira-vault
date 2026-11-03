@@ -67,7 +67,7 @@ nix run github:danieljustus/symaira-vault
 # flake.nix:
 #   inputs.symvault.url = "github:danieljustus/symaira-vault";
 ```
-> **Note:** The flake is new. Go module dependencies are pinned via `vendorHash` in `flake.nix`. If updating dependencies, run `go mod vendor && nix hash path --sri vendor/` and update the hash.
+> **Note:** The flake builds the Rust CLI from `Cargo.lock` (`rustPlatform.buildRustPackage`). It needs a nixpkgs whose `rustc` satisfies the workspace `rust-version` (1.98); if the build reports `requires rustc 1.98`, run `nix flake update nixpkgs`.
 
 **Cargo (build from source):**
 ```bash
