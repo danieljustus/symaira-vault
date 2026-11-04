@@ -295,7 +295,9 @@ def mini_yaml(text):
 def compare_yaml(go_stdout, rust_stdout):
     assert go_stdout.strip() and rust_stdout.strip(), "YAML output is empty"
     left, right = mini_yaml(go_stdout.decode()), mini_yaml(rust_stdout.decode())
-    assert left == right, f"YAML values differ: {left!r} != {right!r}"
+    # type-strict: Python's == makes True == 1 and 1 == 1.0, which would hide a bool/int/float encoder difference
+    found = observations.first_difference(left, right)
+    assert found is None, f"YAML values differ: {found}"
 
 
 def validate_report(report, head):

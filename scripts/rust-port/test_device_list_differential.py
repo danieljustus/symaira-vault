@@ -66,6 +66,15 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             runner.compare_yaml(go, b"   \n")
 
+    def test_yaml_comparison_is_type_strict(self):
+        runner.compare_yaml(b"flag: true\ncount: 1\n", b"flag: true\ncount: 1\n")
+        for left, right in ((b"flag: true\n", b"flag: 1\n"), (b"count: 1\n", b"count: 1.0\n"), (b"flag: false\n", b"flag: 0\n"),
+                            (b"v: 1\n", b"v: '1'\n")):
+            with self.assertRaisesRegex(AssertionError, "YAML values differ: \\$\\.", msg=(left, right)):
+                runner.compare_yaml(left, right)
+            with self.assertRaises(AssertionError):
+                runner.compare_yaml(right, left)
+
     def test_report_validation_rejects_every_tampering(self):
         def row(seed, mode):
             negative = seed == "malformed"
