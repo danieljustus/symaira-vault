@@ -28,7 +28,7 @@ from http_head_contract import exchange as tcp_exchange
 from http_tls_contract import secure_identities
 from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, bounded, canonical_close, capture_arguments_ok, checked,
                                   go_capture_session, inventory, isolated, load_go_observations, pack_tree, pinned_seed,
-                                  provenance, replay_seed, save_go_observations, unpack_tree, vault_snapshot)
+                                  provenance, replay_seed, save_go_observations, scrub_home, unpack_tree, vault_snapshot)
 from oracle_build import remove_oracle_worktree
 
 CONTRACT='http-write'
@@ -383,7 +383,7 @@ def capture(args):
         base = session['base']
         prior = session['prior']
         identities = base / 'identities'
-        if prior:
+        if prior and prior.get('identities'):
             unpack_tree(prior['identities']['tree'], identities)
         else:
             checked([session['helpers']['identity'], '--root', identities], base)
@@ -406,7 +406,7 @@ def capture(args):
                     scratch = base / ('config-' + key)
                     scratch.mkdir()
                     checked([session['helpers']['seed'], '--root', scratch / 'vault', '--write-timeout', tried, '--secure=' + ('true' if version else 'false')], scratch, isolated(scratch))
-                    prior_config = base64.b64encode((scratch / 'vault/config.yaml').read_bytes()).decode()
+                    prior_config = base64.b64encode(scrub_home((scratch / 'vault/config.yaml').read_bytes(), scratch)).decode()
                 session['configs'][key] = prior_config
                 seed_home = base / ('seed-' + key)
                 shutil.copytree(base / 'seed-base/vault', seed_home / 'vault')

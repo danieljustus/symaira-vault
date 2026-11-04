@@ -1249,9 +1249,9 @@ go-observations-capture-http: area-oracle-runner
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/test_http001init_isolation.py --capture-go
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/go_timestamp_fixtures.py --record-go
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/mcp_http_shutdown_go_tests.py --capture-go
-	$(AREA_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-cli" .
-	$(AREA_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-seed" ./scripts/rust-port/cmd/toolhashseed
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) -B scripts/rust-port/toolhash_process_contract.py --capture-go \
+	$(AREA_HTTP_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-cli" .
+	$(AREA_HTTP_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-seed" ./scripts/rust-port/cmd/toolhashseed
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/toolhash_process_contract.py --capture-go \
 		--go-cli "$(AREA_BIN)/toolhash-go-cli" --go-seed "$(AREA_BIN)/toolhash-go-seed" $(CAPTURE_ARGS)
 
 http-framing-contract:

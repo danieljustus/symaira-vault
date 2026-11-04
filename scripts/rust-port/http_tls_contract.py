@@ -33,7 +33,7 @@ NORMALIZATION=['fixed loopback port','seed vault, tokens and the TLS/mTLS identi
                'random TLS wire bytes (encrypted_sent/received, record_sha256) are not stored: no comparison reads them',
                'wall-clock values (elapsed_seconds) and the encrypted sender progress count are asserted against the comparison bounds at '
                'capture and recorded as the bounds midpoint / minimum (see check_profile/normalize_profile)']
-IDENTITY = ROOT/'scripts/rust-port/http_tls_identity.go.txt'
+IDENTITY = ROOT/'scripts/rust-port/http_tls_identity_pinned.go.txt'
 FIELDS = ['status_line','headers_without_date','body_base64']
 
 

@@ -272,5 +272,99 @@ class ReceiptFinalizationControls(unittest.TestCase):
                 self.assertNotEqual(rejected, expected_clean)
 
 
+def _observation_files():
+    return sorted(CONTRACT.GO_OBS_DIR.glob('*.json'))
+
+
+class ObservationHygieneTests(unittest.TestCase):
+    """The committed Go observations carry no operator path and are keyed to fixed oracles."""
+
+    def test_the_scan_finds_a_path_in_plain_text_base64_nested_base64_and_gzip(self):
+        import base64
+        import gzip
+        for path in (b'/Volumes/Dev/x', b'/Users/someone/x', b'/var/folders/7v/abc/T/x', b'/private/var/folders/7v/x',
+                     b'/private/tmp/x', b'/tmp/symvault-go-capture-abc12345/seed/vault'):
+            text = b'vaultDir: ' + path + b'\n'
+            packed = base64.b64encode(text)
+            for label, data in (('plain', text), ('base64', b'{"a": "' + packed + b'"}'),
+                                ('nested', b'{"a": "' + base64.b64encode(packed) + b'"}'),
+                                ('gzip', b'{"a": "' + base64.b64encode(gzip.compress(text)) + b'"}'),
+                                ('gzip-nested', b'{"a": "' + base64.b64encode(base64.b64encode(gzip.compress(text))) + b'"}')):
+                with self.subTest(path=path, form=label):
+                    self.assertTrue(CONTRACT.operator_paths(data), (label, path))
+        self.assertEqual(CONTRACT.operator_paths(b'{"a": "vaultDir: /observation/vault", "b": "/tmp"}'), [])
+
+    def test_committed_observations_and_blobs_have_no_operator_path(self):
+        files = _observation_files() + sorted((CONTRACT.GO_OBS_DIR / 'blobs').glob('*'))
+        self.assertTrue(files, 'no committed Go observations found')
+        for file in files:
+            with self.subTest(file=file.name):
+                self.assertEqual(CONTRACT.operator_paths(file.read_bytes()), [])
+
+    def test_pack_tree_rewrites_the_capture_home_in_place(self):
+        with tempfile.TemporaryDirectory(prefix='symvault-hygiene-') as raw:
+            home = Path(raw) / 'seed'
+            vault = home / 'vault'
+            vault.mkdir(parents=True)
+            (vault / 'config.yaml').write_text(f'a: 1\nvaultDir: {vault}\nb: 2\n')
+            packed = CONTRACT.pack_tree(vault)
+            import base64
+            expected = b'a: 1\nvaultDir: /observation/vault\nb: 2\n'
+            self.assertEqual(base64.b64decode(packed['config.yaml']), expected)
+            self.assertEqual((vault / 'config.yaml').read_bytes(), expected, 'the working copy is what is recorded')
+
+    def test_pack_tree_refuses_an_operator_path_it_cannot_scrub(self):
+        with tempfile.TemporaryDirectory(prefix='symvault-hygiene-') as raw:
+            vault = Path(raw) / 'seed' / 'vault'
+            vault.mkdir(parents=True)
+            (vault / 'note').write_text('log: /Users/someone/project\n')
+            with self.assertRaisesRegex(ValueError, 'operator paths'):
+                CONTRACT.pack_tree(vault)
+
+    def test_save_refuses_an_operator_path_hidden_in_a_packed_value(self):
+        import base64
+        with tempfile.TemporaryDirectory(prefix='symvault-hygiene-') as raw:
+            saved = CONTRACT.GO_OBS_DIR
+            CONTRACT.GO_OBS_DIR = Path(raw)
+            try:
+                hidden = base64.b64encode(b'x: /var/folders/7v/abc/T/y').decode()
+                with self.assertRaisesRegex(ValueError, 'operator paths'):
+                    CONTRACT.save_go_observations('hygiene', {'tree': {'f': hidden}}, {}, [], 'go1.26.6')
+                self.assertEqual(list(Path(raw).iterdir()), [], 'nothing is written on refusal')
+            finally:
+                CONTRACT.GO_OBS_DIR = saved
+
+    def test_every_committed_observation_loads_with_its_pinned_oracle(self):
+        import re
+        seen = set()
+        for file in _observation_files():
+            contract, goos = file.name[:-len('.json')].rsplit('.', 1)
+            with self.subTest(file=file.name):
+                document = CONTRACT.load_go_observations(contract, goos=goos)   # no oracle argument: the generic loader
+                oracle = document['oracle_commit']
+                self.assertEqual(oracle, CONTRACT.pinned_oracle(contract))
+                self.assertTrue(re.fullmatch(r'[0-9a-f]{40}|go_timestamp_oracle\.go\.txt:[0-9a-f]{64}', oracle), oracle)
+                seen.add(contract)
+        self.assertTrue({'mcp-process', 'timestamp-fixtures', 'toolhash-process'} <= seen, seen)
+
+    def test_a_wrong_oracle_is_rejected(self):
+        with self.assertRaises(AssertionError):
+            CONTRACT.load_go_observations('mcp-process', goos='darwin', oracle=CONTRACT.HISTORICAL)
+
+    def test_the_toolhash_capture_pin_is_the_registered_oracle(self):
+        source = Path(__file__).with_name('toolhash_process_contract.py').read_text()
+        self.assertIn(f"GO_SOURCE_COMMIT = '{CONTRACT.TOOLHASH_ORACLE}'", source)
+
+    def test_no_oracle_identity_is_derived_from_git_history_of_go_sources(self):
+        import re
+        for script in sorted(Path(__file__).parent.glob('*contract*.py')) + [Path(__file__).with_name('go_timestamp_fixtures.py')]:
+            if script.name.startswith('test_'):
+                continue
+            text = script.read_text()
+            with self.subTest(script=script.name):
+                self.assertIsNone(re.search(r"['\"](?:log|rev-list|describe)['\"]\s*,\s*['\"]-", text) or
+                                  re.search(r"git\([^)]*['\"](?:log|rev-list)['\"]", text))
+
+
 if __name__ == '__main__':
     unittest.main()

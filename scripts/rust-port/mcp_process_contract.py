@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Real native MCP CLI/profile discovery and call-time authorization comparison."""
 import argparse
+import base64
 import contextlib
+import gzip
 import hashlib
 import json
 import os
@@ -17,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+import zlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_timeout import oracle_build_timeout, remove_worktree
@@ -416,20 +419,87 @@ def normalize_go_record(value):
     return value
 
 
+# What must never reach a committed observation: operator workstation paths and the random mkdtemp directories
+# of a capture (macOS /var/folders/.../T/<prefix>-<random>, Linux /tmp/<prefix>-<random>).
+OPERATOR_PATH = re.compile(rb'/Volumes/|/Users/|/var/folders/|/private/var/|/private/tmp/|/tmp/[A-Za-z0-9_.-]{4,}')
+# A capture home: the mkdtemp directory of a capture plus the per-fixture directory below it (seed, ttl-seed, ...).
+CAPTURE_HOME = re.compile(rb'(?:/private)?(?:/var/folders/[A-Za-z0-9_]+/[A-Za-z0-9_]+/T|/tmp)/symvault-[a-z0-9-]+-[a-z0-9_]{8}/[A-Za-z0-9_.-]+')
+OBSERVATION_HOME = '/observation'
+
+
+def operator_paths(data, depth=0):
+    """Distinct operator-path matches in bytes, in their base64 decodings and in gzip members (packed trees and
+    recorded bodies hold file contents as base64, possibly compressed, possibly nested)."""
+    found = {m.group(0).decode() for m in OPERATOR_PATH.finditer(data)}
+    if depth < 4:
+        for chunk in re.finditer(rb'[A-Za-z0-9+/]{16,}={0,2}', data):
+            raw = chunk.group(0)
+            try:
+                decoded = base64.b64decode(raw + b'=' * (-len(raw) % 4))
+            except ValueError:
+                continue
+            if decoded[:2] == b'\x1f\x8b':
+                try:
+                    decoded = gzip.decompress(decoded)
+                except (OSError, EOFError, zlib.error):
+                    pass
+            found |= {'base64:' + hit for hit in operator_paths(decoded, depth + 1)}
+    return sorted(found)
+
+
+def scrub_home(data, home=None):
+    """bytes with the capture's temporary home (every spelling of `home`, or any symvault capture directory) replaced
+    by /observation: a Go-written config.yaml names the directory it was created in, which differs per run and host."""
+    if home is not None:
+        home = Path(home)
+        forms = {str(home), os.path.realpath(home)}
+        forms |= {f[len('/private'):] for f in list(forms) if f.startswith('/private/')}
+        for form in sorted(forms, key=len, reverse=True):
+            data = data.replace(form.encode(), OBSERVATION_HOME.encode())
+    return CAPTURE_HOME.sub(OBSERVATION_HOME.encode(), data)
+
+
 def save_go_observations(contract, data, contract_args, normalization, go_version, oracle=None):
     """Write the committed Go observations of one contract (canonical, byte-stable)."""
     data = normalize_go_record(data)
     document = dict(schema=GO_OBS_SCHEMA, contract=contract, goos=native_goos(), goarch=platform.machine(),
-                    oracle_commit=oracle or ORACLE, go_version=go_version, contract_args=contract_args,
+                    oracle_commit=oracle or pinned_oracle(contract), go_version=go_version, contract_args=contract_args,
                     normalization=normalization, data=data)
+    text = canonical_json(document)
+    leaked = operator_paths(text.encode('utf-8'))
+    if leaked:
+        raise ValueError(f'{contract}: refusing to record operator paths {leaked[:5]}')
     path = go_obs_path(contract)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(canonical_json(document), encoding='utf-8')
+    path.write_text(text, encoding='utf-8')
     return path
 
 
+# The oracle every committed observation is keyed to: a fixed commit sha, or (for the Go program that lives in this
+# repository as text) the sha-256 of that program. Never derived from the Go sources of the current checkout, so the
+# observations stay valid after the Go tree is gone.
+TOOLHASH_ORACLE = 'c069d3f2b17d704525cedc1bd42840cc6a3e9896'
+TIMESTAMP_ORACLE_SOURCE = ROOT / 'scripts/rust-port/go_timestamp_oracle.go.txt'
+
+
+def pinned_oracle(contract):
+    """The oracle id the committed observation of `contract` must carry."""
+    if contract == 'mcp-process':
+        return ORDERED
+    if contract == 'toolhash-process':
+        return TOOLHASH_ORACLE
+    if contract == 'timestamp-fixtures':
+        return 'go_timestamp_oracle.go.txt:' + hashlib.sha256(TIMESTAMP_ORACLE_SOURCE.read_bytes()).hexdigest()
+    return ORACLE
+
+
 def load_go_observations(contract, contract_args=None, oracle=None, required=True, goos=None):
-    """Return the committed document; missing/mismatched observations FAIL (never skip)."""
+    """Return the committed document; missing/mismatched observations FAIL (never skip).
+
+    `oracle` defaults to the oracle pinned for this contract (pinned_oracle), so a generic caller loads
+    every observation without knowing which reference it was recorded against.
+    """
+    oracle = oracle or pinned_oracle(contract)
     path = go_obs_path(contract, goos)
     if not path.is_file():
         if not required:
@@ -440,7 +510,7 @@ def load_go_observations(contract, contract_args=None, oracle=None, required=Tru
     document = json.loads(raw)
     assert document.get('schema') == GO_OBS_SCHEMA, (contract, 'observation schema')
     assert document['contract'] == contract and document['goos'] == (goos or native_goos()), (contract, 'observation identity')
-    assert document['oracle_commit'] == (oracle or ORACLE), (contract, 'observation oracle commit')
+    assert document['oracle_commit'] == oracle, (contract, 'observation oracle commit')
     assert contract_args is None or document['contract_args'] == contract_args, (contract, 'observation contract args',
                                                                                   document['contract_args'], contract_args)
     assert canonical_json(document).encode() == raw, (contract, 'observation file is not canonical')
@@ -478,6 +548,9 @@ BLOB_THRESHOLD = 256 * 1024
 def pack_tree(root):
     """{relative path: base64 bytes} of every file below root; files above 256 KiB become content-addressed blobs.
 
+    The capture's temporary home (the parent of `root`) is replaced by /observation in the files, on disk and in the
+    record, and a remaining operator path is an error, never a commit.
+
     A blob is stored once, as raw bytes, in go-observations/blobs/<sha256> (shared by every observation and OS that records the same
     bytes) and referenced as {"blob": sha256}.
     """
@@ -487,6 +560,13 @@ def pack_tree(root):
         if not p.is_file():
             continue
         data = p.read_bytes()
+        scrubbed = scrub_home(data, Path(root).parent)
+        if scrubbed != data:
+            p.write_bytes(scrubbed)    # the working copy is rewritten too: every later snapshot hashes what is recorded
+            data = scrubbed
+        leaked = operator_paths(data)
+        if leaked:
+            raise ValueError(f'{p.relative_to(root)}: would record operator paths {leaked[:5]}')
         name = p.relative_to(root).as_posix()
         if len(data) > BLOB_THRESHOLD:
             digest = hashlib.sha256(data).hexdigest()
