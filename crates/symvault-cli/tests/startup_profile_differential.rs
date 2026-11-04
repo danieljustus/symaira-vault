@@ -140,6 +140,33 @@ fn normalize_report(stderr: &str) -> String {
     normalized
 }
 
+/// Replaces the recorded `OS/Arch:` line with the replay host's Go-style
+/// GOOS/GOARCH (darwin|linux / arm64|amd64).
+fn with_host_os_arch(report: &str) -> String {
+    let goos = match std::env::consts::OS {
+        "macos" => "darwin",
+        other => other,
+    };
+    let goarch = match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        "x86_64" => "amd64",
+        other => other,
+    };
+    let mut seen = false;
+    let mut out = String::new();
+    for line in report.lines() {
+        if line.starts_with("  OS/Arch:") {
+            seen = true;
+            out.push_str(&format!("  OS/Arch:    {goos}/{goarch}\n"));
+        } else {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    assert!(seen, "recorded Go report has an OS/Arch line");
+    out
+}
+
 /// Relative paths below `root`, sorted — side-effect manifest.
 fn tree(root: &Path) -> Vec<String> {
     fn walk(base: &Path, dir: &Path, out: &mut Vec<String>) {
@@ -201,6 +228,10 @@ fn differential_report_matches_after_normalizing_runtime_specific_lines() {
         "Rust reports its own runtime"
     );
     assert!(rust_err.contains("  Threads:"), "Rust parallelism label");
+    // The Go report was recorded once on darwin/arm64; its OS/Arch line is the
+    // recording host's. Expect the replay host's Go-style GOOS/GOARCH instead,
+    // so Rust is still checked against the host it runs on.
+    let go_err = with_host_os_arch(&go_err);
     assert_eq!(
         normalize_report(&go_err),
         normalize_report(&rust_err),
