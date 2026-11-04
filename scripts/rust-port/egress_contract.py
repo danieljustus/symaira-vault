@@ -16,7 +16,6 @@ import ssl
 import subprocess
 import tempfile
 import threading
-import time
 
 import go_observations_common as observations
 
@@ -226,10 +225,6 @@ def template(root, peer, *, auth="bearer", port=None, scheme=None, substitutions
         definition["substitutions"] = [{"placeholder": "__SECRET__", "field": "credential", "in": ["path", "query", "header", "body"]}]
     # JSON is a YAML subset; no optional PyYAML dependency is used.
     (directory / (name+".yaml")).write_text(json.dumps(definition), encoding="utf-8")
-
-
-def go_seeder(seed):
-    return lambda root, home: checked([seed, "--root", root, "--seed", home.parent / "entry.json"], cwd=home)
 
 
 def material_seeder(files):
@@ -518,59 +513,13 @@ def concurrent_ca_case(binary, home, records):
                     'first_ca_unchanged':unchanged, 'ca_removed_after_stop':all(not row['ca'].exists() for row in started)})
 
 
-def capture(args):
-    """Capture mode: build and drive the pinned Go oracle only (needs Go)."""
-    from build_timeout import oracle_build_timeout, remove_worktree
-    if os.name != "nt": os.umask(0o022)
-    with tempfile.TemporaryDirectory(prefix="symvault-egress-capture-") as raw:
-        base = Path(raw)
-        (base / "entry.json").write_text(json.dumps(DATA), encoding="utf-8")
-        tree = base / "oracle"
-        checked(["git", "worktree", "add", "--detach", tree, ORACLE])
-        try:
-            paths = checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
-            oracle_sources = sorted(x for x in paths if x in {"go.mod", "go.sum"} or x.endswith(".go") and not x.endswith("_test.go"))
-            embedded = sorted(x for x in paths if x.startswith("internal/mcp/apitemplates/builtin/"))
-            assert len(embedded) == 17
-            recorded = dict(oracle_source_files=oracle_sources, oracle_source_digest=inventory(oracle_sources, tree),
-                            oracle_embedded_files=embedded, oracle_embedded_digest=inventory(embedded, tree),
-                            probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest())
-            helper = tree / "scripts/rust-port/cmd/egressprobe"
-            helper.mkdir()
-            (helper / "main.go").write_bytes(PROBE.read_bytes())
-            go = base / "go-probe"
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "./scripts/rust-port/cmd/egressprobe"],
-                    cwd=tree, timeout=oracle_build_timeout())
-            recorded["go_binary_sha256"] = hashlib.sha256(go.read_bytes()).hexdigest()
-            go_cli = base / "go-cli"
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go_cli, "."], cwd=tree, timeout=oracle_build_timeout())
-            recorded["go_cli_binary_sha256"] = hashlib.sha256(go_cli.read_bytes()).hexdigest()
-            identities = base / "identities"
-            recorded["fixture_identity_files"] = observations.mint_tls_identities(identities, base / "identity-scratch")
-            assert len(recorded["fixture_identity_files"]) == 12
-            recorded["go"] = runtime_cases(go, go_seeder(go), base / "go-home", [], identities)
-            recorded["go_cli"] = cli_cases(go_cli, go_seeder(go), base / "go-cli-home", [])
-            seed_root = base / "seed-vault"
-            (base / "seed-home").mkdir()
-            go_seeder(go)(seed_root, base / "seed-home")
-            material = {"seed_vault": observations.pack_tree(seed_root)}
-        finally:
-            remove_worktree(lambda: checked(["git", "worktree", "remove", "--force", tree]), "oracle worktree")
-    target = observations.save("egress-contract", recorded, oracle_commit=ORACLE, version=observations.go_version(),
-                               args=["egress_contract.py", "--capture-go"], material=material)
-    print(f"captured {target.relative_to(ROOT)}")
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rust-probe", type=Path)
     parser.add_argument("--rust-cli", type=Path)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
-    observations.add_capture_flag(parser)
     args = parser.parse_args()
-    if args.capture_go:
-        return capture(args)
     assert args.rust_probe and args.rust_cli and args.receipt, "--rust-probe, --rust-cli and --receipt are required"
     rust = args.rust_probe.resolve()
     rust_cli = args.rust_cli.resolve()
@@ -582,7 +531,7 @@ def main():
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
-                     if x.startswith(("crates/", "third_party/", "testdata/", "internal/mcp/apitemplates/builtin/", "scripts/rust-port/cmd/cligap/"))
+                     if x.startswith(("crates/", "third_party/", "testdata/"))
                      or x in {"Cargo.toml", "Cargo.lock", ".gitattributes", "scripts/rust-port/egress_contract.py",
                               "scripts/rust-port/egress_contract_probe.go.txt", "scripts/rust-port/http_tls_identity.go.txt", ".github/workflows/rust-broker-egress.yml"})
     receipt = {"passed": False, "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),

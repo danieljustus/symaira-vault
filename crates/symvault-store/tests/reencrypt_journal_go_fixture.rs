@@ -2,7 +2,7 @@
 //! Go-free recovery of re-encryption journals written by the Go oracle.
 //!
 //! `testdata/port/store/reencrypt-journal.json` is recorded once from the Go production journal functions
-//! (`scripts/rust-port/reencrypt_journal_fixture.py capture`): a vault frozen after a crash with the
+//! (the capture script `scripts/rust-port/reencrypt_journal_fixture.py` lives at tag `legacy/go-oracle`): a vault frozen after a crash with the
 //! replacement only staged, and one frozen after the replacement was committed but before the journal was
 //! removed. Each scenario also holds the tree Go's own recovery leaves behind. `Store::open` must recover
 //! the frozen pre-crash tree to exactly that tree (the staged state is rolled back to the original, the

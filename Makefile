@@ -493,8 +493,7 @@ crypto-differential:
 	$(MAKE) --no-print-directory fixtures-verify FIXTURE="testdata/port/crypto/age-kdf.json"
 	python3 scripts/rust-port/go_observations_common.py replay-checked crypto-fixture --file testdata/port/crypto/age-kdf.json
 	$(CARGO) test -p symvault-crypto --all-features --locked
-	# The Rust-emitted file Go's cryptoverify checked is produced by `go-attest-other`, not here: nothing Go-free
-	# consumes it.
+	# Go's cryptoverify checked a Rust-emitted file once; that verdict is the attestation verified below.
 	python3 scripts/rust-port/go_observations_common.py verify-attestation crypto-differential
 
 # Verify the independent fuzz workspace has a present, consistent lockfile.
@@ -644,9 +643,9 @@ store-differential:
 
 # DIST-005 / RUST-014 (decision D1): the first mutation of a vault without a
 # Rust marker is preceded by a verified backup. Runs the real Rust CLI and the
-# Go oracle over Go-created seed vaults (frozen mobilebind seed, Go `init`, the
-# Go zero-key identity) and exercises the negative controls.
-DATA_SAFETY_GO_BINARY := target/port/symvault-go-data-safety
+# recorded Go seed calls (frozen mobilebind seed, Go `init`, the Go zero-key
+# identity) and exercises the negative controls. The Go reverse reads are
+# attested (docs/rust-port/evidence/go-removal-attestations/data-safety-contract.<goos>.json).
 .PHONY: data-safety-differential
 data-safety-differential:
 	$(CARGO) build -p symvault-cli --bin symvault --locked
@@ -659,7 +658,7 @@ audit-fixtures-check:
 
 audit-differential: audit-fixtures-check
 	$(CARGO) test -p symvault-store --test audit --locked
-	# The audit log Go's auditverify checked is produced by `go-attest-other` (audit-emit), not here.
+	# Go's auditverify checked a Rust-written audit log once; that verdict is the attestation verified below.
 	python3 scripts/rust-port/go_observations_common.py verify-attestation audit-differential
 
 # FFI-001: the Rust replacement for the gomobile pkg/mobilebind bridge.
@@ -673,27 +672,25 @@ audit-differential: audit-fixtures-check
 #                          Swift part prints a visible SKIP.
 SWIFT ?= swift
 FFI_TARGET_ABS := $(abspath $(CARGO_TARGET_DIR))
-FFI_DRIVER := $(FFI_TARGET_ABS)/ffi-driver/mobilebindgen
 ffi-fixtures-check ffi-differential: export SYMVAULT_TEST_KEYRING := memory
 
 ffi-fixtures-check:
 	$(MAKE) --no-print-directory fixtures-verify FIXTURE="testdata/port/ffi/mobilebind.json"
 	python3 scripts/rust-port/go_observations_common.py replay-checked ffi-fixture --file testdata/port/ffi/mobilebind.json
 
-# interop.rs (Go decrypts Rust-produced vault data) has two modes. With the Go-free replay of
-# testdata/port/cli-observations/ffi_interop.json (local/cap-cli-b) it runs and prints no SKIP. Without it
-# and without SYMVAULT_FFI_GO_DRIVER it prints "SKIP interop": that is accepted only because the
-# `ffi-differential` attestation (a live Go mobilebind driver run of the same test, SKIP forbidden when it was
-# recorded) is verified in the same target; a SKIP with a missing or foreign attestation fails.
+# interop.rs replays testdata/port/cli-observations/ffi_interop.json (Go-written data read by Rust). Go
+# decrypting Rust-produced vault data is no longer tested: the `ffi-differential` attestation (a past live Go
+# mobilebind driver run of the same test) is verified in the same target as static, historical evidence.
+# A test that prints SKIP (c_abi under coverage instrumentation) is reported, not hidden.
 FFI_LOG := target/ffi-differential/cargo-test.txt
 ffi-differential: ffi-fixtures-check
 	@set -eu; mkdir -p target/ffi-differential; \
 	$(CARGO) test -p symvault-ffi --locked -- --nocapture > "$(FFI_LOG)" 2>&1 || { cat "$(FFI_LOG)"; exit 1; }; \
 	cat "$(FFI_LOG)"; \
 	if grep -q 'SKIP' "$(FFI_LOG)"; then \
-		echo "ffi-differential: interop.rs printed SKIP (no Go driver, no Go-free replay): the Go attestation below is what covers it"; \
+		echo "ffi-differential: a test printed SKIP (see the log above)"; \
 	else \
-		echo "ffi-differential: interop.rs ran without SKIP"; \
+		echo "ffi-differential: ran without SKIP"; \
 	fi; \
 	python3 scripts/rust-port/go_observations_common.py verify-attestation ffi-differential
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
@@ -1183,7 +1180,7 @@ AREA_PAIRING_TMP := $(if $(filter Darwin,$(shell uname -s)),TMPDIR="$(shell getc
 pairing-oracle-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	# The cli/import/auth/startup differentials interleave the live Go CLI and the Rust CLI on shared
-	# vaults: a reverse check, attested once (go-attest-other). The Go process-tree harness tests are
+	# vaults: a reverse check, attested once (historical). The Go process-tree harness tests are
 	# recorded observations.
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py verify-attestation pairing-oracle
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py replay-go-text pairing-process-tree --output "$(AREA_EVIDENCE)/pairing-process-tree.log"
@@ -1225,7 +1222,7 @@ kdf-resource-policy-contract:
 		policy_migration_restores_both_files_after_post_replacement_failure \
 		policy_migration_accepts_null_vault_configuration \
 		--contains "$(AREA_KDF_MIGRATION_TESTS) passed; 0 failed; 0 ignored"
-	# Go<->Rust KDF migration integration drives the live Go CLI: attested once (go-attest-other).
+	# Go<->Rust KDF migration integration drove the live Go CLI: attested once (historical).
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py verify-attestation kdf-go-rust-integration
 
 # vault-read-resource-policy.yml
@@ -1292,7 +1289,7 @@ tui-harness-check: $(AREA_VENV)/.ready
 # example reads the encrypted store; the Go side is the committed observation
 # fixtures/go-observations/tui-contract.<goos>.json, and the driver equivalence
 # evidence proves the Python driver reproduces the Go helper's Rust-side rows.
-# `make go-observations-capture-tui` (Go, Xvfb) records both once.
+# Both were recorded once on a Go capture host (tag legacy/go-oracle); there is no capture target here.
 TUI_TARGET := $(AREA_EVIDENCE)/tui-candidate
 TUI_BUILD_ENV := CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
 # Two builds: one combined `-p ... -p ...` build unifies features differently and the binary would no longer
@@ -1316,21 +1313,6 @@ tui-contract: $(AREA_VENV)/.ready
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_mutation_test.py \
 		--rust-cli "$(TUI_TARGET)/debug/symvault" --snapshot-bin "$(TUI_SNAPSHOT)" --native-receipt "$(AREA_EVIDENCE)/tui/native-tui.json" \
 		--receipt "$(AREA_EVIDENCE)/tui/native-mutation.json"
-
-# One-time Go capture (needs Go, Xvfb/xclip and a built candidate): records the Go side of the contract and
-# the Rust binary driven by the former Go fixture helper, then proves the Python driver reproduces those
-# Rust rows. Run on each Linux lane after changing tui_driver.py, tui-snapshot.rs or the Rust browser.
-.PHONY: go-observations-capture-tui
-go-observations-capture-tui: $(AREA_VENV)/.ready
-	@rm -rf "$(AREA_EVIDENCE)/tui-capture" && mkdir -p "$(AREA_EVIDENCE)/tui-capture"
-	$(TUI_CARGO_BUILD)
-	$(TUI_CARGO_SNAPSHOT)
-	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py --capture-go \
-		--rust-cli "$(TUI_TARGET)/debug/symvault" --reference-rust-out "$(AREA_EVIDENCE)/tui-capture/reference-rust.json"
-	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py --allow-dirty-for-development \
-		--rust-cli "$(TUI_TARGET)/debug/symvault" --snapshot-bin "$(TUI_SNAPSHOT)" --receipt "$(AREA_EVIDENCE)/tui-capture/native-tui.json"
-	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_driver_equivalence.py "$(AREA_EVIDENCE)/tui-capture/reference-rust.json" \
-		"$(AREA_EVIDENCE)/tui-capture/native-tui.json" --evidence docs/rust-port/evidence/tui-driver-equivalence.$$(uname -s | tr A-Z a-z).json
 
 rust-gates-core: store-differential audit-differential
 	$(MAKE) rust-lint
@@ -1642,7 +1624,7 @@ api-templates-differential: api-templates-fixtures-check
 # MCP-003: Go-recorded request_share/approve_share/revoke_share/list_shares corpus
 # (testdata/port/mcp/tools-sharing.json) driven through the real Go protocol
 # handler over a seeded share store. The check is non-writing and needs the
-# pinned toolchain (GOWORK=off); generation is the explicit -generate target.
+# archived oracle; the frozen fixture is only verified here.
 .PHONY: mcp-sharing-fixtures-check mcp-sharing-differential
 mcp-sharing-fixtures-check:
 	$(MAKE) --no-print-directory fixtures-verify FIXTURE="testdata/port/mcp/tools-sharing.json"
@@ -1703,8 +1685,8 @@ mcp-copy-clipboard-differential: mcp-copy-clipboard-fixtures-check mcp-clipboard
 .PHONY: mcp-secure-input-fixtures-check mcp-secure-input-differential
 mcp-secure-input-fixtures-check: mcp-ordered-fixtures-check
 	$(MAKE) --no-print-directory fixtures-verify FIXTURE="testdata/port/mcp/secure-input.json"
-	# The Go IsPrint table check ran `go run secure_input_unicode`; Go is not needed any more: the table
-	# still has the bytes the Go check accepted (captured by go-observations-capture-other).
+	# The Go IsPrint table check ran a Go program once; Go is not needed any more: the table
+	# still has the bytes the Go check accepted (committed observation).
 	python3 scripts/rust-port/go_observations_common.py replay-checked secure-input-unicode --file crates/symvault-core/src/go_unicode_print_15.rs
 
 mcp-secure-input-differential: mcp-secure-input-fixtures-check
@@ -1770,13 +1752,13 @@ export-cli-fixtures-check:
 	$(MAKE) --no-print-directory fixtures-verify FIXTURE="testdata/port/cli/export-backup-restore.json"
 
 # Go->Rust crash recovery used the live Go test. It is now three Go-free checks plus one attestation:
-#   1. the frozen Go-written journal states (testdata/port/store/reencrypt-journal.json, recorded by
-#      scripts/rust-port/reencrypt_journal_fixture.py capture from the Go production journal functions) are
+#   1. the frozen Go-written journal states (testdata/port/store/reencrypt-journal.json, recorded once from
+#      the Go production journal functions; the capture script lives at tag legacy/go-oracle) are
 #      recovered by Store::open to the tree Go's own recovery left;
 #   2. the existing journal recovery unit tests, selected by exact name (the old `cargo test ... reencrypt`
 #      filter matched one trivial test);
 #   3. every one of those tests must be listed as `ok` in the log (their names are printed);
-#   4. Rust-written journals recovered by Go (the reverse direction) stay an attestation (go-attest-other).
+#   4. Rust-written journals recovered by Go (the reverse direction) stay an attestation (historical).
 # The state "replacement staged, backup not yet journaled" is rolled back by Go and, with the fixture test
 # asserting Go's tree, by Rust too; a changed target without staged-replacement provenance stays refused.
 REENCRYPT_FIXTURE_TESTS := go_written_crash_states_recover_to_the_tree_go_recovery_leaves the_comparison_notices_a_wrong_tree
@@ -1791,81 +1773,14 @@ reencrypt-journal-differential:
 	echo "matched tests:"; grep -h '^test .* \.\.\. ok$$' "$$log" "$$units" | sed 's/^/  /'
 	python3 scripts/rust-port/go_observations_common.py verify-attestation reencrypt-journal-differential
 
-# Capture the Go side of the non-HTTP process contracts and live-Go differentials
-# once (needs Go; writes scripts/rust-port/fixtures/go-observations/<contract>.<goos>.json).
-# Every contract target replays these files and runs Rust only. A missing
-# observation fails the target. Both local-gate lanes capture: darwin natively, linux through
-# `scripts/rust-port/go-observations-capture-linux.sh NAME 'make go-observations-capture-other'` (gate image;
-# `... 'make go-attest-other'` records the reverse-check attestations there). Captures never record host paths.
-.PHONY: go-observations-capture-other go-observations-selftest
-GO_OBS_CAPTURE := $(AREA_ENV) $(AREA_GO) $(AREA_PYTHON)
-go-observations-capture-other:
-	$(GO_OBS_CAPTURE) scripts/rust-port/api_transport_contract.py --capture-go
-	$(GO_OBS_CAPTURE) scripts/rust-port/connect_contract.py --capture-go
-	$(AREA_ENV) $(AREA_GO) $(if $(wildcard /opt/homebrew/bin/bash),CLI_ARTIFACTS_BASH=/opt/homebrew/bin/bash) $(AREA_PYTHON) scripts/rust-port/cli_artifacts_contract.py --capture-go --require-native-shells
-	$(GO_OBS_CAPTURE) scripts/rust-port/go_observations_common.py capture-go-text cli-artifacts-go-manual -- $(GO) test ./internal/manpages ./scripts/rust-port/cmd/portgen -count=1 -v
-	$(GO_OBS_CAPTURE) scripts/rust-port/go_observations_common.py capture-checked cli-artifacts-port-fixture --file $(PORT_CLI_FIXTURE) -- $(GO) run ./scripts/rust-port/cmd/portgen --check --output $(PORT_CLI_FIXTURE)
-	$(GO_OBS_CAPTURE) scripts/rust-port/intake_watch_contract.py --capture-go
-	$(GO_OBS_CAPTURE) scripts/rust-port/serve_contract.py --capture-go
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/signal_process_contract.py --capture-go
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/device_list_differential.py --capture-go
-	$(GO_OBS_CAPTURE) scripts/rust-port/egress_contract.py --capture-go
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/native_closeout.py portable --capture-go
-
+# Committed Go observations: every contract target replays
+# scripts/rust-port/fixtures/go-observations/<contract>.<goos>.json (and the reverse-check
+# attestations under docs/rust-port/evidence/go-removal-attestations/) and runs Rust only. A missing
+# observation fails the target. This tree has no capture or attest mode and no Go toolchain
+# requirement: re-recording means checking out tag legacy/go-oracle (docs/rust-port/go-oracle-archive.md).
+.PHONY: go-observations-selftest
 go-observations-selftest:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_go_observations_common.py
 	$(AREA_ENV) $(AREA_PYTHON) -B scripts/rust-port/test_intake_watch_contract.py
 	$(AREA_ENV) $(AREA_PYTHON) -B scripts/rust-port/test_device_list_differential.py
 	$(AREA_ENV) $(AREA_PYTHON) -B scripts/rust-port/test_native_closeout.py
-
-# native_closeout.py keyring: the Go write/verify halves of the native keyring interop, attested once per OS.
-# It stores items in the OS keyring, so it only runs where that is disposable (a hosted runner, or the Linux
-# gate image with GITHUB_ACTIONS=true SYMVAULT_DISPOSABLE_NATIVE_RUNNER=1 and gnome-keyring + dbus-run-session);
-# never on a workstation. The Go-free `native_closeout.py keyring` then runs the Rust half against it.
-.PHONY: go-attest-native-keyring
-go-attest-native-keyring:
-	GOWORK=off $(AREA_PYTHON) -B scripts/rust-port/native_closeout.py keyring --attest-go
-
-# Go-only capture of the helper-driven observations (go test / go run), then the reverse-check
-# attestations. Needs the Go oracle; run once per OS before Go is removed.
-GO_OBS_HELPER := $(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py
-GO_OBS_HELPER_HTTP := $(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/go_observations_common.py
-.PHONY: go-attest-other
-go-observations-capture-other: go-observations-capture-other-tests
-go-observations-capture-other-tests:
-	$(AREA_ENV) $(AREA_HTTP_GO) python3 scripts/rust-port/mcp_authz_matrix.py --capture-go
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py capture update
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py capture kdf-policy
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py capture read-policy
-	$(GO_OBS_HELPER) capture-go-json kdf-go-crypto -- $(GO) test -race ./internal/crypto -count=1 -json
-	$(GO_OBS_HELPER) capture-go-json kdf-go-vault -- $(GO) test -race ./internal/vault -run '^TestKDFPolicyMigration' -count=1 -json
-	$(GO_OBS_HELPER) capture-go-json read-policy-go -- $(GO) test -race -json ./internal/vault ./internal/template ./internal/mcp/server -run TestResourcePolicy -count=1
-	$(GO_OBS_HELPER_HTTP) capture-go-json store-live --env SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" -- $(GO) test ./internal/vault -run '^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance|TestEncryptedIndexBuildEmptyGoRust)$$' -count=1 -timeout=15m -json
-	$(GO_OBS_HELPER_HTTP) capture-go-json store-observations -- $(GO) test -race ./scripts/rust-port/cmd/storegen -count=1 -json
-	$(GO_OBS_HELPER_HTTP) capture-checked audit-fixture --file testdata/port/audit/audit.json -- $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
-	$(GO_OBS_HELPER_HTTP) capture-checked crypto-fixture --file testdata/port/crypto/age-kdf.json -- $(GO) run ./scripts/rust-port/cmd/cryptogen --check --output testdata/port/crypto/age-kdf.json
-	$(GO_OBS_HELPER_HTTP) capture-checked ffi-fixture --file testdata/port/ffi/mobilebind.json -- $(GO) run ./scripts/rust-port/cmd/mobilebindgen --check --output testdata/port/ffi/mobilebind.json
-	$(GO_OBS_HELPER_HTTP) capture-checked store-observations-fixture --file testdata/port/store/store.json -- $(GO) run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json
-	$(GO_OBS_HELPER_HTTP) capture-go-json sync-observations-syncgen -- $(GO) test -race ./scripts/rust-port/cmd/syncgen -count=1 -json
-	$(GO_OBS_HELPER_HTTP) capture-go-json sync-observations-backup -- $(GO) test -race ./cmd/admin -run '^TestCreateBackup_NormalizesTarMemberSeparators$$' -count=1 -json
-	$(GO_OBS_HELPER_HTTP) capture-checked sync-observations-fixtures --file testdata/port/sync/portable.json --file testdata/port/sync/git-io.json -- sh -c '$(GO) run ./scripts/rust-port/cmd/syncgen --portable --check --output testdata/port/sync/portable.json && $(GO) run ./scripts/rust-port/cmd/gitio --check --output testdata/port/sync/git-io.json'
-	$(GO_OBS_HELPER) capture-checked secure-input-unicode --file crates/symvault-core/src/go_unicode_print_15.rs -- $(GO) run ./scripts/rust-port/cmd/secure_input_unicode
-	$(GO_OBS_HELPER_HTTP) capture-go-text pairing-process-tree -- $(GO) test -count=1 -v ./scripts/rust-port/cmd/caserun ./scripts/rust-port/cmd/devicelistdriver ./scripts/rust-port/internal/diff
-	$(CARGO) build -p symvault-cli --bin symvault --locked
-	$(CARGO) build -p symvault-sync --example data_safety_probe --locked
-	CGO_ENABLED=0 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=false -o "$(DATA_SAFETY_GO_BINARY)" .
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -I scripts/rust-port/data_safety_contract.py --capture-go --rust "$(RUST_BINARY)" --go "$(DATA_SAFETY_GO_BINARY)" --probe "$(CARGO_TARGET_DIR)/debug/examples/data_safety_probe"
-
-# Reverse checks (Go verifies or consumes what Rust wrote): run once with Go, commit the attestations
-# under docs/rust-port/evidence/go-removal-attestations/. Needs built Rust artifacts (rust-build).
-go-attest-other:
-	@rm -rf target/audit target/crypto && mkdir -p target/audit target/crypto
-	$(CARGO) build -p symvault-cli --bin symvault -p symvault-store --example audit-emit -p symvault-crypto --example crypto_emit --locked
-	$(CARGO_TARGET_DIR)/debug/examples/audit-emit target/audit/rust-output.jsonl >/dev/null
-	$(CARGO_TARGET_DIR)/debug/examples/crypto_emit > target/crypto/rust-output.txt
-	$(GO_OBS_HELPER_HTTP) attest audit-differential --artifact rust-output.jsonl=target/audit/rust-output.jsonl --note "Go auditverify validates the audit log Rust wrote" -- $(GO) run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
-	$(GO_OBS_HELPER_HTTP) attest crypto-differential --artifact rust-output.txt=target/crypto/rust-output.txt --note "Go cryptoverify validates the age/KDF output Rust emitted" -- $(GO) run ./scripts/rust-port/cmd/cryptoverify target/crypto/rust-output.txt
-	$(GO_OBS_HELPER_HTTP) attest reencrypt-journal-differential --env SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" --artifact symvault="$(RUST_BINARY)" --note "Go test drives the Rust binary through re-encrypt journal crash recovery" -- $(GO) test ./internal/vault -run '^TestReencryptJournalGoRustIntegration$$' -count=1
-	$(GO_OBS_HELPER_HTTP) attest kdf-go-rust-integration --env SYMVAULT_GO_BINARY="$(abspath target/port/go-cli-kdf)" --artifact symvault="$(RUST_BINARY)" --note "Go CLI creates vaults, the Rust CLI migrates KDF policy and Go reads them back" -- sh -c 'CGO_ENABLED=0 $(GO) build -o target/port/go-cli-kdf . && $(CARGO) test -p symvault-cli --test migrate_kdf_differential --locked -- --ignored'
-	$(GO_OBS_HELPER_HTTP) attest ffi-differential --require-output 'test result: ok' --forbid-output 'SKIP' --env SYMVAULT_FFI_GO_DRIVER="$(FFI_DRIVER)" --artifact symvault="$(RUST_BINARY)" --note "Rust-produced vault data is decrypted by the live Go mobilebind driver" -- sh -c '$(GO) build -o $(FFI_DRIVER) ./scripts/rust-port/cmd/mobilebindgen && $(CARGO) test -p symvault-ffi --locked -- --nocapture'
-	$(GO_OBS_HELPER_HTTP) attest pairing-oracle --artifact symvault="$(RUST_BINARY)" --note "Live Go CLI and Rust CLI interleaved on shared vaults (cli_differential, import quarantine, auth, startup profile)" -- env CARGO="$(CARGO)" GO="$(GO)" BUILD_GO_TOOLCHAIN="$(BUILD_GO_TOOLCHAIN)" AREA_CHECK="$(AREA_CHECK)" scripts/rust-port/area_pairing_oracle.sh "$(abspath $(AREA_EVIDENCE))"

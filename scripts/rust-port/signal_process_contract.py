@@ -10,8 +10,8 @@ running this driver on Windows fails closed instead of passing vacuously.
 
 Each observation records how the process ended (exit status or killing signal),
 stdout/stderr, whether a listener or an orphaned child survived, and the
-on-disk names left under HOME (including a private TMPDIR). The Go oracle is
-built from ORACLE; Rust must produce the same observation. The one documented
+on-disk names left under HOME (including a private TMPDIR). The Go side is
+replayed from the committed observation (recorded from ORACLE; no Go is run); Rust must produce the same observation. The one documented
 difference is Go's persistent <vault>/broker-ca.pem, which Rust replaces with a
 per-instance temporary CA directory that must not survive any catchable signal.
 
@@ -30,8 +30,6 @@ and in stdio `mcp`; a `ui` copy kept until quit (duration 0) is cleared before a
 """
 import argparse
 import hashlib
-import http.client
-import io
 import json
 import os
 from pathlib import Path
@@ -44,7 +42,6 @@ import signal
 import socket
 import subprocess
 import sys
-import tarfile
 import tempfile
 import termios
 import threading
@@ -491,232 +488,11 @@ def ui_case(binary, base, template, sig):
     return record
 
 
-def clipboard_case(go, base, template, sig):
-    """Go only: stdio `mcp` with an armed clipboard auto-clear timer receives `sig`.
-
-    Fake pasteboard tools sit first on a PATH that cannot reach the real ones (macOS keeps
-    `pbcopy` in /usr/bin), so the real pasteboard is never touched. The record notes
-    whether the tool recorded the secret and the clear, how the process ended, and
-    whether it kept serving after the clear.
-    """
-    name = f"mcp-clipboard-armed-{sig.lower()}"
-    home = new_home(base, template, name)
-    fake = home / "fakebin"
-    fake.mkdir()
-    for tool in FAKE_CLIPBOARD_TOOLS:
-        (fake / tool).write_text(FAKE_CLIPBOARD)
-        (fake / tool).chmod(0o755)
-    config = home / "vault" / "config.yaml"
-    config.write_text(config.read_text().replace("        canWrite: true\n",
-                                                 "        canWrite: true\n        canUseClipboard: true\n        approvalMode: none\n"))
-    checked([go, "--vault", home / "vault", "set", "github", "--value", CLIPBOARD_SECRET], cwd=home, env=isolated(home))
-    env = isolated(home)
-    env["PATH"] = f"{fake}:/bin"
-    proc = Proc([go, "mcp", "--stdio", "--agent", "cli"], home, stdin=subprocess.PIPE, env=env)
-    events = fake / "events"
-    try:
-        def send(line):
-            proc.popen.stdin.write(line + b"\n")
-            proc.popen.stdin.flush()
-        send(INITIALIZE.strip())
-        proc.wait_for_output(b'"id":1')
-        send(b'{"jsonrpc":"2.0","method":"notifications/initialized"}')
-        send(b'{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"copy_to_clipboard","arguments":{"path":"github"}}}')
-        proc.wait_for_output(b'"id":2')
-        assert b'"isError":false' in bytes(proc.out), ("copy_to_clipboard failed", bytes(proc.out)[-300:])
-        assert events.read_text().split() == ["secret"], "control: the fake tool must hold the secret before the signal"
-        proc.popen.send_signal(getattr(signal, sig))
-        try:
-            proc.popen.wait(timeout=DIE_WINDOW if sig != "SIGHUP" else SURVIVE_WINDOW)
-            serving = False
-        except subprocess.TimeoutExpired:
-            send(b'{"jsonrpc":"2.0","id":3,"method":"ping"}')
-            proc.wait_for_output(b'"id":3')
-            serving = True
-        # The fake tool is a child of the server and may finish after the server exited.
-        deadline = time.monotonic() + 5
-        while events.read_text().split() != ["secret", "clear"] and time.monotonic() < deadline:
-            time.sleep(0.02)
-        record = dict(case=name, command="mcp-clipboard-armed", signal=sig, serving_after_signal=serving,
-                      ending=None if serving else ending(proc.popen.returncode),
-                      clipboard_events=events.read_text().split())
-    finally:
-        proc.kill()
-    return record
-
-
-def ui_clipboard_case(go, base, template, sig):
-    """Go only: `ui` on a pseudo-terminal copies the selected entry (an armed auto-clear), then gets `sig`.
-
-    Same fake-pasteboard PATH as `clipboard_case`: the real pasteboard is never touched. Go's
-    `StartAutoClear` subscription takes SIGINT, SIGTERM and SIGHUP: SIGHUP clears and `ui`
-    keeps running (a second SIGHUP, with nothing armed, kills it by the signal); SIGQUIT is not
-    subscribed, so Go dumps goroutines, exits 2 and leaves the secret on the clipboard.
-    """
-    name = f"ui-clipboard-armed-{sig.lower()}"
-    home = new_home(base, template, name)
-    fake = home / "fakebin"
-    fake.mkdir()
-    for tool in FAKE_CLIPBOARD_TOOLS:
-        (fake / tool).write_text(FAKE_CLIPBOARD)
-        (fake / tool).chmod(0o755)
-    checked([go, "--vault", home / "vault", "set", "github", "--value", CLIPBOARD_SECRET], cwd=home, env=isolated(home))
-    env = isolated(home)
-    env["PATH"] = f"{fake}:/bin"
-    env["TERM"] = "xterm-256color"
-    events = fake / "events"
-
-    def logged():
-        return events.read_text().split() if events.exists() else []
-
-    master, slave = pty.openpty()
-    screen = bytearray()
-    popen = subprocess.Popen([str(go), "ui"], cwd=home, env=env, stdin=slave, stdout=slave,
-                             stderr=subprocess.DEVNULL, start_new_session=True)
-    os.close(slave)
-
-    def wait_until(done, seconds):
-        end = time.monotonic() + seconds
-        while time.monotonic() < end and not done():
-            read_pty(master, screen, 0.05)
-        return done()
-
-    try:
-        assert wait_until(lambda: ALT_SCREEN_ON in screen, 30), "ui never entered the alternate screen"
-        read_pty(master, screen, 0.5)
-        os.write(master, b"\r")  # Enter copies the selected entry's field
-        assert wait_until(lambda: logged() == ["secret"], 10), ("control: the copy must reach the fake tool", logged())
-        assert CLIPBOARD_SECRET.encode() not in screen, "control: the secret is never drawn"
-        popen.send_signal(getattr(signal, sig))
-        wait_until(lambda: popen.poll() is not None, SURVIVE_WINDOW if sig == "SIGHUP" else DIE_WINDOW)
-        serving = popen.poll() is None
-        record = dict(case=name, command="ui-clipboard-armed", signal=sig, serving_after_signal=serving,
-                      ending=None if serving else ending(popen.returncode), second_ending=None)
-        if serving:
-            assert wait_until(lambda: logged() == ["secret", "clear"], 5), ("clear after signal", logged())
-            popen.send_signal(signal.SIGHUP)  # nothing armed any more
-            assert wait_until(lambda: popen.poll() is not None, DIE_WINDOW), "second SIGHUP must end ui"
-            record["second_ending"] = ending(popen.returncode)
-        # The fake tool is a child of the UI and may finish after it exited.
-        wait_until(lambda: logged() == ["secret", "clear"], 3)
-        record["clipboard_events"] = logged()
-    finally:
-        if popen.poll() is None:
-            popen.kill()
-            popen.wait()
-        os.close(master)
-    return record
-
-
 HTTP_BINDING_MARKER = b"without TLS; bearer tokens travel in cleartext"
 HTTP_CLIPBOARD_CASES = (  # (armed copy, signal, SIGHUP inherited as SIG_IGN)
     (True, "SIGINT", False), (True, "SIGTERM", False), (True, "SIGHUP", False),
     (False, "SIGHUP", False), (True, "SIGHUP", True), (False, "SIGHUP", True),
 )
-
-
-def free_loopback_port():
-    with socket.socket() as selection:
-        selection.bind(("127.0.0.1", 0))
-        return selection.getsockname()[1]
-
-
-def http_post(port, token, body):
-    """One JSON-RPC POST to /mcp; returns (status, body bytes)."""
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
-    try:
-        connection.request("POST", "/mcp", body=body, headers={
-            "Authorization": f"Bearer {token}", "X-Symaira-Agent": "fixture", "Origin": f"http://127.0.0.1:{port}",
-            "Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
-        response = connection.getresponse()
-        return response.status, response.read()
-    finally:
-        connection.close()
-
-
-def http_clipboard_case(go, base, seed_home, token, armed, sig, ignored=False):
-    """Go only: HTTP `mcp` receives `sig`, with or without an armed clipboard auto-clear timer.
-
-    Go arms `StartAutoClear` for `copy_to_clipboard` over HTTP too, and that timer (not `serve`)
-    is the only subscriber of SIGHUP. Fake pasteboard tools sit first on a PATH that cannot reach
-    the real ones, so the real pasteboard is never touched. `ignored` starts the server with SIGHUP
-    inherited as SIG_IGN (`nohup`). The record notes whether the server kept serving after the
-    signal (answered a ping), how each further signal ended it, and what the fake tool saw.
-    """
-    name = f"mcp-http-clipboard-{'armed' if armed else 'idle'}-{'ignored-' if ignored else ''}{sig.lower()}"
-    home = new_home(base, seed_home, name)
-    fake = home / "fakebin"
-    fake.mkdir()
-    for tool in FAKE_CLIPBOARD_TOOLS:
-        (fake / tool).write_text(FAKE_CLIPBOARD)
-        (fake / tool).chmod(0o755)
-    config = home / "vault" / "config.yaml"
-    text = config.read_text()
-    patched = text.replace("        canReadValues: true\n", "        canReadValues: true\n        canUseClipboard: true\n", 2)
-    assert patched.count("canUseClipboard: true") == 2, ("the fixture config changed", text)
-    config.write_text(patched)
-    port = free_loopback_port()
-    env = isolated(home)
-    env["PATH"] = f"{fake}:/bin"
-    proc = Proc([go, "--quiet", "mcp", "--bind", "127.0.0.1", "--port", str(port)], home, stdin=subprocess.PIPE,
-                env=env, ignore=("SIGHUP",) if ignored else ())
-    events = fake / "events"
-
-    def logged():
-        return events.read_text().split() if events.exists() else []
-
-    def ping_answered():
-        status, body = http_post(port, token, '{"jsonrpc":"2.0","id":9,"method":"ping"}')
-        return status == 200 and b'"id":9' in body
-
-    try:
-        proc.popen.stdin.write(b"y\n")  # the cleartext-bind confirmation is part of the CLI contract
-        proc.popen.stdin.close()
-        deadline = time.monotonic() + 30
-        while HTTP_BINDING_MARKER not in bytes(proc.err) or not listener_open(port):
-            assert proc.popen.poll() is None, ("server exited before serving", bytes(proc.err)[-500:])
-            assert time.monotonic() < deadline, "server never listened"
-            time.sleep(0.02)
-        initialize = INITIALIZE.decode().strip()
-        assert http_post(port, token, initialize)[0] == 200, "initialize must succeed"
-        if armed:
-            status, body = http_post(port, token, '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":'
-                                     '{"name":"copy_to_clipboard","arguments":{"path":"public/fixture"}}}')
-            assert status == 200 and b'"isError":false' in body, ("copy_to_clipboard failed", status, body[-300:])
-            assert logged() == ["secret"], ("control: the fake tool must hold the secret before the signal", logged())
-        else:
-            assert logged() == [], ("control: nothing may touch the clipboard before the signal", logged())
-        proc.popen.send_signal(getattr(signal, sig))
-        try:
-            proc.popen.wait(timeout=SURVIVE_WINDOW if sig == "SIGHUP" else DIE_WINDOW)
-            serving = False
-        except subprocess.TimeoutExpired:
-            serving = ping_answered()
-        record = dict(case=name, command="mcp-http-clipboard", armed=armed, signal=sig, ignored=ignored,
-                      serving_after_signal=serving, ending=None if serving else ending(proc.popen.returncode),
-                      second_ending=None, final_ending=None)
-        if serving:
-            # A second SIGHUP finds no armed timer. Inherited SIG_IGN is then back in force.
-            if not survived_signal(proc, proc.popen.send_signal, signal.SIGHUP, should_die=not ignored):
-                record["second_ending"] = ending(proc.popen.returncode)
-            else:
-                proc.popen.send_signal(signal.SIGTERM)
-                record["final_ending"] = ending(proc.finish())
-        # The fake tool is a child of the server and may finish after the server exited.
-        deadline = time.monotonic() + 3
-        while armed and logged() != ["secret", "clear"] and time.monotonic() < deadline:
-            time.sleep(0.02)
-        record["clipboard_events"] = logged()
-    finally:
-        proc.kill()
-    return record
-
-
-def exercise_go_only(go, base, template, seed_home, token):
-    return ([clipboard_case(go, base, template, sig) for sig in ("SIGINT", "SIGTERM", "SIGHUP")]
-            + [ui_clipboard_case(go, base, template, sig) for sig in ("SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT")]
-            + [http_clipboard_case(go, base, seed_home, token, armed, sig, ignored)
-               for armed, sig, ignored in HTTP_CLIPBOARD_CASES])
 
 
 GO_EXPECTED_CLIPBOARD = {  # (serving after the signal, ending when it stopped)
@@ -748,6 +524,30 @@ GO_EXPECTED_HTTP_CLIPBOARD = {
 }
 
 
+def exercise(binary, base, template):
+    binary = Path(binary)
+    records = []
+    for command in ("broker", "intake-watch"):
+        for sig in KILLING:
+            records.append(foreground_case(binary, base, template, command, sig))
+    for command in ("run", "run-broker"):
+        for sig in KILLING:
+            records.append(run_case(binary, base, template, command, sig, False))
+        for sig in ("SIGINT", "SIGTERM"):
+            records.append(run_case(binary, base, template, command, sig, True))
+    records.append(run_case(binary, base, template, "run", "SIGINT", True, ("--timeout", "60s"), "-timeout"))
+    for command, sig in IGNORED_CASES:
+        if command in ("broker", "intake-watch"):
+            records.append(foreground_case(binary, base, template, command, sig, ignored=True))
+        else:
+            records.append(run_case(binary, base, template, command, sig, False, ignored=True))
+    for sig in KILLING:
+        records.append(locked_case(binary, base, template, sig))
+    for sig in KILLING:
+        records.append(ui_case(binary, base, template, sig))
+    return records
+
+
 def check_go_only(records):
     """The Go clipboard records must show clear-then-shutdown (SIGINT/SIGTERM) or clear-and-serve (SIGHUP)."""
     mcp = [r for r in records if r["command"] == "mcp-clipboard-armed"]
@@ -776,48 +576,6 @@ def check_go_only(records):
         assert record["second_ending"] == second, ("oracle drifted: http second SIGHUP", record)
         assert record["final_ending"] == after, ("oracle drifted: http follow-up SIGTERM", record)
         assert record["clipboard_events"] in events, ("oracle drifted: http clipboard clear", record)
-
-
-def exercise(binary, base, template):
-    binary = Path(binary)
-    records = []
-    for command in ("broker", "intake-watch"):
-        for sig in KILLING:
-            records.append(foreground_case(binary, base, template, command, sig))
-    for command in ("run", "run-broker"):
-        for sig in KILLING:
-            records.append(run_case(binary, base, template, command, sig, False))
-        for sig in ("SIGINT", "SIGTERM"):
-            records.append(run_case(binary, base, template, command, sig, True))
-    records.append(run_case(binary, base, template, "run", "SIGINT", True, ("--timeout", "60s"), "-timeout"))
-    for command, sig in IGNORED_CASES:
-        if command in ("broker", "intake-watch"):
-            records.append(foreground_case(binary, base, template, command, sig, ignored=True))
-        else:
-            records.append(run_case(binary, base, template, command, sig, False, ignored=True))
-    for sig in KILLING:
-        records.append(locked_case(binary, base, template, sig))
-    for sig in KILLING:
-        records.append(ui_case(binary, base, template, sig))
-    return records
-
-
-def compare(go, rust):
-    """Raise AssertionError on the first observable difference."""
-    assert [r["case"] for r in go] == [r["case"] for r in rust], "different case lists"
-    for left, right in zip(go, rust):
-        name = left["case"]
-        keys = ["ending", "stdout", "stderr", "listener_closed", "orphaned_child_alive",
-                "ignored", "survived", "listener_open_after_ignored_signal",
-                "terminal_restored", "alt_screen_left"]
-        for key in keys:
-            assert left.get(key) == right.get(key), (name, key, left.get(key), right.get(key))
-        go_state, rust_state = list(left["state"]), list(right["state"])
-        if left["command"].startswith(("broker", "run-broker")):
-            # Documented difference: Go leaves its persistent public CA file in the vault.
-            go_state = [n for n in go_state if n != f"vault/{CA_NAME}"]
-        assert go_state == rust_state, (name, "on-disk state", go_state, rust_state)
-        assert not any(".broker-ca-" in n for n in right["state"]), (name, "temporary CA left behind", right["state"])
 
 
 def check_oracle_expectations(go):
@@ -854,87 +612,42 @@ def check_oracle_expectations(go):
             assert record["orphaned_child_alive"] is False
 
 
-def build_oracle(destination):
-    archive = checked(["git", "archive", ORACLE])
-    source = destination / "src"
-    source.mkdir()
-    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        tar.extractall(source, filter="data")
-    helper = source / "scripts/rust-port/cmd/httpprocessseed"
-    helper.mkdir(parents=True)
-    (helper / "main.go").write_bytes(SEED.read_bytes())
-    env = dict(os.environ, GOWORK="off")
-    binary, seed = destination / "symvault-go", destination / "symvault-seed"
-    for output, package in ((binary, "."), (seed, "./scripts/rust-port/cmd/httpprocessseed")):
-        checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", output, package], cwd=source, env=env, timeout=600)
-    return binary, seed
-
-
-def make_template(go, base):
-    template = base / "template"
-    template.mkdir()
-    checked([go, "init", "--auth", "passphrase"], cwd=template, env=isolated(template))
-    shutil.rmtree(template / "tmp")
-    return template
-
-
-def capture(args):
-    """Capture mode: build the pinned Go oracle and observe it alone (needs Go)."""
-    if os.name == "nt":
-        sys.exit("signal_process_contract.py is Unix-only")
-    with tempfile.TemporaryDirectory(prefix="symvault-signals-capture-") as raw:
-        base = Path(raw)
-        go, seed = (args.go.resolve(), args.go_seed.resolve()) if args.go else build_oracle(base)
-        recorded = {"go_binary_sha256": hashlib.sha256(go.read_bytes()).hexdigest(),
-                    "seed_sha256": hashlib.sha256(SEED.read_bytes()).hexdigest()}
-        material = observations.existing_material("signal-process-contract")
-        if material is None:
-            template = make_template(go, base)
-            material = {"template": observations.pack_tree(template)}
-        template = base / "template-material"
-        observations.unpack_tree(material["template"], template)
-        go_root = base / "go"
-        go_root.mkdir()
-        recorded["go"] = exercise(go, go_root, template)
-        check_oracle_expectations(recorded["go"])
-        seed_home = base / "http-seed"
-        seed_home.mkdir()
-        tokens = json.loads(checked([seed, "--root", seed_home / "vault"], cwd=seed_home, env=isolated(seed_home)))
-        recorded["go_only"] = exercise_go_only(go, go_root, template, seed_home, tokens["full"])
-        check_go_only(recorded["go_only"])
-        for row in recorded["go_only"]:
-            if row["command"] == "mcp-http-clipboard":
-                # Go exits before its timer's clear reaches the tool in most runs (a race the oracle itself
-                # documents): keep one canonical member of the acceptable set so captures stay byte-identical.
-                acceptable = GO_EXPECTED_HTTP_CLIPBOARD[(row["armed"], row["signal"], row["ignored"])][4]
-                row["clipboard_events_acceptable"] = [list(events) for events in acceptable]
-                row["clipboard_events"] = list(max(acceptable, key=len))
-    target = observations.save("signal-process-contract", recorded, oracle_commit=ORACLE, version=observations.go_version(),
-                               args=["signal_process_contract.py", "--capture-go"], material=material)
-    print(f"captured {observations.rel(target)}")
+def compare(go, rust):
+    """Raise AssertionError on the first observable difference."""
+    assert [r["case"] for r in go] == [r["case"] for r in rust], "different case lists"
+    for left, right in zip(go, rust):
+        name = left["case"]
+        keys = ["ending", "stdout", "stderr", "listener_closed", "orphaned_child_alive",
+                "ignored", "survived", "listener_open_after_ignored_signal",
+                "terminal_restored", "alt_screen_left"]
+        for key in keys:
+            assert left.get(key) == right.get(key), (name, key, left.get(key), right.get(key))
+        go_state, rust_state = list(left["state"]), list(right["state"])
+        if left["command"].startswith(("broker", "run-broker")):
+            # Documented difference: Go leaves its persistent public CA file in the vault.
+            go_state = [n for n in go_state if n != f"vault/{CA_NAME}"]
+        assert go_state == rust_state, (name, "on-disk state", go_state, rust_state)
+        assert not any(".broker-ca-" in n for n in right["state"]), (name, "temporary CA left behind", right["state"])
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rust", type=Path)
     parser.add_argument("--receipt", type=Path)
-    parser.add_argument("--go", type=Path, help="capture only: prebuilt oracle (development; default builds ORACLE; needs --go-seed)")
-    parser.add_argument("--go-seed", type=Path, help="capture only: prebuilt HTTP fixture seed helper (development)")
     parser.add_argument("--expect-mismatch", action="store_true",
                         help="negative control: PASS only if the Rust binary differs from the recorded Go observations")
     parser.add_argument("--allow-dirty-for-development", action="store_true")
-    observations.add_capture_flag(parser)
     args = parser.parse_args()
     if os.name == "nt":
         sys.exit("signal_process_contract.py is Unix-only; Windows Ctrl-Break evidence lives in "
                  "egress_contract.py and intake_watch_contract.py. Refusing to report a vacuous pass.")
-    if args.capture_go:
-        return capture(args)
     assert args.rust and args.receipt, "--rust and --receipt are required"
     rust = args.rust.resolve()
     assert rust.is_file(), "a real Rust CLI binary is required"
     document = observations.load("signal-process-contract", oracle_commit=ORACLE)
     recorded, material = document["observations"], document["material"]["template"]
+    check_oracle_expectations(recorded["go"])
+    check_go_only(recorded["go_only"])
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development or args.expect_mismatch, "commit the candidate first"
     receipt = dict(oracle_commit=ORACLE, candidate_commit=checked(["git", "rev-parse", "HEAD"]).decode().strip(),

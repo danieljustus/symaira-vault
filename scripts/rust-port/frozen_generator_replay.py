@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Go-free replay of the three fixture refresh scripts whose bytes are themselves hashed into frozen fixtures.
+"""Go-free replay of the frozen fixtures that three retired Go fixture generators produced.
 
-kdf_policy_fixtures.py, refresh-read-policy-fixtures.py and refresh-update-fixtures.py check their
-committed fixtures by re-running a pinned Go oracle. The scripts' own bytes are digests inside
-those fixtures (and in Rust tests), so they stay byte-identical; this companion adds the two modes:
+The kdf-policy, read-policy and update fixtures were produced by Go fixture generators
+(kdf_policy_fixtures.py, refresh-read-policy-fixtures.py, refresh-update-fixtures.py) that re-ran a
+pinned Go oracle. The generators are gone from this tree (ADR 0036; they live at tag `legacy/go-oracle`),
+so there is no capture mode and no generator script to hash. This script only replays:
 
-  capture KIND   run the original script's `--check` (Go oracle), then record the fixture bytes it
-                 accepted under scripts/rust-port/fixtures/go-observations/frozen-<kind>.<goos>.json
-  replay  KIND   no Go: the fixture bytes are the recorded ones, the oracle pin resolves in git and
-                 every provenance digest recomputes from git blobs
+  replay KIND   no Go: the fixture bytes are the recorded ones, the oracle pin resolves in git and every
+                provenance digest recomputes from git blobs (the generator blobs at the pinned commit
+                where the pin names them)
 
 KIND is kdf-policy, read-policy or update. A missing observation is a failure, never a skip.
 """
 import argparse
 import hashlib
-import importlib.util
 import json
-import os
 from pathlib import Path
 import platform
 import subprocess
@@ -43,13 +41,6 @@ def git(*args):
     return subprocess.run(["git", *args], cwd=ROOT, check=True, stdout=subprocess.PIPE).stdout
 
 
-def load_script(file):
-    spec = importlib.util.spec_from_file_location(Path(file).stem.replace("-", "_"), HERE / file)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def blob_digest(commit, names):
     digest = hashlib.sha256()
     for name in names:
@@ -63,28 +54,21 @@ def require_commit(commit):
 
 # ---- kdf-policy -----------------------------------------------------------------
 
-def kdf_files():
-    module = load_script("kdf_policy_fixtures.py")
-    return module, ["testdata/port/crypto/kdf-policy-v1.json"]
-
-
-def kdf_capture():
-    subprocess.run([sys.executable, str(HERE / "kdf_policy_fixtures.py")], cwd=ROOT, check=True)
-    module, files = kdf_files()
-    stored = json.loads((ROOT / files[0]).read_text())
-    return {"fixtures": {f: sha256(f) for f in files}, "oracle_commit": KDF_SOURCE, "cases": [
-        {k: case[k] for k in ("name", "time", "memory_kib", "threads")} for case in stored["cases"]],
-        "go_version": stored["go_version"]}, KDF_SOURCE
+MODULE_FILES = ("go.mod", "go.sum")
+KDF_PROGRAM = HERE / "kdf_policy_oracle.go.txt"
+KDF_FIXTURE = "testdata/port/crypto/kdf-policy-v1.json"
 
 
 def kdf_replay(recorded):
-    module, files = kdf_files()
-    stored = json.loads((ROOT / files[0]).read_text())
+    stored = json.loads((ROOT / KDF_FIXTURE).read_text())
     require_commit(KDF_SOURCE)
-    provenance = {"schema_version": 1, "oracle_commit": KDF_SOURCE, "source_files": list(module.SOURCE_FILES),
-                  "source_digest": module_digest(KDF_SOURCE, module.SOURCE_FILES),
-                  "program_digest": hashlib.sha256(module.PROGRAM.read_bytes()).hexdigest(),
-                  "driver_digest": hashlib.sha256((HERE / "kdf_policy_fixtures.py").read_bytes()).hexdigest()}
+    # driver_digest names the retired generator script; it is pinned by the frozen fixture bytes, not recomputed.
+    files = stored["source_files"]
+    assert files[:2] == list(MODULE_FILES) and len(files) == 4 and all(name.endswith(".go") for name in files[2:]), \
+        "historical KDF source file list changed"
+    provenance = {"schema_version": 1, "oracle_commit": KDF_SOURCE, "source_files": files,
+                  "source_digest": module_digest(KDF_SOURCE, files),
+                  "program_digest": hashlib.sha256(KDF_PROGRAM.read_bytes()).hexdigest()}
     if any(stored.get(k) != v for k, v in provenance.items()):
         raise SystemExit("historical KDF fixture provenance changed")
     assert stored["go_version"] == recorded["go_version"] == "go1.26.6" and len(stored["cases"]) == 4
@@ -103,36 +87,18 @@ def module_digest(commit, names):
 
 # ---- read-policy ----------------------------------------------------------------
 
-def read_policy_capture():
-    receipt = ROOT / "target" / "go-observations-read-policy-receipt.json"
-    receipt.parent.mkdir(parents=True, exist_ok=True)
-    receipt.unlink(missing_ok=True)
-    subprocess.run([sys.executable, str(HERE / "refresh-read-policy-fixtures.py"), "--check", "--receipt", str(receipt)],
-                   cwd=ROOT, check=True)
-    data = json.loads(receipt.read_text())
-    policy = json.loads((ROOT / READ_POLICY_FIXTURES[0]).read_text())
-    commit = policy["oracle"]["commit_sha"]
-    recorded = {"fixtures": {f: sha256(f) for f in READ_POLICY_FIXTURES}, "oracle_commit": commit,
-                "resource_cases": data["resource_cases"], "import_review_cases": data["import_review_cases"],
-                "candidate": {k: data["candidate"][k] for k in ("source_digest", "generator_digest",
-                                                                "resource_cases", "import_review_cases")}}
-    return recorded, commit
-
-
 def read_policy_replay(recorded, receipt_path=None):
-    module = load_script("refresh-read-policy-fixtures.py")
     policy = json.loads((ROOT / READ_POLICY_FIXTURES[0]).read_text())
     review = json.loads((ROOT / READ_POLICY_FIXTURES[1]).read_text())
     commit = policy["oracle"]["commit_sha"]
     require_commit(commit)
     assert commit == recorded["oracle_commit"], "fixture oracle pin differs from the recorded Go observation"
     sources = sorted(n for n in git("ls-tree", "-r", "--name-only", commit).decode().splitlines()
-                     if n in {"go.mod", "go.sum"} or (n.endswith(".go") and not n.endswith("_test.go")))
+                     if n in MODULE_FILES or (n.endswith(".go") and not n.endswith("_test.go")))
     assert sources == policy["oracle"]["source_files"], "oracle source file list changed"
     assert blob_digest(commit, sources) == policy["oracle"]["source_digest"], "oracle source digest differs from git blobs"
-    assert blob_digest(commit, module.GENERATORS) == policy["oracle"]["generator_digest"], "generator digest differs from git blobs"
-    assert (ROOT / "scripts/rust-port/refresh-read-policy-fixtures.py").read_bytes() == git(
-        "show", f"{commit}:scripts/rust-port/refresh-read-policy-fixtures.py"), "generator script is not the oracle commit's"
+    assert blob_digest(commit, policy["oracle"]["generator_files"]) == policy["oracle"]["generator_digest"], \
+        "generator digest differs from git blobs"
     assert review["oracle"]["commit"] == commit, "import-review oracle does not use the resource-policy pin"
     assert blob_digest(commit, review["oracle"]["source_files"]) == review["oracle"]["source_digest"], "import-review source digest changed"
     assert len(policy["cases"]) == recorded["resource_cases"] and len(review["cases"]) == recorded["import_review_cases"]
@@ -153,55 +119,36 @@ def update_files():
     return [f"crates/symvault-cli/tests/fixtures/{name}/cases.json" for name in UPDATE_NAMES]
 
 
-def update_capture():
-    env = dict(os.environ, GOWORK="off")
-    # `go list -m -json` (inside the generator) reports the module directory only once the module is in the
-    # module cache, which a fresh Linux GOMODCACHE lacks; the generator itself is hashed into the fixtures.
-    subprocess.run(["go", "mod", "download", "github.com/danieljustus/symaira-corekit@v0.18.2"], cwd=ROOT, env=env, check=True)
-    subprocess.run([sys.executable, str(HERE / "refresh-update-fixtures.py"), "--commit", UPDATE_COMMIT, "--check"],
-                   cwd=ROOT, env=env, check=True)
-    return {"fixtures": {f: sha256(f) for f in update_files()}, "commit": UPDATE_COMMIT}, UPDATE_COMMIT
-
-
 def update_replay(recorded):
-    module = load_script("refresh-update-fixtures.py")
     commit = git("rev-parse", UPDATE_COMMIT + "^{commit}").decode().strip()
     assert recorded["commit"] == UPDATE_COMMIT
-    generator = module.digest([module.SCRIPT])
     for name, file in zip(UPDATE_NAMES, update_files()):
         oracle = json.loads((ROOT / file).read_text())["oracle"]
         files = list(oracle["source_files"])
-        for module_file in ("go.mod", "go.sum"):
+        for module_file in MODULE_FILES:
             if module_file not in files:
                 files.append(module_file)
-        pinned = module.source_pin_files(files)
+        pinned = [name for name in files if name not in MODULE_FILES]  # the pin covers production code only
         assert oracle["commit"] == commit, f"{name}: oracle pin differs from {UPDATE_COMMIT}"
         assert oracle["source_pin_digest"] == blob_digest(commit, pinned), f"{name}: pinned sources differ from git blobs"
-        assert oracle["generator_digest"] == generator, f"{name}: generator digest differs from the unchanged script"
-        assert oracle["go_version"] == module.ORACLE_GO
+        assert oracle["go_version"] == "go1.26.6"
     return f"PASS recorded Go: {len(UPDATE_NAMES)} update fixture sets, oracle {commit}"
 
 
 KINDS = {
-    "kdf-policy": ("frozen-kdf-policy", kdf_capture, kdf_replay),
-    "read-policy": ("frozen-read-policy", read_policy_capture, read_policy_replay),
-    "update": ("frozen-update", update_capture, update_replay),
+    "kdf-policy": ("frozen-kdf-policy", kdf_replay),
+    "read-policy": ("frozen-read-policy", read_policy_replay),
+    "update": ("frozen-update", update_replay),
 }
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("mode", choices=["capture", "replay"])
+    parser.add_argument("mode", choices=["replay"])
     parser.add_argument("kind", choices=sorted(KINDS))
     parser.add_argument("--receipt", help="read-policy replay: where to write the receipt")
     args = parser.parse_args(argv)
-    contract, capture, replay = KINDS[args.kind]
-    if args.mode == "capture":
-        recorded, commit = capture()
-        target = observations.save(contract, recorded, oracle_commit=commit, version=observations.go_version(),
-                                   args=["frozen_generator_replay.py", "capture", args.kind])
-        print(f"captured {observations.rel(target)}")
-        return 0
+    contract, replay = KINDS[args.kind]
     document = observations.load(contract)
     recorded = document["observations"]
     for relative, digest in recorded["fixtures"].items():

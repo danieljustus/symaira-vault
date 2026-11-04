@@ -27,8 +27,8 @@ Three checks, each fails closed:
    and stored in FROZEN.oracle.json:
 
    recomputed  rebuilt from ``git cat-file blob <sha>:<file>`` with the
-               provenance algorithm (scripts/rust-port/internal/provenance:
-               ``name NUL content NUL`` per file, go.mod/go.sum excluded from
+               provenance algorithm (the retired Go provenance package:
+               ``name NUL content NUL`` per file, the Go module files excluded from
                the enforced set, or included/sorted variants) or, for per-file
                ``sha256`` maps, from each blob.  Re-derived on every check.
    recorded    the generator used an algorithm this tool does not reproduce (or
@@ -131,7 +131,7 @@ def enforced(names: list[str]) -> list[str]:
 
 
 def algo_parts(algo: str) -> tuple[bool, bool, bool]:
-    """(include go.mod/go.sum, sort names, trailing NUL after content)."""
+    """(include the module files, sort names, trailing NUL after content)."""
     tokens = algo.split("-")
     if tokens[0] not in ("provenance", "provenance+modules"):
         raise ValueError(algo)

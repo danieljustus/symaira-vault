@@ -116,52 +116,19 @@ def inventory(paths, root):
     return digest.hexdigest()
 
 
-def oracle_observation(base):
-    """Capture mode: build the pinned Go oracle and exercise it (needs Go)."""
-    from build_timeout import oracle_build_timeout, remove_worktree
-    tree = base / "oracle"
-    checked(["git", "worktree", "add", "--detach", tree, ORACLE])
-    try:
-        listing = checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
-        oracle_sources = sorted(x for x in listing if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
-        embedded = sorted(x for x in listing if x.startswith("internal/mcp/apitemplates/builtin/"))
-        assert len(embedded) == 17
-        helper = tree / "scripts/rust-port/cmd/connectprobe"
-        helper.mkdir()
-        (helper / "main.go").write_bytes(PROBE.read_bytes())
-        go = base / "go-probe"
-        checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "./scripts/rust-port/cmd/connectprobe"],
-                cwd=tree, timeout=oracle_build_timeout())
-        return {"oracle_source_files": oracle_sources, "oracle_source_digest": inventory(oracle_sources, tree),
-                "probe_sha256": hashlib.sha256(PROBE.read_bytes()).hexdigest(),
-                "oracle_embedded_files": embedded, "oracle_embedded_digest": inventory(embedded, tree),
-                "go_binary_sha256": hashlib.sha256(go.read_bytes()).hexdigest(),
-                "go": exercise(go, base / "go-home", True)}
-    finally:
-        remove_worktree(lambda: checked(["git", "worktree", "remove", "--force", tree]), "oracle worktree")
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rust", type=Path)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
-    observations.add_capture_flag(parser)
     args = parser.parse_args()
-    if args.capture_go:
-        with tempfile.TemporaryDirectory(prefix="symvault-connect-capture-") as raw:
-            recorded = oracle_observation(Path(raw))
-        target = observations.save("connect-contract", recorded, oracle_commit=ORACLE,
-                                   version=observations.go_version(), args=["connect_contract.py", "--capture-go"])
-        print(f"captured {target.relative_to(ROOT)}")
-        return
     assert args.rust and args.receipt, "--rust and --receipt are required"
     rust = args.rust.resolve()
     assert rust.is_file()
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
-                     if x.startswith(("crates/", "third_party/", "testdata/", "internal/mcp/apitemplates/builtin/"))
+                     if x.startswith(("crates/", "third_party/", "testdata/"))
                      or x in {"Cargo.toml", "Cargo.lock", ".gitattributes", "scripts/rust-port/connect_contract.py", "scripts/rust-port/connect_contract_probe.go.txt", ".github/workflows/rust-broker-connect.yml"})
     recorded = observations.load("connect-contract", oracle_commit=ORACLE)["observations"]
     with tempfile.TemporaryDirectory(prefix="symvault-connect-contract-") as raw:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Selftests of cligap.py (the Python port of scripts/rust-port/cmd/cligap's unit tests)."""
+"""Selftests of cligap.py (the Python port of the retired Go cligap tool's unit tests)."""
 import json
 from pathlib import Path
 import stat

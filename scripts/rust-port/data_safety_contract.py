@@ -49,8 +49,8 @@ Go-free replay. The Go side is split by what it can prove without Go:
                 digest of the Rust-written vault tree Go was shown). The replay verifies that file, says so, and
                 does not run or re-assert those calls.
 
-Usage: data_safety_contract.py --rust BIN --probe BIN                    (replay)
-       data_safety_contract.py --rust BIN --probe BIN --go BIN --capture-go   (needs Go, writes both records)
+Usage: data_safety_contract.py --rust BIN --probe BIN                    (replay; there is no capture mode in
+       this tree: the recordings were made with the archived Go oracle, tag `legacy/go-oracle`)
 """
 import argparse
 import base64
@@ -116,28 +116,7 @@ def diff_trees(before, after):
     return [k for k in keys if before.get(k) != after.get(k)]
 
 
-def file_snapshot(root):
-    """rel -> (mode, bytes) for regular files, rel -> None for directories (symlinks are skipped)."""
-    result = {}
-    for path in sorted(Path(root).rglob("*")):
-        rel = str(path.relative_to(root))
-        if path.is_symlink():
-            continue
-        result[rel] = None if path.is_dir() else (stat.S_IMODE(path.lstat().st_mode), path.read_bytes())
-    return result
-
-
 WORK = "@WORK@"
-
-
-def snapshot_delta(before, after, work=None):
-    """What a Go call changed. `work`: the run's scratch root, stored as @WORK@ so no host path is recorded."""
-    def text(value):
-        return observations.tokenize_paths(value, {work: WORK}) if work else value
-    return {"files": {rel: {"mode": value[0], "b64": base64.b64encode(text(value[1])).decode()}
-                      for rel, value in after.items() if value is not None and before.get(rel) != value},
-            "dirs": sorted(rel for rel, value in after.items() if value is None and rel not in before),
-            "removed": sorted(rel for rel in before if rel not in after)}
 
 
 def apply_delta(root, delta, work=None):
@@ -158,38 +137,20 @@ def apply_delta(root, delta, work=None):
             target.unlink(missing_ok=True)
 
 
-def tree_digest(root):
-    """sha256 over the sorted tree listing: provenance of the Rust-written vault a reverse call saw."""
-    return hashlib.sha256(json.dumps(sorted(tree(root).items()), default=str).encode()).hexdigest()
-
-
 class GoOracle:
-    """The Go side of the contract.
+    """The Go side of the contract, replayed.
 
-    capture (`GoOracle.live(binary, work)`): runs the real Go binary and records every call. A call made
-    before Rust touched the sandbox is a *seed* call: its on-disk effect (the Go-created vault) is
-    recorded and replayed byte for byte. A call made after Rust wrote to the sandbox is a *reverse*
-    call ("Go still reads what Rust wrote"): it is checked live at capture time and its verdict
-    (exit code, stdout digest, digest of the Rust-written vault tree) goes into the attestation file.
-    replay (`GoOracle.replaying(seed_calls, attested, work)`): serves seed calls from the recording. A
-    reverse call is NOT run and NOT re-checked: the recorded attested verdict is returned (exit code only,
-    `attested = True`) so the Rust side of the flow continues; an unrecorded or changed call is a failure.
+    A call made before Rust touched the sandbox is a *seed* call: the on-disk effect of the Go-created
+    vault was recorded once and is replayed byte for byte. A call made after Rust wrote to the sandbox
+    is a *reverse* call ("Go still reads what Rust wrote"): it is NOT run and NOT re-checked, the recorded
+    attested verdict is returned (exit code only, `attested = True`) so the Rust side of the flow
+    continues; an unrecorded or changed call is a failure.
     """
 
     def __init__(self, binary, calls, work, attested=()):
         self.binary, self.calls, self.work = binary, calls, work
         self.cursor, self.count = {}, {"seed": 0, "reverse": 0}
         self.attested = {c["key"]: c for c in attested}
-        self.reverse = []
-        self.live_mode = binary is not None
-
-    @classmethod
-    def live(cls, binary, work, previous=()):
-        """`previous`: the committed recording. Seed calls it already holds are not run again (the Go-created
-        vault has random keys; minting it once keeps captures byte-identical); reverse calls always run."""
-        oracle = cls(Path(binary), [], work)
-        oracle.previous = {c["key"]: c for c in previous if c["role"] == "seed"}
-        return oracle
 
     @classmethod
     def replaying(cls, calls, attested, work):
@@ -200,30 +161,6 @@ class GoOracle:
         index = self.cursor[sandbox.base.name] = self.cursor.get(sandbox.base.name, -1) + 1
         key = f"{sandbox.base.name}#{index}"
         self.count[role] += 1
-        reused = getattr(self, "previous", {}).get(key) if role == "seed" else None
-        if reused is not None and reused["args"] == list(args):
-            apply_delta(sandbox.base, reused["delta"], self.work)
-            self.calls.append(reused)
-            return self.completed(args, reused)
-        if self.live_mode:
-            before = file_snapshot(sandbox.base)
-            tree_before = tree_digest(sandbox.vault) if role == "reverse" else None
-            done = subprocess.run([str(self.binary), *args], env=sandbox.env(passphrase, vault, extra),
-                                  stdin=subprocess.DEVNULL if stdin is None else None, input=stdin,
-                                  capture_output=True, text=True, timeout=300, check=False)
-
-            def text(value):
-                return observations.tokenize_paths(value.encode(), {self.work: WORK}).decode()
-            call = {"key": key, "role": role, "args": list(args), "returncode": done.returncode,
-                    "stdout": text(done.stdout), "stderr": text(done.stderr)}
-            if role == "seed":
-                call["delta"] = snapshot_delta(before, file_snapshot(sandbox.base), self.work)
-                self.calls.append(call)
-            else:
-                self.reverse.append({"key": key, "args": list(args), "returncode": done.returncode,
-                                     "stdout_sha256": hashlib.sha256(call["stdout"].encode()).hexdigest(),
-                                     "vault_tree_sha256": tree_before})
-            return done
         if role == "reverse":
             attested = self.attested.get(key)
             if attested is None or attested["args"] != list(args):
@@ -762,39 +699,26 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rust", required=True)
     parser.add_argument("--probe", required=True)
-    parser.add_argument("--go", help="capture only: the Go oracle binary; its calls are recorded under fixtures/go-observations")
-    parser.add_argument("--capture-go", action="store_true", help="run the contract against --go and record the Go side")
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args()
-    if args.capture_go != bool(args.go):
-        print("--capture-go and --go go together; replay needs neither", file=sys.stderr)
-        return 2
-    for binary in (args.rust, args.probe, args.go):
-        if binary and not Path(binary).is_file():
+    for binary in (args.rust, args.probe):
+        if not Path(binary).is_file():
             print(f"missing binary: {binary}", file=sys.stderr)
             return 2
     rust, probe = (Path(p).resolve() for p in (args.rust, args.probe))
     base = Path(tempfile.mkdtemp(prefix="data-safety-"))
-    attested_note = None
-    if args.capture_go:
-        try:
-            previous = observations.load("data-safety-contract", oracle_commit=observations.ORACLE_COMMIT)["observations"]["calls"]
-        except observations.MissingObservation:
-            previous = []
-        go = GoOracle.live(Path(args.go).resolve(), base, previous)
-    else:
-        try:
-            recorded = observations.load("data-safety-contract", oracle_commit=observations.ORACLE_COMMIT)["observations"]["calls"]
-            attestation = observations.check_attestation(observations.DATA_SAFETY)
-            if attestation["go_verdict"]["observation_calls_sha256"] != calls_digest(recorded):
-                raise observations.MissingObservation("the Go seed observation is not the one the attestation was recorded with")
-            go = GoOracle.replaying(recorded, attestation["go_verdict"]["reverse_calls"], base)
-        except observations.MissingObservation as error:
-            shutil.rmtree(base, ignore_errors=True)
-            print(f"FAIL: {error}", file=sys.stderr)
-            return 1
-        attested_note = (f"{observations.attestation_path(observations.DATA_SAFETY).relative_to(ROOT)} (Go {attestation['go_version']} "
-                         f"{attestation['goos']}, Rust build {attestation['rust_commit'][:8]})")
+    try:
+        recorded = observations.load("data-safety-contract", oracle_commit=observations.ORACLE_COMMIT)["observations"]["calls"]
+        attestation = observations.check_attestation(observations.DATA_SAFETY)
+        if attestation["go_verdict"]["observation_calls_sha256"] != calls_digest(recorded):
+            raise observations.MissingObservation("the Go seed observation is not the one the attestation was recorded with")
+        go = GoOracle.replaying(recorded, attestation["go_verdict"]["reverse_calls"], base)
+    except observations.MissingObservation as error:
+        shutil.rmtree(base, ignore_errors=True)
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+    attested_note = (f"{observations.attestation_path(observations.DATA_SAFETY).relative_to(ROOT)} (Go {attestation['go_version']} "
+                     f"{attestation['goos']}, Rust build {attestation['rust_commit'][:8]})")
     try:
         run_seed(base, rust, go, "ffi-seed", materialize_ffi_seed, SEED_PASS, "personal/email", [])
         run_seed(base, rust, go, "go-init",
@@ -812,26 +736,11 @@ def main():
         return 1
     if not args.keep:
         shutil.rmtree(base, ignore_errors=True)
-    if args.capture_go:
-        assert sorted(c["key"] for c in go.reverse) == sorted(observations.DATA_SAFETY_REVERSE), \
-            f"the flow made reverse calls {[c['key'] for c in go.reverse]}, expected {observations.DATA_SAFETY_REVERSE}"
-        target = observations.save("data-safety-contract", {"calls": go.calls, "counts": {"seed": go.count["seed"]}},
-                                   oracle_commit=observations.tree_oracle_commit(), version=observations.go_version(),
-                                   args=["data_safety_contract.py", "--capture-go"])
-        verdict = {"command": ["data_safety_contract.py", "--capture-go"], "exit_code": 0, "accepted": True,
-                   "reverse_calls": go.reverse, "observation_calls_sha256": calls_digest(go.calls),
-                   "output_sha256": hashlib.sha256(json.dumps(go.reverse, sort_keys=True).encode()).hexdigest()}
-        attested = observations.store_attestation(
-            observations.DATA_SAFETY, {c["key"]: c["vault_tree_sha256"] for c in go.reverse}, verdict,
-            "live Go opens, reads and writes the vaults Rust has just written (the reverse half of the data-safety contract)")
-        print(f"captured {observations.rel(target)}: {go.count['seed']} seed calls; attested {observations.rel(attested)}: "
-              f"{go.count['reverse']} reverse verdicts")
-    else:
-        assert go.count["reverse"] == len(go.attested), \
-            f"the replay made {go.count['reverse']} reverse calls, the attestation holds {len(go.attested)}"
-        print(f"{go.count['reverse']} Go reverse verdicts (Go reads what Rust wrote) are ATTESTED by {attested_note}: "
-              f"static evidence from a past live-Go run, Go is not run and these are not re-checked here; "
-              f"{go.count['seed']} Go-created seed calls replayed byte for byte")
+    assert go.count["reverse"] == len(go.attested), \
+        f"the replay made {go.count['reverse']} reverse calls, the attestation holds {len(go.attested)}"
+    print(f"{go.count['reverse']} Go reverse verdicts (Go reads what Rust wrote) are ATTESTED by {attested_note}: "
+          f"static evidence from a past live-Go run, Go is not run and these are not re-checked here; "
+          f"{go.count['seed']} Go-created seed calls replayed byte for byte")
     print(f"mutator sweep: {', '.join(swept)}")
     print(f"data-safety contract: PASS ({cases} checks, 3 seed vaults, {len(swept)} mutators, 5 negative-control groups)")
     return 0

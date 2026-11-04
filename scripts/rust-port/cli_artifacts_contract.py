@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture/recheck real Go CLI artifacts; verify the standalone Rust surface."""
+"""Verify the standalone Rust CLI surface against the recorded Go CLI artifacts (replay only)."""
 import argparse
 import hashlib
 import json
@@ -16,7 +16,7 @@ import go_observations_common as observations
 
 ROOT = Path(__file__).resolve().parents[2]
 # CLI manuals intentionally correct Markdown interpretation of dynamic paths.
-# The earlier oracle remains frozen in manual_path_probe.py and Git history.
+# The earlier oracle's diagnostic (manual_path_probe.py) lives at tag legacy/go-oracle.
 PIN = "5cf3da06f1750afad974f2b722734af52ce87362"
 ARTIFACT = ROOT / "testdata/port/cli/artifacts.json"
 PROBE = ROOT / "scripts/rust-port/cli_artifacts_probe.go.txt"
@@ -195,71 +195,6 @@ def validate_observations(observations, commands):
     return [c for c in observations if c['state'] == 'absent']
 
 
-def capture(tree, base, env):
-    from build_timeout import oracle_build_timeout
-    binary = base / ("go.exe" if os.name == "nt" else "go")
-    execute(["go", "build", "-trimpath", "-buildvcs=false", "-o", binary, "."], tree, env,
-            timeout=oracle_build_timeout())
-    helper = tree / "scripts/rust-port/cmd/cli004probe"
-    helper.mkdir()
-    (helper / "main.go").write_bytes(PROBE.read_bytes())
-    # Compile the probe under the build budget, then run the binary under the
-    # ordinary per-run timeout: `go run` would give the probe's execution the
-    # compile budget too.
-    probe = base / ("cli004probe.exe" if os.name == "nt" else "cli004probe")
-    execute(["go", "build", "-trimpath", "-buildvcs=false", "-o", probe, "./scripts/rust-port/cmd/cli004probe"],
-            tree, env, timeout=oracle_build_timeout())
-    metadata = json.loads(execute([probe, "tree"], tree, env).stdout)
-    commands = metadata['commands']
-    help_pages = {}
-    paths = [c["path"] for c in commands]
-    for path in sorted(set(paths)):
-        result = execute([binary, *path.split()[1:], "--help"], base, env)
-        assert not result.stderr, path
-        help_pages[path] = result.stdout.decode().replace(metadata['config_path'],'__CONFIG_PATH__')
-    completions = {}
-    for shell in ["bash", "zsh", "fish", "powershell"]:
-        for plain in [False, True]:
-            args = [binary, "completion", shell]
-            if plain:
-                args.append("--no-descriptions")
-            result = execute(args, base, env)
-            assert not result.stderr
-            completions[f"{shell}/{'plain' if plain else 'descriptions'}"] = result.stdout.decode()
-    man_dir = base / "man"
-    result = execute([binary, "generate", "manpages", man_dir], base, env)
-    assert not result.stderr
-    manpages = {p.name: normalized_man(p,metadata['config_path']) for p in sorted(man_dir.glob("*.1"))}
-    declared = requests(commands)
-    historical = declared[:-len(PARSER_REQUESTS)]
-    seeded = execute([probe], tree, env, json.dumps(historical).encode())
-    assert not seeded.stderr, 'seeded Go probe emitted uncaptured diagnostics'
-    observations = json.loads(seeded.stdout)
-    assert len(observations) == len(historical), 'missing historical Go observations'
-    # Cobra CompErrorln writes os.Stderr rather than Command.SetErr. Capture
-    # new parser controls through the actual executable, not that buffer-only
-    # seeded helper, so completion errors retain every stderr byte and exit.
-    for request in declared[len(historical):]:
-        assert request['state'] == 'absent'
-        result = execute([binary, '--vault', 'absent-vault', '__complete', *request['args']], base, env)
-        assert result.returncode == 0, ('Go protocol exit', request['name'], result.returncode)
-        observations.append(dict(request, stdout=result.stdout.decode(), stderr=result.stderr.decode()))
-    assert not (base / 'absent-vault').exists(), 'Go completion initialized a vault'
-    validate_observations(observations, commands)
-    assert "alpha/account\n" in observations[0]["stdout"], "dynamic Go completion must execute real session/store reads"
-    for c in observations:
-        assert "public-fixture" not in c["stdout"]
-    sources = subprocess.check_output(["git", "ls-tree", "-r", "--name-only", PIN], cwd=tree, text=True).splitlines()
-    sources = sorted(p for p in sources if p in {"go.mod", "go.sum"} or (p.endswith(".go") and not p.endswith("_test.go")))
-    digest = hashlib.sha256()
-    for path in sources:
-        digest.update(path.encode() + b"\0" + (tree / path).read_bytes() + b"\0")
-    return {"schema_version": 1, "oracle_commit": PIN, "oracle_source_files": sources,
-            "oracle_source_digest": digest.hexdigest(), "probe_sha256": hashlib.sha256(PROBE.read_bytes()).hexdigest(),
-            "commands": commands, "config_keys": metadata['config_keys'], "help": help_pages, "completions": completions,
-            "manpages": manpages, "entry_completions": observations}, binary
-
-
 def verify_rust(binary, artifact, base, env):
     counts = {}
     config_path = str(Path(env['XDG_CONFIG_HOME'])/'symaira-vault/config.yaml')
@@ -423,12 +358,6 @@ def run_shell_side(name, binary, artifact, base, env, fixtures, require_native_s
     return side
 
 
-def go_shell_record(side):
-    """The Go side as committed: candidates only (terminal screens carry prompts and timing)."""
-    return {'bash': side['bash'], 'fish': side['fish'],
-            'terminal': {shell: {'candidates': result['candidates']} for shell, result in side['terminal'].items()}}
-
-
 def verify_shells(go_record, rust, artifact, base, env, require_native_shells):
     """Rust's native-shell completions against the recorded Go ones."""
     fixtures = shell_fixtures(artifact, base)
@@ -448,20 +377,15 @@ def verify_shells(go_record, rust, artifact, base, env, require_native_shells):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--capture", action="store_true", help="regenerate testdata/port/cli/artifacts.json from the Go oracle (needs Go)")
-    observations.add_capture_flag(parser)
-    parser.add_argument("--rust", type=Path)
+    parser.add_argument("--rust", type=Path, required=True)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--captured-output", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
     parser.add_argument("--require-native-shells", action="store_true")
     args = parser.parse_args()
-    live_go = args.capture or args.capture_go
-    assert live_go != bool(args.rust), 'use --capture-go / --capture (Go side) or --rust (replay), not both or neither'
     clean = not subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=normal'],cwd=ROOT).strip()
-    if args.rust:
-        assert args.receipt, 'a source/binary receipt is required for native acceptance'
-        assert clean or args.allow_dirty_for_development, 'commit the candidate before recording acceptance'
+    assert args.receipt, 'a source/binary receipt is required for native acceptance'
+    assert clean or args.allow_dirty_for_development, 'commit the candidate before recording acceptance'
     with tempfile.TemporaryDirectory(prefix="symvault-cli-artifacts-") as raw:
         base = Path(raw)
         home = base / "home"
@@ -474,43 +398,6 @@ def main():
             directory = ROOT / 'target/cli-artifacts-captures'
             directory.mkdir(parents=True, exist_ok=True)
             env['CLI_ARTIFACTS_EXECUTION_DIR'] = tempfile.mkdtemp(prefix='capture-', dir=directory)
-        if live_go:
-            from build_timeout import remove_worktree
-            from manual_path_contract import observe_go_manual_paths
-            tree = base / "oracle"
-            execute(["git", "worktree", "add", "--detach", tree, PIN], ROOT, os.environ.copy())
-            try:
-                artifact, go = capture(tree, base, env)
-                if args.captured_output:
-                    write_utf8(args.captured_output,json.dumps(artifact,ensure_ascii=False,indent=2)+'\n')
-                if args.capture:
-                    write_utf8(ARTIFACT,json.dumps(artifact, ensure_ascii=False, indent=2) + "\n")
-                else:
-                    expected_bytes = ARTIFACT.read_bytes()
-                    expected = json.loads(expected_bytes)
-                    generated_bytes = (json.dumps(artifact, ensure_ascii=False, indent=2) + '\n').encode('utf-8')
-                    if artifact != expected or generated_bytes != expected_bytes:
-                        changed = [key for key in artifact if artifact[key] != expected.get(key)]
-                        print('Changed artifact sections:', changed)
-                        raise AssertionError('actual immutable Go CLI artifact bytes changed')
-                if args.capture_go:
-                    recorded = {'artifact_sha256': hashlib.sha256(ARTIFACT.read_bytes()).hexdigest(),
-                                'oracle_source_files': artifact['oracle_source_files'],
-                                'oracle_source_digest': artifact['oracle_source_digest'], 'probe_sha256': artifact['probe_sha256'],
-                                'go_binary_sha256': hashlib.sha256(go.read_bytes()).hexdigest(),
-                                'manual_paths': observe_go_manual_paths(go, base / 'manual-path-controls', env, artifact),
-                                'shells': go_shell_record(run_shell_side('go', go, artifact, base, env, shell_fixtures(artifact, base),
-                                                                         args.require_native_shells))}
-                    target = observations.save('cli-artifacts-contract', recorded, oracle_commit=PIN,
-                                               version=observations.go_version(),
-                                               args=['cli_artifacts_contract.py', '--capture-go'])
-                    print(f'captured {observations.rel(target)}')
-                else:
-                    print(f"PASS actual Go capture: {len(artifact['help'])} help pages, {len(artifact['completions'])} scripts, {len(artifact['manpages'])} manuals, {len(artifact['entry_completions'])} protocol queries")
-            finally:
-                remove_worktree(lambda: execute(["git", "worktree", "remove", "--force", tree], ROOT, os.environ.copy()),
-                                "oracle worktree")
-            return
         from manual_path_contract import verify_manual_paths
         recorded = observations.load('cli-artifacts-contract', oracle_commit=PIN)['observations']
         artifact_bytes = ARTIFACT.read_bytes()
@@ -521,10 +408,10 @@ def main():
             write_utf8(args.captured_output, artifact_bytes.decode('utf-8'))
         rust = args.rust.resolve()
         counts = verify_rust(rust, artifact, base, env)
-        manual_paths = verify_manual_paths(None, rust, base/'manual-path-controls', env, artifact, go_recorded=recorded['manual_paths'])
+        manual_paths = verify_manual_paths(rust, base/'manual-path-controls', env, artifact, recorded['manual_paths'])
         shells = verify_shells(recorded['shells'], rust, artifact, base, env, args.require_native_shells)
         candidate_files = subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines()
-        candidate_files = sorted(p for p in candidate_files if (p.startswith(('crates/','third_party/','testdata/')) and p.endswith(('.rs','.toml','.lock','.json','.txt'))) or p.startswith(('internal/manpages/','scripts/rust-port/cligap','scripts/rust-port/manual_path_')) or p in {'Cargo.toml','Cargo.lock','cmd/manpages.go','cmd/mcp/serve.go','scripts/rust-port/cli_artifacts_contract.py','scripts/rust-port/test_cli_artifacts_contract.py','scripts/rust-port/cli_artifacts_probe.go.txt','.github/workflows/rust-cli-artifacts.yml','docs/adr/0011-cli-artifacts-and-completion-protocol.md'})
+        candidate_files = sorted(p for p in candidate_files if (p.startswith(('crates/','third_party/','testdata/')) and p.endswith(('.rs','.toml','.lock','.json','.txt'))) or p.startswith(('scripts/rust-port/cligap','scripts/rust-port/manual_path_')) or p in {'Cargo.toml','Cargo.lock','scripts/rust-port/cli_artifacts_contract.py','scripts/rust-port/test_cli_artifacts_contract.py','scripts/rust-port/cli_artifacts_probe.go.txt','.github/workflows/rust-cli-artifacts.yml','docs/adr/0011-cli-artifacts-and-completion-protocol.md'})
         digest = hashlib.sha256()
         for path in candidate_files:
             digest.update(path.encode()+b'\0'+(ROOT/path).read_bytes()+b'\0')

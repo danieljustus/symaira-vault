@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Live pinned-Go / Rust device-list differential (explicit --vault, text/JSON/YAML).
+"""Recorded pinned-Go / live Rust device-list differential (explicit --vault, text/JSON/YAML).
 
-No fixture expectations are invented: execute both real CLIs. Malformed registry
+No fixture expectations are invented: the Go side is the committed observation recorded from the real Go CLI
+(replay only, no Go runs); the Rust CLI executes live. Malformed registry
 errors compare failure + stream placement only; exact error taxonomy,
 config/profile resolution and mutating device commands remain unported.
 """
 import argparse
 import base64
 import hashlib
-import io
 import json
 import os
 from pathlib import Path
@@ -18,7 +18,6 @@ import shutil
 import signal
 import stat
 import subprocess
-import tarfile
 import tempfile
 import time
 
@@ -87,19 +86,6 @@ def compare(go, rust, negative=False, semantic_yaml=False):
         else:
             assert go.stdout == rust.stdout, "stdout differs"
         assert go.stderr == rust.stderr, "stderr differs"
-
-
-def run_case(adapter, binary, case, cwd, env):
-    request = json.dumps({"binary": str(binary), "case": case}).encode()
-    result = subprocess.run([str(adapter)], input=request, cwd=cwd, env=env,
-                            capture_output=True, timeout=45, check=True)
-    observation = json.loads(result.stdout)
-    assert not observation["TimedOut"], "native runner timed out"
-    assert not observation["Signal"], "native runner observed signal"
-    assert observation["FilesBefore"] == observation["Files"], "list mutated sandbox"
-    return subprocess.CompletedProcess(case["args"], observation["ExitCode"],
-        base64.b64decode(observation["Stdout"] or ""),
-        base64.b64decode(observation["Stderr"] or "")), observation
 
 
 SEEDS = None  # filled by build_cases(); the registry fixtures below are shared by capture and replay
@@ -313,68 +299,14 @@ def toolchain_env(env):
     return env
 
 
-def sandbox_env_for_build(temp, env):
-    home = temp / "home"
-    home.mkdir()
-    for key in list(env):
-        if key.startswith("SYMVAULT_"):
-            del env[key]
-    env.update(HOME=str(home), USERPROFILE=str(home), XDG_CONFIG_HOME=str(home / "config"), XDG_DATA_HOME=str(home / "data"),
-               XDG_CACHE_HOME=str(home / "cache"), XDG_STATE_HOME=str(home / "state"),
-               GOWORK="off", NO_COLOR="1", TERM="dumb", TZ="UTC")
-    env.update(TMPDIR=str(temp), TMP=str(temp), TEMP=str(temp))
-    return env
-
-
-def capture():
-    """Capture mode: pinned Go oracle through the Go case runner, no Rust (needs Go)."""
-    env = toolchain_env(os.environ.copy())
-    oracle = checked(["git", "rev-parse", ORACLE], ROOT, env).decode().strip()
-    go_version = checked(["go", "version"], ROOT, env).decode().strip()
-    assert "go1.26.6" in go_version
-    caches = json.loads(checked(["go", "env", "-json", "GOCACHE", "GOMODCACHE", "GOPATH", "GOROOT"], ROOT, env))
-    env.update(caches)
-    env["PATH"] = str(Path(caches["GOROOT"]) / "bin") + os.pathsep + env.get("PATH", os.defpath)
-    rows = []
-    with tempfile.TemporaryDirectory(prefix="sv-list-") as temp:
-        temp = Path(temp)
-        env = sandbox_env_for_build(temp, env)
-        env["GOTOOLCHAIN"] = "local"
-        assert "go1.26.6" in checked(["go", "version"], ROOT, env).decode()
-        oracle_dir = temp / "oracle"
-        oracle_dir.mkdir()
-        archive = checked(["git", "archive", oracle], ROOT, env)
-        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-            tar.extractall(oracle_dir, filter="data")
-        go_binary = temp / "go-symvault"
-        checked(["go", "build", "-buildvcs=false", "-o", go_binary, "."], oracle_dir, env, 600)
-        adapter = temp / "caserun"
-        checked(["go", "build", "-o", adapter, "./scripts/rust-port/cmd/caserun"], ROOT, env, 600)
-        for name, mode, argv, case in build_cases():
-            go, native = run_case(adapter, go_binary, case, temp, env)
-            root = native.get("SandboxRoot") or ""
-            clean = lambda raw: raw.replace(root.encode(), SANDBOX.encode()) if root else raw
-            rows.append({"id": case["id"], "argv": argv, "negative": name == "malformed",
-                         "go": {"exit": go.returncode, "stdout_b64": base64.b64encode(clean(go.stdout)).decode(),
-                                "stderr_b64": base64.b64encode(clean(go.stderr)).decode()},
-                         "native_go": {"TimedOut": native["TimedOut"], "Signal": native["Signal"],
-                                       "files_unchanged": native["FilesBefore"] == native["Files"] and bool(native["FilesBefore"])}})
-    target = observations.save("device-list-differential", {"cases": rows, "binary": "built from the oracle archive without -trimpath: its bytes depend on the temporary build path"},
-                               oracle_commit=oracle, version=go_version, args=["device_list_differential.py", "--capture-go"])
-    print(f"captured {observations.rel(target)}")
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path)
     parser.add_argument("--rust", type=Path, help="the symvault CLI built from this checkout")
     parser.add_argument("--supervised", action="store_true", help=argparse.SUPPRESS)
-    observations.add_capture_flag(parser)
     args = parser.parse_args()
     if os.name == "nt":
         raise SystemExit("native Windows is out of scope for the local port")
-    if args.capture_go:
-        return capture()
     if args.report and args.report.exists():
         raise SystemExit("report already exists; choose a fresh evidence path")
     assert args.report and args.rust, "--report and --rust are required"

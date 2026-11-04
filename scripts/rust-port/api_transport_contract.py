@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path
 import platform
-import shutil
 import socket
 import ssl
 import struct
@@ -16,7 +15,6 @@ import tempfile
 import threading
 import time
 
-import re
 
 import go_observations_common as observations
 
@@ -281,23 +279,6 @@ def prepare_root(material, root, base_url, private):
     return inventory(root, sorted(str(p.relative_to(root)) for p in root.rglob('*') if p.is_file()))
 
 
-def normalize_go(observation):
-    """The part of a Go observation that does not depend on ports, timing or random keys."""
-    result = dict(observation['result'])
-    if isinstance(result.get('text'), str):
-        result['text'] = re.sub(r'(example\.test:)\d+', r'\1<PORT>', result['text'])
-    upstream = []
-    for row in observation['upstream']:
-        if 'tls_rejection' in row:
-            upstream.append({'tls_rejection': True})
-        else:
-            upstream.append({'request_received': 'request_base64' in row, 'upstream_eof': row.get('upstream_eof')})
-    unique = [json.loads(x) for x in sorted({json.dumps(r, sort_keys=True) for r in upstream})]
-    return {'case': observation['case'], 'exit_code': observation['exit_code'], 'result': result,
-            'stdout_base64': observation['stdout_base64'], 'stderr_base64': observation['stderr_base64'],
-            'dns': [{'qtype': q} for q in sorted({r['qtype'] for r in observation['dns']})], 'upstream': unique}
-
-
 def drive_case(case, base, certs, material, binary, is_go, label):
     """One case against one implementation with fresh owned DNS and TLS fixtures."""
     upstream = Upstream(certs, case)
@@ -329,56 +310,12 @@ def drive_case(case, base, certs, material, binary, is_go, label):
         upstream.close()
 
 
-def capture(args):
-    """Capture mode: build the pinned Go test binary and drive it alone (needs Go)."""
-    from build_timeout import oracle_build_timeout, remove_worktree
-    contract = 'api-transport-contract'
-    with tempfile.TemporaryDirectory(prefix='symvault-api-capture-') as raw:
-        base = Path(raw)
-        tree = base / 'oracle'
-        checked(['git', 'worktree', 'add', '--detach', tree, ORACLE])
-        try:
-            oracle_names = sorted(x for x in checked(['git', 'ls-tree', '-r', '--name-only', ORACLE]).decode().splitlines()
-                                  if x in {'go.mod', 'go.sum'} or x.endswith('.go') or x.startswith('internal/mcp/apitemplates/builtin/'))
-            recorded = {'oracle_sources': inventory(tree, oracle_names)}
-            helper = ROOT / 'scripts/rust-port/api_transport_probe.go.txt'
-            recorded['go_probe_sha256'] = digest(helper)
-            (tree / 'internal/mcp/server/api_native_probe_test.go').write_bytes(helper.read_bytes())
-            go = base / 'go-api-native'
-            compile_test = ['go', 'test', '-c', '-trimpath', '-buildvcs=false', '-o', go, './internal/mcp/server']
-            checked(compile_test, cwd=tree, timeout=oracle_build_timeout())
-            recorded['go_executable_sha256'] = digest(go)
-            material = observations.existing_material(contract)
-            if material is None:
-                seed = base / 'seed-material'
-                seed.mkdir()
-                execute(go, {'mode': 'seed', 'root': str(seed), 'output': str(base / 'seed.json'),
-                             'base_url': 'https://dns-api.example.test:1', 'allow_private': False}, base / 'seed-home', True)
-                shutil.rmtree(seed / 'templates')
-                material = {'seed_vault': observations.pack_tree(seed)}
-            certs = base / 'certs'
-            certs.mkdir()
-            observations.mint_api_chain(certs, base / 'cert-scratch')
-            recorded['go'] = []
-            for case in CASES:
-                observation, _ = drive_case(case, base, certs, material['seed_vault'], go, True, 'go')
-                recorded['go'].append(normalize_go(observation))
-        finally:
-            remove_worktree(lambda: checked(['git', 'worktree', 'remove', '--force', tree]), 'oracle worktree')
-    target = observations.save(contract, recorded, oracle_commit=ORACLE, version=observations.go_version(),
-                               args=['api_transport_contract.py', '--capture-go'], material=material)
-    print(f'captured {observations.rel(target)}')
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--rust-probe', type=Path)
     parser.add_argument('--receipt', type=Path)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
-    observations.add_capture_flag(parser)
     args = parser.parse_args()
-    if args.capture_go:
-        return capture(args)
     assert args.rust_probe and args.receipt, '--rust-probe and --receipt are required'
     rust = args.rust_probe.resolve()
     document = observations.load('api-transport-contract', oracle_commit=ORACLE)
@@ -387,7 +324,7 @@ def main():
     clean = not checked(['git', 'status', '--porcelain=v1', '--untracked-files=normal']).strip()
     assert clean or args.allow_dirty_for_development
     names = sorted(x for x in checked(['git', 'ls-files', '--cached', '--others', '--exclude-standard']).decode().splitlines()
-                   if x.startswith(('crates/', 'third_party/', 'testdata/', 'internal/mcp/apitemplates/builtin/'))
+                   if x.startswith(('crates/', 'third_party/', 'testdata/'))
                    or x in {'Cargo.toml', 'Cargo.lock', '.gitattributes', 'scripts/rust-port/api_transport_contract.py',
                             'scripts/rust-port/api_transport_probe.go.txt', 'scripts/rust-port/test_api_transport_contract.py',
                             '.github/workflows/rust-api-transport.yml'})

@@ -29,7 +29,6 @@ import time
 
 import pyte
 
-from build_timeout import oracle_build_timeout, remove_worktree
 import go_observations_common as obs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1039,74 +1038,6 @@ def execute(args, receipt):
     print(('PASS' if clean else 'DEVELOPMENT ONLY')+': fifteen Rust browser cases against the recorded Go observation on '+platform.system())
 
 
-def capture_go(args):
-    """One-time Go capture: run only the pinned Go oracle and persist its normalized observations.
-
-    With --reference-rust-out the Rust binary is also driven by the *Go helper* on the same seeds;
-    those rows are the reference the Python driver must reproduce (tui_driver_equivalence.py).
-    """
-    rust = args.rust_cli.resolve()
-    assert sys.version_info[:2] == (3, 13), 'pinned Python 3.13 required'
-    go_version = checked(['go', 'version']).decode().strip()
-    assert go_version.startswith('go version go1.26.6 '), 'pinned Go required'
-    material = obs.existing_material(OBS_NAME)
-    labels = ['go'] + (['rust'] if args.reference_rust_out else [])
-    with tempfile.TemporaryDirectory(prefix='symvault-tui-capture-') as raw:
-        base = Path(raw)
-        tree = base/'oracle'
-        checked(['git', 'worktree', 'add', '--detach', tree, ORACLE])
-        try:
-            helper_source = ROOT/'scripts/rust-port/tui_fixture.go.txt'
-            helper_dir = tree/'scripts/rust-port/cmd/tuifixture'
-            helper_dir.mkdir(parents=True)
-            (helper_dir/'main.go').write_bytes(helper_source.read_bytes())
-            go, helper = base/'go-cli', base/'go-fixture'
-            checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', go, '.'], cwd=tree, timeout=oracle_build_timeout())
-            checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', helper, './scripts/rust-port/cmd/tuifixture'],
-                    cwd=tree, timeout=oracle_build_timeout())
-            receipts = {'go': [], 'rust': []}
-            with private_provider(base, args.xvfb, args.xclip) as provider:
-                seeds, seed_configs, packed, keybindings = {}, {}, {}, None
-                for ttl in [2, 0]:
-                    home = base/('seed-home-'+str(ttl))
-                    env = fixture_env(home, provider)
-                    seed = base/('seed-'+str(ttl))
-                    result = json.loads(checked([helper, '--root', seed, '--clipboard-seconds', str(ttl)], cwd=home, env=env))
-                    assert result['seeded_entries'] == 3 and len(result['keybindings']) == 12
-                    assert result['requested_clipboard_seconds'] == ttl and result['effective_clipboard_seconds'] == ttl
-                    seed_configs[str(ttl)] = {k: result[k] for k in ['requested_clipboard_seconds',
-                                                                  'initial_roundtrip_clipboard_seconds',
-                                                                  'effective_clipboard_seconds']}
-                    keybindings = result['keybindings']
-                    # The Rust replay runs on the recorded bytes: so does the Go capture, which keeps the observation
-                    # byte-stable from one capture to the next. The seed's own directory is stored as a token and
-                    # restored to one fixed synthetic path: the rows hash config.yaml, so it must not vary per run.
-                    packed[str(ttl)] = material['seeds'][str(ttl)] if material is not None else obs.pack_tree(seed)
-                    shutil.rmtree(seed)
-                    obs.unpack_tree(packed[str(ttl)], seed, tree_root=SEED_TREE_ROOT)
-                    seeds[ttl] = seed
-                run_cases(labels, helper, {'go': go, 'rust': rust}, seeds, base, provider, receipts)
-                for label in labels:
-                    output = print_keybindings({'go': go, 'rust': rust}[label], base/('keybindings-'+label), provider)
-                    receipts[label].append({'case': CASES[-1], 'exit_code': 0, 'passed': True,
-                                            'stdout_sha256': hashlib.sha256(output).hexdigest()})
-            rows = []
-            for row in receipts['go']:
-                assert row['passed'] is True and 'failure' not in row and 'cleanup_failure' not in row, row
-                rows.append(dict(normalize_row(row), capture_policy_checked_at_capture=True))
-            saved = obs.save(OBS_NAME, {'rows': rows, 'seed_configs': seed_configs, 'keybindings': keybindings},
-                             oracle_commit=ORACLE, version=obs.go_version(os.environ.copy()), args=[],
-                             material={'seeds': packed})
-            print('captured', obs.rel(saved))
-            if args.reference_rust_out:
-                reference = {'reference_driver': 'go-helper (tui_fixture.go.txt built at the oracle commit)',
-                             'rust_executable_sha256': digest(rust), 'platform': platform.system(),
-                             'rows': [normalize_row(r) for r in receipts['rust']]}
-                args.reference_rust_out.write_text(json.dumps(reference, indent=2, sort_keys=True)+'\n')
-        finally:
-            remove_worktree(lambda: checked(['git', 'worktree', 'remove', '--force', tree]), 'oracle worktree')
-
-
 def main():
     global COMMAND_OUTPUT, CAPTURE_OUTPUT
     parser = argparse.ArgumentParser()
@@ -1114,8 +1045,6 @@ def main():
     parser.add_argument('--receipt', type=Path)
     parser.add_argument('--snapshot-bin', type=Path, help='the Rust tui-snapshot example (symvault-store)')
     parser.add_argument('--observation', type=Path, help='negative controls: replay this observation file instead')
-    parser.add_argument('--capture-go', action='store_true', help='run only the Go oracle and write its observations (needs Go)')
-    parser.add_argument('--reference-rust-out', type=Path, help='with --capture-go: drive Rust with the Go helper too')
     parser.add_argument('--xvfb', default=shutil.which('Xvfb'))
     parser.add_argument('--xclip', default=shutil.which('xclip'))
     parser.add_argument('--allow-dirty-for-development', action='store_true')
@@ -1124,9 +1053,6 @@ def main():
     parser.add_argument('--candidate')
     parser.add_argument('--expected-receipt-sha256')
     args = parser.parse_args()
-    if args.capture_go:
-        capture_go(args)
-        return
     assert args.receipt is not None, '--receipt is required'
     args.receipt.parent.mkdir(parents=True, exist_ok=True)
     if args.validate_receipt:

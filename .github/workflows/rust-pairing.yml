@@ -12,7 +12,6 @@ on:
       - 'crates/symvault-core/**'
       - 'crates/symvault-platform/**'
       - 'scripts/rust-port/build_timeout.py'
-      - 'scripts/rust-port/test_store004_isolation.py'
       - 'scripts/rust-port/native_closeout.py'
       - 'scripts/rust-port/test_http001init_isolation.py'
       - 'testdata/port/mcp/http-initialize.json'
@@ -39,7 +38,6 @@ on:
       - 'crates/symvault-core/**'
       - 'crates/symvault-platform/**'
       - 'scripts/rust-port/build_timeout.py'
-      - 'scripts/rust-port/test_store004_isolation.py'
       - 'scripts/rust-port/native_closeout.py'
       - 'scripts/rust-port/test_http001init_isolation.py'
       - 'testdata/port/mcp/http-initialize.json'
@@ -181,7 +179,7 @@ jobs:
 
       - name: Native CLI and session technical gates
         shell: bash
-        run: python3 scripts/rust-port/native_closeout.py portable --live-go
+        run: python3 scripts/rust-port/native_closeout.py portable
 
       - name: Install disposable Linux Secret Service
         if: runner.os == 'Linux'
@@ -193,7 +191,7 @@ jobs:
         shell: bash
         env:
           SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
-        run: python3 scripts/rust-port/native_closeout.py keyring --live-go
+        run: python3 scripts/rust-port/native_closeout.py keyring
 
       - name: Native disposable launchd lifecycle
         if: ${{ !cancelled() && runner.os == 'macOS' }}

@@ -358,16 +358,6 @@ def inventory(paths, root):
     return digest.hexdigest()
 
 
-def go_init(go, home):
-    checked([go, "init", "--auth", "passphrase"], cwd=home, env=isolated(home))
-
-
-def go_http_home(go, home):
-    go_init(go, home)
-    checked([go, "agent", "token", "new", "default", "--label", "public-fixture", "--tools", "get_entry"],
-            cwd=home, env=isolated(home))
-
-
 def material_seed(files):
     return lambda home: observations.unpack_tree(files, home)
 
@@ -401,57 +391,12 @@ def exercise(binary, material, root):
             + http_cases(binary, material_seed(material["http_home"]), root))
 
 
-def capture(args):
-    """Capture mode: build the pinned Go oracle and exercise it alone (needs Go)."""
-    from build_timeout import oracle_build_timeout, remove_worktree
-    if os.name != "nt":
-        os.umask(0o022)
-    with tempfile.TemporaryDirectory(prefix="symvault-serve-capture-") as raw:
-        base = Path(raw)
-        tree = base / "oracle"
-        checked(["git", "worktree", "add", "--detach", tree, ORACLE])
-        try:
-            go = base / "go"
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree, timeout=oracle_build_timeout())
-            listing = checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
-            oracle_sources = sorted(x for x in listing if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
-            embedded = sorted(x for x in listing if x.startswith("internal/mcp/apitemplates/builtin/"))
-            assert len(embedded) == 17
-            recorded = {"oracle_source_files": oracle_sources, "oracle_source_digest": inventory(oracle_sources, tree),
-                        "oracle_embedded_files": embedded, "oracle_embedded_digest": inventory(embedded, tree),
-                        "go_binary_sha256": hashlib.sha256(go.read_bytes()).hexdigest()}
-            material = observations.existing_material("serve-contract")
-            if material is None:
-                initialized, http_home = base / "seed-initialized", base / "seed-http"
-                initialized.mkdir()
-                http_home.mkdir()
-                go_init(go, initialized)
-                go_http_home(go, http_home)
-                material = {"initialized_home": observations.pack_tree(initialized), "http_home": observations.pack_tree(http_home)}
-            root = base / "go-roots"
-            root.mkdir()
-            recorded["go"] = exercise(go, material, root)
-            for row in recorded["go"]:
-                if row.get("transport_logs"):
-                    # The live run already validated each line's exact shape; keep it, minus clock and peer port.
-                    stamped = re.sub(r"\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}", "__TIMESTAMP__", row["transport_logs"])
-                    row["transport_logs"] = re.sub(r"127\.0\.0\.1:\d+", "127.0.0.1:__PEER__", stamped)
-        finally:
-            remove_worktree(lambda: checked(["git", "worktree", "remove", tree]), "oracle worktree")
-    target = observations.save("serve-contract", recorded, oracle_commit=ORACLE, version=observations.go_version(),
-                               args=["serve_contract.py", "--capture-go"], material=material)
-    print(f"captured {observations.rel(target)}")
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rust", type=Path)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
-    observations.add_capture_flag(parser)
     args = parser.parse_args()
-    if args.capture_go:
-        return capture(args)
     assert args.rust and args.receipt, "--rust and --receipt are required"
     rust = args.rust.resolve()
     assert rust.is_file()
@@ -464,7 +409,7 @@ def main():
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development, "commit the candidate before native acceptance"
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
-                     if x.startswith(("crates/", "third_party/", "testdata/", "internal/mcp/apitemplates/builtin/"))
+                     if x.startswith(("crates/", "third_party/", "testdata/"))
                      or x in {"Cargo.toml", "Cargo.lock", ".gitattributes", "scripts/rust-port/serve_contract.py", ".github/workflows/rust-serve-cli.yml"})
     with tempfile.TemporaryDirectory(prefix="symvault-serve-contract-") as raw:
         base = Path(raw)

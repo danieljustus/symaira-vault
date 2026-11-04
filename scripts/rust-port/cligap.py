@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure the Rust CLI's command surface against the frozen oracle command tree.
 
-Python port of scripts/rust-port/cmd/cligap (Go), which only ever read the
+Python port of the retired Go cligap tool, which only ever read the
 committed testdata/port/cli/command-tree.json and probed the Rust binary; it never
 needed a Go oracle binary. Surface reachability and flag presence only, never
 behavioral parity. Same report schema and same walking rules as the Go tool.

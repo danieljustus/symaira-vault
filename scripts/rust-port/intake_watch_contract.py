@@ -325,47 +325,8 @@ def compare(go, rust):
             assert left == right, (name, left, right)
 
 
-def go_seed(go):
-    return lambda home: checked([go, "init", "--auth", "passphrase"], cwd=home, env=isolated(home))
-
-
 def material_seed(files):
     return lambda home: observations.unpack_tree(files, home)
-
-
-def capture(args):
-    """Capture mode: build the pinned Go oracle and exercise it alone (needs Go)."""
-    from build_timeout import oracle_build_timeout, remove_worktree
-    with tempfile.TemporaryDirectory(prefix="symvault-intake-capture-") as raw:
-        base = Path(raw)
-        tree = base / "oracle"
-        checked(["git", "worktree", "add", "--detach", tree, ORACLE])
-        try:
-            go = base / "go"
-            sources = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
-                             if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
-            digest = hashlib.sha256()
-            for path in sources:
-                digest.update(path.encode()+b"\0"+(tree/path).read_bytes()+b"\0")
-            recorded = {"oracle_source_files": sources, "oracle_source_digest": digest.hexdigest()}
-            compiler = json.loads(checked(["go", "env", "-json", "GOVERSION", "GOOS", "GOARCH"], cwd=tree))
-            recorded["compiler"] = compiler
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree, timeout=oracle_build_timeout())
-            recorded["go_binary_sha256"] = hashlib.sha256(go.read_bytes()).hexdigest()
-            material = observations.existing_material("intake-watch-contract")
-            if material is None:
-                scratch = base / "seed-home"
-                scratch.mkdir()
-                go_seed(go)(scratch)
-                material = {"initialized_home": observations.pack_tree(scratch)}
-            go_root = base / "go-roots"
-            go_root.mkdir()
-            recorded["go"] = exercise(go, go, go_root, material_seed(material["initialized_home"]))
-        finally:
-            remove_worktree(lambda: checked(["git", "worktree", "remove", tree]), "oracle worktree")
-    target = observations.save("intake-watch-contract", recorded, oracle_commit=ORACLE, version=observations.go_version(),
-                               args=["intake_watch_contract.py", "--capture-go"], material=material)
-    print(f"captured {observations.rel(target)}")
 
 
 def main():
@@ -373,10 +334,7 @@ def main():
     parser.add_argument("--rust", type=Path)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
-    observations.add_capture_flag(parser)
     args = parser.parse_args()
-    if args.capture_go:
-        return capture(args)
     assert args.rust and args.receipt, "--rust and --receipt are required"
     rust = args.rust.resolve()
     assert rust.is_file(), "a real Rust CLI binary is required"
