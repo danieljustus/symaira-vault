@@ -1206,6 +1206,14 @@ struct Parsed {
     /// The last `--vault` / `--profile` value (the agent-mode gate resolves the vault).
     vault: Option<String>,
     profile: Option<String>,
+    /// pflag's final value of the `help` flag: only a help flag the parse really
+    /// reached (not a flag's value, not behind `--`) with a true value counts.
+    help: bool,
+}
+
+/// pflag's `strconv.ParseBool` truth of an already validated bool-flag value.
+fn bool_enabled(value: &str) -> bool {
+    matches!(value, "1" | "t" | "T" | "TRUE" | "true" | "True")
 }
 
 /// pflag's parse of the remaining tokens against the command's flag set.
@@ -1223,6 +1231,7 @@ fn parse_flags(
         output: None,
         vault: None,
         profile: None,
+        help: false,
     };
     let mut index = 0;
     let note = |arg: &Arg, value: Option<&str>, parsed: &mut Parsed| match (arg.get_long(), value) {
@@ -1266,6 +1275,13 @@ fn parse_flags(
                 return Err(format!("unknown flag: --{name}"));
             };
             if is_help_arg(arg) {
+                if let Some(value) = inline
+                    && !go_parse_bool(value)
+                {
+                    return Err(invalid_argument(value, arg, "ParseBool", "invalid syntax"));
+                }
+                // Like every bool flag, the last occurrence decides.
+                parsed.help = inline.is_none_or(bool_enabled);
                 continue;
             }
             if let Some(long) = arg.get_long() {
@@ -1295,9 +1311,7 @@ fn parse_flags(
                 }
                 // pflag assigns the parsed value on every occurrence: the last one wins,
                 // so `--json --json=false` leaves the flag unset.
-                let enabled = inline.is_none_or(|value| {
-                    matches!(value, "1" | "t" | "T" | "TRUE" | "true" | "True")
-                });
+                let enabled = inline.is_none_or(bool_enabled);
                 if arg.get_long() == Some("json") {
                     parsed.json_flag = enabled;
                 }
@@ -1333,7 +1347,13 @@ fn parse_flags(
                                 "invalid syntax",
                             ));
                         }
+                        if is_help_arg(arg) {
+                            parsed.help = bool_enabled(&value);
+                        }
                         break;
+                    }
+                    if is_help_arg(arg) {
+                        parsed.help = true;
                     }
                     continue;
                 }
@@ -1503,13 +1523,6 @@ fn resolve<'a>(args: &[String], root: &'a Command) -> Resolution<'a> {
 }
 
 fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdict {
-    if args
-        .iter()
-        .take_while(|token| *token != "--")
-        .any(|token| token == "-h" || token == "--help")
-    {
-        return Verdict::Proceed;
-    }
     root.build();
     let Resolution {
         current,
@@ -1521,13 +1534,15 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
         Stop::Resolved => {}
         Stop::Help => {
             // cobra's `help` command is runnable and requires a vault, so the
-            // agent-mode gate runs before it prints anything.
+            // agent-mode gate runs before it prints anything, unless the help
+            // command's own help flag was really given.
             if required {
                 let flags = Flags {
                     command: &root,
                     root: &root,
                 };
                 if let Ok(parsed) = parse_flags(&tokens, flags, "help", true)
+                    && !parsed.help
                     && let Some(message) = crate::agent_gate::preflight(
                         "help",
                         parsed.vault.as_deref(),
@@ -1551,6 +1566,13 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
         Ok(parsed) => parsed,
         Err(message) => return fail_at(&path_text, &message, 1),
     };
+    // cobra checks the help flag right after parsing, before any validator and
+    // before the pre-run (so before the agent-mode gate). Only a help flag the
+    // parse reached counts: `--tools --help` hands `--help` to `--tools` as its
+    // value and the command runs.
+    if parsed.help {
+        return Verdict::Proceed;
+    }
     if current.path.is_empty() {
         // The root is not runnable: whatever is left (a lone `-`, everything after `--`,
         // only persistent flags) is a positional cobra's legacy check never sees, and
@@ -1744,6 +1766,106 @@ mod tests {
         ));
         // `evaluate` itself stays at the validator/gate stage.
         assert_eq!(evaluate(&["export".to_owned()], root()), Verdict::Proceed);
+    }
+
+    /// The `help` flag as pflag leaves it after parsing `args` (command words resolved).
+    fn parsed_help(args: &[&str]) -> Result<bool, String> {
+        let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+        let mut command = root();
+        command.build();
+        let resolution = resolve(&args, &command);
+        let flags = Flags {
+            command: resolution.current.command.unwrap_or(&command),
+            root: &command,
+        };
+        let lenient = resolution.current.command.is_none() && !resolution.current.path.is_empty();
+        parse_flags(
+            &resolution.tokens,
+            flags,
+            &resolution.current.path.join(" "),
+            lenient,
+        )
+        .map(|parsed| parsed.help)
+    }
+
+    /// A help token is a help request only when pflag parses it as the help flag:
+    /// not as the value of a flag that takes one, not behind `--`, and the last
+    /// occurrence of the bool flag decides.
+    #[test]
+    fn help_token_is_a_request_only_as_a_help_flag() {
+        let value_of_a_flag: &[&[&str]] = &[
+            &["agent", "token", "new", "x", "--tools", "--help"],
+            &["agent", "token", "new", "--tools", "-h", "x"],
+            &["agent", "token", "new", "x", "--tools=--help"],
+            &["run", "--broker-passthrough", "--help", "true"],
+            &["broker", "--passthrough", "--help"],
+            &["list", "--vault", "-h"],
+            &["list", "--output", "--help"],
+            &["--vault", "--help", "list"],
+            &["list", "--", "--help"],
+            &["list", "--help=false"],
+            &["list", "-h=false"],
+            &["list", "--help", "--help=false"],
+            &["list"],
+        ];
+        for args in value_of_a_flag {
+            assert_eq!(parsed_help(args), Ok(false), "{args:?}");
+        }
+        let requests: &[&[&str]] = &[
+            &["list", "--help"],
+            &["list", "-h"],
+            &["list", "--help=true"],
+            &["list", "-h=true"],
+            &["list", "--help=false", "--help"],
+            &["--help"],
+            &["-h", "list"],
+            &["agent", "token", "new", "x", "--tools", "a", "--help"],
+            &["agent", "token", "new", "x", "--help", "--tools", "a"],
+        ];
+        for args in requests {
+            assert_eq!(parsed_help(args), Ok(true), "{args:?}");
+        }
+        for args in [&["list", "--help=foo"][..], &["list", "-h=foo"]] {
+            assert!(parsed_help(args).is_err(), "{args:?}");
+        }
+    }
+
+    /// The help shortcut must not hide the validators that cobra runs for a
+    /// command whose `--help` is only a flag value.
+    #[test]
+    fn help_shortcut_skips_nothing_when_the_token_is_a_flag_value() {
+        let run = |args: &[&str]| {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            evaluate(&args, root())
+        };
+        assert_eq!(run(&["export", "--help", "extra"]), Verdict::Proceed);
+        assert_eq!(run(&["export", "-h", "extra"]), Verdict::Proceed);
+        for args in [
+            &["export", "--format", "--help", "extra"][..],
+            &["export", "--format", "-h", "extra"],
+            &["export", "--format=--help", "extra"],
+            &["export", "--", "--help", "extra"],
+        ] {
+            assert!(
+                matches!(run(args), Verdict::Fail { code: 1, ref stderr }
+                    if stderr.contains("unknown command \"")),
+                "{args:?}"
+            );
+        }
+        // A parse error ends the run wherever the help flag stands.
+        assert!(matches!(
+            run(&["list", "--help", "--bogus"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+        assert!(matches!(
+            run(&["list", "--bogus", "--help"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+        // An unknown command is an error before its help flag is looked at.
+        assert!(matches!(
+            run(&["nosuch", "--help"]),
+            Verdict::Fail { code: 1, .. }
+        ));
     }
 
     #[test]

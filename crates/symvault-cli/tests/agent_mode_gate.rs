@@ -609,3 +609,92 @@ fn agent_gate_ordering_flags_and_output_modes() {
         },
     );
 }
+
+/// cobra consumes `--help` / `-h` as a flag's value when the flag takes one, and
+/// checks the help flag right after parsing, before the pre-run: a value is no
+/// help request (the gate runs), a real help flag is (it does not), the last
+/// occurrence of a bool flag decides, and `--` ends the flags.
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_resolves_help_tokens_like_pflag() {
+    let (_oracle, pair) = Pair::new("agent_gate_resolves_help_tokens_like_pflag");
+    pair.set_config(&Config::Text(PROFILES));
+    let ghost = Some("ghost");
+    let none = Opts::default();
+
+    // `--help` / `-h` is the value of a flag: the command is gated (and never
+    // runs, so no token store appears in the vault).
+    for args in [
+        &["agent", "token", "new", "x", "--tools", "--help"][..],
+        &["agent", "token", "new", "--tools", "-h", "x"],
+        &["agent", "token", "new", "x", "--tools=--help"],
+        &["agent", "token", "new", "x", "--tools", "--help=true"],
+        &["run", "--broker-passthrough", "--help", "true"],
+        &["broker", "--passthrough", "--help"],
+        &["list", "--vault", "-h"],
+        &["list", "--vault", "--help", "--", "x"],
+        &["--vault", "--help", "list"],
+        &["list", "--output", "-h"],
+        &["--output", "--help", "list"],
+        &["export", "--format", "--help"],
+        &["help", "--vault", "--help"],
+        &["help", "--vault", "--help", "list"],
+        &["list", "--", "--help"],
+        &["list", "--help=false"],
+        &["list", "-h=false"],
+        &["list", "--help", "--help=false"],
+    ] {
+        let (code, _) = pair.check(&format!("ghost {args:?}"), args, ghost, none);
+        assert_eq!(code, Some(5), "ghost {args:?} is gated");
+    }
+    let (code, _) = pair.check(
+        "profile flag value --help",
+        &["--profile", "--help", "list"],
+        ghost,
+        none,
+    );
+    assert_eq!(code, Some(5));
+    assert!(
+        !pair.rust.listing().contains_key("mcp-tokens.json"),
+        "a gated `agent token new` must not create the token store"
+    );
+
+    // A real help flag precedes the pre-run: no gate, no audit log. A parse
+    // error ends the run first, wherever the help flag stands.
+    for args in [
+        &["list", "--help"][..],
+        &["list", "-h"],
+        &["list", "--help=true"],
+        &["add", "x", "--help"],
+        &["get", "--help"],
+        &["agent", "token", "new", "x", "--tools", "a", "--help"],
+        &["agent", "token", "new", "x", "--help", "--tools", "a"],
+        &["help", "--help"],
+        &["help", "list", "-h"],
+        &["--help"],
+        &["-h"],
+        &["export", "-h"],
+    ] {
+        for agent in ["ghost", "alpha"] {
+            let (code, _) = pair.check(&format!("{agent} {args:?}"), args, Some(agent), none);
+            assert_eq!(code, Some(0), "{agent} {args:?} prints help");
+        }
+    }
+    assert!(
+        !pair.rust.listing().contains_key("audit-alpha.log"),
+        "help never loads the agent"
+    );
+    for args in [
+        &["list", "--help=foo"][..],
+        &["list", "-h=foo"],
+        &["list", "--help", "--bogus"],
+        &["list", "--bogus", "--help"],
+        &["agent", "token", "new", "x", "-t", "-h"],
+    ] {
+        let (code, _) = pair.check(&format!("ghost {args:?}"), args, ghost, none);
+        assert_eq!(code, Some(1), "ghost {args:?} is a usage error");
+    }
+}

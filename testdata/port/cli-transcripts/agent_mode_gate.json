@@ -1856,6 +1856,1749 @@
         }
       ]
     },
+    "agent_gate_resolves_help_tokens_like_pflag": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "08ee5d884c3a83baa3e2b95a2359469706ecd0d37ef9e8ee8fe21e5664fdc72c",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "x",
+              "--tools",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a513ac1bfe1ef56ee66f2245d50a97e09466b019562874535711af2eb3f2c355",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "--tools",
+              "-h",
+              "x"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8c75c0f38ad06816054a81cb961a473a0f3628d026a81472853b24f530325c4c",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "x",
+              "--tools=--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9fe72dbba77be458e118646178ec9fab441138f4f96dd1081e1a86a0b5ad64a9",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "x",
+              "--tools",
+              "--help=true"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4e33b305f006887d5188c7aa0d431593ed9afd96f552f66395326bc873ea3b8f",
+          "request": {
+            "args": [
+              "run",
+              "--broker-passthrough",
+              "--help",
+              "true"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "41c450e737798b634701bc8e1a08bac8cd506196f1699c2425dd857fe515a438",
+          "request": {
+            "args": [
+              "broker",
+              "--passthrough",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ebd9dc7472971a8ca7350b74dc44f4653e4327225329e12c9b88b12446f269ba",
+          "request": {
+            "args": [
+              "list",
+              "--vault",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from -h/config.yaml: open -h/config.yaml: no such file or directory: load config from -h/config.yaml: open -h/config.yaml: no such file or directory\nError: agent mode: load config from -h/config.yaml: open -h/config.yaml: no such file or directory: load config from -h/config.yaml: open -h/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d3af9d0ce715fc18107bafc72f87509f2906a0a7f14e89ef2f61afdfa545f7cd",
+          "request": {
+            "args": [
+              "list",
+              "--vault",
+              "--help",
+              "--",
+              "x"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from --help/config.yaml: open --help/config.yaml: no such file or directory: load config from --help/config.yaml: open --help/config.yaml: no such file or directory\nError: agent mode: load config from --help/config.yaml: open --help/config.yaml: no such file or directory: load config from --help/config.yaml: open --help/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "05268b16464bdfdb590bcb68022aa0c48e294519aaac9a4dc36ccf6585a7e768",
+          "request": {
+            "args": [
+              "--vault",
+              "--help",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from --help/config.yaml: open --help/config.yaml: no such file or directory: load config from --help/config.yaml: open --help/config.yaml: no such file or directory\nError: agent mode: load config from --help/config.yaml: open --help/config.yaml: no such file or directory: load config from --help/config.yaml: open --help/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ecdb1b66aa554d8a405f051c46be12bc88d63dcc321d9e9b886381670456e0b5",
+          "request": {
+            "args": [
+              "list",
+              "--output",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2d0ca34690cb9877886641c85fc9fb2c4ca5264b2b1b5a1db6c6eff227b7549b",
+          "request": {
+            "args": [
+              "--output",
+              "--help",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ce0159ccf57123125d4ba5536a923e100ffc357672d8d51240b3d56e73c61f68",
+          "request": {
+            "args": [
+              "export",
+              "--format",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "016e4f825959010bd2f3687a771c77fa19272432bb0c2ef839be3fabbcb6074d",
+          "request": {
+            "args": [
+              "help",
+              "--vault",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from --help/config.yaml: open --help/config.yaml: no such file or directory: load config from --help/config.yaml: open --help/config.yaml: no such file or directory\nError: agent mode: load config from --help/config.yaml: open --help/config.yaml: no such file or directory: load config from --help/config.yaml: open --help/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "12ab92c5f70cd816aea184b0e31930f9e173869f87a1842a41a6ee333c6d2d41",
+          "request": {
+            "args": [
+              "help",
+              "--vault",
+              "--help",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from --help/config.yaml: open --help/config.yaml: no such file or directory: load config from --help/config.yaml: open --help/config.yaml: no such file or directory\nError: agent mode: load config from --help/config.yaml: open --help/config.yaml: no such file or directory: load config from --help/config.yaml: open --help/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ffc239c9b16152c86e4643d47b7bf80410014a0161a8d16bdc7700c233248ce8",
+          "request": {
+            "args": [
+              "list",
+              "--",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8b0aba50c477fca85629455346ac089547d3ae37f05ef48cc60a8190e8952479",
+          "request": {
+            "args": [
+              "list",
+              "--help=false"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6ea11c9323ed2e4eca83501d81e355fa073305997998ba351e84eae65f065fc8",
+          "request": {
+            "args": [
+              "list",
+              "-h=false"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f6447a615e537d0373f5394cacb45e22caa6d7dc8cec9e945df70f51e2691e0d",
+          "request": {
+            "args": [
+              "list",
+              "--help",
+              "--help=false"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "bf9d880849cda426ff27d4b4c53b488d238003f8d794bf9dea313925ee1e641d",
+          "request": {
+            "args": [
+              "--profile",
+              "--help",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9f15b05446cbabf3b2f96ad1178912ed71e573a461f039b39a154a8e66e22dfb",
+          "request": {
+            "args": [
+              "list",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "List password entries\n\nUsage:\n  symvault list [prefix] [flags]\n\nAliases:\n  list, ls\n\nExamples:\n  # List all entries\n  symvault list\n\n  # List entries under \"work/\" prefix\n  symvault list work/\n\n  # JSON output\n  symvault list --output json\n\nFlags:\n  -h, --help   help for list\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "55c838c3d7e261ed19c01fc1fc53646e882ee69fd4b12668a874f6f777abeab1",
+          "request": {
+            "args": [
+              "list",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "List password entries\n\nUsage:\n  symvault list [prefix] [flags]\n\nAliases:\n  list, ls\n\nExamples:\n  # List all entries\n  symvault list\n\n  # List entries under \"work/\" prefix\n  symvault list work/\n\n  # JSON output\n  symvault list --output json\n\nFlags:\n  -h, --help   help for list\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0bb6ab9db14864bfc48b99fd8a7bd2d4327bc1a078c51e6acebda410b07e2548",
+          "request": {
+            "args": [
+              "list",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "List password entries\n\nUsage:\n  symvault list [prefix] [flags]\n\nAliases:\n  list, ls\n\nExamples:\n  # List all entries\n  symvault list\n\n  # List entries under \"work/\" prefix\n  symvault list work/\n\n  # JSON output\n  symvault list --output json\n\nFlags:\n  -h, --help   help for list\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "72e2d3cf4166dda893ace4465554359d61ea013495478a26fe67fa764caad336",
+          "request": {
+            "args": [
+              "list",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "List password entries\n\nUsage:\n  symvault list [prefix] [flags]\n\nAliases:\n  list, ls\n\nExamples:\n  # List all entries\n  symvault list\n\n  # List entries under \"work/\" prefix\n  symvault list work/\n\n  # JSON output\n  symvault list --output json\n\nFlags:\n  -h, --help   help for list\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d7dfda759aa9194a5d03522b9cff00184dec9573d6a5444714710497c7f31a43",
+          "request": {
+            "args": [
+              "list",
+              "--help=true"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "List password entries\n\nUsage:\n  symvault list [prefix] [flags]\n\nAliases:\n  list, ls\n\nExamples:\n  # List all entries\n  symvault list\n\n  # List entries under \"work/\" prefix\n  symvault list work/\n\n  # JSON output\n  symvault list --output json\n\nFlags:\n  -h, --help   help for list\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8b78e84f6a41242666bf016a3f1b739b98e479889f1cd209a9549cf669b65cdd",
+          "request": {
+            "args": [
+              "list",
+              "--help=true"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "List password entries\n\nUsage:\n  symvault list [prefix] [flags]\n\nAliases:\n  list, ls\n\nExamples:\n  # List all entries\n  symvault list\n\n  # List entries under \"work/\" prefix\n  symvault list work/\n\n  # JSON output\n  symvault list --output json\n\nFlags:\n  -h, --help   help for list\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0f88fec29fc89cc510ccffa5ef79421954fb5c87e01902f27f5f6487c86a1363",
+          "request": {
+            "args": [
+              "add",
+              "x",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Creates a new password entry in the vault.\n\nThe entry name can use slash notation for organization (e.g., work/aws).\nInteractive mode prompts for username, password, and URL.\n\nUsage:\n  symvault add <name> [flags]\n\nAliases:\n  add, new, create\n\nExamples:\n  symvault add github\n  symvault add work/aws\n  symvault add personal/bank\n  symvault add github-token --value \"my-secret-token\"\n  symvault add secure-pass --generate --length 20\n  symvault add aws-key --type api_key --value \"AKIA...\"\n  symvault add ssh-key --type ssh_key --usage-hint \"Production server key\"\n\nFlags:\n      --allow-empty           Allow empty value for sensitive fields\n      --auto-rotate           Enable automatic rotation reminder\n      --expires-at string     Expiration date (RFC3339 format)\n      --force                 Skip password strength validation\n      --generate              Generate a secure password (non-interactive)\n  -h, --help                  help for add\n      --length int            Generated password length for --generate (default 20)\n      --notes string          Notes (non-interactive)\n      --stdin-totp-secret     Read TOTP secret from stdin (prevents argv leak)\n      --stdin-value           Read password value from stdin (prevents argv leak)\n      --totp-account string   TOTP account name/username\n      --totp-issuer string    TOTP issuer/service name\n      --totp-secret string    TOTP secret key (base32 encoded, visible in process listings)\n      --type string           Secret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n      --url string            URL (non-interactive)\n      --usage-hint string     Usage hint for AI agents\n      --username string       Username (non-interactive)\n      --value string          Password value (non-interactive, visible in process listings)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b66a231cfe25bc7b1ed1be32159046d266dd6b2d80a3d928b8251802ae848e95",
+          "request": {
+            "args": [
+              "add",
+              "x",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Creates a new password entry in the vault.\n\nThe entry name can use slash notation for organization (e.g., work/aws).\nInteractive mode prompts for username, password, and URL.\n\nUsage:\n  symvault add <name> [flags]\n\nAliases:\n  add, new, create\n\nExamples:\n  symvault add github\n  symvault add work/aws\n  symvault add personal/bank\n  symvault add github-token --value \"my-secret-token\"\n  symvault add secure-pass --generate --length 20\n  symvault add aws-key --type api_key --value \"AKIA...\"\n  symvault add ssh-key --type ssh_key --usage-hint \"Production server key\"\n\nFlags:\n      --allow-empty           Allow empty value for sensitive fields\n      --auto-rotate           Enable automatic rotation reminder\n      --expires-at string     Expiration date (RFC3339 format)\n      --force                 Skip password strength validation\n      --generate              Generate a secure password (non-interactive)\n  -h, --help                  help for add\n      --length int            Generated password length for --generate (default 20)\n      --notes string          Notes (non-interactive)\n      --stdin-totp-secret     Read TOTP secret from stdin (prevents argv leak)\n      --stdin-value           Read password value from stdin (prevents argv leak)\n      --totp-account string   TOTP account name/username\n      --totp-issuer string    TOTP issuer/service name\n      --totp-secret string    TOTP secret key (base32 encoded, visible in process listings)\n      --type string           Secret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n      --url string            URL (non-interactive)\n      --usage-hint string     Usage hint for AI agents\n      --username string       Username (non-interactive)\n      --value string          Password value (non-interactive, visible in process listings)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "96521dd5ab4b8914280eaad7d615e5d0a334132e3b3702e0ab4d638a6c77922e",
+          "request": {
+            "args": [
+              "get",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Retrieves and displays a password entry. Use path.field syntax to get specific fields.\n\nUsage:\n  symvault get <path[.field]> [flags]\n\nAliases:\n  get, show, cat\n\nExamples:\n  # Get a specific field (auto-copies to clipboard on TTY)\n  symvault get github.password\n\n  # Substring search fallback (when exact path doesn't exist)\n  symvault get git\n\n  # Explicitly print to stdout instead of clipboard\n  symvault get github.password --print\n\n  # Output as JSON\n  symvault get github --output json\n\n  # Use a specific profile\n  symvault get github.password --profile work\n\nFlags:\n      --digest     Print sha256 digest (first 12 hex chars) of the value only\n  -h, --help       help for get\n      --length     Print byte length of the stored string value only\n      --metadata   Print JSON metadata (length and sha256_12) of the value only\n  -p, --print      Print value to stdout instead of copying to clipboard\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "5d0ffefe4572a2e13aaafe420b7417dbb510c58502b10af7b5f80648a03bd0d1",
+          "request": {
+            "args": [
+              "get",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Retrieves and displays a password entry. Use path.field syntax to get specific fields.\n\nUsage:\n  symvault get <path[.field]> [flags]\n\nAliases:\n  get, show, cat\n\nExamples:\n  # Get a specific field (auto-copies to clipboard on TTY)\n  symvault get github.password\n\n  # Substring search fallback (when exact path doesn't exist)\n  symvault get git\n\n  # Explicitly print to stdout instead of clipboard\n  symvault get github.password --print\n\n  # Output as JSON\n  symvault get github --output json\n\n  # Use a specific profile\n  symvault get github.password --profile work\n\nFlags:\n      --digest     Print sha256 digest (first 12 hex chars) of the value only\n  -h, --help       help for get\n      --length     Print byte length of the stored string value only\n      --metadata   Print JSON metadata (length and sha256_12) of the value only\n  -p, --print      Print value to stdout instead of copying to clipboard\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2f96a5f36beb0d6466429c18fad8c8adc791759c0b437e56e2c7c07b5cb8d848",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "x",
+              "--tools",
+              "a",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Create a new scoped MCP token associated with the named agent.\n\nThe raw token is printed exactly once — copy it immediately. It cannot be\nretrieved later.\n\nUsage:\n  symvault agent token new <name> [flags]\n\nFlags:\n  -h, --help            help for new\n      --label string    Human-readable label\n      --tools strings   Comma-separated allowed tools, or '*' for all (default [*])\n      --ttl string      Token TTL (e.g. 24h, 7d); defaults to mcp.scoped_token_ttl from config\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "83432b402046bd9b82df48e91444f8ef8d310f5c66a1a021232f6cd669ce0d1a",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "x",
+              "--tools",
+              "a",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Create a new scoped MCP token associated with the named agent.\n\nThe raw token is printed exactly once — copy it immediately. It cannot be\nretrieved later.\n\nUsage:\n  symvault agent token new <name> [flags]\n\nFlags:\n  -h, --help            help for new\n      --label string    Human-readable label\n      --tools strings   Comma-separated allowed tools, or '*' for all (default [*])\n      --ttl string      Token TTL (e.g. 24h, 7d); defaults to mcp.scoped_token_ttl from config\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2131b1198d5150e8ccee8b7249ece2aa0517bb30e9bfa7469bacb29bc6e35a1d",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "x",
+              "--help",
+              "--tools",
+              "a"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Create a new scoped MCP token associated with the named agent.\n\nThe raw token is printed exactly once — copy it immediately. It cannot be\nretrieved later.\n\nUsage:\n  symvault agent token new <name> [flags]\n\nFlags:\n  -h, --help            help for new\n      --label string    Human-readable label\n      --tools strings   Comma-separated allowed tools, or '*' for all (default [*])\n      --ttl string      Token TTL (e.g. 24h, 7d); defaults to mcp.scoped_token_ttl from config\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d8ea5d3666eac89395347e2395106361f0eb0d9d6979b8d2041941288025b497",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "x",
+              "--help",
+              "--tools",
+              "a"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Create a new scoped MCP token associated with the named agent.\n\nThe raw token is printed exactly once — copy it immediately. It cannot be\nretrieved later.\n\nUsage:\n  symvault agent token new <name> [flags]\n\nFlags:\n  -h, --help            help for new\n      --label string    Human-readable label\n      --tools strings   Comma-separated allowed tools, or '*' for all (default [*])\n      --ttl string      Token TTL (e.g. 24h, 7d); defaults to mcp.scoped_token_ttl from config\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b6121dcf053b3d1b357d33fdf59430e9b54080e3739d4a372c74f9c01aaa2560",
+          "request": {
+            "args": [
+              "help",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Help provides help for any command in the application.\nSimply type symvault help [path to command] for full details.\n\nUsage:\n  symvault help [command] [flags]\n\nFlags:\n  -h, --help   help for help\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f8334914c0219063860ceb83a2b279bb542710de17cfe7d25f3d1514a8efb0a6",
+          "request": {
+            "args": [
+              "help",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Help provides help for any command in the application.\nSimply type symvault help [path to command] for full details.\n\nUsage:\n  symvault help [command] [flags]\n\nFlags:\n  -h, --help   help for help\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "620a0833e9718170e6afad1e199a32214f264a5ecf9262868d90fda1c011359d",
+          "request": {
+            "args": [
+              "help",
+              "list",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Help provides help for any command in the application.\nSimply type symvault help [path to command] for full details.\n\nUsage:\n  symvault help [command] [flags]\n\nFlags:\n  -h, --help   help for help\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f3dfb029a7924cbae34090a7f6a83f01f1a95e1acc4c38122aa1206135d5deac",
+          "request": {
+            "args": [
+              "help",
+              "list",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Help provides help for any command in the application.\nSimply type symvault help [path to command] for full details.\n\nUsage:\n  symvault help [command] [flags]\n\nFlags:\n  -h, --help   help for help\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "fc554ac5f2d967dc6262c8b44a9f7b493538778ab3a77d5b8f2e95629c73b602",
+          "request": {
+            "args": [
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6d06b2aa2cba4ef5dd00693410f8cefefd66285d59316f9651faec9c9b89f3d5",
+          "request": {
+            "args": [
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4605bd13e5e73fed385e9f1b5f378e298d8cc9f878da9fec886bf51453325a1f",
+          "request": {
+            "args": [
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8ca6c950cd200518a4f699bf8f45f6bc68e16390e41d519c93cc81754c56a136",
+          "request": {
+            "args": [
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "322ee3b8cde988cf3d1a093ed5f33555539e11496e2a836bc0a0649cba30eace",
+          "request": {
+            "args": [
+              "export",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Exports all vault entries in CSV or JSON format for portability and backup.\n\nUsage:\n  symvault export [flags]\n\nExamples:\n  # Export all entries as JSON\n  symvault export --format json\n\n  # Export as CSV to a file\n  symvault export --format csv --output ~/vault-export.csv\n\n  # Export with field mapping (rename columns)\n  symvault export --format csv --mapping \"path=title,username=user,password=secret\"\n\nFlags:\n      --format string    Export format: csv or json (required)\n  -h, --help             help for export\n      --mapping string   Column mapping (format: vault_field=output_header,...)\n      --output string    Output file path (default: stdout)\n  -y, --yes              Skip confirmation prompt\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ac2e57823155ea21e0ba14931f29535a893093281b91cbe6343c06f9157c3645",
+          "request": {
+            "args": [
+              "export",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Exports all vault entries in CSV or JSON format for portability and backup.\n\nUsage:\n  symvault export [flags]\n\nExamples:\n  # Export all entries as JSON\n  symvault export --format json\n\n  # Export as CSV to a file\n  symvault export --format csv --output ~/vault-export.csv\n\n  # Export with field mapping (rename columns)\n  symvault export --format csv --mapping \"path=title,username=user,password=secret\"\n\nFlags:\n      --format string    Export format: csv or json (required)\n  -h, --help             help for export\n      --mapping string   Column mapping (format: vault_field=output_header,...)\n      --output string    Output file path (default: stdout)\n  -y, --yes              Skip confirmation prompt\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "240c72385985808a9a2867fba6dcd9c22d5e51a1d2dbf417cc841983db0b1d74",
+          "request": {
+            "args": [
+              "list",
+              "--help=foo"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: invalid argument \"foo\" for \"-h, --help\" flag: strconv.ParseBool: parsing \"foo\": invalid syntax\nError: invalid argument \"foo\" for \"-h, --help\" flag: strconv.ParseBool: parsing \"foo\": invalid syntax\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3d6c703408ce3579b6b980b3f953d8f399e521de8155960cdd1a57c5900fbd57",
+          "request": {
+            "args": [
+              "list",
+              "-h=foo"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: invalid argument \"foo\" for \"-h, --help\" flag: strconv.ParseBool: parsing \"foo\": invalid syntax\nError: invalid argument \"foo\" for \"-h, --help\" flag: strconv.ParseBool: parsing \"foo\": invalid syntax\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "74ffb6f552d2d6af42b74978a8ccfc71035e5ea18c6dbf0d017db8be7a94a40c",
+          "request": {
+            "args": [
+              "list",
+              "--help",
+              "--bogus"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "dfead9d5b1f360092d5ab7e7d6501ae1e6d3c240e3080f5b9e456b6b2c07e00c",
+          "request": {
+            "args": [
+              "list",
+              "--bogus",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "71e756c46e75148595f298a71a863006a6c3122fc05ab7543e5020be0031aa3e",
+          "request": {
+            "args": [
+              "agent",
+              "token",
+              "new",
+              "x",
+              "-t",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown shorthand flag: 't' in -t\nError: unknown shorthand flag: 't' in -t\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
     "agent_load_error_branches": {
       "seeds": [],
       "calls": [
