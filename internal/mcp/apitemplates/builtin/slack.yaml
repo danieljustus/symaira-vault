@@ -1,9 +1,0 @@
-base_url: https://slack.com/api
-auth_type: bearer
-entry_ref: op:///slack
-allowed_endpoints:
-  - /*
-allowed_methods:
-  - GET
-  - POST
-default_headers: {}

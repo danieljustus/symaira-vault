@@ -12,7 +12,7 @@ OpenPass
 # Test binary
 *.test
 
-# Output of go coverage
+# Coverage output
 *.out
 *_output.txt
 
@@ -110,26 +110,6 @@ ARCHITEKTUR.md
 
 # Local build/run scratch tree, not part of the repository.
 /target-run/
-
-# `go build ./scripts/rust-port/cmd/<name>` drops the binary at the repository
-# root. Generator binaries are build output, never sources.
-/policygen
-/configgen
-/configpathgen
-/configprofilegen
-/coregen
-/keyringkeygen
-/manifestkeygen
-/quotagen
-/sessionquotagen
-/storegen
-/store004gen
-/storemetagen
-/syncgen
-/pairinggen
-/portgen
-/caserun
-/auditgen
 
 # AgentsRoom state is per-machine agent/room metadata, not repository content.
 # Keep it out of the tracked tree so consumer checkouts stay clean.
