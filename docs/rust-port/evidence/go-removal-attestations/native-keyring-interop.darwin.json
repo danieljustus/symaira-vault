@@ -8,8 +8,10 @@
   "run_url": "https://github.com/danieljustus/symaira-vault/actions/runs/41481364542",
   "schema": 1,
   "source": "ci-run",
-  "source_digest": "181f53e05c1ff4c83e6b1bd345b3802b34612bd74fa341c80b5364600ef0b5e2",
+  "source_digest": "d5910b48c6ab38048debc989fa1c7aff988e6db1938472e9ac004d6a0f23d77f",
   "source_paths": [
+    "crates/symvault-core/src/keychain_status.rs",
+    "crates/symvault-core/src/session.rs",
     "crates/symvault-platform/src/macos_keychain.rs",
     "crates/symvault-platform/src/os_keyring.rs"
   ]
