@@ -419,8 +419,8 @@
    ]
   ],
   "info": {
-   "go_binary_sha256": "cae5e2c48a9f6fe5ab258ed5d6fab9dab2707db66c17db9ff188db3f6b173635",
-   "seed_binary_sha256": "2d68595900b782c503cd3000e706d6464a808d4c1223ae3137732e32e517f6db"
+   "go_binary_sha256": "f346e1e7ef7b62d7706a1455f7a144e4fc7d05c924b000374c7ab3819ef77037",
+   "seed_binary_sha256": "1e7dd0f0fc6f7ccf8347b8480a2fe04813af53f8ec17b41776058860934b744c"
   },
   "issue": {
    "new": "bccf8c7e8660328030bc4e9bbc0c0d43a650278bae4b8ef60d5543d64c46455d",
@@ -453,7 +453,7 @@
    "rust_cli_issued": "2602833b789ba22d9c0a44fc57f8be52bc78cc7509b8364456774c90aa50c458"
   }
  },
- "go_version": "go1.26.10",
+ "go_version": "go1.26.6",
  "goarch": "aarch64",
  "goos": "linux",
  "normalization": [

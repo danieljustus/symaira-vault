@@ -915,8 +915,8 @@
        "TLSv1.3",
        128
       ],
-      "error_reason": null,
-      "error_type": "ConnectionResetError",
+      "error_reason": "TLSV1_ALERT_UNKNOWN_CA",
+      "error_type": "SSLError",
       "received_base64": "",
       "rejected": true,
       "server_certificate_sha256": "72b7578002bd49ab5e27271d2c999a17bd66fa3028bbc18132d04c76be3848f7",
