@@ -57,7 +57,9 @@ class HarnessTests(unittest.TestCase):
              'rebuilt_binary_artifact': 'safe', 'rebuilt_binary_bytes': len(STRUCTURAL_BYTES),
              'seed_configs': {str(ttl): {'requested_clipboard_seconds': ttl, 'effective_clipboard_seconds': ttl,
                                         'initial_roundtrip_clipboard_seconds': 30 if ttl == 0 else 2} for ttl in [0, 2]},
-             'passed': True, 'candidate_worktree_clean': True, 'candidate_worktree_clean_at_end': True}
+             'passed': True, 'candidate_worktree_clean': True, 'candidate_worktree_clean_at_end': True,
+             'go_observation': {'goos': 'darwin', 'goarch': 'arm64', 'go_version': 'go1.26.6',
+                                'oracle_commit': tui.ORACLE, 'sha256': 'c'*64}}
         for label in ['go', 'rust']:
             r[label] = []
             for case in tui.CASES:
@@ -76,6 +78,9 @@ class HarnessTests(unittest.TestCase):
                                      'foreground_terminal_restored': label == 'rust'}
                 if case == 'zero-ttl-quit-cleanup':
                     row.update(clipboard_survived_quit=label == 'go', zero_ttl_observation_seconds=2.2)
+                if label == 'go':
+                    # The Go side is the committed observation: normalized rows, no timings or document sizes.
+                    row = dict(tui.normalize_row(row), replayed=True, capture_policy_checked_at_capture=True)
                 r[label].append(row)
         return r
 
@@ -298,6 +303,173 @@ class HarnessTests(unittest.TestCase):
             env = tui.fixture_env(Path(raw)/'home', {})
             self.assertEqual(env['TERM'], 'screen-256color')
             self.assertEqual(env['SYMVAULT_TEST_KEYRING'], 'memory')
+
+
+class RecordedGoObservationTests(unittest.TestCase):
+    """Negative controls: the recorded Go side is authoritative and cannot be bent or faked."""
+
+    valid_structural_receipt = HarnessTests.valid_structural_receipt
+    validate = HarnessTests.validate
+
+    def test_valid_replayed_receipt_passes(self):
+        self.validate(self.valid_structural_receipt())
+
+    def test_tampered_recorded_go_store_snapshot_is_a_differential_mismatch(self):
+        for field in ['before', 'after']:
+            r = self.valid_structural_receipt()
+            r['go'][1][field][0]['data_sha256'] = 'f'*64
+            with self.subTest(field=field), self.assertRaisesRegex(AssertionError, 'encrypted-store differential mismatch'):
+                self.validate(r)
+
+    def test_tampered_recorded_go_exit_class_or_keybinding_digest_is_rejected(self):
+        r = self.valid_structural_receipt(); r['go'][tui.CASES.index('uninitialized')]['exit_code'] = 99
+        with self.assertRaises(AssertionError): self.validate(r)
+        r = self.valid_structural_receipt(); r['go'][-1]['stdout_sha256'] = '0'*64
+        with self.assertRaisesRegex(AssertionError, 'keybinding byte mismatch'): self.validate(r)
+
+    def test_only_the_go_side_may_be_a_recording(self):
+        r = self.valid_structural_receipt(); r['rust'][2]['replayed'] = True
+        with self.assertRaisesRegex(AssertionError, 'recorded observation'): self.validate(r)
+        r = self.valid_structural_receipt(); r['go'][2]['replayed'] = False
+        with self.assertRaisesRegex(AssertionError, 'recorded observation'): self.validate(r)
+
+    def test_recorded_go_capture_policy_and_identity_are_required(self):
+        r = self.valid_structural_receipt(); r['go'][0]['capture_policy_checked_at_capture'] = False
+        with self.assertRaisesRegex(AssertionError, 'recorded Go terminal capture'): self.validate(r)
+        r = self.valid_structural_receipt(); r['go_observation']['oracle_commit'] = 'a'*40
+        with self.assertRaisesRegex(AssertionError, 'recorded Go observation identity'): self.validate(r)
+        r = self.valid_structural_receipt(); del r['go_observation']
+        with self.assertRaises(KeyError): self.validate(r)
+
+    def test_missing_or_foreign_observation_is_a_failure_never_a_skip(self):
+        with tempfile.TemporaryDirectory() as raw:
+            with self.assertRaises(tui.obs.MissingObservation): tui.load_observation(Path(raw)/'absent.json')
+            foreign = Path(raw)/'foreign.json'
+            foreign.write_text(json.dumps({'schema': 1, 'contract': 'other', 'goos': tui.obs.host_goos()}))
+            with self.assertRaises(tui.obs.MissingObservation): tui.load_observation(foreign)
+            wrong_oracle = Path(raw)/'oracle.json'
+            wrong_oracle.write_text(json.dumps({'schema': 1, 'contract': tui.OBS_NAME, 'goos': tui.obs.host_goos(),
+                                                'oracle_commit': 'e'*40, 'observations': {}, 'material': {}}))
+            with self.assertRaises(tui.obs.MissingObservation): tui.load_observation(wrong_oracle)
+
+    def test_committed_observation_for_this_host_is_complete_when_present(self):
+        path = tui.obs.path(tui.OBS_NAME)
+        if not path.is_file():
+            if tui.obs.host_goos() == 'linux':
+                self.fail(f'missing recorded Go observation {tui.obs.rel(path)}')
+            self.skipTest('this OS runs the harness checks only; its Go observation needs a disposable host')
+        document = tui.load_observation(path)
+        rows = document['observations']['rows']
+        self.assertEqual([row['case'] for row in rows], tui.CASES)
+        self.assertEqual(set(document['material']['seeds']), {'0', '2'})
+        for row in rows:
+            self.assertIs(row['passed'], True)
+            self.assertIs(row['capture_policy_checked_at_capture'], True)
+            self.assertNotIn('capture_artifact', row)
+
+
+class FixtureDriverTests(unittest.TestCase):
+    """The Python console driver on a real private pty: never a clipboard, a credential store or Go."""
+
+    def run_on_pty(self, argv, env, timeout=20, steer=None):
+        import pty, select, subprocess
+        master, slave = pty.openpty()
+        child = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave, env=env, start_new_session=True)
+        os.close(slave)
+        end = time.monotonic() + timeout
+        output = b''
+        try:
+            while time.monotonic() < end:
+                ready, _, _ = select.select([master], [], [], 0.05)
+                if ready:
+                    try:
+                        data = os.read(master, 4096)
+                    except OSError:
+                        break
+                    if not data:
+                        break
+                    output += data
+                if steer is not None:
+                    steer()
+                if child.poll() is not None and not ready:
+                    break
+            child.wait(timeout=5)
+        finally:
+            if child.poll() is None:
+                child.kill(); child.wait()
+            os.close(master)
+        return child.returncode, output
+
+    def launcher(self, base):
+        return tui.build_driver(base)
+
+    def test_console_wrapper_reports_exit_code_and_restored_modes_then_waits_for_release(self):
+        with tempfile.TemporaryDirectory(prefix='tui-driver-') as raw:
+            base = Path(raw); helper = self.launcher(base)
+            cli = base/'cli'; cli.write_text('#!/bin/sh\nexit 3\n'); cli.chmod(0o755)
+            receipt = base/'console.json'
+            def steer():
+                if receipt.is_file():
+                    Path(str(receipt)+'.release').write_text('release\n')
+            code, _ = self.run_on_pty([str(helper), '--root', str(base/'vault'), '--console-binary', str(cli),
+                                       '--console-receipt', str(receipt)], dict(os.environ), steer=steer)
+            self.assertEqual(code, 3)
+            self.assertEqual(json.loads(receipt.read_bytes()), {'exit_code': 3, 'input_restored': True, 'output_restored': True})
+            before = json.loads(Path(str(receipt)+'.before').read_bytes())
+            self.assertEqual(set(before), {'input', 'output'})
+            self.assertEqual(set(before['input']), {'Iflag', 'Oflag', 'Cflag', 'Lflag', 'Ispeed', 'Ospeed', 'Cc'})
+
+    def test_console_wrapper_detects_a_child_that_leaves_the_terminal_raw(self):
+        with tempfile.TemporaryDirectory(prefix='tui-driver-') as raw:
+            base = Path(raw); helper = self.launcher(base)
+            cli = base/'cli'; cli.write_text('#!/bin/sh\nstty raw -echo\nexit 0\n'); cli.chmod(0o755)
+            receipt = base/'console.json'
+            def steer():
+                if receipt.is_file():
+                    Path(str(receipt)+'.release').write_text('release\n')
+            code, _ = self.run_on_pty([str(helper), '--root', str(base/'vault'), '--console-binary', str(cli),
+                                       '--console-receipt', str(receipt)], dict(os.environ), steer=steer)
+            self.assertEqual(code, 0)
+            observed = json.loads(receipt.read_bytes())
+            self.assertIs(observed['input_restored'], False); self.assertIs(observed['output_restored'], False)
+
+    def test_fixture_editor_modes_and_filtered_environment(self):
+        for mode, expected_after, expected_code in [('invalid', b'invalid-json', 0), ('empty', b'', 0),
+                                                    ('failure', b'{"data":null}', 23),
+                                                    ('valid', b'public-tui-edited-secret-782a', 0)]:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix='tui-driver-') as raw:
+                base = Path(raw); helper = self.launcher(base)
+                editor = base/'fixture-editor'; editor.write_bytes(helper.read_bytes()); editor.chmod(0o755)
+                ready, release, console = base/'ready.json', base/'release', base/'console.json.before'
+                console.write_bytes(b'x')
+                Path(str(editor)+'.editor.json').write_text(json.dumps({'Mode': mode, 'Ready': str(ready), 'Release': str(release),
+                                                                       'Console': str(console)}))
+                document = base/'document.json'; document.write_text('{"data":null}'); document.chmod(0o600)
+                env = {k: v for k, v in os.environ.items() if not k.startswith(('SYMVAULT_', 'TUI_'))}
+                def steer():
+                    if ready.is_file():
+                        release.write_text('release\n')
+                code, output = self.run_on_pty([str(editor), str(document)], env, steer=steer)
+                self.assertEqual(code, expected_code)
+                self.assertIn(b'TUI_EDITOR_READY', output)
+                observed = json.loads(ready.read_bytes())
+                self.assertEqual({k: observed[k] for k in ['input_is_terminal', 'output_is_terminal', 'mode', 'document_bytes',
+                                                           'environment_filtered']},
+                                 {'input_is_terminal': True, 'output_is_terminal': True, 'mode': 0o600, 'document_bytes': 13,
+                                  'environment_filtered': True})
+                self.assertIs(observed['foreground_terminal_restored'], False)  # the .before stand-in is not this terminal's state
+                self.assertIn(expected_after, document.read_bytes())
+
+    def test_snapshot_forwards_to_the_rust_tool_only(self):
+        with tempfile.TemporaryDirectory(prefix='tui-driver-') as raw:
+            base = Path(raw); helper = self.launcher(base)
+            tool = base/'tui-snapshot'; tool.write_text('#!/bin/sh\necho "[\\"$*\\"]"\n'); tool.chmod(0o755)
+            env = dict(os.environ, TUI_SNAPSHOT_BIN=str(tool))
+            out = tui.checked([helper, '--root', '/vault', '--snapshot', '--config-receipt', '/receipt.json'], env=env)
+            self.assertEqual(json.loads(out), ['--root /vault --config-receipt /receipt.json'])
+            env.pop('TUI_SNAPSHOT_BIN')
+            with self.assertRaises(AssertionError): tui.checked([helper, '--root', '/vault', '--snapshot'], env=env)
+            with self.assertRaises(AssertionError): tui.checked([helper, '--root', '/vault'], env=env)  # seeding is a recording
 
 
 class FakeWin32:

@@ -1,0 +1,23 @@
+{
+  "direction": "Rust-produced vault data is decrypted by the live Go mobilebind driver",
+  "go_verdict": {
+    "accepted": true,
+    "command": [
+      "sh",
+      "-c",
+      "go build -o <cargo-target>/ffi-driver/mobilebindgen ./scripts/rust-port/cmd/mobilebindgen && cargo test -p symvault-ffi --locked -- --nocapture"
+    ],
+    "exit_code": 0,
+    "output_sha256": "67ac5e3ff8e44731da947ac8a77a5d517c950942aefeea3e9761431e6af4d96d"
+  },
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "linux",
+  "name": "ffi-differential",
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "rust_artifacts_sha256": {
+    "symvault": "14c1af4d2afeb49eba5fcd720aa616096e02cb15a77adea6444dbf493029c11c"
+  },
+  "rust_commit": "2080d4633142b0839dfabd2b0247b1716bf51a43",
+  "schema": 1
+}

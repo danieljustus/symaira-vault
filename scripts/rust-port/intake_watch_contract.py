@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import time
 
-from build_timeout import oracle_build_timeout, remove_worktree
+import go_observations_common as observations
 
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
@@ -61,7 +61,9 @@ def isolated(home):
                XDG_CONFIG_HOME=str(home / "config"), XDG_DATA_HOME=str(home / "data"),
                XDG_CACHE_HOME=str(home / "cache"), SYMVAULT_TEST_KEYRING="memory",
                SYMVAULT_VAULT=str(home / "vault"), SYMVAULT_PASSPHRASE=PASSPHRASE,
-               SYMVAULT_ALLOW_ENV_PASSPHRASE="1", SYMVAULT_NO_ENV_WARNING="1")
+               SYMVAULT_ALLOW_ENV_PASSPHRASE="1", SYMVAULT_NO_ENV_WARNING="1",
+               # batch ids carry the local date: pin the zone so capture and replay agree on any host
+               TZ="UTC")
     return env
 
 
@@ -96,7 +98,7 @@ def spawn(args, home):
                             creationflags=flags)
 
 
-def exercise(binary, inspector, root):
+def exercise(binary, inspector, root, seed):
     records = []
     def case(name, args, home=None, extra_env=None):
         home = home or root / name
@@ -184,7 +186,7 @@ def exercise(binary, inspector, root):
     home = root / "encrypted-batch"
     home.mkdir()
     env = isolated(home)
-    checked([inspector, "init", "--auth", "passphrase"], cwd=home, env=env)
+    seed(home)
     inbox = home / "inbox"
     inbox.mkdir()
     source = inbox / "fixture.env"
@@ -294,7 +296,7 @@ def exercise(binary, inspector, root):
     home = root / "ordinary-encrypted-file"
     home.mkdir()
     env = isolated(home)
-    checked([inspector, "init", "--auth", "passphrase"], cwd=home, env=env)
+    seed(home)
     source = home / "source.env"
     source.write_bytes(b"USERNAME=fixture-user\nPASSWORD=fixture-password\n")
     os.utime(source, (1700000000,1700000000))
@@ -323,14 +325,63 @@ def compare(go, rust):
             assert left == right, (name, left, right)
 
 
+def go_seed(go):
+    return lambda home: checked([go, "init", "--auth", "passphrase"], cwd=home, env=isolated(home))
+
+
+def material_seed(files):
+    return lambda home: observations.unpack_tree(files, home)
+
+
+def capture(args):
+    """Capture mode: build the pinned Go oracle and exercise it alone (needs Go)."""
+    from build_timeout import oracle_build_timeout, remove_worktree
+    with tempfile.TemporaryDirectory(prefix="symvault-intake-capture-") as raw:
+        base = Path(raw)
+        tree = base / "oracle"
+        checked(["git", "worktree", "add", "--detach", tree, ORACLE])
+        try:
+            go = base / "go"
+            sources = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
+                             if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
+            digest = hashlib.sha256()
+            for path in sources:
+                digest.update(path.encode()+b"\0"+(tree/path).read_bytes()+b"\0")
+            recorded = {"oracle_source_files": sources, "oracle_source_digest": digest.hexdigest()}
+            compiler = json.loads(checked(["go", "env", "-json", "GOVERSION", "GOOS", "GOARCH"], cwd=tree))
+            recorded["compiler"] = compiler
+            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree, timeout=oracle_build_timeout())
+            recorded["go_binary_sha256"] = hashlib.sha256(go.read_bytes()).hexdigest()
+            material = observations.existing_material("intake-watch-contract")
+            if material is None:
+                scratch = base / "seed-home"
+                scratch.mkdir()
+                go_seed(go)(scratch)
+                material = {"initialized_home": observations.pack_tree(scratch)}
+            go_root = base / "go-roots"
+            go_root.mkdir()
+            recorded["go"] = exercise(go, go, go_root, material_seed(material["initialized_home"]))
+        finally:
+            remove_worktree(lambda: checked(["git", "worktree", "remove", tree]), "oracle worktree")
+    target = observations.save("intake-watch-contract", recorded, oracle_commit=ORACLE, version=observations.go_version(),
+                               args=["intake_watch_contract.py", "--capture-go"], material=material)
+    print(f"captured {observations.rel(target)}")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rust", required=True, type=Path)
-    parser.add_argument("--receipt", required=True, type=Path)
+    parser.add_argument("--rust", type=Path)
+    parser.add_argument("--receipt", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
+    observations.add_capture_flag(parser)
     args = parser.parse_args()
+    if args.capture_go:
+        return capture(args)
+    assert args.rust and args.receipt, "--rust and --receipt are required"
     rust = args.rust.resolve()
     assert rust.is_file(), "a real Rust CLI binary is required"
+    document = observations.load("intake-watch-contract", oracle_commit=ORACLE)
+    recorded, material = document["observations"], document["material"]["initialized_home"]
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development, "commit the candidate before recording native acceptance"
     candidate_sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
@@ -349,51 +400,27 @@ def main():
                "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                "native_os": platform.system(), "architecture": platform.machine(),
                "keyring": "memory", "go": [], "rust": [], "passed": False,
-               "stage": "oracle-checkout"}
-    # The existing CI upload path must exist even if checkout/build fails before
-    # any comparison. A failed prerequisite is never a parity observation.
+               "stage": "replay-load",
+               "oracle_source_files": recorded["oracle_source_files"], "oracle_source_digest": recorded["oracle_source_digest"],
+               "compiler": recorded["compiler"], "go_binary_sha256": recorded["go_binary_sha256"],
+               "go_observation": "replayed from scripts/rust-port/fixtures/go-observations/intake-watch-contract.%s.json" % observations.host_goos()}
+    # The existing CI upload path must exist even if a stage fails before any comparison.
     args.receipt.write_text(json.dumps(receipt, indent=2)+"\n")
-    with tempfile.TemporaryDirectory(prefix="symvault-intake-contract-") as raw:
-        base = Path(raw)
-        tree = base / "oracle"
-        checked(["git", "worktree", "add", "--detach", tree, ORACLE])
-        try:
-            go = base / ("go.exe" if os.name == "nt" else "go")
-            sources = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
-                             if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
-            digest = hashlib.sha256()
-            for path in sources:
-                digest.update(path.encode()+b"\0"+(tree/path).read_bytes()+b"\0")
-            receipt.update(oracle_source_files=sources, oracle_source_digest=digest.hexdigest(),
-                           stage="oracle-compiler-preflight")
-            # Observe the effective compiler/cache paths without warming caches,
-            # downloading modules separately, or changing the 120-second limit
-            # (the compile step below has its own oracle_build_timeout() budget).
-            receipt['compiler'] = json.loads(checked(["go", "env", "-json", "GOVERSION", "GOROOT",
-                "GOOS", "GOARCH", "GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS", "GOTOOLCHAIN"], cwd=tree))
-            receipt.update(stage="oracle-build", oracle_build={})
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."],
-                    cwd=tree, evidence=receipt['oracle_build'],
-                    timeout=oracle_build_timeout())
-            receipt['go_binary_sha256'] = hashlib.sha256(go.read_bytes()).hexdigest()
-            go_root, rust_root = base / "go-roots", base / "rust-roots"
-            go_root.mkdir(); rust_root.mkdir()
-            receipt['stage'] = 'go-exercise'
-            receipt['go'] = exercise(go, go, go_root)
-            receipt['stage'] = 'rust-exercise'
-            receipt['rust'] = exercise(rust, go, rust_root)
-            receipt['stage'] = 'comparison'
-            compare(receipt['go'], receipt['rust'])
-            receipt.update(passed=True, stage='complete')
-        finally:
-            try:
-                remove_worktree(lambda: checked(["git", "worktree", "remove", tree]), "oracle worktree")
-            except Exception:
-                receipt.update(passed=False, cleanup_failed=True)
-                raise
-            finally:
-                args.receipt.write_text(json.dumps(receipt, indent=2)+"\n")
-    print(f"PASS: {len(receipt['go'])} actual Go/Rust intake CLI observations on {platform.system()}")
+    try:
+        with tempfile.TemporaryDirectory(prefix="symvault-intake-contract-") as raw:
+            base = Path(raw)
+            rust_root = base / "rust-roots"
+            rust_root.mkdir()
+            receipt["go"] = recorded["go"]
+            receipt["stage"] = "rust-exercise"
+            # The recorded vault was initialized by the Go oracle; the Rust CLI reads it back.
+            receipt["rust"] = exercise(rust, rust, rust_root, material_seed(material))
+            receipt["stage"] = "comparison"
+            compare(receipt["go"], receipt["rust"])
+            receipt.update(passed=True, stage="complete")
+    finally:
+        args.receipt.write_text(json.dumps(receipt, indent=2)+"\n")
+    print(f"PASS: {len(receipt['go'])} recorded Go / live Rust intake CLI observations on {platform.system()}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,1074 @@
+{
+  "args": [
+    "intake_watch_contract.py",
+    "--capture-go"
+  ],
+  "contract": "intake-watch-contract",
+  "go_version": "go1.26.10",
+  "goarch": "arm64",
+  "goos": "linux",
+  "material": {
+    "initialized_home": {
+      "vault": null,
+      "vault/.git": null,
+      "vault/.git/HEAD": "cmVmOiByZWZzL2hlYWRzL21hc3Rlcgo=",
+      "vault/.git/config": "W2NvcmVdCgliYXJlID0gZmFsc2UK",
+      "vault/.git/objects": null,
+      "vault/.git/objects/info": null,
+      "vault/.git/objects/pack": null,
+      "vault/.git/refs": null,
+      "vault/.git/refs/heads": null,
+      "vault/.git/refs/tags": null,
+      "vault/.gitignore": "IyBTeW1haXJhIFZhdWx0IHZhdWx0IC0gaWdub3JlIHNlbnNpdGl2ZSBmaWxlcwppZGVudGl0eS5hZ2UKLmRldmljZS1pZAoqLmtleQoqLnBlbQojIElnbm9yZSBTeW1haXJhIFZhdWx0IHJ1bnRpbWUgYXJ0aWZhY3RzCm1jcC10b2tlbgptY3AtdG9rZW5zLmpzb24KLnJ1bnRpbWUtcG9ydAojIElnbm9yZSBPUyBmaWxlcwouRFNfU3RvcmUKVGh1bWJzLmRiCiMgSWdub3JlIElERSBmaWxlcwouaWRlYS8KLnZzY29kZS8KKi5zd3AKKi5zd28KKn4K",
+      "vault/config.yaml": "YWdlbnRzOgogICAgY2xpOgogICAgICAgIGFsbG93ZWRQYXRoczoKICAgICAgICAgICAgLSAnKicKICAgICAgICBjYW5Xcml0ZTogdHJ1ZQogICAgICAgIHJlcXVpcmVBcHByb3ZhbDogZmFsc2UKdmF1bHQ6CiAgICBhdXRoTWV0aG9kOiBwYXNzcGhyYXNlCiAgICBzZWFyY2hfaW5kZXg6IHRydWUKICAgIGF1dG9faGVhbF96ZXJvX2tleTogdHJ1ZQpnaXQ6CiAgICBjb21taXRfdGVtcGxhdGU6IFVwZGF0ZSBmcm9tIFN5bWFpcmEgVmF1bHQKICAgIGF1dG9fcHVzaDogdHJ1ZQp2YXVsdERpcjogQFRSRUVfUk9PVEAvdmF1bHQKZGVmYXVsdEFnZW50OiBjbGkKc2Vzc2lvblRpbWVvdXQ6IDE1bTBzCnNlc3Npb25NYXhMaWZldGltZTogOGgwbTBzCmF1dGhNZXRob2Q6IHBhc3NwaHJhc2UKdXNlVG91Y2hJRDogZmFsc2UK",
+      "vault/entries": null,
+      "vault/identity.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGFuVlV3bk9zLzBnUmkwQ0wwTkRJdXcgdD0zLG09NjU1MzYscD00CnpXODdxVytwU1drSHZHWGJhL1BFaENmU1VFNjVNbnhQTmhUWmFsL0lCZlpxSHhUWXdsSWZyeEtDTk1FCi0tLSBkdld6akZXYUlvOEE2QjlOdDdtbWlkSEtRNWl6dGJmTjB0THdmWE9NamM4Cm5R41NROXlFasgsA6AB9VQHeWFibWchIrKbfXzi2VP5DdHO9R0kgggdWGxwg3APoGw5vXBRwG/aJGWxxwMguyzR2sBRJzU3x+xF6Fk0DzRECcOocduBYyTvgYxXtYwfhDZoWd7z00Kznf0="
+    }
+  },
+  "observations": {
+    "compiler": {
+      "GOARCH": "arm64",
+      "GOOS": "linux",
+      "GOVERSION": "go1.26.10"
+    },
+    "go": [
+      {
+        "case": "missing-directory",
+        "exit": 9,
+        "stderr": "Error: watch: stat watch directory: stat missing: no such file or directory\nError: watch: stat watch directory: stat missing: no such file or directory\n",
+        "stdout": ""
+      },
+      {
+        "case": "missing-argument",
+        "exit": 1,
+        "stderr": "Error: accepts 1 arg(s), received 0\nError: accepts 1 arg(s), received 0\n",
+        "stdout": ""
+      },
+      {
+        "case": "disable-absent",
+        "exit": 0,
+        "stderr": "",
+        "stdout": "No intake LaunchAgent found at __HOME__/Library/LaunchAgents/com.symaira.vault-intake.plist — nothing to disable.\n"
+      },
+      {
+        "case": "disable-quiet",
+        "exit": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "not-directory",
+        "exit": 9,
+        "stderr": "Error: watch: watch path is not a directory: file\nError: watch: watch path is not a directory: file\n",
+        "stdout": ""
+      },
+      {
+        "case": "disable-present",
+        "exit": 9,
+        "stderr": "Error: LaunchAgent disable is only supported on macOS\nError: LaunchAgent disable is only supported on macOS\n",
+        "stdout": ""
+      },
+      {
+        "case": "empty-text",
+        "exit": 0,
+        "stderr": "",
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n"
+      },
+      {
+        "case": "empty-quiet",
+        "exit": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "case": "empty-json",
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"scanned\":0,\"staged\":null}\n"
+      },
+      {
+        "case": "zero-defaults",
+        "exit": 0,
+        "stderr": "",
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n"
+      },
+      {
+        "case": "negative-defaults",
+        "exit": 0,
+        "stderr": "",
+        "stdout": "Scanned 0 candidate(s), staged 0, skipped 0, errors 0\n"
+      },
+      {
+        "case": "invalid-interval",
+        "exit": 1,
+        "stderr": "Error: invalid argument \"bad\" for \"--interval\" flag: time: invalid duration \"bad\"\nError: invalid argument \"bad\" for \"--interval\" flag: time: invalid duration \"bad\"\n",
+        "stdout": ""
+      },
+      {
+        "case": "invalid-debounce",
+        "exit": 1,
+        "stderr": "Error: invalid argument \"bad\" for \"--debounce\" flag: time: invalid duration \"bad\"\nError: invalid argument \"bad\" for \"--debounce\" flag: time: invalid duration \"bad\"\n",
+        "stdout": ""
+      },
+      {
+        "case": "file-no-argument",
+        "exit": 1,
+        "stderr": "Error: requires at least 1 arg(s), only received 0\nError: requires at least 1 arg(s), only received 0\n",
+        "stdout": ""
+      },
+      {
+        "case": "file-unknown-flag",
+        "exit": 1,
+        "stderr": "Error: unknown flag: --unknown\nError: unknown flag: --unknown\n",
+        "stdout": ""
+      },
+      {
+        "case": "file-count-limit",
+        "exit": 9,
+        "stderr": "Error: intake: batch exceeds the 1 file limit (2 given)\nError: intake: batch exceeds the 1 file limit (2 given)\n",
+        "stdout": ""
+      },
+      {
+        "case": "json-staging",
+        "exit": 0,
+        "stderr": "",
+        "stdout": "{\"scanned\": 1, \"staged\": [\"__PRIVATE_STAGED_PATH__\"]}"
+      },
+      {
+        "case": "encrypted-batch",
+        "exit": 0,
+        "stderr": "",
+        "stdout": "Scanned 1 candidate(s), staged 1, skipped 0, errors 0\nStaged batch __BATCH__ (1 entries)\nReview with: symvault import review promote __BATCH__\n"
+      },
+      {
+        "attachment_sha256": "96933b33e79b0a908c5ef9358ae2f608e572b69ba6075892f0b61f040ce302a4",
+        "case": "go-readback",
+        "quarantine_only": true
+      },
+      {
+        "case": "encrypted-batch-repeat",
+        "exit": 0,
+        "stderr": "",
+        "stdout": "Scanned 1 candidate(s), staged 1, skipped 0, errors 0\nNo new files to stage.\n"
+      },
+      {
+        "case": "interrupt",
+        "exit": 0,
+        "stderr": "",
+        "stdout": "Watching inbox (interval 1h0m0s, debounce 5s). Ctrl-C to stop.\n"
+      },
+      {
+        "case": "terminate",
+        "exit": 0,
+        "stderr": "",
+        "stdout": "Watching inbox (interval 1h0m0s, debounce 5s). Ctrl-C to stop.\n"
+      },
+      {
+        "case": "file-env",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "fixture.env",
+              "provenance": {
+                "mtime": "2023-11-14T22:13:20Z",
+                "sha256": "c22d866ec2d769237875e0f8872d951a4ed7eb37ddc59a5625910dbaceb2795f",
+                "size": 58,
+                "source_name": "fixture.env",
+                "source_path": "fixture.env",
+                "source_type": "env"
+              },
+              "status": "ok",
+              "suggestions": [
+                {
+                  "confidence": 0.95,
+                  "field": "password",
+                  "path": "fixture"
+                },
+                {
+                  "confidence": 0.95,
+                  "field": "username",
+                  "path": "fixture"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "file-text",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "fixture.txt",
+              "provenance": {
+                "mtime": "2023-11-14T22:13:20Z",
+                "sha256": "5dcedf66c500b38275decb570e77cee0c7dfa267610906a8dd29673f2a726429",
+                "size": 68,
+                "source_name": "fixture.txt",
+                "source_path": "fixture.txt",
+                "source_type": "text"
+              },
+              "status": "ok",
+              "suggestions": [
+                {
+                  "confidence": 0.85,
+                  "field": "password",
+                  "path": "fixture"
+                },
+                {
+                  "confidence": 0.8,
+                  "field": "username",
+                  "path": "fixture"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "file-json",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "fixture.json",
+              "provenance": {
+                "mtime": "2023-11-14T22:13:20Z",
+                "sha256": "63893d204caeaad610200021b896ab2c7c6d67f47727d0354d16a23a9112dc85",
+                "size": 94,
+                "source_name": "fixture.json",
+                "source_path": "fixture.json",
+                "source_type": "json"
+              },
+              "status": "ok",
+              "suggestions": [
+                {
+                  "confidence": 0.5,
+                  "field": "notes",
+                  "path": "fixture"
+                },
+                {
+                  "confidence": 0.95,
+                  "field": "password",
+                  "path": "fixture"
+                },
+                {
+                  "confidence": 0.95,
+                  "field": "username",
+                  "path": "fixture"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "extension-not-type",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "fixture.env",
+              "provenance": {
+                "mtime": "2023-11-14T22:13:20Z",
+                "sha256": "f7f5063652961aa90bb51f442a03acc20cb324d87c1a2d613c2dbdc245352cd0",
+                "size": 27,
+                "source_name": "fixture.env",
+                "source_path": "fixture.env",
+                "source_type": "text"
+              },
+              "status": "ok",
+              "suggestions": [
+                {
+                  "confidence": 0.85,
+                  "field": "password",
+                  "path": "fixture"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "attachment-empty",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "empty.txt",
+              "reason": "read \"empty.txt\": EOF",
+              "status": "error"
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "attachment-png",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "fixture.png",
+              "provenance": {
+                "mtime": "2023-11-14T22:13:20Z",
+                "sha256": "3abfb5f93b8e48fa21c1010cc4f139cc030979541da904ab95de58707f724fe2",
+                "size": 22,
+                "source_name": "fixture.png",
+                "source_path": "fixture.png",
+                "source_type": "image"
+              },
+              "status": "ok",
+              "suggestions": [
+                {
+                  "attachment": true,
+                  "confidence": 1,
+                  "field": "attachment",
+                  "path": "fixture"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "file-ocr",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "fixture.png",
+              "provenance": {
+                "mtime": "2023-11-14T22:13:20Z",
+                "sha256": "3abfb5f93b8e48fa21c1010cc4f139cc030979541da904ab95de58707f724fe2",
+                "size": 22,
+                "source_name": "fixture.png",
+                "source_path": "fixture.png",
+                "source_type": "image"
+              },
+              "status": "ok",
+              "suggestions": [
+                {
+                  "confidence": 0.85,
+                  "field": "password",
+                  "path": "fixture"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "file-byte-limit",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "fixture.env",
+              "reason": "batch exceeds the 1 byte total limit",
+              "status": "skipped"
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "file-default-limits",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "fixture.env",
+              "provenance": {
+                "mtime": "2023-11-14T22:13:20Z",
+                "sha256": "9e83c0faa2cb3bdfca3f6e5f710d5ec980cfa78988143f66270f8bb48fd49d71",
+                "size": 26,
+                "source_name": "fixture.env",
+                "source_path": "fixture.env",
+                "source_type": "env"
+              },
+              "status": "ok",
+              "suggestions": [
+                {
+                  "confidence": 0.95,
+                  "field": "password",
+                  "path": "fixture"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "file-bool-true",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "fixture.env",
+              "provenance": {
+                "mtime": "2023-11-14T22:13:20Z",
+                "sha256": "9e83c0faa2cb3bdfca3f6e5f710d5ec980cfa78988143f66270f8bb48fd49d71",
+                "size": 26,
+                "source_name": "fixture.env",
+                "source_path": "fixture.env",
+                "source_type": "env"
+              },
+              "status": "ok",
+              "suggestions": [
+                {
+                  "confidence": 0.95,
+                  "field": "password",
+                  "path": "fixture"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "file-env-local-zone",
+        "exit": 0,
+        "json": {
+          "results": [
+            {
+              "file": "fixture.env",
+              "provenance": {
+                "mtime": "2023-11-14T23:13:20+01:00",
+                "sha256": "96933b33e79b0a908c5ef9358ae2f608e572b69ba6075892f0b61f040ce302a4",
+                "size": 48,
+                "source_name": "fixture.env",
+                "source_path": "fixture.env",
+                "source_type": "env"
+              },
+              "status": "ok",
+              "suggestions": [
+                {
+                  "confidence": 0.95,
+                  "field": "password",
+                  "path": "fixture"
+                },
+                {
+                  "confidence": 0.95,
+                  "field": "username",
+                  "path": "fixture"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "ordinary-encrypted-file",
+        "exit": 0,
+        "json": {
+          "import_id": "__BATCH__",
+          "results": [
+            {
+              "file": "source.env",
+              "provenance": {
+                "mtime": "2023-11-14T22:13:20Z",
+                "sha256": "96933b33e79b0a908c5ef9358ae2f608e572b69ba6075892f0b61f040ce302a4",
+                "size": 48,
+                "source_name": "source.env",
+                "source_path": "source.env",
+                "source_type": "env"
+              },
+              "status": "ok",
+              "suggestions": [
+                {
+                  "confidence": 0.95,
+                  "field": "username",
+                  "path": "source"
+                },
+                {
+                  "confidence": 0.95,
+                  "field": "password",
+                  "path": "source"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      {
+        "case": "ordinary-encrypted-file-repeat",
+        "exit": 0,
+        "json": {
+          "import_id": "__BATCH__",
+          "results": [
+            {
+              "duplicates": [
+                "quarantine/__BATCH__/source"
+              ],
+              "file": "source.env",
+              "provenance": {
+                "mtime": "2023-11-14T22:13:20Z",
+                "sha256": "96933b33e79b0a908c5ef9358ae2f608e572b69ba6075892f0b61f040ce302a4",
+                "size": 48,
+                "source_name": "source.env",
+                "source_path": "source.env",
+                "source_type": "env"
+              },
+              "reason": "duplicate source hash already quarantined",
+              "status": "skipped",
+              "suggestions": [
+                {
+                  "confidence": 0.95,
+                  "field": "username",
+                  "path": "source"
+                },
+                {
+                  "confidence": 0.95,
+                  "field": "password",
+                  "path": "source"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    ],
+    "go_binary_sha256": "eb4d6287297288c641f314cee63226185e1010e5130ae25349a4ce05f866b27a",
+    "oracle_source_digest": "1dc9e67b6ff55261e8ab19827a4170acf3bb3d2b775093f84007808aa6b32f44",
+    "oracle_source_files": [
+      "cmd/admin/audit.go",
+      "cmd/admin/audit_export.go",
+      "cmd/admin/backup.go",
+      "cmd/admin/commands.go",
+      "cmd/admin/config.go",
+      "cmd/admin/doctor.go",
+      "cmd/admin/export.go",
+      "cmd/admin/import.go",
+      "cmd/admin/init.go",
+      "cmd/admin/migrate.go",
+      "cmd/admin/migrate_session.go",
+      "cmd/admin/setup.go",
+      "cmd/admin/startup_profile.go",
+      "cmd/admin/update.go",
+      "cmd/admin/verify.go",
+      "cmd/approval.go",
+      "cmd/auth/auth.go",
+      "cmd/auth/auth_rotate.go",
+      "cmd/auth/commands.go",
+      "cmd/auth/lock.go",
+      "cmd/auth/unlock.go",
+      "cmd/broker.go",
+      "cmd/crud/add.go",
+      "cmd/crud/commands.go",
+      "cmd/crud/delete.go",
+      "cmd/crud/edit.go",
+      "cmd/crud/find.go",
+      "cmd/crud/get.go",
+      "cmd/crud/list.go",
+      "cmd/crud/set.go",
+      "cmd/device.go",
+      "cmd/device_approval.go",
+      "cmd/diag.go",
+      "cmd/dynamic.go",
+      "cmd/file/add.go",
+      "cmd/file/commands.go",
+      "cmd/file/field.go",
+      "cmd/file/file.go",
+      "cmd/file/get.go",
+      "cmd/file/use.go",
+      "cmd/generate.go",
+      "cmd/git.go",
+      "cmd/input.go",
+      "cmd/intake/intake.go",
+      "cmd/intake/watch.go",
+      "cmd/manpages.go",
+      "cmd/mcp/agent.go",
+      "cmd/mcp/agent_audit.go",
+      "cmd/mcp/agent_doctor.go",
+      "cmd/mcp/agent_install.go",
+      "cmd/mcp/agent_list.go",
+      "cmd/mcp/agent_profile.go",
+      "cmd/mcp/agent_skill.go",
+      "cmd/mcp/agent_token.go",
+      "cmd/mcp/agent_uninstall.go",
+      "cmd/mcp/agent_upgrade.go",
+      "cmd/mcp/agent_whoami.go",
+      "cmd/mcp/commands.go",
+      "cmd/mcp/mcp_config.go",
+      "cmd/mcp/mcp_install.go",
+      "cmd/mcp/mcp_token.go",
+      "cmd/mcp/serve.go",
+      "cmd/mcp/serve_deps.go",
+      "cmd/mcp/serve_install.go",
+      "cmd/passlint/clierror.go",
+      "cmd/passlint/mcpcheckscope.go",
+      "cmd/passlint/mcpmarshal.go",
+      "cmd/passlint/mcpstringsafely.go",
+      "cmd/passlint/passlint.go",
+      "cmd/passlint/testdata/src/clierror/a/a.go",
+      "cmd/passlint/testdata/src/clierror/cobra/cobra.go",
+      "cmd/passlint/testdata/src/mcp/handlers/handlers.go",
+      "cmd/passlint/testdata/src/mcp/marshal/marshal.go",
+      "cmd/passlint/testdata/src/mcp/strings/strings.go",
+      "cmd/passlint/testdata/src/mcp/strings/taint/taint.go",
+      "cmd/passlint/testdata/src/p/a/a.go",
+      "cmd/passlint/testdata/src/taint/taint.go",
+      "cmd/policy.go",
+      "cmd/profile.go",
+      "cmd/recipients.go",
+      "cmd/remote.go",
+      "cmd/root.go",
+      "cmd/run.go",
+      "cmd/share.go",
+      "cmd/sync.go",
+      "cmd/template.go",
+      "cmd/ui.go",
+      "crates/symvault-cli/tests/approval_pair_server/main.go",
+      "crates/symvault-cli/tests/approval_queue_server/main.go",
+      "go.mod",
+      "go.sum",
+      "internal/agentctx/context.go",
+      "internal/agentskill/install.go",
+      "internal/agentskill/manifest.go",
+      "internal/agentskill/skill.go",
+      "internal/anomaly/detector.go",
+      "internal/anomaly/rules.go",
+      "internal/approval/enroll.go",
+      "internal/approval/http.go",
+      "internal/approval/local.go",
+      "internal/approval/queue.go",
+      "internal/audit/audit.go",
+      "internal/audit/export.go",
+      "internal/audit/keystore.go",
+      "internal/audit/keystore_fallback.go",
+      "internal/audit/keystore_os.go",
+      "internal/authguard/challenge.go",
+      "internal/autotype/autotype_common.go",
+      "internal/autotype/autotype_darwin.go",
+      "internal/autotype/autotype_linux.go",
+      "internal/autotype/autotype_unsupported.go",
+      "internal/autotype/autotype_windows.go",
+      "internal/autotype/focus.go",
+      "internal/autotype/focus_darwin.go",
+      "internal/autotype/focus_linux.go",
+      "internal/autotype/focus_other.go",
+      "internal/autotype/focus_windows.go",
+      "internal/autotype/interface.go",
+      "internal/autotype/null.go",
+      "internal/autotype/provider.go",
+      "internal/broker/ca.go",
+      "internal/broker/proxy.go",
+      "internal/cli/cli.go",
+      "internal/cli/completion.go",
+      "internal/cli/completion_cache.go",
+      "internal/cli/configfix.go",
+      "internal/cli/generate.go",
+      "internal/cli/input.go",
+      "internal/cli/input/input.go",
+      "internal/cli/output.go",
+      "internal/cli/output/output.go",
+      "internal/cli/passphrase_env.go",
+      "internal/cli/port_utils.go",
+      "internal/cli/sync.go",
+      "internal/cli/terminal.go",
+      "internal/cli/unlock.go",
+      "internal/cli/vault.go",
+      "internal/cli/vaultpath.go",
+      "internal/cli/version.go",
+      "internal/clipboard/clipboard.go",
+      "internal/clipboard/clipboard_signal_unix.go",
+      "internal/clipboard/clipboard_signal_windows.go",
+      "internal/clipboard/interface.go",
+      "internal/clipboard/null_clipboard.go",
+      "internal/clipboard/provider.go",
+      "internal/clipboard/system_clipboard.go",
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/config_save.go",
+      "internal/config/config_validate.go",
+      "internal/config/dottedpath.go",
+      "internal/config/migrate.go",
+      "internal/config/migrate_copy_unix.go",
+      "internal/config/migrate_copy_windows.go",
+      "internal/config/migrate_source_unix.go",
+      "internal/config/migrate_source_windows.go",
+      "internal/config/paths.go",
+      "internal/config/presets.go",
+      "internal/config/schema.go",
+      "internal/config/warn.go",
+      "internal/crypto/age.go",
+      "internal/crypto/argon2_resources.go",
+      "internal/crypto/argon2id.go",
+      "internal/crypto/diceware.go",
+      "internal/crypto/hmac.go",
+      "internal/crypto/interop.go",
+      "internal/crypto/keygen.go",
+      "internal/crypto/keystore.go",
+      "internal/crypto/password.go",
+      "internal/crypto/secstring_other.go",
+      "internal/crypto/secstring_unix.go",
+      "internal/crypto/symmetric.go",
+      "internal/crypto/totp.go",
+      "internal/daemon/daemon.go",
+      "internal/dynamicsecret/aws.go",
+      "internal/dynamicsecret/aws_stub.go",
+      "internal/dynamicsecret/engine.go",
+      "internal/dynamicsecret/lease.go",
+      "internal/dynamicsecret/manager.go",
+      "internal/dynamicsecret/mock.go",
+      "internal/dynamicsecret/postgres.go",
+      "internal/dynamicsecret/postgres_stub.go",
+      "internal/errors/errors.go",
+      "internal/exporter/csv.go",
+      "internal/exporter/exporter.go",
+      "internal/exporter/json.go",
+      "internal/fsutil/createsensitiveoutput.go",
+      "internal/fsutil/doc.go",
+      "internal/fsutil/reexport.go",
+      "internal/fsutil/safepath/doc.go",
+      "internal/fsutil/safepath/manager_unix.go",
+      "internal/fsutil/safepath/manager_windows.go",
+      "internal/fsutil/safepath/safepath.go",
+      "internal/fsutil/safewrite_windows.go",
+      "internal/git/device_id.go",
+      "internal/git/git.go",
+      "internal/git/git_offline.go",
+      "internal/git/git_pull.go",
+      "internal/git/git_push.go",
+      "internal/git/git_remote.go",
+      "internal/git/git_staging.go",
+      "internal/git/git_util.go",
+      "internal/git/process_tree_unix.go",
+      "internal/git/process_tree_windows.go",
+      "internal/git/separate_gitdir.go",
+      "internal/git/syncer.go",
+      "internal/health/doctor.go",
+      "internal/health/doctor_conflicts.go",
+      "internal/health/doctor_crypto.go",
+      "internal/health/doctor_git.go",
+      "internal/health/doctor_keyring.go",
+      "internal/health/doctor_mcp.go",
+      "internal/health/doctor_session.go",
+      "internal/health/doctor_tempfiles.go",
+      "internal/health/doctor_vault.go",
+      "internal/i18n/catalog_de.go",
+      "internal/i18n/catalog_en.go",
+      "internal/i18n/i18n.go",
+      "internal/importer/bitwarden.go",
+      "internal/importer/csv.go",
+      "internal/importer/csv_profiles.go",
+      "internal/importer/cxf.go",
+      "internal/importer/importer.go",
+      "internal/importer/onepux.go",
+      "internal/importer/pass.go",
+      "internal/importer/totp.go",
+      "internal/intake/intake.go",
+      "internal/intake/parse.go",
+      "internal/intake/process.go",
+      "internal/intake/quarantine.go",
+      "internal/intake/sniff.go",
+      "internal/intake/spool.go",
+      "internal/intake/watch.go",
+      "internal/logging/logging.go",
+      "internal/mcp/apitemplates/auth.go",
+      "internal/mcp/apitemplates/template.go",
+      "internal/mcp/auth/auth.go",
+      "internal/mcp/auth/token.go",
+      "internal/mcp/auth/token_ratelimit.go",
+      "internal/mcp/errors/codes.go",
+      "internal/mcp/install/agent.go",
+      "internal/mcp/install/config.go",
+      "internal/mcp/install/detect.go",
+      "internal/mcp/install/installer.go",
+      "internal/mcp/masking/doc.go",
+      "internal/mcp/masking/sanitizer.go",
+      "internal/mcp/masking/validator.go",
+      "internal/mcp/mcptypes.go",
+      "internal/mcp/server/approval.go",
+      "internal/mcp/server/approval_helper.go",
+      "internal/mcp/server/command_policy.go",
+      "internal/mcp/server/grant_keys.go",
+      "internal/mcp/server/grant_keys_fallback.go",
+      "internal/mcp/server/hooks.go",
+      "internal/mcp/server/hooks_builtin.go",
+      "internal/mcp/server/http_helpers.go",
+      "internal/mcp/server/leanmode.go",
+      "internal/mcp/server/prompt_registry.go",
+      "internal/mcp/server/protocol.go",
+      "internal/mcp/server/render.go",
+      "internal/mcp/server/secure_input.go",
+      "internal/mcp/server/server.go",
+      "internal/mcp/server/server_approval.go",
+      "internal/mcp/server/server_authorize.go",
+      "internal/mcp/server/server_dispatch.go",
+      "internal/mcp/server/setup.go",
+      "internal/mcp/server/sharing_store.go",
+      "internal/mcp/server/tool_registry.go",
+      "internal/mcp/server/tools_audit_self.go",
+      "internal/mcp/server/tools_auth.go",
+      "internal/mcp/server/tools_autotype.go",
+      "internal/mcp/server/tools_clipboard.go",
+      "internal/mcp/server/tools_delete.go",
+      "internal/mcp/server/tools_execute_api_request.go",
+      "internal/mcp/server/tools_execute_with_secret.go",
+      "internal/mcp/server/tools_find.go",
+      "internal/mcp/server/tools_generate.go",
+      "internal/mcp/server/tools_get.go",
+      "internal/mcp/server/tools_health.go",
+      "internal/mcp/server/tools_list.go",
+      "internal/mcp/server/tools_perplexity.go",
+      "internal/mcp/server/tools_prepare_payment.go",
+      "internal/mcp/server/tools_request_credential.go",
+      "internal/mcp/server/tools_run.go",
+      "internal/mcp/server/tools_sanitize.go",
+      "internal/mcp/server/tools_search.go",
+      "internal/mcp/server/tools_search_openai.go",
+      "internal/mcp/server/tools_secure_input.go",
+      "internal/mcp/server/tools_set.go",
+      "internal/mcp/server/tools_sharing.go",
+      "internal/mcp/server/tools_template.go",
+      "internal/mcp/server/tools_test_helpers.go",
+      "internal/mcp/server/tools_totp.go",
+      "internal/mcp/server/tools_unseal.go",
+      "internal/mcp/server/tools_whoami.go",
+      "internal/mcp/serverbootstrap/http.go",
+      "internal/mcp/serverbootstrap/http_metrics.go",
+      "internal/mcp/serverbootstrap/http_nometrics.go",
+      "internal/mcp/serverbootstrap/http_setup.go",
+      "internal/mcp/serverbootstrap/oauth.go",
+      "internal/mcp/serverbootstrap/stdio.go",
+      "internal/mcp/serverbootstrap/tls.go",
+      "internal/mcp/serverbootstrap/wellknown.go",
+      "internal/mcp/sharing_types.go",
+      "internal/mcp/toolhash.go",
+      "internal/mcp/transport/stdio.go",
+      "internal/mcp/transport/transport.go",
+      "internal/mcp/util.go",
+      "internal/metrics/metrics.go",
+      "internal/metrics/metrics_stub.go",
+      "internal/metrics/tracing.go",
+      "internal/metrics/tracing_stub.go",
+      "internal/mobilebind/mobilebind.go",
+      "internal/notify/notify.go",
+      "internal/pairing/devicesession.go",
+      "internal/pairing/token.go",
+      "internal/payment/decimal.go",
+      "internal/payment/enforcer.go",
+      "internal/payment/tracker.go",
+      "internal/policy/authorizer.go",
+      "internal/policy/context.go",
+      "internal/policy/engine.go",
+      "internal/policy/parser.go",
+      "internal/policy/ratelimit.go",
+      "internal/policy/ratelimit_transition.go",
+      "internal/policy/types.go",
+      "internal/quotas/counter.go",
+      "internal/quotas/lock_unix.go",
+      "internal/quotas/lock_windows.go",
+      "internal/redact/detectors.go",
+      "internal/redact/entropy.go",
+      "internal/redact/redact.go",
+      "internal/redact/strict.go",
+      "internal/secrets/doc.go",
+      "internal/secrets/filter.go",
+      "internal/secrets/resolver.go",
+      "internal/secrets/runner.go",
+      "internal/secureedit/secureedit.go",
+      "internal/secureui/backend.go",
+      "internal/secureui/backend_darwin.go",
+      "internal/secureui/backend_other.go",
+      "internal/secureui/backend_tty.go",
+      "internal/secureui/backend_unix.go",
+      "internal/secureui/backend_windows.go",
+      "internal/secureui/capslock.go",
+      "internal/secureui/capslock_darwin.go",
+      "internal/secureui/capslock_linux.go",
+      "internal/secureui/capslock_other.go",
+      "internal/secureui/runner.go",
+      "internal/secureui/secureui.go",
+      "internal/session/biometric.go",
+      "internal/session/guisession_darwin.go",
+      "internal/session/guisession_nondarwin.go",
+      "internal/session/keychain_status.go",
+      "internal/session/keyring.go",
+      "internal/session/memory_init.go",
+      "internal/session/memory_keyring.go",
+      "internal/session/oskeyring.go",
+      "internal/session/oskeyring_unavailable.go",
+      "internal/session/secure_bytes.go",
+      "internal/session/session.go",
+      "internal/session/touchid_darwin.go",
+      "internal/ssrf/ssrf.go",
+      "internal/template/builtins.go",
+      "internal/template/engine.go",
+      "internal/template/funcs.go",
+      "internal/template/resolver.go",
+      "internal/testutil/testutil.go",
+      "internal/ui/cliout/cliout.go",
+      "internal/ui/cliout/primitives.go",
+      "internal/ui/cliout/ticker.go",
+      "internal/ui/forms/add_form.go",
+      "internal/ui/keybindings.go",
+      "internal/ui/qr.go",
+      "internal/ui/render/render.go",
+      "internal/ui/theme/a11y.go",
+      "internal/ui/theme/capabilities.go",
+      "internal/ui/theme/preset.go",
+      "internal/ui/theme/symbols.go",
+      "internal/ui/theme/theme.go",
+      "internal/ui/tui.go",
+      "internal/ui/tui_commands.go",
+      "internal/ui/tui_filter.go",
+      "internal/ui/tui_keys.go",
+      "internal/ui/tui_view.go",
+      "internal/ui/wizard/apply.go",
+      "internal/ui/wizard/passphrase_meter.go",
+      "internal/ui/wizard/state_persist.go",
+      "internal/ui/wizard/step.go",
+      "internal/ui/wizard/step_agents.go",
+      "internal/ui/wizard/step_auth.go",
+      "internal/ui/wizard/step_backup.go",
+      "internal/ui/wizard/step_multidevice.go",
+      "internal/ui/wizard/step_multidevice_qr.go",
+      "internal/ui/wizard/step_nextsteps.go",
+      "internal/ui/wizard/step_passphrase.go",
+      "internal/ui/wizard/step_profile.go",
+      "internal/ui/wizard/step_recipients.go",
+      "internal/ui/wizard/step_summary.go",
+      "internal/ui/wizard/step_sync.go",
+      "internal/ui/wizard/step_vault.go",
+      "internal/ui/wizard/step_welcome.go",
+      "internal/ui/wizard/styletheme.go",
+      "internal/ui/wizard/wizard.go",
+      "internal/update/apply.go",
+      "internal/update/checker.go",
+      "internal/update/cosign.go",
+      "internal/update/installmethod/detect.go",
+      "internal/vault/backup_codes.go",
+      "internal/vault/cache.go",
+      "internal/vault/devices.go",
+      "internal/vault/entry.go",
+      "internal/vault/entry_canary.go",
+      "internal/vault/entry_metadata.go",
+      "internal/vault/entry_readwrite.go",
+      "internal/vault/entry_resources.go",
+      "internal/vault/entry_validate.go",
+      "internal/vault/file_digest.go",
+      "internal/vault/git.go",
+      "internal/vault/index_resources.go",
+      "internal/vault/kdf_resource_migration.go",
+      "internal/vault/lock_unix.go",
+      "internal/vault/lock_windows.go",
+      "internal/vault/manifest.go",
+      "internal/vault/manifest_updater.go",
+      "internal/vault/metrics.go",
+      "internal/vault/payment.go",
+      "internal/vault/read_admission.go",
+      "internal/vault/recipients.go",
+      "internal/vault/reencrypt.go",
+      "internal/vault/reencrypt_journal.go",
+      "internal/vault/reencrypt_journal_unix.go",
+      "internal/vault/reencrypt_journal_windows.go",
+      "internal/vault/reencrypt_unix.go",
+      "internal/vault/reencrypt_windows.go",
+      "internal/vault/retention_budget.go",
+      "internal/vault/search.go",
+      "internal/vault/search_index.go",
+      "internal/vault/service.go",
+      "internal/vault/symlink_harden.go",
+      "internal/vault/symlink_harden_windows.go",
+      "internal/vault/sync/sync.go",
+      "internal/vault/taint/taint.go",
+      "internal/vault/types.go",
+      "internal/vault/url.go",
+      "internal/vault/vault.go",
+      "internal/vault/vault_sync_reconcile.go",
+      "main.go",
+      "pkg/mobilebind/mobilebind.go",
+      "scripts/generate_schema.go",
+      "scripts/rust-port/cmd/auditverify/main.go",
+      "scripts/rust-port/cmd/caserun/main.go",
+      "scripts/rust-port/cmd/cligap/main.go",
+      "scripts/rust-port/cmd/configbytesgen/main.go",
+      "scripts/rust-port/cmd/configclicasesgen/main.go",
+      "scripts/rust-port/cmd/configgen/main.go",
+      "scripts/rust-port/cmd/configpathgen/main.go",
+      "scripts/rust-port/cmd/configprecedencegen/main.go",
+      "scripts/rust-port/cmd/configprofilegen/archive_extract.go",
+      "scripts/rust-port/cmd/configprofilegen/main.go",
+      "scripts/rust-port/cmd/coregen/crypto.go",
+      "scripts/rust-port/cmd/coregen/main.go",
+      "scripts/rust-port/cmd/cryptogen/main.go",
+      "scripts/rust-port/cmd/cryptoverify/main.go",
+      "scripts/rust-port/cmd/cxfgen/archive_extract.go",
+      "scripts/rust-port/cmd/cxfgen/main.go",
+      "scripts/rust-port/cmd/devicelistdriver/main.go",
+      "scripts/rust-port/cmd/devicelistdriver/report.go",
+      "scripts/rust-port/cmd/diffharness/main.go",
+      "scripts/rust-port/cmd/entrypolicygen/main.go",
+      "scripts/rust-port/cmd/execute_secret_child/main.go",
+      "scripts/rust-port/cmd/execute_secret_provenance/main.go",
+      "scripts/rust-port/cmd/execute_secret_unicode/main.go",
+      "scripts/rust-port/cmd/exportgen/main.go",
+      "scripts/rust-port/cmd/gitio/main.go",
+      "scripts/rust-port/cmd/gitofflinegen/main.go",
+      "scripts/rust-port/cmd/gitwinnergen/main.go",
+      "scripts/rust-port/cmd/http001initgen/main.go",
+      "scripts/rust-port/cmd/import1passgen/main.go",
+      "scripts/rust-port/cmd/importcsvgen/main.go",
+      "scripts/rust-port/cmd/keyringkeygen/main.go",
+      "scripts/rust-port/cmd/manifestkeygen/main.go",
+      "scripts/rust-port/cmd/mcpcallgen/main.go",
+      "scripts/rust-port/cmd/mcpinitgen/main.go",
+      "scripts/rust-port/cmd/mcprendergen/main.go",
+      "scripts/rust-port/cmd/mcpstdiogen/main.go",
+      "scripts/rust-port/cmd/nativekeyringinterop/main.go",
+      "scripts/rust-port/cmd/nativekeyringprobe/main.go",
+      "scripts/rust-port/cmd/pairinggen/archive_extract.go",
+      "scripts/rust-port/cmd/pairinggen/main.go",
+      "scripts/rust-port/cmd/policygen/main.go",
+      "scripts/rust-port/cmd/portgen/main.go",
+      "scripts/rust-port/cmd/quotagen/main.go",
+      "scripts/rust-port/cmd/secure_input_unicode/main.go",
+      "scripts/rust-port/cmd/sessiongen/main.go",
+      "scripts/rust-port/cmd/sessionquotagen/identity.go",
+      "scripts/rust-port/cmd/sessionquotagen/main.go",
+      "scripts/rust-port/cmd/store004gen/archive_extract.go",
+      "scripts/rust-port/cmd/store004gen/main.go",
+      "scripts/rust-port/cmd/store004gen/process_group_unix.go",
+      "scripts/rust-port/cmd/store004gen/process_group_windows.go",
+      "scripts/rust-port/cmd/storegen/archive_extract.go",
+      "scripts/rust-port/cmd/storegen/main.go",
+      "scripts/rust-port/cmd/storegen/projection.go",
+      "scripts/rust-port/cmd/storemetagen/main.go",
+      "scripts/rust-port/cmd/storereopen/main.go",
+      "scripts/rust-port/cmd/syncgen/archive_extract.go",
+      "scripts/rust-port/cmd/syncgen/main.go",
+      "scripts/rust-port/internal/diff/capture.go",
+      "scripts/rust-port/internal/diff/case.go",
+      "scripts/rust-port/internal/diff/compare.go",
+      "scripts/rust-port/internal/diff/exec.go",
+      "scripts/rust-port/internal/diff/manifest.go",
+      "scripts/rust-port/internal/diff/process.go",
+      "scripts/rust-port/internal/diff/process_unix.go",
+      "scripts/rust-port/internal/diff/process_windows.go",
+      "scripts/rust-port/internal/diff/signal_unix.go",
+      "scripts/rust-port/internal/diff/signal_windows.go",
+      "scripts/rust-port/internal/diff/wait_error_unix.go",
+      "scripts/rust-port/internal/diff/wait_error_windows.go",
+      "scripts/rust-port/internal/provenance/provenance.go"
+    ]
+  },
+  "oracle_commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+  "schema": 1
+}

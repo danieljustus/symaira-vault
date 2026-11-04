@@ -2962,6 +2962,75 @@ fn recovery_resource_failures_preserve_journal_and_originals() {
 }
 
 #[test]
+fn recovery_without_backup_rolls_back_only_with_staged_provenance() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let target = temp.path().join("entries/minimal.age");
+    let original = fs::read(&target).unwrap();
+    let staged = temp
+        .path()
+        .join("entries/.minimal.age.reencrypt-0123456789abcdef01234567");
+    let journal = temp.path().join(".reencrypt.journal");
+    let digest = "0".repeat(64);
+
+    // Replacement staged, backup not yet journaled (the Go crash window): the target is still the
+    // original, so recovery keeps it, drops the staged file and the journal, and the vault opens.
+    fs::write(&staged, b"staged replacement").unwrap();
+    fs::write(
+        &journal,
+        serde_json::to_vec(&serde_json::json!({
+            "version":1,
+            "entries":[{"path":target,"temp":staged,"digest":digest,"installed":false}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    store.recover_reencrypt_journal_locked(&identity).unwrap();
+    assert_eq!(fs::read(&target).unwrap(), original);
+    assert!(!staged.exists() && !journal.exists());
+
+    // The same state after cleanup already removed the staged file (crash before the journal went).
+    fs::write(
+        &journal,
+        serde_json::to_vec(&serde_json::json!({
+            "version":1,
+            "entries":[{"path":target,"temp":staged,"digest":digest}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    store.recover_reencrypt_journal_locked(&identity).unwrap();
+    assert_eq!(fs::read(&target).unwrap(), original);
+    assert!(!journal.exists());
+
+    // A changed target with no staged replacement and no backup has no provenance: refuse, change nothing.
+    fs::write(&staged, b"unrelated file").unwrap();
+    fs::write(
+        &journal,
+        serde_json::to_vec(&serde_json::json!({
+            "version":1,
+            "entries":[{"path":target,"digest":digest}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let error = store
+        .recover_reencrypt_journal_locked(&identity)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("re-encryption target changed without an original backup"),
+        "{error}"
+    );
+    assert_eq!(fs::read(&target).unwrap(), original);
+    assert_eq!(fs::read(&staged).unwrap(), b"unrelated file");
+    assert!(journal.is_file());
+}
+
+#[test]
 fn keep_negative_zero_rewrites_only_a_leading_minus_zero() {
     let rewrite = |text: &str| {
         super::keep_negative_zero(text.as_bytes())

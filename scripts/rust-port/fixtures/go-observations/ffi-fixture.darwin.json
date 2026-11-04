@@ -1,0 +1,22 @@
+{
+  "args": [
+    "go",
+    "run",
+    "./scripts/rust-port/cmd/mobilebindgen",
+    "--check",
+    "--output",
+    "testdata/port/ffi/mobilebind.json"
+  ],
+  "contract": "ffi-fixture",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "observations": {
+    "check_exit": 0,
+    "files": {
+      "testdata/port/ffi/mobilebind.json": "00510b8c512762aad52d65b5ce67b6023cbf188b39afe635b99f16b9b03c676c"
+    }
+  },
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "schema": 1
+}

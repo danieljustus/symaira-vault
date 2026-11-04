@@ -1,0 +1,24 @@
+{
+  "direction": "Go cryptoverify validates the age/KDF output Rust emitted",
+  "go_verdict": {
+    "accepted": true,
+    "command": [
+      "go",
+      "run",
+      "./scripts/rust-port/cmd/cryptoverify",
+      "target/crypto/rust-output.txt"
+    ],
+    "exit_code": 0,
+    "output_sha256": "7c2c9b2d3c23972ba9e29ca81e3c4b5314554baca53f3c36998ba9f443b75453"
+  },
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "linux",
+  "name": "crypto-differential",
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "rust_artifacts_sha256": {
+    "rust-output.txt": "6521709a2cadcedbb329c2d816c3f0b8f4cb4b54a75fd7e74dbeb7028e0c2fca"
+  },
+  "rust_commit": "c310045b6b3658084d19667fa1227550d2289b31",
+  "schema": 1
+}

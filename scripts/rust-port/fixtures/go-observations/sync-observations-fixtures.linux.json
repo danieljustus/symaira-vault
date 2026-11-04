@@ -1,0 +1,20 @@
+{
+  "args": [
+    "sh",
+    "-c",
+    "go run ./scripts/rust-port/cmd/syncgen --portable --check --output testdata/port/sync/portable.json && go run ./scripts/rust-port/cmd/gitio --check --output testdata/port/sync/git-io.json"
+  ],
+  "contract": "sync-observations-fixtures",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "linux",
+  "observations": {
+    "check_exit": 0,
+    "files": {
+      "testdata/port/sync/git-io.json": "c65101d90a3f985c165c74f2058f8bedb0300fcc6a66280506b6ec3045178936",
+      "testdata/port/sync/portable.json": "31111585ddf77fa87708a65f50099c92509e3a307ff78490553390e1722e553e"
+    }
+  },
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "schema": 1
+}

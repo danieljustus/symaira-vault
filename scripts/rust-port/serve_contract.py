@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import time
 
-from build_timeout import oracle_build_timeout, remove_worktree
+import go_observations_common as observations
 
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
@@ -77,7 +77,7 @@ def protocol_input(locked, gui_metadata=False):
                     for i, method, params in requests)
 
 
-def launch_cases(binary, inspector, base):
+def launch_cases(binary, seed, base):
     records = []
     missing = base / "missing"
     missing.mkdir()
@@ -100,7 +100,7 @@ def launch_cases(binary, inspector, base):
     home = base / "initialized"
     home.mkdir()
     env = isolated(home)
-    checked([inspector, "init", "--auth", "passphrase"], cwd=home, env=env)
+    seed(home)
     gui_bin = home / "gui-metadata-bin"
     gui_bin.mkdir()
     gui_name = "powershell.exe" if os.name == "nt" else "osascript" if platform.system() == "Darwin" else "zenity"
@@ -236,7 +236,7 @@ def service_cases(binary, base):
     return records
 
 
-def http_cases(binary, inspector, base):
+def http_cases(binary, seed, base):
     """Exercise real TLS listeners, runtime bind/port and effective flag paths.
 
     Force-stop only this test's child after observing startup. This is not a
@@ -245,11 +245,10 @@ def http_cases(binary, inspector, base):
     home = base / "http"
     home.mkdir()
     env = isolated(home)
-    checked([inspector, "init", "--auth", "passphrase"], cwd=home, env=env)
+    seed(home)
     vault = home / "vault"
-    # An empty registry makes Go create and migrate a legacy wildcard token.
-    # Create the fixture's real, scoped registry through the public Go CLI.
-    checked([inspector, "agent", "token", "new", "default", "--label", "public-fixture", "--tools", "get_entry"], cwd=home, env=env)
+    # An empty registry makes Go create a legacy wildcard token: the seeded home already holds the
+    # scoped registry the public Go CLI created for this fixture.
     records = []
     for name, command, custom, mtls in [
         ("http-default-tls", "serve", False, False),
@@ -359,18 +358,109 @@ def inventory(paths, root):
     return digest.hexdigest()
 
 
+def go_init(go, home):
+    checked([go, "init", "--auth", "passphrase"], cwd=home, env=isolated(home))
+
+
+def go_http_home(go, home):
+    go_init(go, home)
+    checked([go, "agent", "token", "new", "default", "--label", "public-fixture", "--tools", "get_entry"],
+            cwd=home, env=isolated(home))
+
+
+def material_seed(files):
+    return lambda home: observations.unpack_tree(files, home)
+
+
+def compare_observed(go_rows, rust_rows):
+    for left, right in zip(go_rows, rust_rows, strict=True):
+        if left["case"] in {"http-default-tls", "http-custom-tls"}:
+            assert left["response"]["body"]["resource"] == "http://127.0.0.1:__PORT__/mcp"
+            assert right["response"]["body"]["resource"] == "https://127.0.0.1:__PORT__/mcp"
+            # Compare every other measured property unchanged.
+            comparable = json.loads(json.dumps(right))
+            comparable["response"]["body"]["resource"] = left["response"]["body"]["resource"]
+            if left["case"] == "http-default-tls" and os.name != "nt":
+                assert left["tls_file_modes"] == {"certificate": 0o644, "private_key": 0o600}
+                assert right["tls_file_modes"] == {"certificate": 0o600, "private_key": 0o600}
+                comparable["tls_file_modes"] = left["tls_file_modes"]
+            assert left == comparable, (left, right)
+        elif left["case"] == "http-client-ca":
+            # Rejection is independently proven by the TLS exchange.
+            # The async Go log may race this fixture's forced stop;
+            # retain and strictly validate every observed line above.
+            assert right["transport_logs"] == ""
+            comparable = dict(right, transport_logs=left["transport_logs"])
+            assert left == comparable, (left, right)
+        else:
+            assert left == right, (left, right)
+
+
+def exercise(binary, material, root):
+    return (launch_cases(binary, material_seed(material["initialized_home"]), root) + service_cases(binary, root)
+            + http_cases(binary, material_seed(material["http_home"]), root))
+
+
+def capture(args):
+    """Capture mode: build the pinned Go oracle and exercise it alone (needs Go)."""
+    from build_timeout import oracle_build_timeout, remove_worktree
+    if os.name != "nt":
+        os.umask(0o022)
+    with tempfile.TemporaryDirectory(prefix="symvault-serve-capture-") as raw:
+        base = Path(raw)
+        tree = base / "oracle"
+        checked(["git", "worktree", "add", "--detach", tree, ORACLE])
+        try:
+            go = base / "go"
+            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree, timeout=oracle_build_timeout())
+            listing = checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
+            oracle_sources = sorted(x for x in listing if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
+            embedded = sorted(x for x in listing if x.startswith("internal/mcp/apitemplates/builtin/"))
+            assert len(embedded) == 17
+            recorded = {"oracle_source_files": oracle_sources, "oracle_source_digest": inventory(oracle_sources, tree),
+                        "oracle_embedded_files": embedded, "oracle_embedded_digest": inventory(embedded, tree),
+                        "go_binary_sha256": hashlib.sha256(go.read_bytes()).hexdigest()}
+            material = observations.existing_material("serve-contract")
+            if material is None:
+                initialized, http_home = base / "seed-initialized", base / "seed-http"
+                initialized.mkdir()
+                http_home.mkdir()
+                go_init(go, initialized)
+                go_http_home(go, http_home)
+                material = {"initialized_home": observations.pack_tree(initialized), "http_home": observations.pack_tree(http_home)}
+            root = base / "go-roots"
+            root.mkdir()
+            recorded["go"] = exercise(go, material, root)
+            for row in recorded["go"]:
+                if row.get("transport_logs"):
+                    # The live run already validated each line's exact shape; keep it, minus clock and peer port.
+                    stamped = re.sub(r"\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}", "__TIMESTAMP__", row["transport_logs"])
+                    row["transport_logs"] = re.sub(r"127\.0\.0\.1:\d+", "127.0.0.1:__PEER__", stamped)
+        finally:
+            remove_worktree(lambda: checked(["git", "worktree", "remove", tree]), "oracle worktree")
+    target = observations.save("serve-contract", recorded, oracle_commit=ORACLE, version=observations.go_version(),
+                               args=["serve_contract.py", "--capture-go"], material=material)
+    print(f"captured {observations.rel(target)}")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rust", required=True, type=Path)
-    parser.add_argument("--receipt", required=True, type=Path)
+    parser.add_argument("--rust", type=Path)
+    parser.add_argument("--receipt", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
+    observations.add_capture_flag(parser)
     args = parser.parse_args()
+    if args.capture_go:
+        return capture(args)
+    assert args.rust and args.receipt, "--rust and --receipt are required"
     rust = args.rust.resolve()
     assert rust.is_file()
     if os.name != "nt":
         # Equal, explicit input: an inherited 0077 umask would conceal Go's
         # public-certificate 0644 versus Rust's private publication mode.
         os.umask(0o022)
+    document = observations.load("serve-contract", oracle_commit=ORACLE)
+    recorded, material = document["observations"], document["material"]
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development, "commit the candidate before native acceptance"
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
@@ -378,62 +468,28 @@ def main():
                      or x in {"Cargo.toml", "Cargo.lock", ".gitattributes", "scripts/rust-port/serve_contract.py", ".github/workflows/rust-serve-cli.yml"})
     with tempfile.TemporaryDirectory(prefix="symvault-serve-contract-") as raw:
         base = Path(raw)
-        tree = base / "oracle"
-        checked(["git", "worktree", "add", "--detach", tree, ORACLE])
-        try:
-            go = base / ("go.exe" if os.name == "nt" else "go")
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree,
-                    timeout=oracle_build_timeout())
-            oracle_sources = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
-                                    if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
-            embedded = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
-                              if x.startswith("internal/mcp/apitemplates/builtin/"))
-            assert len(embedded) == 17
-            observed = {}
-            for label, binary in [("go", go), ("rust", rust)]:
-                root = base / (label+"-roots")
-                root.mkdir()
-                observed[label] = launch_cases(binary, go, root)+service_cases(binary, root)+http_cases(binary, go, root)
-            for left, right in zip(observed["go"], observed["rust"], strict=True):
-                if left["case"] in {"http-default-tls", "http-custom-tls"}:
-                    assert left["response"]["body"]["resource"] == "http://127.0.0.1:__PORT__/mcp"
-                    assert right["response"]["body"]["resource"] == "https://127.0.0.1:__PORT__/mcp"
-                    # Compare every other measured property unchanged.
-                    comparable = json.loads(json.dumps(right))
-                    comparable["response"]["body"]["resource"] = left["response"]["body"]["resource"]
-                    if left["case"] == "http-default-tls" and os.name != "nt":
-                        assert left["tls_file_modes"] == {"certificate": 0o644, "private_key": 0o600}
-                        assert right["tls_file_modes"] == {"certificate": 0o600, "private_key": 0o600}
-                        comparable["tls_file_modes"] = left["tls_file_modes"]
-                    assert left == comparable, (left, right)
-                elif left["case"] == "http-client-ca":
-                    # Rejection is independently proven by the TLS exchange.
-                    # The async Go log may race this fixture's forced stop;
-                    # retain and strictly validate every observed line above.
-                    assert right["transport_logs"] == ""
-                    comparable = dict(right, transport_logs=left["transport_logs"])
-                    assert left == comparable, (left, right)
-                else:
-                    assert left == right, (left, right)
-            receipt = {"passed": True, "oracle_commit": ORACLE, "oracle_source_files": oracle_sources,
-                       "oracle_source_digest": inventory(oracle_sources, tree),
-                       "oracle_embedded_files": embedded, "oracle_embedded_digest": inventory(embedded, tree),
-                       "go_binary_sha256": hashlib.sha256(go.read_bytes()).hexdigest(),
-                       "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(),
-                       "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),
-                       "candidate_worktree_clean": clean, "candidate_source_files": sources,
-                       "candidate_source_digest": inventory(sources, ROOT),
-                       "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                       "native_os": platform.system(), "architecture": platform.machine(),
-                       "keyring": "memory", "service_manager_mode": "injected-process-outcomes",
-                       "secure_ui_fixture": "none for bootstrap; explicit lookup-only GUI metadata case with locked credential call denied",
-                       "test_umask": "0022" if os.name != "nt" else "native-Windows",
-                       "stdio_scope": "locked metadata and locked tool-call rejection; unlocked bootstrap metadata and unknown dispatch; full store/anomaly tool acceptance remains #1248",
-                       **observed}
-            args.receipt.write_bytes((json.dumps(receipt, indent=2)+"\n").encode("utf-8"))
-            print(f"PASS: {len(observed['go'])} actual Go/Rust serve observations on {platform.system()}")
-        finally:
-            remove_worktree(lambda: checked(["git", "worktree", "remove", tree]), "oracle worktree")
+        root = base / "rust-roots"
+        root.mkdir()
+        observed = {"go": recorded["go"], "rust": exercise(rust, material, root)}
+        compare_observed(observed["go"], observed["rust"])
+        receipt = {"passed": True, "oracle_commit": ORACLE, "oracle_source_files": recorded["oracle_source_files"],
+                   "oracle_source_digest": recorded["oracle_source_digest"],
+                   "oracle_embedded_files": recorded["oracle_embedded_files"], "oracle_embedded_digest": recorded["oracle_embedded_digest"],
+                   "go_binary_sha256": recorded["go_binary_sha256"],
+                   "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(),
+                   "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),
+                   "candidate_worktree_clean": clean, "candidate_source_files": sources,
+                   "candidate_source_digest": inventory(sources, ROOT),
+                   "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                   "native_os": platform.system(), "architecture": platform.machine(),
+                   "keyring": "memory", "service_manager_mode": "injected-process-outcomes",
+                   "secure_ui_fixture": "none for bootstrap; explicit lookup-only GUI metadata case with locked credential call denied",
+                   "test_umask": "0022" if os.name != "nt" else "native-Windows",
+                   "stdio_scope": "locked metadata and locked tool-call rejection; unlocked bootstrap metadata and unknown dispatch; full store/anomaly tool acceptance remains #1248",
+                   "go_observation": "replayed from scripts/rust-port/fixtures/go-observations/serve-contract.%s.json" % observations.host_goos(),
+                   **observed}
+        args.receipt.write_bytes((json.dumps(receipt, indent=2)+"\n").encode("utf-8"))
+        print(f"PASS: {len(observed['go'])} recorded Go / live Rust serve observations on {platform.system()}")
 
 
 if __name__ == "__main__":

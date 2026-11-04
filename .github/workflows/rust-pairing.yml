@@ -243,7 +243,7 @@ jobs:
 
       - name: Native CLI and session technical gates
         shell: bash
-        run: python3 scripts/rust-port/native_closeout.py portable
+        run: python3 scripts/rust-port/native_closeout.py portable --live-go
 
       - name: Install disposable Linux Secret Service
         if: runner.os == 'Linux'
@@ -255,7 +255,7 @@ jobs:
         shell: bash
         env:
           SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
-        run: python3 scripts/rust-port/native_closeout.py keyring
+        run: python3 scripts/rust-port/native_closeout.py keyring --live-go
 
       - name: Native disposable launchd lifecycle
         if: ${{ !cancelled() && runner.os == 'macOS' }}

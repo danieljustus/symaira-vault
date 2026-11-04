@@ -1,0 +1,16 @@
+{
+  "cases": 15,
+  "compared_fields": 189,
+  "contract": "tui-driver-equivalence",
+  "identical": true,
+  "observation_sha256": "14d3f7ccfe8d3ed8f33077054a712bde4723f521581a82c0a6dfd029c4f585c7",
+  "platform": "Linux",
+  "python_driver_source_sha256": "17d200f347c297dff58122ed1b82eb67d61fdb6507bc1f86b9b3eee050159653",
+  "reference_driver": "go-helper (tui_fixture.go.txt built at the oracle commit)",
+  "reference_sha256": "12d54b952b7d12871ba9b333135cce8a8518d66e873f460f34acfcdb857f76c2",
+  "rust_executable_sha256": "2f51a3431f0df4f621be51fdd19f94acf2adbe92db7f81decab084b91ad76216",
+  "schema": 1,
+  "snapshot_tool": "symvault-store example tui-snapshot",
+  "snapshot_tool_source_sha256": "10f6754f93b2fb7fc79e537ce2f61bcdaecb08b782e449b8098dbcea5530e2f1",
+  "snapshots_compared": 84
+}

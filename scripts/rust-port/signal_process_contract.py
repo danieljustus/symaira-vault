@@ -50,6 +50,8 @@ import termios
 import threading
 import time
 
+import go_observations_common as observations
+
 ROOT = Path(__file__).resolve().parents[2]
 SEED = ROOT / "scripts/rust-port/http_process_seed.go.txt"
 ORACLE = "45b8577e01ce1826e312ed970d0fc01a3a9b6e17"
@@ -876,45 +878,80 @@ def make_template(go, base):
     return template
 
 
+def capture(args):
+    """Capture mode: build the pinned Go oracle and observe it alone (needs Go)."""
+    if os.name == "nt":
+        sys.exit("signal_process_contract.py is Unix-only")
+    with tempfile.TemporaryDirectory(prefix="symvault-signals-capture-") as raw:
+        base = Path(raw)
+        go, seed = (args.go.resolve(), args.go_seed.resolve()) if args.go else build_oracle(base)
+        recorded = {"go_binary_sha256": hashlib.sha256(go.read_bytes()).hexdigest(),
+                    "seed_sha256": hashlib.sha256(SEED.read_bytes()).hexdigest()}
+        material = observations.existing_material("signal-process-contract")
+        if material is None:
+            template = make_template(go, base)
+            material = {"template": observations.pack_tree(template)}
+        template = base / "template-material"
+        observations.unpack_tree(material["template"], template)
+        go_root = base / "go"
+        go_root.mkdir()
+        recorded["go"] = exercise(go, go_root, template)
+        check_oracle_expectations(recorded["go"])
+        seed_home = base / "http-seed"
+        seed_home.mkdir()
+        tokens = json.loads(checked([seed, "--root", seed_home / "vault"], cwd=seed_home, env=isolated(seed_home)))
+        recorded["go_only"] = exercise_go_only(go, go_root, template, seed_home, tokens["full"])
+        check_go_only(recorded["go_only"])
+        for row in recorded["go_only"]:
+            if row["command"] == "mcp-http-clipboard":
+                # Go exits before its timer's clear reaches the tool in most runs (a race the oracle itself
+                # documents): keep one canonical member of the acceptable set so captures stay byte-identical.
+                acceptable = GO_EXPECTED_HTTP_CLIPBOARD[(row["armed"], row["signal"], row["ignored"])][4]
+                row["clipboard_events_acceptable"] = [list(events) for events in acceptable]
+                row["clipboard_events"] = list(max(acceptable, key=len))
+    target = observations.save("signal-process-contract", recorded, oracle_commit=ORACLE, version=observations.go_version(),
+                               args=["signal_process_contract.py", "--capture-go"], material=material)
+    print(f"captured {observations.rel(target)}")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rust", required=True, type=Path)
-    parser.add_argument("--receipt", required=True, type=Path)
-    parser.add_argument("--go", type=Path, help="prebuilt oracle (development only; default builds ORACLE; needs --go-seed)")
-    parser.add_argument("--go-seed", type=Path, help="prebuilt HTTP fixture seed helper (development only)")
+    parser.add_argument("--rust", type=Path)
+    parser.add_argument("--receipt", type=Path)
+    parser.add_argument("--go", type=Path, help="capture only: prebuilt oracle (development; default builds ORACLE; needs --go-seed)")
+    parser.add_argument("--go-seed", type=Path, help="capture only: prebuilt HTTP fixture seed helper (development)")
     parser.add_argument("--expect-mismatch", action="store_true",
-                        help="negative control: PASS only if the Rust binary differs from Go")
+                        help="negative control: PASS only if the Rust binary differs from the recorded Go observations")
     parser.add_argument("--allow-dirty-for-development", action="store_true")
+    observations.add_capture_flag(parser)
     args = parser.parse_args()
     if os.name == "nt":
         sys.exit("signal_process_contract.py is Unix-only; Windows Ctrl-Break evidence lives in "
                  "egress_contract.py and intake_watch_contract.py. Refusing to report a vacuous pass.")
+    if args.capture_go:
+        return capture(args)
+    assert args.rust and args.receipt, "--rust and --receipt are required"
     rust = args.rust.resolve()
     assert rust.is_file(), "a real Rust CLI binary is required"
+    document = observations.load("signal-process-contract", oracle_commit=ORACLE)
+    recorded, material = document["observations"], document["material"]["template"]
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development or args.expect_mismatch, "commit the candidate first"
     receipt = dict(oracle_commit=ORACLE, candidate_commit=checked(["git", "rev-parse", "HEAD"]).decode().strip(),
                    candidate_worktree_clean=clean, native_os=platform.system(), architecture=platform.machine(),
                    rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),
                    driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                   seed_sha256=hashlib.sha256(SEED.read_bytes()).hexdigest(),
+                   seed_sha256=recorded["seed_sha256"], go_binary_sha256=recorded["go_binary_sha256"],
+                   go_observation="replayed from scripts/rust-port/fixtures/go-observations/signal-process-contract.%s.json" % observations.host_goos(),
                    keyring="memory", expect_mismatch=args.expect_mismatch, go=[], rust=[], go_only=[], passed=False)
     args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
     with tempfile.TemporaryDirectory(prefix="symvault-signals-") as raw:
         base = Path(raw)
-        go, seed = (args.go.resolve(), args.go_seed.resolve()) if args.go else build_oracle(base)
-        receipt["go_binary_sha256"] = hashlib.sha256(go.read_bytes()).hexdigest()
-        template = make_template(go, base)
-        go_root, rust_root = base / "go", base / "rust"
-        go_root.mkdir()
+        template = base / "template"
+        observations.unpack_tree(material, template)
+        rust_root = base / "rust"
         rust_root.mkdir()
-        receipt["go"] = exercise(go, go_root, template)
-        check_oracle_expectations(receipt["go"])
-        seed_home = base / "http-seed"
-        seed_home.mkdir()
-        tokens = json.loads(checked([seed, "--root", seed_home / "vault"], cwd=seed_home, env=isolated(seed_home)))
-        receipt["go_only"] = exercise_go_only(go, go_root, template, seed_home, tokens["full"])
-        check_go_only(receipt["go_only"])
+        receipt["go"], receipt["go_only"] = recorded["go"], recorded["go_only"]
         receipt["rust"] = exercise(rust, rust_root, template)
         try:
             compare(receipt["go"], receipt["rust"])
@@ -929,7 +966,7 @@ def main():
     if args.expect_mismatch:
         print(f"PASS (negative control): mutant rejected: {mismatch}")
     else:
-        print(f"PASS: {len(receipt['go'])} actual Go/Rust signal observations and {len(receipt['go_only'])} "
+        print(f"PASS: {len(receipt['go'])} recorded Go / live Rust signal observations and {len(receipt['go_only'])} "
               f"Go-only clipboard observations on {platform.system()}")
 
 

@@ -1,0 +1,24 @@
+{
+  "direction": "Go auditverify validates the audit log Rust wrote",
+  "go_verdict": {
+    "accepted": true,
+    "command": [
+      "go",
+      "run",
+      "./scripts/rust-port/cmd/auditverify",
+      "target/audit/rust-output.jsonl"
+    ],
+    "exit_code": 0,
+    "output_sha256": "8a6695cb60215e7e2bf10a4b37cbe3783c707b5f6574a236cad83f1aeac8661f"
+  },
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "name": "audit-differential",
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "rust_artifacts_sha256": {
+    "rust-output.jsonl": "69b98a740060ca0a0a340b56dbc6b263bd22c9aa4f690782ee28689950d36526"
+  },
+  "rust_commit": "7fc881eb0951287aa113bf82ab774fda0acf2408",
+  "schema": 1
+}

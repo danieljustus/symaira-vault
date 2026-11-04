@@ -1,0 +1,1242 @@
+{
+  "args": [
+    "device_list_differential.py",
+    "--capture-go"
+  ],
+  "contract": "device-list-differential",
+  "go_version": "go version go1.26.6 darwin/arm64",
+  "goarch": "arm64",
+  "goos": "darwin",
+  "observations": {
+    "binary": "built from the oracle archive without -trimpath: its bytes depend on the temporary build path",
+    "cases": [
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "Tm8gZGV2aWNlcyByZWdpc3RlcmVkLgo="
+        },
+        "id": "missing/text",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W119Cg=="
+        },
+        "id": "missing/json",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "Y291bnQ6IDAKZGV2aWNlczogW10K"
+        },
+        "id": "missing/yaml",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "missing/json-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "missing/yaml-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W119Cg=="
+        },
+        "id": "missing/json-alias",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "missing/quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "ignored",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W119Cg=="
+        },
+        "id": "missing/extra",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "Tm8gZGV2aWNlcyByZWdpc3RlcmVkLgo="
+        },
+        "id": "null/text",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W119Cg=="
+        },
+        "id": "null/json",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "Y291bnQ6IDAKZGV2aWNlczogW10K"
+        },
+        "id": "null/yaml",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "null/json-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "null/yaml-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W119Cg=="
+        },
+        "id": "null/json-alias",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "null/quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "ignored",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W119Cg=="
+        },
+        "id": "null/extra",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "Tm8gZGV2aWNlcyByZWdpc3RlcmVkLgo="
+        },
+        "id": "empty/text",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W119Cg=="
+        },
+        "id": "empty/json",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "Y291bnQ6IDAKZGV2aWNlczogW10K"
+        },
+        "id": "empty/yaml",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "empty/json-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "empty/yaml-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W119Cg=="
+        },
+        "id": "empty/json-alias",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "empty/quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "ignored",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W119Cg=="
+        },
+        "id": "empty/extra",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "Tm8gZGV2aWNlcyByZWdpc3RlcmVkLgoKVW5tYW5hZ2VkIHJlY2lwaWVudHMgaW4gcmVjaXBpZW50cy50eHQ6CiAgYWdlMWFhYWFhYWFhYWFhYS4uLgogIGFnZTFhYWFhYWFhYWFhYWEuLi4K"
+        },
+        "id": "unmanaged/text",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W10sInVubWFuYWdlZF9yZWNpcGllbnRzIjpbImFnZTFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYWdlMWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiXX0K"
+        },
+        "id": "unmanaged/json",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "Y291bnQ6IDAKZGV2aWNlczogW10KdW5tYW5hZ2VkX3JlY2lwaWVudHM6CiAgICAtIGFnZTFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhCiAgICAtIGFnZTFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhCg=="
+        },
+        "id": "unmanaged/yaml",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "unmanaged/json-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "unmanaged/yaml-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W10sInVubWFuYWdlZF9yZWNpcGllbnRzIjpbImFnZTFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYWdlMWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiXX0K"
+        },
+        "id": "unmanaged/json-alias",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "unmanaged/quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "ignored",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MCwiZGV2aWNlcyI6W10sInVubWFuYWdlZF9yZWNpcGllbnRzIjpbImFnZTFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYWdlMWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiXX0K"
+        },
+        "id": "unmanaged/extra",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "RGV2aWNlcyAoMik6CgogIGxhcHRvcDwmPuKAqAogICAgUHVibGljIEtleTogYWdlMWFhYWFhYWFhYWFhYS4uLgogICAgQWRkZWQ6ICAgICAgMjAyNi0wOS0xNFQxMjozNDo1NiswMjowMAogICAgTGFzdCBTZWVuOiAgbmV2ZXIKCiAgc2Vjb25kCiAgICBQdWJsaWMgS2V5OiBhZ2UxYmJiYmJiYmJiYmJiLi4uCiAgICBBZGRlZDogICAgICAyMDI2LTAxLTAxVDAwOjAwOjAwWgogICAgTGFzdCBTZWVuOiAgMjAyNi0wOS0xNFQxMDoxMToxMloKClVubWFuYWdlZCByZWNpcGllbnRzIGluIHJlY2lwaWVudHMudHh0OgogIGV4dHJhLWtleQoK"
+        },
+        "id": "registered/text",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MiwiZGV2aWNlcyI6W3sibmFtZSI6ImxhcHRvcDwmPlx1MjAyOCIsInB1YmxpY19rZXkiOiJhZ2UxYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImFkZGVkX2F0IjoiMjAyNi0wOS0xNFQxMjozNDo1NiswMjowMCJ9LHsibmFtZSI6InNlY29uZCIsInB1YmxpY19rZXkiOiJhZ2UxYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsImFkZGVkX2F0IjoiMjAyNi0wMS0wMVQwMDowMDowMFoiLCJsYXN0X3NlZW4iOiIyMDI2LTA5LTE0VDEwOjExOjEyWiJ9XSwidW5tYW5hZ2VkX3JlY2lwaWVudHMiOlsiZXh0cmEta2V5Il19Cg=="
+        },
+        "id": "registered/json",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "Y291bnQ6IDIKZGV2aWNlczoKICAgIC0gbmFtZTogJ2xhcHRvcDwmPuKAqCcKICAgICAgcHVibGljX2tleTogYWdlMWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEKICAgICAgYWRkZWRfYXQ6ICIyMDI2LTA5LTE0VDEyOjM0OjU2KzAyOjAwIgogICAgLSBuYW1lOiBzZWNvbmQKICAgICAgcHVibGljX2tleTogYWdlMWJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIKICAgICAgYWRkZWRfYXQ6ICIyMDI2LTAxLTAxVDAwOjAwOjAwWiIKICAgICAgbGFzdF9zZWVuOiAiMjAyNi0wOS0xNFQxMDoxMToxMloiCnVubWFuYWdlZF9yZWNpcGllbnRzOgogICAgLSBleHRyYS1rZXkK"
+        },
+        "id": "registered/yaml",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "registered/json-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "registered/yaml-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MiwiZGV2aWNlcyI6W3sibmFtZSI6ImxhcHRvcDwmPlx1MjAyOCIsInB1YmxpY19rZXkiOiJhZ2UxYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImFkZGVkX2F0IjoiMjAyNi0wOS0xNFQxMjozNDo1NiswMjowMCJ9LHsibmFtZSI6InNlY29uZCIsInB1YmxpY19rZXkiOiJhZ2UxYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsImFkZGVkX2F0IjoiMjAyNi0wMS0wMVQwMDowMDowMFoiLCJsYXN0X3NlZW4iOiIyMDI2LTA5LTE0VDEwOjExOjEyWiJ9XSwidW5tYW5hZ2VkX3JlY2lwaWVudHMiOlsiZXh0cmEta2V5Il19Cg=="
+        },
+        "id": "registered/json-alias",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "registered/quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "ignored",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MiwiZGV2aWNlcyI6W3sibmFtZSI6ImxhcHRvcDwmPlx1MjAyOCIsInB1YmxpY19rZXkiOiJhZ2UxYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImFkZGVkX2F0IjoiMjAyNi0wOS0xNFQxMjozNDo1NiswMjowMCJ9LHsibmFtZSI6InNlY29uZCIsInB1YmxpY19rZXkiOiJhZ2UxYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsImFkZGVkX2F0IjoiMjAyNi0wMS0wMVQwMDowMDowMFoiLCJsYXN0X3NlZW4iOiIyMDI2LTA5LTE0VDEwOjExOjEyWiJ9XSwidW5tYW5hZ2VkX3JlY2lwaWVudHMiOlsiZXh0cmEta2V5Il19Cg=="
+        },
+        "id": "registered/extra",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "RGV2aWNlcyAoMSk6CgogIAogICAgUHVibGljIEtleTogCiAgICBBZGRlZDogICAgICAwMDAxLTAxLTAxVDAwOjAwOjAwWgogICAgTGFzdCBTZWVuOiAgbmV2ZXIKCg=="
+        },
+        "id": "zero/text",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MSwiZGV2aWNlcyI6W3sibmFtZSI6IiIsInB1YmxpY19rZXkiOiIiLCJhZGRlZF9hdCI6IjAwMDEtMDEtMDFUMDA6MDA6MDBaIn1dfQo="
+        },
+        "id": "zero/json",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "Y291bnQ6IDEKZGV2aWNlczoKICAgIC0gbmFtZTogIiIKICAgICAgcHVibGljX2tleTogIiIKICAgICAgYWRkZWRfYXQ6ICIwMDAxLTAxLTAxVDAwOjAwOjAwWiIK"
+        },
+        "id": "zero/yaml",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "zero/json-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "zero/yaml-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MSwiZGV2aWNlcyI6W3sibmFtZSI6IiIsInB1YmxpY19rZXkiOiIiLCJhZGRlZF9hdCI6IjAwMDEtMDEtMDFUMDA6MDA6MDBaIn1dfQo="
+        },
+        "id": "zero/json-alias",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": ""
+        },
+        "id": "zero/quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "ignored",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 0,
+          "stderr_b64": "",
+          "stdout_b64": "eyJjb3VudCI6MSwiZGV2aWNlcyI6W3sibmFtZSI6IiIsInB1YmxpY19rZXkiOiIiLCJhZGRlZF9hdCI6IjAwMDEtMDEtMDFUMDA6MDA6MDBaIn1dfQo="
+        },
+        "id": "zero/extra",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": false
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list"
+        ],
+        "go": {
+          "exit": 1,
+          "stderr_b64": "RXJyb3I6IGxpc3QgZGV2aWNlczogcGFyc2UgZGV2aWNlcyBmaWxlOiBpbnZhbGlkIGNoYXJhY3RlciAnbycgaW4gbGl0ZXJhbCBudWxsIChleHBlY3RpbmcgJ3UnKQpFcnJvcjogbGlzdCBkZXZpY2VzOiBwYXJzZSBkZXZpY2VzIGZpbGU6IGludmFsaWQgY2hhcmFjdGVyICdvJyBpbiBsaXRlcmFsIG51bGwgKGV4cGVjdGluZyAndScpCg==",
+          "stdout_b64": ""
+        },
+        "id": "malformed/text",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": true
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 1,
+          "stderr_b64": "RXJyb3I6IGxpc3QgZGV2aWNlczogcGFyc2UgZGV2aWNlcyBmaWxlOiBpbnZhbGlkIGNoYXJhY3RlciAnbycgaW4gbGl0ZXJhbCBudWxsIChleHBlY3RpbmcgJ3UnKQpFcnJvcjogbGlzdCBkZXZpY2VzOiBwYXJzZSBkZXZpY2VzIGZpbGU6IGludmFsaWQgY2hhcmFjdGVyICdvJyBpbiBsaXRlcmFsIG51bGwgKGV4cGVjdGluZyAndScpCg==",
+          "stdout_b64": ""
+        },
+        "id": "malformed/json",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": true
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml"
+        ],
+        "go": {
+          "exit": 1,
+          "stderr_b64": "RXJyb3I6IGxpc3QgZGV2aWNlczogcGFyc2UgZGV2aWNlcyBmaWxlOiBpbnZhbGlkIGNoYXJhY3RlciAnbycgaW4gbGl0ZXJhbCBudWxsIChleHBlY3RpbmcgJ3UnKQpFcnJvcjogbGlzdCBkZXZpY2VzOiBwYXJzZSBkZXZpY2VzIGZpbGU6IGludmFsaWQgY2hhcmFjdGVyICdvJyBpbiBsaXRlcmFsIG51bGwgKGV4cGVjdGluZyAndScpCg==",
+          "stdout_b64": ""
+        },
+        "id": "malformed/yaml",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": true
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "json",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 1,
+          "stderr_b64": "RXJyb3I6IGxpc3QgZGV2aWNlczogcGFyc2UgZGV2aWNlcyBmaWxlOiBpbnZhbGlkIGNoYXJhY3RlciAnbycgaW4gbGl0ZXJhbCBudWxsIChleHBlY3RpbmcgJ3UnKQpFcnJvcjogbGlzdCBkZXZpY2VzOiBwYXJzZSBkZXZpY2VzIGZpbGU6IGludmFsaWQgY2hhcmFjdGVyICdvJyBpbiBsaXRlcmFsIG51bGwgKGV4cGVjdGluZyAndScpCg==",
+          "stdout_b64": ""
+        },
+        "id": "malformed/json-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": true
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--output",
+          "yaml",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 1,
+          "stderr_b64": "RXJyb3I6IGxpc3QgZGV2aWNlczogcGFyc2UgZGV2aWNlcyBmaWxlOiBpbnZhbGlkIGNoYXJhY3RlciAnbycgaW4gbGl0ZXJhbCBudWxsIChleHBlY3RpbmcgJ3UnKQpFcnJvcjogbGlzdCBkZXZpY2VzOiBwYXJzZSBkZXZpY2VzIGZpbGU6IGludmFsaWQgY2hhcmFjdGVyICdvJyBpbiBsaXRlcmFsIG51bGwgKGV4cGVjdGluZyAndScpCg==",
+          "stdout_b64": ""
+        },
+        "id": "malformed/yaml-quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": true
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--json"
+        ],
+        "go": {
+          "exit": 1,
+          "stderr_b64": "RXJyb3I6IGxpc3QgZGV2aWNlczogcGFyc2UgZGV2aWNlcyBmaWxlOiBpbnZhbGlkIGNoYXJhY3RlciAnbycgaW4gbGl0ZXJhbCBudWxsIChleHBlY3RpbmcgJ3UnKQpFcnJvcjogbGlzdCBkZXZpY2VzOiBwYXJzZSBkZXZpY2VzIGZpbGU6IGludmFsaWQgY2hhcmFjdGVyICdvJyBpbiBsaXRlcmFsIG51bGwgKGV4cGVjdGluZyAndScpCg==",
+          "stdout_b64": ""
+        },
+        "id": "malformed/json-alias",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": true
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "--quiet"
+        ],
+        "go": {
+          "exit": 1,
+          "stderr_b64": "RXJyb3I6IGxpc3QgZGV2aWNlczogcGFyc2UgZGV2aWNlcyBmaWxlOiBpbnZhbGlkIGNoYXJhY3RlciAnbycgaW4gbGl0ZXJhbCBudWxsIChleHBlY3RpbmcgJ3UnKQpFcnJvcjogbGlzdCBkZXZpY2VzOiBwYXJzZSBkZXZpY2VzIGZpbGU6IGludmFsaWQgY2hhcmFjdGVyICdvJyBpbiBsaXRlcmFsIG51bGwgKGV4cGVjdGluZyAndScpCg==",
+          "stdout_b64": ""
+        },
+        "id": "malformed/quiet",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": true
+      },
+      {
+        "argv": [
+          "--vault",
+          "${WORKSPACE}",
+          "device",
+          "list",
+          "ignored",
+          "--output",
+          "json"
+        ],
+        "go": {
+          "exit": 1,
+          "stderr_b64": "RXJyb3I6IGxpc3QgZGV2aWNlczogcGFyc2UgZGV2aWNlcyBmaWxlOiBpbnZhbGlkIGNoYXJhY3RlciAnbycgaW4gbGl0ZXJhbCBudWxsIChleHBlY3RpbmcgJ3UnKQpFcnJvcjogbGlzdCBkZXZpY2VzOiBwYXJzZSBkZXZpY2VzIGZpbGU6IGludmFsaWQgY2hhcmFjdGVyICdvJyBpbiBsaXRlcmFsIG51bGwgKGV4cGVjdGluZyAndScpCg==",
+          "stdout_b64": ""
+        },
+        "id": "malformed/extra",
+        "native_go": {
+          "Signal": "",
+          "TimedOut": false,
+          "files_unchanged": true
+        },
+        "negative": true
+      }
+    ]
+  },
+  "oracle_commit": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+  "schema": 1
+}
