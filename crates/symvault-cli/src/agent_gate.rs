@@ -16,10 +16,15 @@
 //! `expand vault path: <cause>`, printed twice). Without an agent the gate stays
 //! silent and the command reports its own error, as before.
 //!
-//! Known wording gaps (the exit status and the refusal itself always match):
-//! a `SYMVAULT_VAULT` that is not UTF-8 is refused with `vault path must be
-//! UTF-8` where Go would carry on with the raw bytes, and a profile name with
-//! control characters is quoted by Rust's `{:?}` rather than Go's `%q`.
+//! Known gaps against Go. The first two can change the exit status or the verdict
+//! (both need a value that is not UTF-8); the third is wording only:
+//! - a `SYMVAULT_VAULT` that is not UTF-8 is refused with exit 1 and `vault path
+//!   must be UTF-8`, where Go carries on with the raw bytes (exit 5 from the agent
+//!   check, or the command runs);
+//! - a `--vault` value that is not UTF-8 is gated on its lossy text (U+FFFD for
+//!   each bad byte), so the path the agent check reads can differ from Go's;
+//! - a profile name with control characters is quoted by Rust's `{:?}` rather than
+//!   Go's `%q`.
 
 use std::path::Path;
 
