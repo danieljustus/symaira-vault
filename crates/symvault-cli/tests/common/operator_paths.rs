@@ -37,7 +37,7 @@ pub fn bytes_hit(bytes: &[u8]) -> Option<String> {
 
 fn looks_like_base64(text: &str) -> bool {
     text.len() >= 8
-        && text.len() % 4 == 0
+        && text.len().is_multiple_of(4)
         && text
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'='))
