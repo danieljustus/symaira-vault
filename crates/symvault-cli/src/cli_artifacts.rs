@@ -136,18 +136,26 @@ pub fn flag_help(args: &[std::ffi::OsString]) -> Option<&'static str> {
     {
         return None;
     }
+    if unknown_first_command(args) {
+        // cobra's `Find` fails with `unknown command` (exit 1), never the root
+        // help; the regular path reports it.
+        return None;
+    }
     let mut selected = root();
     let mut seen = Vec::new();
     let mut help = false;
-    let mut bare_help = false;
+    // cobra's `Find` never sees a bare `-h` / `--help` as the help flag: it takes the
+    // next word as its value, so that word names no command.
+    let mut swallow_next = false;
     let mut i = 1;
     while let Some(word) = args.get(i) {
         let word = word.to_str()?;
         if word == "--" {
             break;
         }
+        let swallowed = std::mem::take(&mut swallow_next);
         if word.starts_with('-') {
-            bare_help |= word == "-h" || word == "--help";
+            swallow_next = !swallowed && (word == "-h" || word == "--help");
             let f = flag(selected, word)?;
             let inline = word.split_once('=').map(|(_, v)| v);
             let value = if let Some(v) = inline {
@@ -173,18 +181,8 @@ pub fn flag_help(args: &[std::ffi::OsString]) -> Option<&'static str> {
                 symvault_core::config::parse_go_duration(value).ok()?;
             }
             seen.push(f.name.as_str());
-        } else if let Some(next) = child(selected, word) {
+        } else if !swallowed && let Some(next) = child(selected, word) {
             selected = next;
-        } else if selected.path == root().path
-            && word != "help"
-            && !word.starts_with("__")
-            && !bare_help
-        {
-            // An unknown first word is cobra's `unknown command` error (exit 1),
-            // never the root help; the regular path reports it. (A bare `-h` /
-            // `--help` before it is unknown to cobra's `Find`, which then takes
-            // the word as that flag's value, so the root help still wins.)
-            return None;
         }
         i += 1;
     }
@@ -198,4 +196,81 @@ pub fn flag_help(args: &[std::ffi::OsString]) -> Option<&'static str> {
     DATA.help
         .contains_key(&selected.path)
         .then_some(selected.path.strip_prefix("symvault ").unwrap_or(""))
+}
+
+/// Cobra's `stripFlags` for `command`: the words that are neither flags nor flag
+/// values. The help flag is not registered yet while `Find` runs, so a bare `-h` /
+/// `--help` takes (only) the next word as its value, like any flag that wants one;
+/// `--` ends the scan unless it is taken as such a value; the empty string never
+/// counts as a command word.
+fn strip_flags<'a>(words: &[&'a str], command: &'static Command) -> Vec<&'a str> {
+    let known = flags(command);
+    let no_opt_default = |name: &str, short: bool| {
+        known.iter().any(|f| {
+            f.name != "help"
+                && (if short {
+                    f.shorthand == name
+                } else {
+                    f.name == name
+                })
+                && !f.no_opt_default.is_empty()
+        })
+    };
+    let mut commands = Vec::new();
+    let mut i = 0;
+    while let Some(&word) = words.get(i) {
+        i += 1;
+        if word == "--" {
+            break;
+        }
+        let takes_value = !word.contains('=')
+            && ((word.starts_with("--") && !no_opt_default(&word[2..], false))
+                || (word.starts_with('-') && word.len() == 2 && !no_opt_default(&word[1..], true)));
+        if takes_value {
+            if words.len() - i <= 1 {
+                break;
+            }
+            i += 1;
+        } else if !word.is_empty() && !word.starts_with('-') {
+            commands.push(word);
+        }
+    }
+    commands
+}
+
+/// Whether cobra's `Find` stops at the root with `unknown command`: the first
+/// word left by [`strip_flags`] names no root command (`help` and the hidden
+/// `__complete` commands are not part of the artifact tree).
+fn unknown_first_command(args: &[std::ffi::OsString]) -> bool {
+    let words: Vec<_> = args
+        .iter()
+        .skip(1)
+        .map(|word| word.to_string_lossy())
+        .collect();
+    let words: Vec<&str> = words.iter().map(|word| &**word).collect();
+    strip_flags(&words, root()).first().is_some_and(|first| {
+        child(root(), first).is_none() && *first != "help" && !first.starts_with("__")
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{root, strip_flags};
+
+    /// cobra's `stripFlags` with the help flag still unknown: a bare `-h` / `--help`
+    /// takes exactly the next word, the empty string is no command, `--` ends it.
+    #[test]
+    fn strip_flags_follows_cobra_find() {
+        fn strip<'a>(words: &[&'a str]) -> Vec<&'a str> {
+            strip_flags(words, root())
+        }
+        assert_eq!(strip(&["--help", "nosuch"]), Vec::<&str>::new());
+        assert_eq!(strip(&["--help", "--help", "nosuch"]), ["nosuch"]);
+        assert_eq!(strip(&["-h", "--help", "nosuch"]), ["nosuch"]);
+        assert_eq!(strip(&["--help", "x", "y"]), ["y"]);
+        assert_eq!(strip(&["--help=true", "nosuch"]), ["nosuch"]);
+        assert_eq!(strip(&["", "--help"]), Vec::<&str>::new());
+        assert_eq!(strip(&["--help", "--", "nosuch"]), ["nosuch"]);
+        assert_eq!(strip(&["--json", "nosuch", "--", "x"]), ["nosuch"]);
+    }
 }

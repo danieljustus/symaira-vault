@@ -1170,3 +1170,99 @@ fn agent_gate_unknown_command_beats_the_root_help() {
     let (code, _) = pair.check("unknown", &["nosuch", "--help"], None, none);
     assert_eq!(code, Some(1));
 }
+
+/// cobra's `stripFlags` skips the empty string, so it never names a command: the
+/// help flag still wins (root help or the help of the command named after it).
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_empty_words_are_no_command() {
+    let (_oracle, pair) = Pair::new("agent_gate_empty_words_are_no_command");
+    pair.set_config(&Config::Text(PROFILES));
+    let none = Opts::default();
+    for args in [
+        &["", "--help"][..],
+        &["", "-h"],
+        &["", "--help=true"],
+        &[""],
+        &["", ""],
+        &["", "--help=false"],
+        &["", "", "--help"],
+        &["--json", "", "--help"],
+        &["", "get", "-h"],
+        &["", "agent", "--help"],
+        &["", "agent", "nosuch", "-h"],
+        &["--help", "", "nosuch"],
+        &["", "nosuch", "--help"],
+        &["", "nosuch"],
+    ] {
+        for agent in [Some("ghost"), None] {
+            pair.check(&format!("{agent:?} {args:?}"), args, agent, none);
+        }
+    }
+    let (code, _) = pair.check("empty help", &["", "--help"], Some("ghost"), none);
+    assert_eq!(code, Some(0));
+    let (code, _) = pair.check("empty then unknown", &["", "nosuch", "--help"], None, none);
+    assert_eq!(code, Some(1));
+}
+
+/// A bare `-h` / `--help` is unknown to `Find` and takes only the next word as its
+/// value (as any flag that wants one does), so a second word after it is still the
+/// command; the earlier fixed shapes keep their answers.
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_bare_help_swallows_only_the_next_word() {
+    let (_oracle, pair) = Pair::new("agent_gate_bare_help_swallows_only_the_next_word");
+    pair.set_config(&Config::Text(PROFILES));
+    let none = Opts::default();
+    let unknown: &[&[&str]] = &[
+        &["--help", "--help", "nosuch"],
+        &["-h", "--help", "nosuch"],
+        &["--help", "-h", "nosuch"],
+        &["-h", "-h", "nosuch"],
+        &["--help", "--help", "--help", "--help", "nosuch"],
+        &["--help", "--json", "nosuch"],
+        &["--help", "--", "nosuch"],
+        &["--help", "", "nosuch"],
+        &["--help", "--help=true", "nosuch"],
+        &["--json", "--help", "--help", "nosuch"],
+    ];
+    let help: &[&[&str]] = &[
+        &["--help"],
+        &["-h"],
+        &["--help", "nosuch"],
+        &["-h", "nosuch"],
+        &["--help", "--help"],
+        &["--help", "-h"],
+        &["--help", "--help", "--help", "nosuch"],
+        &["--help", "--help", "get"],
+        &["--help", "get"],
+        &["--help", "get", "-h"],
+        &["--help", "--"],
+        &["--help", "", ""],
+        &["--json", "--help", "nosuch"],
+        &["-h", "--json", "--help", "nosuch"],
+        &["--help=true", "--help", "nosuch"],
+        &["agent", "--help", "nosuch"],
+        &["agent", "nosuch", "-h=true"],
+        &["completion", "bash", "extra", "--help"],
+        &["nosuch", "--help"],
+    ];
+    for (args, want) in unknown
+        .iter()
+        .map(|args| (*args, Some(1)))
+        .chain(help.iter().map(|args| (*args, None)))
+    {
+        for agent in [Some("ghost"), None] {
+            let (code, _) = pair.check(&format!("{agent:?} {args:?}"), args, agent, none);
+            if let Some(want) = want {
+                assert_eq!(code, Some(want), "{agent:?} {args:?}");
+            }
+        }
+    }
+}

@@ -726,6 +726,13 @@ fn eats_next(arg: &Arg) -> bool {
     arg.get_action().takes_values() && !arg.is_require_equals_set()
 }
 
+/// [`eats_next`] as cobra's `Find` sees it: the help flag is only added to the
+/// command once it is found, so while the command is resolved a bare `-h` /
+/// `--help` takes the next token as its value like any flag that wants one.
+fn eats_next_at_find(arg: &Arg) -> bool {
+    eats_next(arg) || is_help_arg(arg)
+}
+
 /// A Go bool flag: clap `SetTrue`/`SetFalse`, or the `--flag[=bool]` spelling
 /// (`ArgAction::Set` with `require_equals` and an optional value) that
 /// accepts Go's `ParseBool` forms with the last occurrence winning.
@@ -741,7 +748,8 @@ fn is_help_arg(arg: &Arg) -> bool {
     arg.get_id().as_str() == "help"
 }
 
-/// cobra's `stripFlags`: the positional tokens before `--`.
+/// cobra's `stripFlags`: the positional tokens before `--` (the empty string is
+/// never one: `s != ""` in cobra).
 fn strip_flags(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<String> {
     let mut positional = Vec::new();
     let mut index = 0;
@@ -754,7 +762,7 @@ fn strip_flags(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<String
             if !token.contains('=') {
                 let known = flags.long(name);
                 let skip = match known {
-                    Some(arg) => eats_next(arg),
+                    Some(arg) => eats_next_at_find(arg),
                     None => !lenient,
                 };
                 if skip {
@@ -765,14 +773,14 @@ fn strip_flags(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<String
             if !token.contains('=') && token.len() == 2 {
                 let known = token.chars().nth(1).and_then(|c| flags.short(c));
                 let skip = match known {
-                    Some(arg) => eats_next(arg),
+                    Some(arg) => eats_next_at_find(arg),
                     None => !lenient,
                 };
                 if skip {
                     index += 1;
                 }
             }
-        } else if !token.starts_with('-') {
+        } else if !token.is_empty() && !token.starts_with('-') {
             positional.push(token.clone());
         }
         index += 1;
@@ -798,13 +806,13 @@ fn first_word_index(
         if let Some(name) = token.strip_prefix("--") {
             if !token.contains('=') {
                 skip_value = match flags.long(name) {
-                    Some(arg) => eats_next(arg),
+                    Some(arg) => eats_next_at_find(arg),
                     None => !lenient,
                 };
             }
         } else if token.starts_with('-') && token.len() == 2 && !token.contains('=') {
             skip_value = match token.chars().nth(1).and_then(|c| flags.short(c)) {
-                Some(arg) => eats_next(arg),
+                Some(arg) => eats_next_at_find(arg),
                 None => !lenient,
             };
         }
