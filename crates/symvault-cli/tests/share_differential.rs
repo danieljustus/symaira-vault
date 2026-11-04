@@ -122,6 +122,10 @@ fn normalized_revoke_listing(bytes: &[u8]) -> serde_json::Value {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn share_list_matches_go_for_formats_and_filters() {
     let oracle = go_oracle::GoOracle::begin(
         "share_differential",
@@ -203,6 +207,10 @@ fn stable_revoke_output(bytes: &[u8]) -> Vec<u8> {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn share_revoke_matches_go_and_persists_metadata() {
     let oracle = go_oracle::GoOracle::begin(
         "share_differential",

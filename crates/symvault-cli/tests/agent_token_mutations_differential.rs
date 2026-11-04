@@ -81,6 +81,10 @@ fn home_dir() -> tempfile::TempDir {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_token_new_matches_go_summary_shape_and_exit_code() {
     let oracle = go_oracle::GoOracle::begin(
         "agent_token_mutations_differential",
@@ -115,6 +119,10 @@ fn agent_token_new_matches_go_summary_shape_and_exit_code() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_token_revoke_matches_go_not_found_and_success_text() {
     let oracle = go_oracle::GoOracle::begin(
         "agent_token_mutations_differential",
@@ -182,6 +190,10 @@ fn agent_token_revoke_matches_go_not_found_and_success_text() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_token_rotate_matches_go_summary_shape_for_unknown_and_existing_agent() {
     let oracle = go_oracle::GoOracle::begin(
         "agent_token_mutations_differential",

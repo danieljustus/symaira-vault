@@ -43,9 +43,20 @@ impl Drop for TempFixture {
     }
 }
 
+/// Search path of the Rust side: the doctor tooling checks probe `osascript`,
+/// `pbcopy`, ... on PATH, so the Rust run must not depend on the host PATH.
+const HERMETIC_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
+    let mut command = Command::new(binary);
+    // Applied to the Rust side only: the Go request (and its recorded key)
+    // stays as captured. `tooling.precommit` reads the working directory, so
+    // Rust runs in the scratch home instead of the repository checkout.
+    if !go_oracle::is_oracle_binary(binary) {
+        command.env("PATH", HERMETIC_PATH).current_dir(home);
+    }
     go_oracle::output(
-        Command::new(binary)
+        command
             .args(args)
             .env("HOME", home)
             .env("USERPROFILE", home)
@@ -105,6 +116,10 @@ fn oracle_binaries(test: &str) -> (go_oracle::GoOracle, PathBuf, PathBuf) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_missing_vault_text_and_strict() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_missing_vault_text_and_strict");
     let home = temporary_root("home");
@@ -152,6 +167,10 @@ fn differential_doctor_missing_vault_text_and_strict() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_missing_vault_json() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_missing_vault_json");
     let home = temporary_root("home");
@@ -192,6 +211,10 @@ fn differential_doctor_missing_vault_json() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_filter_config_matches_nothing() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_filter_config_matches_nothing");
     let home = temporary_root("home");
@@ -243,6 +266,10 @@ fn differential_doctor_filter_config_matches_nothing() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_output_json_rejected() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_output_json_rejected");
     let home = temporary_root("home");
@@ -270,6 +297,10 @@ fn differential_doctor_output_json_rejected() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_initialized_vault_parity() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_initialized_vault_parity");
     let home = temporary_root("home");
@@ -338,6 +369,10 @@ fn differential_doctor_initialized_vault_parity() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_corrupted_identity_age() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_corrupted_identity_age");
     let home = temporary_root("home");
@@ -381,6 +416,10 @@ fn differential_doctor_corrupted_identity_age() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_exclude_filter() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_exclude_filter");
     let home = temporary_root("home");
@@ -443,6 +482,10 @@ fn differential_doctor_exclude_filter() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_fix_dry_run_and_apply() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_fix_dry_run_and_apply");
     let home = temporary_root("home");
@@ -489,6 +532,10 @@ fn differential_doctor_fix_dry_run_and_apply() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_initialized_vault_parity() {
     let (_oracle, go, rust) =
         oracle_binaries("differential_doctor_new_checks_initialized_vault_parity");
@@ -559,6 +606,10 @@ fn differential_doctor_new_checks_initialized_vault_parity() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_missing_vault() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_missing_vault");
     let home = temporary_root("home");
@@ -608,6 +659,10 @@ fn differential_doctor_new_checks_missing_vault() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_corrupt_config() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_corrupt_config");
     let home = temporary_root("home");
@@ -659,6 +714,10 @@ fn differential_doctor_new_checks_corrupt_config() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_multi_document_config_errors_match_go() {
     let (_oracle, go, rust) =
         oracle_binaries("differential_doctor_multi_document_config_errors_match_go");
@@ -712,6 +771,10 @@ fn differential_doctor_multi_document_config_errors_match_go() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_quick_filter() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_quick_filter");
     let home = temporary_root("home");
@@ -752,6 +815,10 @@ fn differential_doctor_new_checks_quick_filter() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_scrypt_benchmark_shape() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_scrypt_benchmark_shape");
     let home_go = temporary_root("scrypt-go-home");
@@ -818,6 +885,10 @@ fn differential_doctor_scrypt_benchmark_shape() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_no_network_filter() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_no_network_filter");
     let home = temporary_root("home");
@@ -933,6 +1004,10 @@ fn run_mcp_server_doctor(binary: &Path, vault: &Path, home: &Path) -> Output {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_server_reachability_local_http_cases() {
     let (oracle, go, rust) =
         oracle_binaries("differential_doctor_mcp_server_reachability_local_http_cases");
@@ -1000,6 +1075,10 @@ fn differential_doctor_mcp_server_reachability_local_http_cases() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_exclude_filter() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_exclude_filter");
     let home = temporary_root("home");
@@ -1049,6 +1128,10 @@ fn differential_doctor_new_checks_exclude_filter() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_recipients_recovery_invalid() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_recipients_recovery_invalid");
     let home = temporary_root("home");
@@ -1093,6 +1176,10 @@ fn differential_doctor_recipients_recovery_invalid() {
 /// quotes a YAML parser error, so the documented go-yaml-vs-Rust dialect
 /// divergence does not apply here — any deviation is a real port defect.
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_session_tooling_checks() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_session_tooling_checks");
     let home = temporary_root("wave2a_home");
@@ -1289,6 +1376,10 @@ fn normalized_registry_bytes(bytes: &[u8], generated_hash: bool) -> Vec<u8> {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_tokens_existing_registry_is_read_only() {
     let (_oracle, go, rust) =
         oracle_binaries("differential_doctor_mcp_tokens_existing_registry_is_read_only");
@@ -1332,6 +1423,10 @@ fn differential_doctor_mcp_tokens_existing_registry_is_read_only() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_approval_tls_initializes_private_device_sessions() {
     let (_oracle, go, rust) =
         oracle_binaries("differential_doctor_mcp_approval_tls_initializes_private_device_sessions");
@@ -1365,6 +1460,10 @@ fn differential_doctor_mcp_approval_tls_initializes_private_device_sessions() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_write_access() {
     use std::os::unix::fs::PermissionsExt;
 
@@ -1401,6 +1500,10 @@ fn differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_writ
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_expiry() {
     let (_oracle, go, rust) = oracle_binaries(
         "differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_expiry",
@@ -1478,6 +1581,10 @@ fn differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_exp
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn doctor_mcp_approval_tls_refuses_symlinked_store_parent() {
     use std::os::unix::fs::symlink;
 
@@ -1538,6 +1645,10 @@ fn doctor_mcp_approval_tls_refuses_symlinked_store_parent() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go() {
     let (_oracle, go, rust) =
         oracle_binaries("differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go");
@@ -1588,6 +1699,10 @@ fn differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy() {
     let (_oracle, go, rust) = oracle_binaries(
         "differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy",
@@ -1637,6 +1752,10 @@ fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_leg
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_tokens_empty_environment_value_creates_registry() {
     let (_oracle, go, rust) =
         oracle_binaries("differential_doctor_mcp_tokens_empty_environment_value_creates_registry");
@@ -1687,6 +1806,10 @@ fn differential_doctor_mcp_tokens_empty_environment_value_creates_registry() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure() {
     use std::os::unix::fs::symlink;
 
@@ -1742,6 +1865,10 @@ fn differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
     let (_oracle, go, rust) =
         oracle_binaries("differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases");
@@ -1858,6 +1985,10 @@ fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_auth_method_touchid_availability() {
     let (_oracle, go, rust) =
         oracle_binaries("differential_doctor_auth_method_touchid_availability");
@@ -1875,6 +2006,10 @@ fn differential_doctor_auth_method_touchid_availability() {
 /// case is excluded here by design: both IDs quote the config-loader error, which
 /// is the documented go-yaml-vs-Rust dialect divergence.
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_config_checks() {
     let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_config_checks");
     const IDS: &str = "mcp.dynamic.engines,mcp.agents";

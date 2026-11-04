@@ -39,6 +39,10 @@ pub const CONFIG_CLI_ORACLE: &str = "fca3f89401833b5e14ec4ec74ef736b0f63bca74";
 /// A test-supplied output normalization (see [`GoOracle::stable_under`]).
 pub type Normalizer = fn(&[u8]) -> Vec<u8>;
 
+/// Written by the Rust CLI for the vault directory it ran in; its `vault_id`
+/// binds to that directory's path and inode, so a recorded copy would never
+/// validate in another run.
+const LIVE_MARKER: &str = ".symvault-rust";
 const SENTINEL: &str = "/nonexistent/symvault-go-oracle-replay";
 const MAX_CAPTURED_FILE: u64 = 8 * 1024 * 1024;
 static TRANSCRIPT_LOCK: Mutex<()> = Mutex::new(());
@@ -135,7 +139,18 @@ pub struct Transcript {
     pub oracle: Oracle,
     /// Free-form statement about which host the recording is valid for.
     pub platform_note: String,
+    /// Host operating systems (`std::env::consts::OS`) this recording may be
+    /// replayed on. A test may narrow or widen it (`TestRecord`). Tests whose
+    /// transcript excludes the host must be gated with
+    /// `#[cfg_attr(not(target_os = ...), ignore = "SKIP (...)")]`
+    /// (checked by `cli_transcript_platforms`); replaying one anyway fails.
+    #[serde(default = "default_replay_platforms")]
+    pub replay_platforms: Vec<String>,
     pub tests: BTreeMap<String, TestRecord>,
+}
+
+fn default_replay_platforms() -> Vec<String> {
+    vec!["macos".to_owned()]
 }
 
 /// A frozen set-up step (typically `symvault init`, whose keys are random).
@@ -145,12 +160,27 @@ pub struct Transcript {
 pub struct Seed {
     pub name: String,
     pub fs_delta: Vec<FsOp>,
+    /// What the set-up command printed (normalized); replay compares the live
+    /// run against it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<SeedOutput>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SeedOutput {
+    pub stdout: Bytes,
+    pub stderr: Bytes,
+    pub exit_code: Option<i32>,
+    pub signal: Option<i32>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestRecord {
     pub seeds: Vec<Seed>,
     pub calls: Vec<Entry>,
+    /// Overrides the transcript's `replay_platforms` for this test.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_platforms: Option<Vec<String>>,
 }
 
 struct State {
@@ -202,13 +232,41 @@ fn load(file: &str) -> Option<Transcript> {
     Some(serde_json::from_slice(&bytes).unwrap_or_else(|e| panic!("{}: {e}", path.display())))
 }
 
+/// macOS per-user temporary directory (`/var/folders/..../T`), independent of
+/// `TMPDIR`. Tests that need the root-owned `/var` -> `/private/var` alias
+/// allocate their fixtures here so they work under any `TMPDIR`.
+pub fn darwin_user_temp_dir() -> Option<PathBuf> {
+    static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        if !cfg!(target_os = "macos") {
+            return None;
+        }
+        let output = Command::new("/usr/bin/getconf")
+            .arg("DARWIN_USER_TEMP_DIR")
+            .output()
+            .ok()?;
+        let text = String::from_utf8(output.stdout).ok()?;
+        let text = text.trim();
+        (output.status.success() && !text.is_empty()).then(|| PathBuf::from(text))
+    })
+    .clone()
+}
+
 fn temp_bases() -> Vec<String> {
     let raw = env::temp_dir();
     let mut bases = Vec::new();
-    for candidate in [Some(raw.clone()), fs::canonicalize(&raw).ok()]
+    let candidates = [Some(raw.clone()), fs::canonicalize(&raw).ok()]
         .into_iter()
-        .flatten()
-    {
+        .chain(
+            darwin_user_temp_dir()
+                .map(|user| {
+                    let canonical = fs::canonicalize(&user).ok();
+                    [Some(user), canonical]
+                })
+                .into_iter()
+                .flatten(),
+        );
+    for candidate in candidates.flatten() {
         let text = candidate.to_string_lossy().trim_end_matches('/').to_owned();
         if !text.is_empty() && !bases.contains(&text) {
             bases.push(text);
@@ -257,6 +315,18 @@ impl GoOracle {
                         "go_oracle: transcript oracle commit differs from the pinned one"
                     );
                 }
+                let platforms = record
+                    .replay_platforms
+                    .as_ref()
+                    .unwrap_or(&transcript.replay_platforms);
+                let host = env::consts::OS;
+                assert!(
+                    platforms.iter().any(|p| p == host),
+                    "go_oracle: SKIP ({} recording) on {host}: {file}::{test} replays only on \
+                     {platforms:?}; gate the test with #[cfg_attr(not(target_os = ...), ignore = \
+                     \"SKIP (...)\")]",
+                    transcript.oracle.goos
+                );
                 note_platform(file, &transcript);
                 (PathBuf::from(SENTINEL), Some(transcript.oracle), record)
             }
@@ -333,24 +403,174 @@ impl GoOracle {
     /// random. `roots` are every directory the step creates or changes.
     /// Returns the step's result when it actually ran.
     pub fn seed<R>(&self, name: &str, roots: &[&Path], setup: impl FnOnce() -> R) -> Option<R> {
-        self.freeze(name, roots, false, setup)
+        self.freeze(name, roots, setup)
     }
 
-    /// Like [`seed`], but the step also runs live on replay (its output is
-    /// compared by the test); the recorded state is installed over its
-    /// effects so the recorded Go calls see exactly what they saw on capture.
-    pub fn pin<R>(&self, name: &str, roots: &[&Path], step: impl FnOnce() -> R) -> R {
-        self.freeze(name, roots, true, step)
-            .expect("pinned step always runs")
+    /// Like [`seed`] for a Rust set-up command (typically `symvault init`):
+    /// the command runs live in every mode, its output and the file-system
+    /// shape it produced are compared with the recording (exit status,
+    /// normalized stdout/stderr, file set, modes, age/JSON/YAML structure),
+    /// and only then the recorded state is installed so that the recorded Go
+    /// calls see exactly what they saw on capture. A Rust command that stops
+    /// behaving like the recording therefore fails the test instead of being
+    /// papered over by the frozen state. Returns the live output.
+    pub fn seed_run(&self, name: &str, roots: &[&Path], setup: impl FnOnce() -> Output) -> Output {
+        self.live_seed(name, roots, true, setup)
     }
 
-    fn freeze<R>(
+    /// Like [`seed_run`] for a step whose stdout the test compares itself
+    /// (e.g. against Go): only the file-system shape is checked here.
+    pub fn pin(&self, name: &str, roots: &[&Path], step: impl FnOnce() -> Output) -> Output {
+        self.live_seed(name, roots, false, step)
+    }
+
+    fn live_seed(
         &self,
         name: &str,
         roots: &[&Path],
-        live: bool,
-        setup: impl FnOnce() -> R,
-    ) -> Option<R> {
+        check_output: bool,
+        setup: impl FnOnce() -> Output,
+    ) -> Output {
+        let mut st = self.state.borrow_mut();
+        for root in roots {
+            let text = root.to_string_lossy().into_owned();
+            st.scan(text.as_bytes());
+        }
+        let nth = st.seeds_used.iter().filter(|used| *used == name).count();
+        let recorded = st
+            .prior
+            .seeds
+            .iter()
+            .filter(|s| s.name == name)
+            .nth(nth)
+            .cloned();
+        assert!(
+            recorded.is_some() || st.mode == Mode::Capture,
+            "go_oracle: {}::{} has no recorded seed `{name}`; recapture",
+            st.file,
+            st.test
+        );
+        let tracked: Vec<(usize, PathBuf)> = roots
+            .iter()
+            .map(|r| {
+                let index = st
+                    .roots
+                    .iter()
+                    .position(|known| r.starts_with(known))
+                    .or_else(|| st.real_roots.iter().position(|real| r.starts_with(real)))
+                    .expect("seed root registered");
+                (index, st.roots[index].clone())
+            })
+            .collect();
+        let before: Vec<_> = tracked
+            .iter()
+            .map(|(_, r)| snapshot(r, GitMode::Full))
+            .collect();
+        drop(st);
+        let output = setup();
+        let mut st = self.state.borrow_mut();
+        let mut live_ops = Vec::new();
+        let mut created: Vec<(PathBuf, bool, usize, String)> = Vec::new();
+        for ((index, root), before) in tracked.iter().zip(&before) {
+            let after = snapshot(root, GitMode::Full);
+            live_ops.extend(delta(&st, *index, before, &after));
+            for (path, node) in &after {
+                if !before.contains_key(path) {
+                    let full = if path.is_empty() {
+                        root.clone()
+                    } else {
+                        root.join(path)
+                    };
+                    created.push((full, matches!(node, Node::Dir { .. }), *index, path.clone()));
+                }
+            }
+        }
+        let (code, signal) = status_parts(&output.status);
+        let live_output = SeedOutput {
+            stdout: Bytes::encode(&st.normalize(&output.stdout)),
+            stderr: Bytes::encode(&st.normalize(&output.stderr)),
+            exit_code: code,
+            signal,
+        };
+        let mut problems = Vec::new();
+        let seed = match recorded {
+            Some(mut seed) => {
+                problems.extend(shape_diff(&live_ops, &seed.fs_delta));
+                if check_output {
+                    match &seed.output {
+                        Some(recorded_output) => {
+                            problems.extend(output_diff(recorded_output, &live_output));
+                        }
+                        None if st.mode == Mode::Replay => problems.push(format!(
+                            "recording of seed `{name}` carries no command output; recapture"
+                        )),
+                        None => seed.output = Some(live_output.clone()),
+                    }
+                }
+                Some(seed)
+            }
+            None => None,
+        };
+        let seed = match (st.mode, seed, problems.is_empty()) {
+            (Mode::Replay, _, false) => panic!(
+                "go_oracle: {}::{} live `{name}` differs from the recording:\n  {}",
+                st.file,
+                st.test,
+                problems.join("\n  ")
+            ),
+            // Recapture of a drifted set-up step: record the live state.
+            (Mode::Capture, Some(_), false) | (Mode::Capture, None, _) => Seed {
+                name: name.to_owned(),
+                fs_delta: live_ops,
+                output: check_output.then_some(live_output),
+            },
+            (_, Some(seed), true) => {
+                // Install the recorded state (random keys and clocks) over
+                // the live one. Directories keep their identity (the data
+                // safety marker binds to the vault's inode), live files the
+                // recording lacks (git objects) are dropped, and the marker
+                // the live run wrote for this very directory stays.
+                let recorded_paths: Vec<(usize, &str)> = seed
+                    .fs_delta
+                    .iter()
+                    .map(|op| (op.root, op.path.as_str()))
+                    .collect();
+                let mut stale: Vec<&(PathBuf, bool, usize, String)> = created
+                    .iter()
+                    .filter(|(_, _, root, rel)| !recorded_paths.contains(&(*root, rel.as_str())))
+                    .collect();
+                stale.sort_by_key(|(path, ..)| std::cmp::Reverse(path.as_os_str().len()));
+                for (path, is_dir, ..) in stale {
+                    let _ = if *is_dir {
+                        fs::remove_dir_all(path)
+                    } else {
+                        fs::remove_file(path)
+                    };
+                }
+                let live_markers: Vec<(usize, &str)> = live_ops
+                    .iter()
+                    .filter(|op| op.path.ends_with(LIVE_MARKER))
+                    .map(|op| (op.root, op.path.as_str()))
+                    .collect();
+                let install: Vec<FsOp> = seed
+                    .fs_delta
+                    .iter()
+                    .filter(|op| !live_markers.contains(&(op.root, op.path.as_str())))
+                    .cloned()
+                    .collect();
+                apply(&st, &install);
+                seed
+            }
+            (Mode::Replay, None, _) => unreachable!("checked above"),
+        };
+        st.seeds_used.push(name.to_owned());
+        if st.mode == Mode::Capture {
+            st.seeds_captured.push(seed);
+        }
+        output
+    }
+
+    fn freeze<R>(&self, name: &str, roots: &[&Path], setup: impl FnOnce() -> R) -> Option<R> {
         let mut st = self.state.borrow_mut();
         for root in roots {
             let text = root.to_string_lossy().into_owned();
@@ -366,20 +586,12 @@ impl GoOracle {
             .nth(nth)
             .cloned();
         if let Some(seed) = &recorded {
-            let result = if live {
-                drop(st);
-                let result = setup();
-                st = self.state.borrow_mut();
-                Some(result)
-            } else {
-                None
-            };
             apply(&st, &seed.fs_delta);
             st.seeds_used.push(name.to_owned());
             if st.mode == Mode::Capture {
                 st.seeds_captured.push(seed.clone());
             }
-            return result;
+            return None;
         }
         assert!(
             st.mode == Mode::Capture,
@@ -413,6 +625,7 @@ impl GoOracle {
         st.seeds_captured.push(Seed {
             name: name.to_owned(),
             fs_delta: ops,
+            output: None,
         });
         st.seeds_used.push(name.to_owned());
         Some(result)
@@ -426,6 +639,172 @@ impl GoOracle {
             Mode::Capture => state.captured.len(),
         }
     }
+}
+
+/// Hex runs of 64 characters (vault ids, digests) are fresh per run.
+fn mask_hex64(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let run = bytes[i..]
+            .iter()
+            .take_while(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+            .count();
+        let boundary = i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
+        if run >= 64 && boundary {
+            out.extend_from_slice(b"<hex>");
+            i += run;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
+fn shape_mask(bytes: &[u8]) -> Vec<u8> {
+    mask_hex64(&mask_volatile(bytes))
+}
+
+fn output_diff(recorded: &SeedOutput, live: &SeedOutput) -> Vec<String> {
+    let mut problems = Vec::new();
+    if (recorded.exit_code, recorded.signal) != (live.exit_code, live.signal) {
+        problems.push(format!(
+            "exit status: recorded {:?}/{:?}, live {:?}/{:?}",
+            recorded.exit_code, recorded.signal, live.exit_code, live.signal
+        ));
+    }
+    for (stream, old, new) in [
+        ("stdout", &recorded.stdout, &live.stdout),
+        ("stderr", &recorded.stderr, &live.stderr),
+    ] {
+        let (old, new) = (shape_mask(&old.decode()), shape_mask(&new.decode()));
+        if old != new {
+            problems.push(format!(
+                "{stream}: recorded {:?}, live {:?}",
+                String::from_utf8_lossy(&old),
+                String::from_utf8_lossy(&new)
+            ));
+        }
+    }
+    problems
+}
+
+/// `Some(relative)` for a path below a `.git` directory.
+fn git_internal(path: &str) -> Option<String> {
+    let mut parts = path.split('/');
+    let mut seen = Vec::new();
+    for part in parts.by_ref() {
+        seen.push(part);
+        if part == ".git" {
+            return Some(parts.collect::<Vec<_>>().join("/"));
+        }
+    }
+    None
+}
+
+/// Entries of a frozen set-up step that must match the live run. Repository
+/// internals (object ids, index, logs, host templates) are random or
+/// host-dependent, so only the structural files are compared.
+fn significant(op: &FsOp) -> bool {
+    match git_internal(&op.path) {
+        None => true,
+        Some(inner) => matches!(
+            inner.as_str(),
+            "" | "HEAD" | "config" | "objects" | "refs" | "COMMIT_EDITMSG"
+        ),
+    }
+}
+
+fn age_stanza_type(bytes: &[u8]) -> Option<String> {
+    // Every recipient stanza: its type plus the deterministic `k=v` arguments
+    // (KDF cost parameters). Random salts, ephemeral keys and bodies are
+    // dropped; the count and order of non-grease stanzas are kept.
+    let text = bytes.strip_prefix(b"age-encryption.org/v1\n")?;
+    let mut stanzas = Vec::new();
+    for line in text.split(|b| *b == b'\n') {
+        if line.starts_with(b"---") {
+            break;
+        }
+        let Some(rest) = line.strip_prefix(b"-> ") else {
+            continue;
+        };
+        let rest = std::str::from_utf8(rest).ok()?;
+        let mut parts = rest.split_whitespace();
+        let kind = parts.next()?;
+        if kind.ends_with("-grease") {
+            // age adds random grease stanzas (random type and arguments).
+            continue;
+        }
+        let mut shape = vec![kind.to_string()];
+        shape.extend(parts.filter(|arg| arg.contains('=')).map(str::to_string));
+        stanzas.push(shape.join(" "));
+    }
+    (!stanzas.is_empty()).then(|| stanzas.join("\n"))
+}
+
+fn content_matches(path: &str, recorded: &[u8], live: &[u8]) -> bool {
+    if recorded == live {
+        return true;
+    }
+    if path.ends_with(".age") || recorded.starts_with(b"age-encryption.org/v1\n") {
+        // Ciphertext is random: same age container and recipient stanza type.
+        return age_stanza_type(recorded).is_some()
+            && age_stanza_type(recorded) == age_stanza_type(live);
+    }
+    if path.ends_with("/HEAD") || (path.ends_with("/config") && git_internal(path).is_some()) {
+        // Host git defaults (initial branch, templates) differ.
+        return true;
+    }
+    shape_mask(recorded) == shape_mask(live)
+}
+
+/// Differences between a live set-up run and its recorded delta. Both sides
+/// are already normalized (temp roots become `<ROOT:n>`).
+fn shape_diff(live: &[FsOp], recorded: &[FsOp]) -> Vec<String> {
+    let index = |ops: &[FsOp]| -> BTreeMap<(usize, String), FsOp> {
+        ops.iter()
+            .filter(|op| significant(op))
+            .map(|op| ((op.root, op.path.clone()), op.clone()))
+            .collect()
+    };
+    let (live, recorded) = (index(live), index(recorded));
+    let mut problems = Vec::new();
+    for key in recorded.keys().filter(|k| !live.contains_key(*k)) {
+        problems.push(format!("missing in live run: {}", key.1));
+    }
+    for key in live.keys().filter(|k| !recorded.contains_key(*k)) {
+        problems.push(format!("not in recording: {}", key.1));
+    }
+    for (key, rec) in &recorded {
+        let Some(now) = live.get(key) else { continue };
+        if (&rec.op, rec.mode) != (&now.op, now.mode) {
+            problems.push(format!(
+                "{}: recorded {} mode {:?}, live {} mode {:?}",
+                key.1,
+                rec.op,
+                rec.mode.map(|m| format!("{m:o}")),
+                now.op,
+                now.mode.map(|m| format!("{m:o}"))
+            ));
+        } else if let (Some(old), Some(new)) = (&rec.content, &now.content)
+            && !content_matches(&key.1, &old.decode(), &new.decode())
+        {
+            problems.push(format!(
+                "{}: content differs (recorded {:?}, live {:?})",
+                key.1,
+                String::from_utf8_lossy(&old.decode())
+                    .chars()
+                    .take(120)
+                    .collect::<String>(),
+                String::from_utf8_lossy(&new.decode())
+                    .chars()
+                    .take(120)
+                    .collect::<String>()
+            ));
+        }
+    }
+    problems
 }
 
 fn note_platform(file: &str, transcript: &Transcript) {
@@ -508,6 +887,7 @@ impl Drop for GoOracle {
                     TestRecord {
                         seeds: state.seeds_captured.clone(),
                         calls: state.captured.clone(),
+                        replay_platforms: state.prior.replay_platforms.clone(),
                     },
                 );
             }
@@ -522,6 +902,7 @@ fn write_capture(file: &str, test: &str, oracle: &Oracle, record: TestRecord) {
         schema: 1,
         oracle: oracle.clone(),
         platform_note: platform_note(oracle),
+        replay_platforms: vec![host_name(&oracle.goos)],
         tests: BTreeMap::new(),
     });
     assert_eq!(
@@ -659,6 +1040,11 @@ fn equivalent(stable: Option<Normalizer>, old: &Response, new: &Response) -> boo
             && old.signal == new.signal
             && volatile_equal(stable, &old.stdout.decode(), &new.stdout.decode())
             && volatile_equal(stable, &old.stderr.decode(), &new.stderr.decode()))
+}
+
+/// `GOOS` spelled like `std::env::consts::OS`.
+fn host_name(goos: &str) -> String {
+    if goos == "darwin" { "macos" } else { goos }.to_owned()
 }
 
 fn platform_note(oracle: &Oracle) -> String {
@@ -872,7 +1258,7 @@ impl State {
         for (index, port) in self.ports.iter().enumerate() {
             out = replace_number(&out, port.as_bytes(), format!("<PORT:{index}>").as_bytes());
         }
-        out
+        scrub_tmpfile(&out)
     }
 
     fn denormalize(&self, bytes: &[u8]) -> Vec<u8> {
@@ -883,6 +1269,19 @@ impl State {
             .into_iter()
             .map(|(real, placeholder)| (placeholder, real))
             .collect();
+        // The recording may carry `<ROOT:n:real>` (captured under an aliased
+        // TMPDIR such as /var -> /private/var) while this run's TMPDIR has no
+        // alias, so `mapping()` has no `:real` entry for the root: both
+        // spellings are then the same path.
+        for (index, real) in self.real_roots.iter().enumerate() {
+            let placeholder = format!("<ROOT:{index}:real>").into_bytes();
+            if !pairs.iter().any(|(from, _)| *from == placeholder) {
+                pairs.push((
+                    placeholder,
+                    real.to_string_lossy().into_owned().into_bytes(),
+                ));
+            }
+        }
         pairs.sort_by_key(|(from, _)| std::cmp::Reverse(from.len()));
         for (from, to) in pairs {
             out = replace_bytes(&out, &from, &to);
@@ -901,6 +1300,40 @@ impl State {
         );
         out
     }
+}
+
+/// Placeholder for the per-process scratch directories the CLI itself creates
+/// below the temp dir (`<temp>/symvault-file-<pid>-<seq>`): their names embed
+/// a pid and are neither requested nor printed by any call, so they cannot be
+/// tracked as roots. Recorded paths keep only `<TMPFILE>`; replay leaves the
+/// placeholder as is.
+pub const TMPFILE: &str = "<TMPFILE>";
+
+fn scrub_tmpfile(bytes: &[u8]) -> Vec<u8> {
+    let mut out = bytes.to_vec();
+    for base in temp_bases() {
+        let needle = format!("{base}/symvault-file-");
+        let needle = needle.as_bytes();
+        let mut scrubbed = Vec::with_capacity(out.len());
+        let mut i = 0;
+        while i < out.len() {
+            if out[i..].starts_with(needle) {
+                let mut end = i + needle.len();
+                while end < out.len() && (out[end].is_ascii_digit() || out[end] == b'-') {
+                    end += 1;
+                }
+                if end > i + needle.len() {
+                    scrubbed.extend_from_slice(TMPFILE.as_bytes());
+                    i = end;
+                    continue;
+                }
+            }
+            scrubbed.push(out[i]);
+            i += 1;
+        }
+        out = scrubbed;
+    }
+    out
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
@@ -1208,6 +1641,13 @@ fn status_parts(status: &std::process::ExitStatus) -> (Option<i32>, Option<i32>)
     {
         (status.code(), None)
     }
+}
+
+/// True when `program` is the Go oracle of the running test (the recorded or
+/// captured side). Lets a test harden only the Rust side of a pair without
+/// changing the recorded Go request keys.
+pub fn is_oracle_binary(program: &Path) -> bool {
+    current().is_some_and(|state| state.borrow().go_path == program)
 }
 
 fn current() -> Option<Rc<RefCell<State>>> {

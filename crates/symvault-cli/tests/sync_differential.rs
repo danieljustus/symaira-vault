@@ -82,6 +82,10 @@ fn arg_refs(args: &[String]) -> Vec<&str> {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn sync_matches_go_for_no_remote_pull_push_and_offline_local_remote() {
     let oracle = go_oracle::GoOracle::begin(
         "sync_differential",
@@ -97,7 +101,7 @@ fn sync_matches_go_for_no_remote_pull_push_and_offline_local_remote() {
     fs::create_dir_all(&home).expect("home");
 
     // `init` generates random keys: record it once as a frozen seed.
-    if let Some(init) = oracle.seed("init", &[&vault, &home], || {
+    let init = oracle.seed_run("init", &[&vault, &home], || {
         run(
             &rust_binary,
             &[
@@ -110,9 +114,8 @@ fn sync_matches_go_for_no_remote_pull_push_and_offline_local_remote() {
             &vault,
             &home,
         )
-    }) {
-        assert_success(&init, "Rust init");
-    }
+    });
+    assert_success(&init, "Rust init");
 
     let no_remote = sync_args(&vault, false, false);
     let no_remote = arg_refs(&no_remote);
@@ -242,6 +245,10 @@ fn sync_matches_go_for_no_remote_pull_push_and_offline_local_remote() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn force_sync_preserves_dirty_config_like_go() {
     let oracle = go_oracle::GoOracle::begin(
         "sync_differential",
@@ -258,7 +265,7 @@ fn force_sync_preserves_dirty_config_like_go() {
     let remote_work = temporary_root("force-remote-work");
     fs::create_dir_all(&home).expect("home");
     // `init` generates random keys: record it once as a frozen seed.
-    if let Some(init) = oracle.seed("init", &[&vault, &home], || {
+    let init = oracle.seed_run("init", &[&vault, &home], || {
         run(
             &rust_binary,
             &[
@@ -271,9 +278,8 @@ fn force_sync_preserves_dirty_config_like_go() {
             &vault,
             &home,
         )
-    }) {
-        assert_success(&init, "Rust force init");
-    }
+    });
+    assert_success(&init, "Rust force init");
     git(&vault, &["config", "user.name", "Symaira Vault Test"]);
     git(
         &vault,

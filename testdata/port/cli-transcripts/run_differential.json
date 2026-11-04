@@ -8,6 +8,9 @@
     "vcs_modified": "false"
   },
   "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
   "tests": {
     "run_matches_go_for_secret_env_file_passthrough_pattern_and_exit": {
       "seeds": [
@@ -156,7 +159,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIHZ6d0VkZFBkOXp2cm1EZ3p4ZzQxamcgdD0zLG09NjU1MzYscD00Cjg5ZHFtZ3o2dGxRR0RnZEk1L0RjUk9xaXFvNUd0SEcrdDNPNkU5clltMys2cDZ6b0J1d3NlYXdxU0dzCi0+ICNGSzVTOXMtZ3JlYXNlICZPSyEgYVx+YD8vIG5VCmdlKytDd21KRWcKLS0tIHZBcDFJSU55cVMvOTZZemFRSmNJWkRFRUtlQjAvREdpNXRtVmM4b29LUGcKkfCownzfgjJ+a/9GgLsvE/tv7FunJtwtnTS8enOv+FSroZkc+N9WMNHldndeMxLnmRgJ53KigWALsm7CbFYOKaNPA4P7EgIeCYYAaSc3S8Pu5Ydayl7ZwSTVGOr8LS5lq0S91yhn7ckS7w=="
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1g0h5ntjnl506klzm76efvdv3yqkcuvcahvpj43y6km6fppxfcg9qcpm5vy\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [

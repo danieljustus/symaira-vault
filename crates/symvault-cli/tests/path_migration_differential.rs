@@ -40,6 +40,10 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn migration_preview_matches_go_for_empty_marker_and_complete_tree() {
     let oracle = go_oracle::GoOracle::begin(
         "path_migration_differential",
@@ -144,6 +148,10 @@ fn migration_preview_matches_go_for_empty_marker_and_complete_tree() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn migration_preview_matches_go_for_legacy_symlink_errors() {
     let oracle = go_oracle::GoOracle::begin(
         "path_migration_differential",

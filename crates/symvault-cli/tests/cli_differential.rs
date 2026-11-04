@@ -119,20 +119,57 @@ fn first_json(stdout: &[u8], command: &str) -> serde_json::Value {
         .unwrap_or_else(|error| panic!("{command} JSON: {error}; stdout={stdout:?}"))
 }
 
-/// Drops the entry mtime (`Modified`, minute resolution) everywhere in a JSON
-/// document. Live Go and Rust used to agree on it only because both ran within
-/// the same minute; a replayed Go answer carries the capture-time minute.
-fn strip_modified(mut value: serde_json::Value) -> serde_json::Value {
-    match &mut value {
+/// `Modified` is the entry mtime at minute resolution in Go's layout
+/// (`2006-01-02 15:04`). Live Go and Rust used to agree on it only because both
+/// ran within the same minute; a replayed Go answer carries the capture-time
+/// minute. Every `Modified` must have that shape on both sides, then its value
+/// is replaced by a placeholder (the key itself still has to be present).
+fn is_go_minute_timestamp(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.len() == 16
+        && bytes.iter().enumerate().all(|(i, b)| match i {
+            4 | 7 => *b == b'-',
+            10 => *b == b' ',
+            13 => *b == b':',
+            _ => b.is_ascii_digit(),
+        })
+}
+
+fn mask_modified_in(value: &mut serde_json::Value, side: &str, seen: &mut usize) {
+    match value {
         serde_json::Value::Object(map) => {
-            map.remove("Modified");
-            map.values_mut().for_each(|v| *v = strip_modified(v.take()));
+            if let Some(modified) = map.get_mut("Modified") {
+                let text = modified.as_str().unwrap_or_else(|| {
+                    panic!("{side}: `Modified` is not a string: {modified}");
+                });
+                assert!(
+                    is_go_minute_timestamp(text),
+                    "{side}: `Modified` {text:?} does not have Go's `YYYY-MM-DD HH:MM` shape"
+                );
+                *modified = serde_json::Value::String("<modified>".to_owned());
+                *seen += 1;
+            }
+            map.values_mut()
+                .for_each(|v| mask_modified_in(v, side, seen));
         }
-        serde_json::Value::Array(items) => {
-            items.iter_mut().for_each(|v| *v = strip_modified(v.take()));
-        }
+        serde_json::Value::Array(items) => items
+            .iter_mut()
+            .for_each(|v| mask_modified_in(v, side, seen)),
         _ => {}
     }
+}
+
+/// Masks every `Modified` (see above); documents without one pass unchanged.
+fn mask_modified(mut value: serde_json::Value, side: &str) -> serde_json::Value {
+    mask_modified_in(&mut value, side, &mut 0);
+    value
+}
+
+/// Like [`mask_modified`], for entry documents that must carry `Modified`.
+fn mask_modified_required(mut value: serde_json::Value, side: &str) -> serde_json::Value {
+    let mut seen = 0;
+    mask_modified_in(&mut value, side, &mut seen);
+    assert!(seen > 0, "{side}: the entry document carries no `Modified`");
     value
 }
 
@@ -188,7 +225,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     fs::create_dir_all(&home).expect("home");
 
     // `init` generates random keys: frozen as a seed for replay.
-    if let Some(rust_init) = oracle.seed("init", &[&rust_root, &home], || {
+    let rust_init = oracle.seed_run("init", &[&rust_root, &home], || {
         run(
             &rust_binary,
             &[
@@ -201,9 +238,8 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
             &rust_root,
             &home,
         )
-    }) {
-        assert_success(&rust_init, "Rust init");
-    }
+    });
+    assert_success(&rust_init, "Rust init");
     assert_initialized(&rust_root);
 
     let go_recipients_list = run(
@@ -390,8 +426,14 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_find_url, "Go find URL");
     assert_success(&rust_find_url, "Rust find URL");
     assert_eq!(
-        strip_modified(first_json_output(&rust_find_url, "Rust find URL")),
-        strip_modified(first_json_output(&go_find_url, "Go find URL"))
+        mask_modified(
+            first_json_output(&rust_find_url, "Rust find URL"),
+            "Rust find URL"
+        ),
+        mask_modified(
+            first_json_output(&go_find_url, "Go find URL"),
+            "Go find URL"
+        )
     );
     let go_find_scoped = run_search(
         &go_binary,
@@ -426,8 +468,14 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_find_scoped, "Go scoped find");
     assert_success(&rust_find_scoped, "Rust scoped find");
     assert_eq!(
-        strip_modified(first_json_output(&rust_find_scoped, "Rust scoped find")),
-        strip_modified(first_json_output(&go_find_scoped, "Go scoped find"))
+        mask_modified(
+            first_json_output(&rust_find_scoped, "Rust scoped find"),
+            "Rust scoped find"
+        ),
+        mask_modified(
+            first_json_output(&go_find_scoped, "Go scoped find"),
+            "Go scoped find"
+        )
     );
     let go_set_unicode = run(
         &go_binary,
@@ -597,11 +645,13 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_json, "Go get JSON");
     assert_success(&rust_json, "Rust get JSON");
     assert_eq!(
-        strip_modified(
-            serde_json::from_slice::<serde_json::Value>(&rust_json.stdout).expect("Rust JSON")
+        mask_modified_required(
+            serde_json::from_slice::<serde_json::Value>(&rust_json.stdout).expect("Rust JSON"),
+            "Rust get"
         ),
-        strip_modified(
-            serde_json::from_slice::<serde_json::Value>(&go_json.stdout).expect("Go JSON")
+        mask_modified_required(
+            serde_json::from_slice::<serde_json::Value>(&go_json.stdout).expect("Go JSON"),
+            "Go get"
         )
     );
     // The frozen Go v0.22.1 oracle prints secrets in JSON; #1106 masks them
@@ -668,13 +718,15 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_updated, "Go get after Rust set");
     assert_success(&rust_updated, "Rust get after Rust set");
     assert_eq!(
-        strip_modified(
+        mask_modified_required(
             serde_json::from_slice::<serde_json::Value>(&rust_updated.stdout)
-                .expect("Rust updated JSON")
+                .expect("Rust updated JSON"),
+            "Rust get"
         ),
-        strip_modified(
+        mask_modified_required(
             serde_json::from_slice::<serde_json::Value>(&go_updated.stdout)
-                .expect("Go updated JSON")
+                .expect("Go updated JSON"),
+            "Go get"
         )
     );
 
@@ -791,8 +843,11 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_export, "Go export");
     assert_success(&rust_export, "Rust export");
     assert_eq!(
-        strip_modified(first_json_output(&rust_export, "Rust export")),
-        strip_modified(first_json_output(&go_export, "Go export"))
+        mask_modified(
+            first_json_output(&rust_export, "Rust export"),
+            "Rust export"
+        ),
+        mask_modified(first_json_output(&go_export, "Go export"), "Go export")
     );
 
     let initialize = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"probe","version":"1.0"},"capabilities":{}}}
@@ -1061,7 +1116,7 @@ fn import_quarantine_matches_pinned_go_cli_batch_contract() {
     fs::write(&source, b"title,password\nexample,secret\n").expect("source");
     for root in [&go_root, &rust_root] {
         // `init` generates random keys: frozen as a seed for replay.
-        if let Some(output) = oracle.seed("init", &[root, &home], || {
+        let output = oracle.seed_run("init", &[root, &home], || {
             run(
                 &rust_binary,
                 &[
@@ -1074,9 +1129,8 @@ fn import_quarantine_matches_pinned_go_cli_batch_contract() {
                 root,
                 &home,
             )
-        }) {
-            assert_success(&output, "initialize quarantine differential vault");
-        }
+        });
+        assert_success(&output, "initialize quarantine differential vault");
     }
 
     let args = [
@@ -1165,6 +1219,10 @@ fn quarantine_id(stdout: &[u8]) -> String {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn export_cancel_happens_before_vault_open() {
     let oracle = begin_oracle(
         "cli_differential",
@@ -1223,6 +1281,10 @@ fn export_cancel_happens_before_vault_open() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn add_noninteractive_matches_go_and_preserves_existing_entries() {
     let oracle = begin_oracle(
         "cli_differential",
@@ -1237,7 +1299,7 @@ fn add_noninteractive_matches_go_and_preserves_existing_entries() {
     fs::create_dir_all(&home).expect("home");
 
     // `init` generates random keys: frozen as a seed for replay.
-    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+    let init = oracle.seed_run("init", &[&root, &home], || {
         run(
             &rust_binary,
             &[
@@ -1250,9 +1312,8 @@ fn add_noninteractive_matches_go_and_preserves_existing_entries() {
             &root,
             &home,
         )
-    }) {
-        assert_success(&init, "Rust init for add differential");
-    }
+    });
+    assert_success(&init, "Rust init for add differential");
 
     let go_explicit = run(
         &go_binary,
@@ -1614,6 +1675,10 @@ fn add_noninteractive_matches_go_and_preserves_existing_entries() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
     let oracle = begin_oracle(
         "cli_differential",
@@ -1627,7 +1692,7 @@ fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
     fs::create_dir_all(&home).expect("home");
 
     // `init` generates random keys: frozen as a seed for replay.
-    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+    let init = oracle.seed_run("init", &[&root, &home], || {
         run(
             &rust_binary,
             &[
@@ -1640,9 +1705,8 @@ fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
             &root,
             &home,
         )
-    }) {
-        assert_success(&init, "Rust init for verify differential");
-    }
+    });
+    assert_success(&init, "Rust init for verify differential");
 
     // Go's Vault.Open repairs a missing manifest before VerifyManifestIntegrity;
     // run it first so the CLI comparison observes that production behavior.
@@ -1764,6 +1828,10 @@ fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn file_add_get_roundtrip_matches_go_cli() {
     let oracle = begin_oracle(
         "cli_differential",
@@ -1787,7 +1855,7 @@ fn file_add_get_roundtrip_matches_go_cli() {
     fs::write(&rust_source, rust_content).expect("Rust fixture");
 
     // `init` generates random keys: frozen as a seed for replay.
-    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+    let init = oracle.seed_run("init", &[&root, &home], || {
         run(
             &rust_binary,
             &[
@@ -1800,9 +1868,8 @@ fn file_add_get_roundtrip_matches_go_cli() {
             &root,
             &home,
         )
-    }) {
-        assert_success(&init, "Rust init for file differential");
-    }
+    });
+    assert_success(&init, "Rust init for file differential");
 
     let go_add = run(
         &go_binary,
@@ -2023,6 +2090,10 @@ fn file_add_get_roundtrip_matches_go_cli() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     let oracle = begin_oracle(
         "cli_differential",
@@ -2044,7 +2115,7 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     fs::write(&source, content).expect("source fixture");
 
     // `init` generates random keys: frozen as a seed for replay.
-    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+    let init = oracle.seed_run("init", &[&root, &home], || {
         run(
             &rust_binary,
             &[
@@ -2057,9 +2128,8 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             &root,
             &home,
         )
-    }) {
-        assert_success(&init, "Rust init for file use differential");
-    }
+    });
+    assert_success(&init, "Rust init for file use differential");
     let add = run(
         &go_binary,
         &[
@@ -2123,8 +2193,26 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     assert!(!String::from_utf8_lossy(&rust_use.stderr).contains("file-use-secret"));
     let go_materialized = fs::read_to_string(&marker_go).expect("Go marker");
     let rust_materialized = fs::read_to_string(&marker_rust).expect("Rust marker");
-    assert!(!Path::new(&go_materialized).exists(), "Go file cleanup");
+    if oracle.replaying() {
+        // The recording keeps the scratch directory Go created only as
+        // `<TMPFILE>`: that path never existed in this run, so Go's cleanup
+        // cannot be re-checked here (it was checked against the live process
+        // on capture, where the real path is asserted gone below).
+        assert_eq!(
+            go_materialized,
+            format!("{}/CERT_P12", go_oracle::TMPFILE),
+            "recorded Go materialization marker"
+        );
+    } else {
+        assert!(!Path::new(&go_materialized).exists(), "Go file cleanup");
+    }
     assert!(!Path::new(&rust_materialized).exists(), "Rust file cleanup");
+    assert!(
+        Path::new(&rust_materialized).is_absolute()
+            && rust_materialized.ends_with("/CERT_P12")
+            && rust_materialized.contains("symvault-file-"),
+        "Rust materialization path shape: {rust_materialized}"
+    );
 
     let go_failure = run(
         &go_binary,
@@ -2310,6 +2398,10 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn builtin_templates_match_go_cli() {
     let oracle = begin_oracle(
         "cli_differential",
@@ -2321,16 +2413,15 @@ fn builtin_templates_match_go_cli() {
     let home = temporary_root("template-home");
     let root = temporary_root("template-vault");
     fs::create_dir_all(&home).unwrap();
-    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+    let init = oracle.seed_run("init", &[&root, &home], || {
         run(
             &rust_binary,
             &["init", "--auth", "passphrase"],
             &root,
             &home,
         )
-    }) {
-        assert_success(&init, "init template vault");
-    }
+    });
+    assert_success(&init, "init template vault");
     assert_success(
         &run(
             &rust_binary,
@@ -2390,6 +2481,10 @@ fn builtin_templates_match_go_cli() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn get_flags_parity_matches_go() {
     let oracle = begin_oracle(
         "cli_differential",
@@ -2404,16 +2499,15 @@ fn get_flags_parity_matches_go() {
     fs::create_dir_all(&home).unwrap();
 
     // `init` generates random keys: frozen as a seed for replay.
-    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+    let init = oracle.seed_run("init", &[&root, &home], || {
         run(
             &rust_binary,
             &["init", "--auth", "passphrase"],
             &root,
             &home,
         )
-    }) {
-        assert_success(&init, "Rust init for get flags parity");
-    }
+    });
+    assert_success(&init, "Rust init for get flags parity");
 
     let add = run(
         &rust_binary,
@@ -2557,6 +2651,10 @@ fn get_flags_parity_matches_go() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn set_totp_flags_parity_matches_go() {
     let oracle = begin_oracle(
         "cli_differential",
@@ -2572,11 +2670,10 @@ fn set_totp_flags_parity_matches_go() {
     for (root, home) in [(&go_root, &go_home), (&rust_root, &rust_home)] {
         fs::create_dir_all(root).unwrap();
         fs::create_dir_all(home).unwrap();
-        if let Some(init) = oracle.seed("init", &[root, home], || {
+        let init = oracle.seed_run("init", &[root, home], || {
             run(&rust_binary, &["init", "--auth", "passphrase"], root, home)
-        }) {
-            assert_success(&init, "init for set totp");
-        }
+        });
+        assert_success(&init, "init for set totp");
     }
 
     let secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
@@ -2638,6 +2735,10 @@ fn set_totp_flags_parity_matches_go() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn template_name_and_prefix_parity_matches_go() {
     let oracle = begin_oracle(
         "cli_differential",
@@ -2652,16 +2753,15 @@ fn template_name_and_prefix_parity_matches_go() {
     fs::create_dir_all(&home).unwrap();
 
     // `init` generates random keys: frozen as a seed for replay.
-    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+    let init = oracle.seed_run("init", &[&root, &home], || {
         run(
             &rust_binary,
             &["init", "--auth", "passphrase"],
             &root,
             &home,
         )
-    }) {
-        assert_success(&init, "init for template prefix test");
-    }
+    });
+    assert_success(&init, "init for template prefix test");
 
     for (path, val) in [
         ("deploy/api", "apisecret12345"),

@@ -44,6 +44,10 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn policy_validate_and_list_match_go() {
     let oracle = go_oracle::GoOracle::begin(
         "policy_differential",

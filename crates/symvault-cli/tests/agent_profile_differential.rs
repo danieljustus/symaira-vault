@@ -78,6 +78,10 @@ fn assert_same(go: &Output, rust: &Output, command: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_profile_show_matches_go_yaml_json_and_nil_fields() {
     let oracle = go_oracle::GoOracle::begin(
         "agent_profile_differential",
@@ -319,6 +323,10 @@ mod profile_edit_differential {
     }
 
     #[test]
+    #[cfg_attr(
+        not(target_os = "macos"),
+        ignore = "SKIP (darwin recording): replays on macOS only"
+    )]
     fn agent_profile_edit_matches_go_and_preserves_cancelled_config() {
         let oracle = super::go_oracle::GoOracle::begin(
             "agent_profile_differential",
@@ -326,11 +334,7 @@ mod profile_edit_differential {
             Some(super::go_oracle::CONFIG_CLI_ORACLE),
         );
         let go_binary = oracle.binary();
-        let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
-            eprintln!("skipping Rust differential: CARGO_BIN_EXE_symvault is not set");
-            return;
-        };
-        let rust_binary = PathBuf::from(rust_binary);
+        let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
         let cases = [
             ("success", "canWrite: true\nallowedPaths:\n  - new\n", "y\n"),

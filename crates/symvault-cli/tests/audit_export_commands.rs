@@ -60,6 +60,10 @@ fn cli_export(binary: &Path, home: &Path, args: &[&str]) -> std::process::Output
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn audit_export_json_matches_go_for_filters_and_redaction() {
     let oracle = go_oracle::GoOracle::begin(
         "audit_export_commands",
@@ -170,6 +174,10 @@ fn audit_export_accepts_injected_hmac_generations_without_keychain_access() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn audit_export_cli_bytes_match_go_for_formats_empty_and_file_output() {
     let oracle = go_oracle::GoOracle::begin(
         "audit_export_commands",

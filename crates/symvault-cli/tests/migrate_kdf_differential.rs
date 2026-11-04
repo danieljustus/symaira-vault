@@ -121,6 +121,10 @@ fn assert_unchanged(root: &Path, original: &[u8]) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn migrate_kdf_go_rust_integration() {
     let oracle = go_oracle::GoOracle::begin(
         "migrate_kdf_differential",
@@ -218,6 +222,10 @@ fn migrate_kdf_go_rust_integration() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn kdf_resource_policy_go_rust_integration() {
     use base64::Engine as _;
     // The resource policy (`--allow-legacy-kdf`) postdates the config-cli

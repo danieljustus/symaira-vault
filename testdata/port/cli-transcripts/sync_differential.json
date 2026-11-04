@@ -8,6 +8,9 @@
     "vcs_modified": "false"
   },
   "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
   "tests": {
     "force_sync_preserves_dirty_config_like_go": {
       "seeds": [
@@ -156,7 +159,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFEyVU5rZU5WVXJHanJzVVF3bWd3V0EgdD0zLG09NjU1MzYscD00ClMwejZCc3AzYnRHVGhOVVlZQ09iUDl6amlXQzhxVmlBNkdHUXhvei9DWUg2TC9JNDN3aHBUTURXSHE0Ci0+IEwtZ3JlYXNlID04IERnZjQKdGNuVDY3QkpjVlJhd01WNFA0NEJNU3I4M0ZQTnNGL3dLc2lqMzJaZDhua3dKSmt4MkNid0dKWTE0bU1zcVF0QgpYN1BCNnpOcUNlcGZDK2NRSTdzcFZMT2gxaFM4Yi95MkZSeHR6K1Nld0dzRUNGOAotLS0geHIvczlpZzBNTGF5WkhubVllQ0IxNEVDTlB2NHpzRFd4ZlZVeGlvNlltRQpr+GoszhBmti2OPw67k/56wCrp0TYFCfpSWcw3U+yA3jjbGvJYB8nDRU4SuAw5T4o7SKk4EXE86urxRZq/Xc2vLDsvtp+qbzDXuyCSHoYurgencWeCC4JJ1UA84t/x23Dlwon92jkV1I8m"
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age15ywegnxw6gal7y99djhmw7nfz0trncjwsj3rtq324qea59ldwezqnzwt5h\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [
@@ -379,7 +392,17 @@
                 "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIG1kSXl5WG9TakFVbVN5bmlJQ1hZSkEgdD0zLG09NjU1MzYscD00CnhYT216RkltMm0vdUdYN1JidFlhMlBtVFpvUXJmNnJPOWxMZzZncHFMNmNQYSsvTkh3OVh3UUlOaUxRCi0+IFRvUzBALWdyZWFzZSBzIGUiTnRNXyMgNEdQbiJ7CnEyaUZqeDlBCi0tLSBBb29RQnNGYTIzbG5jWG5pWU95bUJGamRNMmdrSVZhYVlNR0Q4SlY3aXdnCjQHLU55A5+0MRq2DO/+Ypxv3OTb/4RE0zeo7P5ZdTmOrd3BMvxAfo4TxNOinmlgg9tPLMvKn0dXS8P8P+lm/QQ/fP5XDkRW0sGqaS8nJP3Asy2uSDWiqgwwsbp0gF1J7EuifhzO8YzLPhM="
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age1suex4tslhv8yl8gjthk9heung4hdjdat6zvygynl47tq6pzxydfs242f69\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [

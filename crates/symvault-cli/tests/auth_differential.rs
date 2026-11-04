@@ -68,6 +68,10 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn auth_set_matches_go_contract() {
     let oracle = go_oracle::GoOracle::begin(
         "auth_differential",
@@ -357,6 +361,10 @@ fn auth_rotate_legacy_migration_matches_go_on_normal_root() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 #[cfg(unix)]
 fn find_legacy_migration_matches_go_root_trust_boundary() {
     use std::os::unix::fs::symlink;
@@ -462,6 +470,10 @@ fn find_legacy_migration_matches_go_root_trust_boundary() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn device_accept_matches_go_open_error_order_for_symlinked_entries_root() {
     use std::os::unix::fs::symlink;
 
@@ -527,6 +539,10 @@ fn device_accept_matches_go_open_error_order_for_symlinked_entries_root() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn device_accept_matches_go_open_error_order_for_non_directory_entries_root() {
     let oracle = go_oracle::GoOracle::begin(
         "auth_differential",
@@ -644,6 +660,10 @@ fn auth_rotate_rejects_user_owned_ancestor_symlink_before_new_passphrase_validat
 
 #[cfg(target_os = "macos")]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn auth_rotate_accepts_root_owned_macos_alias_and_migrates_legacy_entry() {
     use std::os::unix::fs::MetadataExt;
 
@@ -654,9 +674,16 @@ fn auth_rotate_accepts_root_owned_macos_alias_and_migrates_legacy_entry() {
     );
     let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
-    let home = TempDir::new("legacy-trusted-alias");
+    // The fixture needs the root-owned /var -> /private/var alias, so it is
+    // allocated in the per-user macOS temp dir whatever TMPDIR points at.
+    let user_temp = go_oracle::darwin_user_temp_dir()
+        .expect("native trusted-alias fixture requires `getconf DARWIN_USER_TEMP_DIR` on macOS");
+    let home = TempDir(test_temp_root::TempRoot::existing_in(
+        &user_temp,
+        "symvault-auth-diff-legacy-trusted-alias-",
+    ));
     let home_alias = macos_var_alias(&home.0).expect(
-        "native trusted-alias fixture requires the configured temporary root (TMPDIR) to canonicalize below /private/var; unsupported temporary layout is not migration acceptance",
+        "native trusted-alias fixture requires the per-user temp dir to canonicalize below /private/var; unsupported temporary layout is not migration acceptance",
     );
     assert!(
         home_alias

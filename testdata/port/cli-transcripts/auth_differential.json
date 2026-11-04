@@ -8,6 +8,9 @@
     "vcs_modified": "false"
   },
   "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
   "tests": {
     "auth_rotate_accepts_root_owned_macos_alias_and_migrates_legacy_entry": {
       "seeds": [],
@@ -651,6 +654,10 @@
             }
           ]
         }
+      ],
+      "replay_platforms": [
+        "linux",
+        "macos"
       ]
     },
     "auth_rotate_passphrase_matches_go_contract": {
@@ -1090,6 +1097,10 @@
             }
           ]
         }
+      ],
+      "replay_platforms": [
+        "linux",
+        "macos"
       ]
     },
     "auth_rotate_rejects_user_owned_ancestor_symlink_before_new_passphrase_validation": {
@@ -1350,6 +1361,10 @@
           },
           "fs_delta": []
         }
+      ],
+      "replay_platforms": [
+        "linux",
+        "macos"
       ]
     },
     "auth_set_matches_go_contract": {

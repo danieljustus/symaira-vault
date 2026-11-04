@@ -51,6 +51,10 @@ fn assert_success(output: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn remote_status_matches_go_for_local_repository_states() {
     let oracle = go_oracle::GoOracle::begin(
         "remote_differential",
@@ -65,7 +69,7 @@ fn remote_status_matches_go_for_local_repository_states() {
     fs::create_dir_all(&home).expect("home");
 
     // `init` generates random keys: record it once as a frozen seed.
-    if let Some(init) = oracle.seed("init", &[&vault, &home], || {
+    let init = oracle.seed_run("init", &[&vault, &home], || {
         run(
             &rust_binary,
             &[
@@ -78,9 +82,8 @@ fn remote_status_matches_go_for_local_repository_states() {
             &vault,
             &home,
         )
-    }) {
-        assert_success(&init, "Rust init");
-    }
+    });
+    assert_success(&init, "Rust init");
 
     let no_remote_args = [
         "--vault",
@@ -243,6 +246,10 @@ fn initialized_remote_fixture(name: &str) -> (test_temp_root::TempRoot, test_tem
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn remote_init_matches_go_for_target_forms_and_rejects_empty_target() {
     let oracle = go_oracle::GoOracle::begin(
         "remote_differential",

@@ -1581,8 +1581,9 @@ sync-observations-contract:
 
 # rust-pairing.yml: oracle-bound steps not covered by pairing-differential,
 # config-profile-differential and device-list-differential.
-# The macOS trusted-alias auth case needs TMPDIR below the root-owned /var ->
-# /private/var alias (the same rule as config-cli-differential in local-gate.sh).
+# The macOS trusted-alias auth case allocates its fixture in the per-user temp
+# dir itself; the TMPDIR export below only keeps the other fixtures on the same
+# volume as the alias (the replay no longer depends on it).
 AREA_PAIRING_TMP := $(if $(filter Darwin,$(shell uname -s)),TMPDIR="$(shell getconf DARWIN_USER_TEMP_DIR)")
 pairing-oracle-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
