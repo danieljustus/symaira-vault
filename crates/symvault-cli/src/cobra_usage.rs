@@ -1611,6 +1611,18 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
     // `completion <shell>` is cobra's built-in subcommand: the gate and the
     // agent check see its full path. `completion` alone only prints group help.
     let shell_path = completion_shell(&path_text, &parsed.positionals);
+    // The generated shell commands take no arguments (cobra.NoArgs): an extra
+    // positional ends the run before the output-format gate and the agent check.
+    if let Some(shell_path) = &shell_path
+        && let Some(extra) = parsed.positionals.get(1)
+    {
+        let message = format!(
+            "unknown command {} for {}",
+            crate::cli_artifacts::quote_go_string(extra),
+            crate::cli_artifacts::quote_go_string(&format!("symvault {shell_path}"))
+        );
+        return fail(&message, 1);
+    }
     let command_path = shell_path.as_deref().unwrap_or(&path_text);
     if let Some(format) = refused_format(command_path, parsed.json_flag, parsed.output.as_deref()) {
         return fail(&gate_message(&format, command_path), 9);
@@ -2353,6 +2365,28 @@ mod tests {
     fn verdict(args: &[&str]) -> Verdict {
         let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
         evaluate(&args, root())
+    }
+
+    /// `completion <shell>` takes no arguments (cobra.NoArgs): that error comes
+    /// before the output-format gate, with or without a format flag.
+    #[test]
+    fn completion_shell_extra_argument_precedes_the_format_gate() {
+        for args in [
+            &["completion", "bash", "extra", "--json"][..],
+            &["completion", "bash", "--json", "extra"],
+            &["completion", "zsh", "extra", "--output", "yaml"],
+        ] {
+            let Verdict::Fail { stderr, code } = verdict(args) else {
+                panic!("{args:?} must fail");
+            };
+            assert_eq!(code, 1, "{args:?}");
+            assert!(
+                stderr.contains("unknown command \"extra\" for \"symvault completion"),
+                "{stderr}"
+            );
+        }
+        // The format gate still decides without an extra argument.
+        assert!(refused(&["completion", "bash", "--json"]));
     }
 
     fn refused(args: &[&str]) -> bool {

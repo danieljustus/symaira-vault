@@ -240,6 +240,38 @@ impl Pair {
         self.rust.set_global_config(text);
     }
 
+    /// Runs one command on both sides and requires the same exit status, stdout and
+    /// vault files; stderr is not compared (an argument that is not UTF-8 is echoed
+    /// with U+FFFD where Go prints `\xff`). Returns the Go side's exit code.
+    fn check_exit(
+        &self,
+        label: &str,
+        args: &[&str],
+        agent: Option<&str>,
+        opts: Opts<'_>,
+    ) -> Option<i32> {
+        let go = self.go.run(args, agent, opts);
+        let rust = self.rust.run(args, agent, opts);
+        assert_eq!(
+            rust.status.code(),
+            go.status.code(),
+            "{label}: exit status differs\ngo stderr: {:?}\nrust stderr: {:?}",
+            self.go.mask(&go.stderr),
+            self.rust.mask(&rust.stderr)
+        );
+        assert_eq!(
+            self.rust.mask(&rust.stdout),
+            self.go.mask(&go.stdout),
+            "{label}: stdout differs"
+        );
+        assert_eq!(
+            self.rust.listing(),
+            self.go.listing(),
+            "{label}: vault file set differs"
+        );
+        go.status.code()
+    }
+
     /// Runs one command on both sides and requires identical behaviour.
     /// Returns the Go side's (exit code, masked stderr).
     fn check(
@@ -1011,5 +1043,47 @@ fn agent_gate_completion_shells_refuse_output_formats_first() {
         &["completion", "bash", "extra"],
     ] {
         pair.check(&format!("ghost {args:?}"), args, Some("ghost"), none);
+    }
+}
+
+/// cobra's `NoArgs` on the generated `completion <shell>` commands rejects an
+/// extra argument (exit 1) before the output-format gate and the agent check.
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_completion_shell_rejects_extra_arguments_first() {
+    let (_oracle, pair) = Pair::new("agent_gate_completion_shell_rejects_extra_arguments_first");
+    pair.set_config(&Config::Text(PROFILES));
+    let none = Opts::default();
+    for shell in ["bash", "zsh", "fish", "powershell"] {
+        for tail in [
+            &["extra"][..],
+            &["extra", "--json"],
+            &["--json", "extra"],
+            &["extra", "--output", "yaml"],
+            &["extra", "more", "--json"],
+            &["{FF}"],
+            &["--json", "{FF}"],
+            &["extra", "{FF}"],
+        ] {
+            let mut args = vec!["completion", shell];
+            args.extend_from_slice(tail);
+            for agent in [Some("ghost"), Some("alpha"), None] {
+                let label = format!("{agent:?} {args:?}");
+                if tail.iter().any(|arg| arg.contains("{FF}")) {
+                    let code = pair.check_exit(&label, &args, agent, none);
+                    assert_eq!(code, Some(1), "{label}");
+                    continue;
+                }
+                let (code, stderr) = pair.check(&label, &args, agent, none);
+                assert_eq!(code, Some(1), "{label}");
+                assert!(
+                    stderr.contains(&format!("for \"symvault completion {shell}\"")),
+                    "{label}: {stderr}"
+                );
+            }
+        }
     }
 }

@@ -832,6 +832,3563 @@
         }
       ]
     },
+    "agent_gate_completion_shell_rejects_extra_arguments_first": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "e43ac44a3dd0f8353ff72effc1f8e4e93f82e83ffa9c2ca2512497bad52867cc",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "498715071dc1554c575434a6954241f7cb34aed167762a84e9ae82d8c4997034",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "709430f580ba97110a8d7e0cb1f4cda8368502bb83265bb993ded7fc1e3eafba",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e4b49f72a02c8d0ca4fa4fa6e727c4bfde5222e25d08a3600db7958164960b04",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f57bd29e5f19fe7242251d584c896cb94e28f4aa735772f2e7e46f4e9b60c48a",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "11171e024fddcfef48866227aa7f0c5c4bc401edb1a3e085781c1163eb3f2dcd",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "64417960f07212cff35652768ef9b221b33bd9fba1f41f97f29da44a65f92cc7",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9da4d145f65a46d2d5b5474e45dc25a0fe163f93d64646aa63ec9c3efc3983f1",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2b73ba315dd2c719c08fa9ea1d887eb20107180ecb8a483d879224a33d105877",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c231655619c3d25e1668a6b21308f71b1c51a3f7fdf40cca23dd5061fd6fc8dd",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b5f8068d3027f7041610abfc2266a78d063a089853b628d8e2452794c5f3c7a0",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2a9e6f8f0e73f1966c7e3abf0886b58036f32d3d41318485ac439465dc755924",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "caec392d214079bdd0db6370a56b2dfa91dcb25794f59684e5c837a7c0578a4f",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b4a3ec010c48bb73f5ac065c4da595942a6b95d3fc4a3cd2e30da5bd7f9f8604",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "5088ccc6cecac3872e891319fb2a61a6a5b86ea3732b22f87355141fdd8b9c8f",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2e2a57683c6236c67bb4a51ae044ae7e05bdf73b305492a3a9e31570e9d638da",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion bash\"\nError: unknown command \"\\xff\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "887aa8383712a76b6c7432e0f334f2d52fb0d65b0d3bc95cc00dd796a58397ab",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion bash\"\nError: unknown command \"\\xff\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "197f90677e35788c8cc0f624794791b9bde59bf5ecede03ee27bbaed3eec97cd",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion bash\"\nError: unknown command \"\\xff\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4e92d523dee68cef70a1216e1e03cbb0ac87c190d84f8915575d4eafa62ac486",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion bash\"\nError: unknown command \"\\xff\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "cb58c95b6915ab60f362ba175daaca992d8a00b080fa9a9489655bdc9a36338a",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion bash\"\nError: unknown command \"\\xff\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2c8c0f2b1b4744844e9b42f46b0af827af99e8e7f4ea40395c49d746f64181f7",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion bash\"\nError: unknown command \"\\xff\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e3ca2dd28f2cf0a5f7330ff29b695c38549422ab03802e752047291c80005d48",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "11564acc1c61ee559524ea34878e3896529526ab88bd19a6bf92e7074ac656c6",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "34f34df93bf9e76c3e3b09e25df1b46985c3b821374246a2964fe23cb5b2ff91",
+          "request": {
+            "args": [
+              "completion",
+              "bash",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion bash\"\nError: unknown command \"extra\" for \"symvault completion bash\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b10e75c45ef3e8937233f1f6326b79444de2ad20b4623ee4f38c9a85737aec63",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "293f0cf00db44f27e99b15b74bbd75d9fb6d8b91f2b1dc11a5dfc4c5b2615712",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f9e38aa17f19cb3bb25e04bfe6db4da22f3aeb55d41eb0752cc6af0ee799db9f",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a520e35f22a63b1023aebcd0fae05d90ef4910ab1591a2aeab111aaa996ed9d4",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f10108565cdf7bfbb058a2d983b28900f182a49f290c06d6d6eb7e8663b2e23a",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0b6265a42b8f98b693d5fb72de47b16111e3fe850bc78d543784bdefa4568aa3",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "035afc62bdf3b8f22a65cf2b5907ea2c97a5bb39c3269bb143cc1a2ef183d0fd",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3d703da2678f5651416d2689e3576915dce205d0eeecb6385611b188edfb585d",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "fa6421a01355dc317ac6aad76fed2251ed64a8df1efdc4b76390d14bbc5fca68",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "5dc88eb32a69d69b67bfe5a342fe77a720f79a03c73cd298ffce8d6af9f8f688",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "80c82ea5b95340281dc611bff4dbef9b82f6dda7263b12c58953d06bb8607d63",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4b22319761974cdf9592eb4d4765e78f44b320138f51e0911f29339b4a32eab8",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d8f59731647e68ccfc8a841d5c10b331ffded7fe729f85988bbfc178b58f5d19",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d1cc6dd4fc06df2f6369cb7f823d1c23c926b26c76f151634a5c82fea80fa5f9",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f01e3704179b712a76723b69c385005330c953f71280698b5bd3844a86f2a132",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "1644f1dce47df1848f66481f54793d4afeda80b3eedf9bca44e7e3197d100687",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion zsh\"\nError: unknown command \"\\xff\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a9bf0b410090cca20d8bff3de999fdb62bea1f9467d4c846bff63d2ecad33c28",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion zsh\"\nError: unknown command \"\\xff\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e0ba0a2db8d4eafdbbb113ba26a18be0c224504e4de85c776bf745ad62d7fdb3",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion zsh\"\nError: unknown command \"\\xff\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3c648d53f30695b5661fcfafc4f2faa6405b36929e092a479fe556f94d045463",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion zsh\"\nError: unknown command \"\\xff\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b98d06de1abe24bba6137569ab9ae9e54599ff6f64c8c0d323ffffcbae814a07",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion zsh\"\nError: unknown command \"\\xff\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "558f558bc14275dd9a551c2ec56a14672dccae3d3a574da72efd6aa9c28dc217",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion zsh\"\nError: unknown command \"\\xff\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8dc76305c013c6f8f605ab48ed9dab38f16cff42f84e4aa83d0479655025f0a9",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3269b734d1929d1c4adae88518d4f9e49e3432154d97d8ae619080215c11c58f",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "dbe998fad6e76dc28d8df6ac9cc4e10b911ec453753f06cd5728f87b090e6720",
+          "request": {
+            "args": [
+              "completion",
+              "zsh",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion zsh\"\nError: unknown command \"extra\" for \"symvault completion zsh\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0e099dd731ff59cb8a3dc0bf1f4a925524c406ad940c536b8bc5fbeb7a3fdbc0",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "dc24c551f6344c7b6e9ba1353dd8550c1c25d52f497cc7eadd719f0f1c3eb25b",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6e88842fccbc39a760501c190504af72b872dd9e2650fe78d115d7afbb2a1d71",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "67571255bc9a2c5d3a62bc9736575ce9d0f4f25fa04ed8e7531d5c395bd4197e",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "fed366ac3bd2411b253998f5f36155898369fbcedf06cded4b16561e0fe93f62",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f51fa2ab42a97a22502b3dd784282e95c79e0c2514af20d8a33f4ed75e3289d1",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2c34f3ed74d3a83b71ec67bb94a083debb131b5410623b2f1f7949e836a001b1",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e8ddb219ea3308766b58ca34179d1ba7894b172ce750fbbbd178891a0915c896",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3d062d8c3283d07befd42bcaa4407a95352719c615bae0a70ca921a050d07d74",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0fd36788963ca9ca6e0646af7e5c614b5a0605029b222f69dd87ae7a6bfa928e",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "bc52b20ed266b9b5d571b9931d6c35601c8159bfbe981a01dbdc2733d9bec0bc",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2f770124af3cec116930ddf4886c9599ff0105b3960a105172780b0cf399a53a",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "34e8ef81d799605f79b640be5b90f00ca4e315bf3e21a1ed7c778394a43af563",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6302f7ec529102c01c55da5e351919da2892f4bf0b347ead38e964c24e64d0ba",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e45f796a4bee6eec2e4fa6e6388a67b533b384d5c0aaeb35502b539f2e92df25",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "dbde875e0bee5177d97178c301fe60fcb6805721165d65ac745a707625ecd417",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion fish\"\nError: unknown command \"\\xff\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "39463210ddc7c97533364e08dbb932e78dfe3be6e7f85b7a3cc87d69a69b632b",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion fish\"\nError: unknown command \"\\xff\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "5d405fa27524d6d63adcc7fc7c1e5e4cf1000be41651ff589303886dd70b1c4f",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion fish\"\nError: unknown command \"\\xff\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "31ef2916fc31ab81fb72480084204493e4218bd8f57cda15a2819d7e80e4479f",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion fish\"\nError: unknown command \"\\xff\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c0b37a8fcfab7e739c66b1f43cf588d4ec002c10f823453bc66f8e9c88d8f82d",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion fish\"\nError: unknown command \"\\xff\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3adf20fc9eb47cd8981ce30f559eba78a58480cf217dac1c7c5db7c6e4cf3258",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion fish\"\nError: unknown command \"\\xff\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ceff00323e1913fa91437fe085b86f35d3698b3fd55d1ecc295bcbfb65be0ecc",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "cdb8f2448b129f03f6b158fb1dd520230c88e079b1c38f60bf66ee78303ed891",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "34e522682111fe6518d51909efa5e95b216baa40424adf721579482509c2aede",
+          "request": {
+            "args": [
+              "completion",
+              "fish",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion fish\"\nError: unknown command \"extra\" for \"symvault completion fish\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d8afff301403226e31d80941c3ca911298d73692e039fae84b455b7d913b8770",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "af1efeea005e4668f10b7ec6e4d47d502a9229475b40b4125cd6b79d43d3d77a",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "71e510605045a387940243480796e3726c980e90215fdbb6b07328eead35de43",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f61aa5cb559975ea5302972230fa407ecc19a5b3cd5255235d3c9e1d7e0c3e3d",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4d291bd8ab10f76e17282f301cb19574cae4bfd13da3d00a3f8d701b44ba219f",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "267fd0f2bb442c413be654ff23b8ab8ed1c5c2604c89542bbb55e6bdc4e73bb3",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0d4138044e93e84b7fcc1d6806891ef871393261d72cd34823f27a7b568ff671",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d6ebd8e158a17e1b6983798da3b265cc036493f7d51072cda56c9c0a8f773dc8",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "636e63ffd593b6ad6c4f216669f2964f14829f562e139a106e3d097229b1d31e",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "--json",
+              "extra"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7fe1fc64d71c8f326288280d5ee7ceb991983f79f50746ccd90dd7bf92657552",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0d3b746897569c0b17e954deed665f78695ba36329af5ec045be276181813313",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ea6c7b3b96d4fcf4217ac844deb703c87a100e65903c4923ab1de555a05bb180",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "--output",
+              "yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "54ee71b02e6ddbc1c37c92305abe7a933ded5e62f812e06a62a330a706ca202b",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f9b9635c0f0f3d7a60ca0428a9d3dee85dfaee7d66d537e719839c928d2ecdf3",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d8e7ba45b952fdbc5625d5f56ec7945dfeb3c10bd870224cce18da56bbf17661",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "more",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "41dbcbc9ae9f87d72c7d17e0d7a7fb5243252de95207c846ab869f345dd9ba02",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion powershell\"\nError: unknown command \"\\xff\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f77172b1e075c6e352831873425a8ec8bece7f987f125ecf4dc186e29ad6cf3c",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion powershell\"\nError: unknown command \"\\xff\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "986b1bfd041a6dc7e1f32a17292eba98f8a117651975cdb2f077cdca8e425f55",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion powershell\"\nError: unknown command \"\\xff\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7679b32c35932abef483718629f78b98504348a5534aceebfb5f49e182367728",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion powershell\"\nError: unknown command \"\\xff\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8db498887ae7001c60bc1d6907bc2d272a6406c6ec72693074347ec271e1cd0c",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion powershell\"\nError: unknown command \"\\xff\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b3f45d0d652d1742c361b8ef216c93246835afb3901592527174dac6fe90f2f5",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "--json",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"\\xff\" for \"symvault completion powershell\"\nError: unknown command \"\\xff\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "50528490106bc2943bf7ec712a8066460f7838de263b099ca6a093ae16c5014e",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "31cf451af59411dd4fbaa3ba2596b014f9f448bab4ac31ec321d39a88065380f",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ec8d843ece5685245d71ea018dc64b01d029c3a3c11462675b50fbe49949ad33",
+          "request": {
+            "args": [
+              "completion",
+              "powershell",
+              "extra",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"extra\" for \"symvault completion powershell\"\nError: unknown command \"extra\" for \"symvault completion powershell\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
     "agent_gate_completion_shells_refuse_output_formats_first": {
       "seeds": [],
       "calls": [
