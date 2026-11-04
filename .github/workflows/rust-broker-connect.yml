@@ -62,7 +62,7 @@ jobs:
           set -euo pipefail
           cargo fmt --all --check
           cargo clippy -p symvault-mcp --all-targets --all-features --locked -- -D warnings
-          cargo test -p symvault-mcp --lib --locked broker::connect::tests:: > target/native-connect-tests.txt 2>&1
+          cargo test -p symvault-mcp --lib --locked broker::connect::tests:: > target/native-connect-tests.txt 2>&1 || { cat target/native-connect-tests.txt; exit 1; }
           cat target/native-connect-tests.txt
           python3 - <<'PY'
           from pathlib import Path

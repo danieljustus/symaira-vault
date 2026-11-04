@@ -87,7 +87,7 @@ jobs:
           umask 0022
           cargo test -p symvault-crypto --all-features --locked
           cargo test -p symvault-cli --bin symvault --locked migrate_kdf_commands::tests | tee kdf-rust-migration.log
-          python3 -c 'from pathlib import Path; text=Path("kdf-rust-migration.log").read_text(); names={"policy_migration_retains_originals_and_rewrites_same_identity","policy_migration_wrong_passphrase_and_old_backup_do_not_mutate_files","policy_migration_restores_both_files_after_post_replacement_failure","policy_migration_accepts_null_vault_configuration"}; assert all(f"test migrate_kdf_commands::tests::{name} ... ok" in text for name in names); assert "9 passed; 0 failed; 0 ignored" in text'
+          python3 scripts/rust-port/gate_area_check.py log-ok kdf-rust-migration.log --exact-prefix "migrate_kdf_commands::tests::" policy_migration_retains_originals_and_rewrites_same_identity policy_migration_wrong_passphrase_and_old_backup_do_not_mutate_files policy_migration_restores_both_files_after_post_replacement_failure policy_migration_accepts_null_vault_configuration --contains "$(make -s print-AREA_KDF_MIGRATION_TESTS) passed; 0 failed; 0 ignored"
           cargo clippy -p symvault-crypto -p symvault-cli --all-targets --all-features --locked -- -D warnings
       - name: Upload native policy evidence
         if: always()

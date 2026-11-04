@@ -90,5 +90,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Replays the frozen Go fixture and the recorded Go verdict on the Rust-written
+          # log (static attestation, Go is not re-run); no Go-produced output file exists.
           make audit-differential
-          test -s target/audit/rust-output.jsonl

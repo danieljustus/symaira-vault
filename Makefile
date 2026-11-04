@@ -803,9 +803,11 @@ endef
 # since, so the gate asserts 10.
 AREA_KDF_MIGRATION_TESTS := 10
 # The unit-test count of `cargo test -p symvault-mcp --all-targets` (non-Windows)
-# that the HTTP, MCP and API workflows assert exactly. They still hard-code 246,
-# which the tree outgrew (296 at the merge of local/rust-port 6ac34423, 304 at
-# ca0f2300 after the MCP authz-order tests, 305 at ae6f8340 after the
+# that the HTTP, MCP and API workflows assert exactly. The workflows read it with
+# `make -s print-AREA_MCP_TEST_COUNT` (and the KDF one with
+# `print-AREA_KDF_MIGRATION_TESTS`), so this file is the only place that holds it.
+# They used to hard-code 246, which the tree outgrew (296 at the merge of
+# local/rust-port 6ac34423, 304 at ca0f2300 after the MCP authz-order tests, 305 at ae6f8340 after the
 # crate-local API template drift guard `apitemplate_assets_sync`, which stays a
 # passing test, early return, once the Go copy is deleted), 339 at the
 # local/integ2 merge (MCP audit ids, policy BuildContext, OAuth expiry, HTTP
@@ -818,7 +820,7 @@ AREA_KDF_MIGRATION_TESTS := 10
 # enroll.rs and the 5 device_enroll_replay tests; measured: 53 result lines,
 # 385 passed, 0 failed); the
 # gate asserts the real count, so a shrunken run still fails. Raise it together
-# with the new tests (and the workflows' constant when they run again).
+# with the new tests.
 # 386 after merging local/tls-write-deadline (+1 TLS write-deadline regression).
 # 408 on local/anomaly (+22: 9 detector unit tests in anomaly.rs, 3
 # anomaly_replay and 10 anomaly_dispatch tests; measured: 408 passed, 0 failed).
@@ -838,6 +840,11 @@ AREA_KDF_MIGRATION_TESTS := 10
 # raw-text arguments decode; measured: 447 passed, 0 failed over 56 result lines).
 # 448 after the coordinator's anomaly_dispatch order pin (decode before lookup/token scope).
 AREA_MCP_TEST_COUNT := 448
+
+# `make -s print-<VARIABLE>` prints a variable's value, for the workflows that must
+# not repeat the constants above.
+print-%:
+	@echo '$($*)'
 
 # Negative controls of the checker every area target below ends with: shrunken,
 # partial and malformed receipts and logs must all fail it; the gate receipt's
