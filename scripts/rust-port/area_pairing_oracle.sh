@@ -2,8 +2,7 @@
 # The oracle-bound steps of .github/workflows/rust-pairing.yml that no other
 # local target runs: stateful CLI differential, import quarantine differential,
 # auth root-trust differential, startup-profile differential (all four replay
-# the committed Go transcripts, no Go oracle), the process-tree adapter tests,
-# and HTTP-001 keyring isolation.
+# the committed Go transcripts, no Go oracle) and HTTP-001 keyring isolation.
 # (pairing-differential, config-profile-differential and
 # device-list-differential are separate local-area targets.)
 #
@@ -12,21 +11,20 @@
 #
 #   scripts/rust-port/area_pairing_oracle.sh EVIDENCE_DIR
 #
-# Env: CARGO (default cargo), GO (default go), AREA_CHECK (command prefix of
-#      gate_area_check.py). Oracles are built in detached worktrees below
-#      EVIDENCE_DIR and removed on exit; the live tree is never touched.
+# Env: CARGO (default cargo), AREA_CHECK (command prefix of
+#      gate_area_check.py). Logs are written below EVIDENCE_DIR; the live tree
+#      is never touched.
 set -euo pipefail
 
 evidence="${1:?usage: $0 EVIDENCE_DIR}"
 cargo="${CARGO:-cargo}"
-go="${GO:-go}"
 check="${AREA_CHECK:-python3 -B scripts/rust-port/gate_area_check.py}"
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
 work="$evidence/pairing-oracle"
 rm -rf "$work"
 mkdir -p "$work"
-export GOWORK=off SYMVAULT_TEST_KEYRING=memory TZ=UTC
+export SYMVAULT_TEST_KEYRING=memory TZ=UTC
 
 # Unregister exactly this worktree (never a global `git worktree prune`; see
 # worktree_remove.sh). Oracle trees must lie inside $work, below the evidence dir.
@@ -44,21 +42,17 @@ cleanup() {
 trap cleanup EXIT
 
 # Toolchain identity (workflow step "Verify toolchain identity").
-[ "$(GOTOOLCHAIN="${BUILD_GO_TOOLCHAIN:-go1.26.10}" "$go" env GOVERSION)" = "${BUILD_GO_TOOLCHAIN:-go1.26.10}" ] \
-  || { echo "area-pairing: build Go is not ${BUILD_GO_TOOLCHAIN:-go1.26.10}" >&2; exit 1; }
 [ "$(rustc --version | awk '{print $2}')" = "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" ] \
   || { echo "area-pairing: rustc is not the pinned toolchain" >&2; exit 1; }
-[ "$(GOTOOLCHAIN=go1.26.6 "$go" env GOVERSION)" = go1.26.6 ] \
-  || { echo "area-pairing: oracle Go is not go1.26.6" >&2; exit 1; }
 
 # replay LOG CARGO_TEST_ARGS...: replay the committed Go transcripts
-# (testdata/port/cli-transcripts; no oracle binary, no SYMVAULT_GO_BINARY), then
-# require an executed, passing test that really replayed recorded Go calls.
-# Re-record with `make config-cli-capture` (Go required).
+# (testdata/port/cli-transcripts; no oracle binary), then require an executed,
+# passing test that really replayed recorded Go calls. Re-recording needs the
+# archived oracle (tag legacy/go-oracle, docs/rust-port/go-oracle-archive.md).
 replay() {
   local log="$1"
   shift
-  env -u SYMVAULT_GO_BINARY -u SYMVAULT_ORACLE "$cargo" test -p symvault-cli --locked "$@" >"$log" 2>&1 \
+  "$cargo" test -p symvault-cli --locked "$@" >"$log" 2>&1 \
     || { cat "$log"; exit 1; }
   cat "$log"
   grep -q "go_oracle: replayed [1-9][0-9]* cases" "$log" \
@@ -82,27 +76,14 @@ $check log-ok "$work/import-quarantine.log" import_quarantine_matches_pinned_go_
 # Auth root-trust differential (recorded Go transcript).
 replay "$work/auth-differential.log" --test auth_differential auth_rotate
 
-# Startup-profile differential (recorded Go transcript of the pinned Go source).
+# Startup-profile differential (recorded Go transcript of the pinned Go source,
+# oracle ecaf4d0c64bc; the Go source is archived at tag legacy/go-oracle).
 startup_commit=ecaf4d0c64bcd21138468080f93f7ea097d7803a
 git merge-base --is-ancestor "$startup_commit" HEAD
-if git cat-file -e HEAD:cmd/admin/startup_profile.go 2>/dev/null; then
-  git diff --quiet "$startup_commit" HEAD -- cmd/admin/startup_profile.go
-else
-  # The Go source was removed from HEAD: the committed transcript is the
-  # frozen record of the pinned source.
-  echo "area-pairing: NOTE cmd/admin/startup_profile.go is absent from HEAD; startup-profile replays the frozen transcript"
-fi
 replay "$work/startup-profile.log" --test startup_profile_differential
-
-# Process-tree adapter and cleanup.
-GOTOOLCHAIN=go1.26.6 "$go" test -count=1 -v \
-  ./scripts/rust-port/cmd/caserun ./scripts/rust-port/cmd/devicelistdriver ./scripts/rust-port/internal/diff \
-  >"$work/process-tree.log" 2>&1 || { cat "$work/process-tree.log"; exit 1; }
-grep -q '^ok ' "$work/process-tree.log" || { echo "area-pairing: no Go package ran" >&2; exit 1; }
-if grep -q '^FAIL' "$work/process-tree.log"; then echo "area-pairing: a Go package failed" >&2; exit 1; fi
 
 # HTTP-001 generator keyring isolation (the workflow runs it on macOS only; it
 # is cheap and platform-independent).
-PYTHONDONTWRITEBYTECODE=1 GOTOOLCHAIN=go1.26.6 python3 scripts/rust-port/test_http001init_isolation.py
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_http001init_isolation.py
 
 echo "area-pairing-oracle: ok"
