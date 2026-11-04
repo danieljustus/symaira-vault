@@ -1,0 +1,16 @@
+{
+  "commit": "bf5bd12008726b7fc805c8d3583edc5ce60e9159",
+  "direction": "Go NewOSKeyring writes a native item, the Rust adapter updates it, Go reads it back and deletes it: macos-latest job 'Pairing differential (macos-latest)', step 'Native keyring resource probe' (native_closeout.py keyring, live three-stage run, passed with write+verify records) on a disposable hosted runner. The Rust keyring adapter sources are byte-identical to this tree; native_keyring_interop.rs differs only by an added test (no removed line).",
+  "goos": "darwin",
+  "job_id": 125400227618,
+  "name": "native-keyring-interop",
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "run_url": "https://github.com/danieljustus/symaira-vault/actions/runs/41481364542",
+  "schema": 1,
+  "source": "ci-run",
+  "source_digest": "181f53e05c1ff4c83e6b1bd345b3802b34612bd74fa341c80b5364600ef0b5e2",
+  "source_paths": [
+    "crates/symvault-platform/src/macos_keychain.rs",
+    "crates/symvault-platform/src/os_keyring.rs"
+  ]
+}

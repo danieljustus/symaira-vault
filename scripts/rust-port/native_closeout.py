@@ -184,8 +184,14 @@ def main():
         else:
             # The Go write/verify halves are the committed attestation; Rust stores the attested payload itself.
             attestation = obs.check_attestation(KEYRING_ATTESTATION)
-            report["go_attestation"] = {"name": KEYRING_ATTESTATION, "goos": attestation["goos"], "go_version": attestation["go_version"],
-                                        "oracle_commit": attestation["oracle_commit"], "rust_commit": attestation["rust_commit"]}
+            report["go_attestation"] = {"name": KEYRING_ATTESTATION, "goos": attestation["goos"],
+                                        "oracle_commit": attestation["oracle_commit"]}
+            if attestation.get("source") == "ci-run":
+                report["go_attestation"].update(source="ci-run", run_url=attestation["run_url"], job_id=attestation["job_id"],
+                                                commit=attestation["commit"], source_digest=attestation["source_digest"])
+            else:
+                report["go_attestation"].update(source="local-go-run", go_version=attestation["go_version"],
+                                                rust_commit=attestation["rust_commit"])
             stages = [cargo + ["-p", "symvault-platform", "--test", "native_keyring_interop", "--all-features", "--", "--ignored", "--exact", "native_keyring_rust_half_set_update_read_delete", "--nocapture"]]
         sequence = " && ".join(shlex.join(stage) for stage in stages)
         if platform.system() == "Linux":

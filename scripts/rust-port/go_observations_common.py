@@ -30,9 +30,15 @@ Reverse checks (Go verifies what Rust wrote) cannot be replayed without Go; they
         run the Go-side verdict `cmd` (must exit 0) and write
         docs/rust-port/evidence/go-removal-attestations/NAME.<goos>.json: sha256 of every Rust artifact,
         the Go verdict (command, exit code, sha256 of its output), the oracle commit and the Rust commit
+  attest-ci NAME --run-url U --job-id N --commit SHA --source PATH...
+        a native attestation taken from a recorded CI run (a disposable host this machine is not) instead of a local
+        Go run; allowed only when `git diff --quiet SHA HEAD -- PATH...` holds, and every verification recomputes the
+        digest of PATH...: changed sources invalidate it.
   verify-attestation NAME
-        replay: the attestation exists for this host, is well-formed and records an accepting Go verdict
-        (missing = failure). The artifact digests are provenance of the attested build, not a pin on future builds.
+        replay: the attestation exists for this host, is well-formed, has exactly the expected artifact labels, was
+        built from a commit that is an ancestor of HEAD and records an accepting Go verdict (missing = failure,
+        unless the documented ACCEPTED_GAPS names this OS: then the gap is printed and the check passes). It is a
+        STATIC, historical claim: Go is not re-run, and the artifact digests are provenance, not a pin on future builds.
 """
 import argparse
 import base64
@@ -420,7 +426,14 @@ EXPECTED_ARTIFACTS = {
 }
 # Gaps that are accepted, documented and visible: the verifying target prints them and passes. An entry here
 # is not a skip of a check that exists; the attestation cannot be produced on that OS (see the text).
-ACCEPTED_GAPS = {}
+ACCEPTED_GAPS = {
+    ("tui-contract", "darwin"): (
+        "the fifteen-case live Go-vs-Rust terminal comparison drives the real macOS pasteboard, so it only runs on a disposable "
+        "CI host (rust-tui.yml, macos-latest) and no darwin Go observation is recorded; every successful rust-tui.yml macOS run "
+        "predates Rust TUI sources that differ from this tree (crates/symvault-platform/src/{text_clipboard,desktop_commands}.rs, "
+        "crates/symvault-store/src), so no CI run covers this code. The darwin lane keeps tui_harness_test.py; the gap closes "
+        "when rust-tui.yml passes on macos-latest at this tree (record it with `attest-ci`)."),
+}
 CI_RUN_URL = re.compile(r"https://github\.com/danieljustus/symaira-vault/actions/runs/[0-9]+")
 
 
@@ -568,6 +581,13 @@ def main(argv=None):
     p.add_argument("--note", default="")
     p.add_argument("--require-output", default=None, help="regex the verdict output must match")
     p.add_argument("--forbid-output", default=None, help="regex the verdict output must not match (e.g. SKIP)")
+    p = sub.add_parser("attest-ci")
+    p.add_argument("name")
+    p.add_argument("--run-url", required=True)
+    p.add_argument("--job-id", required=True, type=int)
+    p.add_argument("--commit", required=True)
+    p.add_argument("--source", action="append", default=[], help="repository file the CI run exercised (byte-identical now)")
+    p.add_argument("--note", default="")
     p = sub.add_parser("verify-attestation")
     p.add_argument("name")
     for name in ("replay-checked", "replay-verdict"):
@@ -586,6 +606,11 @@ def main(argv=None):
         if args.command == "attest":
             assert command and args.artifact, "attest needs --artifact LABEL=PATH and a command after --"
             print(f"attested {rel(write_attestation(args.name, args.artifact, command, args.env, args.note, args.require_output, args.forbid_output))}")
+            return 0
+        if args.command == "attest-ci":
+            target = write_ci_attestation(args.name, run_url=args.run_url, job_id=args.job_id, commit=args.commit,
+                                          source_paths=args.source, note=args.note)
+            print(f"attested {rel(target)} from CI run {args.run_url} job {args.job_id}")
             return 0
         if args.command == "verify-attestation":
             try:

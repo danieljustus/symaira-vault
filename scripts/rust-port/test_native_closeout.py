@@ -76,7 +76,7 @@ class KeyringAttestation(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.good = {"schema": obs.SCHEMA, "name": closeout.KEYRING_ATTESTATION, "goos": obs.host_goos(), "go_version": "go1.26.6",
-                     "oracle_commit": "a" * 40, "rust_commit": "b" * 40,
+                     "oracle_commit": obs.ORACLE_COMMIT, "rust_commit": obs.git_output("rev-parse", "HEAD"),
                      "rust_artifacts_sha256": {"rust-native-keyring-test": "c" * 64},
                      "go_verdict": {"command": ["x"], "exit_code": 0, "output_sha256": "d" * 64, "accepted": True}}
 
@@ -96,7 +96,8 @@ class KeyringAttestation(unittest.TestCase):
             target[path[-1]] = value
             return document
         for path, value in [(["go_verdict", "accepted"], False), (["go_verdict", "exit_code"], 1), (["goos"], "plan9"),
-                            (["oracle_commit"], "zz"), (["rust_commit"], ""), (["rust_artifacts_sha256"], {}),
+                            (["oracle_commit"], "zz"), (["oracle_commit"], "a" * 40), (["rust_commit"], ""),
+                            (["rust_commit"], "b" * 40), (["rust_artifacts_sha256"], {}),
                             (["name"], "other"), (["schema"], 2)]:
             with self.subTest(path=path):
                 self.write(mutate(path, value))
