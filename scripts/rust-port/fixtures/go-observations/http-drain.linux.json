@@ -1,0 +1,613 @@
+{
+ "contract": "http-drain",
+ "contract_args": {},
+ "data": {
+  "go": [
+   {
+    "case": "idle-keepalive",
+    "command_outlives_server": null,
+    "delta": {
+     "added": [],
+     "changed": [],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": null,
+    "exit_code": 0,
+    "exit_elapsed": 1.5,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "closed-at-once",
+    "peer_closed_after": 1.5,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}\n",
+     "headers": [
+      [
+       "content-length",
+       "37"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 200 OK"
+    },
+    "runtime_records": [],
+    "signal": "SIGINT",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "idle-keepalive",
+    "command_outlives_server": null,
+    "delta": {
+     "added": [],
+     "changed": [],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": null,
+    "exit_code": 0,
+    "exit_elapsed": 1.5,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "closed-at-once",
+    "peer_closed_after": 1.5,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}\n",
+     "headers": [
+      [
+       "content-length",
+       "37"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 200 OK"
+    },
+    "runtime_records": [],
+    "signal": "SIGTERM",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "inflight-within",
+    "command_outlives_server": false,
+    "delta": {
+     "added": [],
+     "changed": [
+      "vault/audit-fixture.log"
+     ],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": "refused",
+    "exit_code": 0,
+    "exit_elapsed": 2.75,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "completed",
+    "peer_closed_after": 2.75,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"{\\\"duration_ms:N,\\\"exit_code\\\":0,\\\"stderr\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\",\\\"stdout\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n",
+     "headers": [
+      [
+       "connection",
+       "close"
+      ],
+      [
+       "content-length",
+       "372"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 200 OK"
+    },
+    "runtime_records": [],
+    "signal": "SIGINT",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "inflight-within",
+    "command_outlives_server": false,
+    "delta": {
+     "added": [],
+     "changed": [
+      "vault/audit-fixture.log"
+     ],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": "refused",
+    "exit_code": 0,
+    "exit_elapsed": 2.75,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "completed",
+    "peer_closed_after": 2.75,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"{\\\"duration_ms:N,\\\"exit_code\\\":0,\\\"stderr\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\",\\\"stdout\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n",
+     "headers": [
+      [
+       "connection",
+       "close"
+      ],
+      [
+       "content-length",
+       "372"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 200 OK"
+    },
+    "runtime_records": [],
+    "signal": "SIGTERM",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "inflight-keepalive",
+    "command_outlives_server": false,
+    "delta": {
+     "added": [],
+     "changed": [
+      "vault/audit-fixture.log"
+     ],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": "refused",
+    "exit_code": 0,
+    "exit_elapsed": 2.75,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "completed",
+    "peer_closed_after": 2.75,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"{\\\"duration_ms:N,\\\"exit_code\\\":0,\\\"stderr\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\",\\\"stdout\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n",
+     "headers": [
+      [
+       "connection",
+       "close"
+      ],
+      [
+       "content-length",
+       "372"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 200 OK"
+    },
+    "runtime_records": [],
+    "signal": "SIGINT",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "inflight-keepalive",
+    "command_outlives_server": false,
+    "delta": {
+     "added": [],
+     "changed": [
+      "vault/audit-fixture.log"
+     ],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": "refused",
+    "exit_code": 0,
+    "exit_elapsed": 2.75,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "completed",
+    "peer_closed_after": 2.75,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"{\\\"duration_ms:N,\\\"exit_code\\\":0,\\\"stderr\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\",\\\"stdout\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n",
+     "headers": [
+      [
+       "connection",
+       "close"
+      ],
+      [
+       "content-length",
+       "372"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 200 OK"
+    },
+    "runtime_records": [],
+    "signal": "SIGTERM",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "inflight-exceeds",
+    "command_outlives_server": true,
+    "delta": {
+     "added": [],
+     "changed": [],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": null,
+    "exit_code": 0,
+    "exit_elapsed": 6.25,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "force-closed-empty",
+    "peer_closed_after": 6.25,
+    "peer_end": "eof",
+    "response": null,
+    "runtime_records": [],
+    "signal": "SIGINT",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "inflight-exceeds",
+    "command_outlives_server": true,
+    "delta": {
+     "added": [],
+     "changed": [],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": null,
+    "exit_code": 0,
+    "exit_elapsed": 6.25,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "force-closed-empty",
+    "peer_closed_after": 6.25,
+    "peer_end": "eof",
+    "response": null,
+    "runtime_records": [],
+    "signal": "SIGTERM",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "slowbody-within",
+    "command_outlives_server": null,
+    "delta": {
+     "added": [],
+     "changed": [],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": null,
+    "exit_code": 0,
+    "exit_elapsed": 2.15,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "completed",
+    "peer_closed_after": 2.15,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"error\":{\"message\":\"context canceled\",\"code\":-32603},\"jsonrpc\":\"2.0\",\"id\":2}\n",
+     "headers": [
+      [
+       "connection",
+       "close"
+      ],
+      [
+       "content-length",
+       "78"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 403 Forbidden"
+    },
+    "runtime_records": [],
+    "signal": "SIGINT",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "slowbody-within",
+    "command_outlives_server": null,
+    "delta": {
+     "added": [],
+     "changed": [],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": null,
+    "exit_code": 0,
+    "exit_elapsed": 2.15,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "completed",
+    "peer_closed_after": 2.15,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"error\":{\"message\":\"context canceled\",\"code\":-32603},\"jsonrpc\":\"2.0\",\"id\":2}\n",
+     "headers": [
+      [
+       "connection",
+       "close"
+      ],
+      [
+       "content-length",
+       "78"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 403 Forbidden"
+    },
+    "runtime_records": [],
+    "signal": "SIGTERM",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "slowbody-exceeds",
+    "command_outlives_server": null,
+    "delta": {
+     "added": [],
+     "changed": [],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": null,
+    "exit_code": 0,
+    "exit_elapsed": 6.25,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "force-closed-empty",
+    "peer_closed_after": 6.25,
+    "peer_end": "eof",
+    "response": null,
+    "runtime_records": [],
+    "signal": "SIGINT",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "slowbody-exceeds",
+    "command_outlives_server": null,
+    "delta": {
+     "added": [],
+     "changed": [],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": null,
+    "exit_code": 0,
+    "exit_elapsed": 6.25,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "force-closed-empty",
+    "peer_closed_after": 6.25,
+    "peer_end": "eof",
+    "response": null,
+    "runtime_records": [],
+    "signal": "SIGTERM",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "second-signal",
+    "command_outlives_server": false,
+    "delta": {
+     "added": [],
+     "changed": [
+      "vault/audit-fixture.log"
+     ],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": "refused",
+    "exit_code": 0,
+    "exit_elapsed": 3.4,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "completed",
+    "peer_closed_after": 3.4,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"{\\\"duration_ms:N,\\\"exit_code\\\":0,\\\"stderr\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\",\\\"stdout\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n",
+     "headers": [
+      [
+       "connection",
+       "close"
+      ],
+      [
+       "content-length",
+       "372"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 200 OK"
+    },
+    "runtime_records": [],
+    "signal": "SIGINT",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "second-signal",
+    "command_outlives_server": false,
+    "delta": {
+     "added": [],
+     "changed": [
+      "vault/audit-fixture.log"
+     ],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": "refused",
+    "exit_code": 0,
+    "exit_elapsed": 3.4,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "completed",
+    "peer_closed_after": 3.4,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"{\\\"duration_ms:N,\\\"exit_code\\\":0,\\\"stderr\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\",\\\"stdout\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n",
+     "headers": [
+      [
+       "connection",
+       "close"
+      ],
+      [
+       "content-length",
+       "372"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 200 OK"
+    },
+    "runtime_records": [],
+    "signal": "SIGTERM",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\n",
+    "stdout": ""
+   },
+   {
+    "case": "inflight-within",
+    "command_outlives_server": false,
+    "delta": {
+     "added": [],
+     "changed": [
+      "vault/audit-fixture.log"
+     ],
+     "removed": [
+      "vault/.runtime-port"
+     ]
+    },
+    "during_drain": "refused",
+    "exit_code": 0,
+    "exit_elapsed": 2.75,
+    "implementation": "go",
+    "in_window": true,
+    "listener_closed": true,
+    "outcome": "completed",
+    "peer_closed_after": 2.75,
+    "peer_end": "eof",
+    "response": {
+     "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"{\\\"duration_ms:N,\\\"exit_code\\\":0,\\\"stderr\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\",\\\"stdout\\\":\\\"\\\\u003c!-- DATA_ID label=command_output --\\\\u003e\\\\u003c!-- /DATA_ID --\\\\u003e\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n",
+     "headers": [
+      [
+       "connection",
+       "close"
+      ],
+      [
+       "content-length",
+       "372"
+      ],
+      [
+       "content-type",
+       "application/json"
+      ]
+     ],
+     "status_line": "HTTP/1.1 200 OK"
+    },
+    "runtime_records": [],
+    "signal": "SIGQUIT",
+    "stderr": "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.\nBind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] MCP server listening on 127.0.0.1:<PORT>\nMCP server is binding \"127.0.0.1\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true). Even on loopback, a local attacker or compromised process on the same machine can sniff traffic.\nReceived SIGQUIT, shutting down gracefully...\n",
+    "stdout": ""
+   }
+  ],
+  "info": {
+   "go_binary_sha256": "39a93e97675c343ae0039b0de8d1ec42d5b35e0b607ed3671ac5fa0a22b6e518",
+   "oracle_embedded": "48aee571507acaa19b8f6f5b6c926b75e45a3da5b9ba142a8f02f48a4cbe0e30",
+   "oracle_sources": "315a85951be1ce30d1083c3d66393f4cfba62a56461864d0397e3f0e72eccea8",
+   "seed_binary_sha256": "de279402c9c3f8fb64623daf119f9bdc2118e668c726e54cb46d632796c51e1a",
+   "seed_sha256": "9b2f1eabe318a70ba75cbf3c59a234b6ffb72b54ffc04d64cee010814d1acf5f"
+  },
+  "seeds": {
+   "main": {
+    "tokens": {
+     "expired": "6dfb1c3bd821f44d645395f832c45ffef6e823da5e1aae61143584e7cdcd34da",
+     "full": "0f6d69b789ad3bcb23c526099d873dbdeaf7a678f7df3a202267bca2d66a6132",
+     "health": "e720b930d035dc63f79aa7d5c9b2711370308252adcac6f7becade172f91c41c",
+     "metadata": "f9ac19872def69b172c20dab8e2d508ee5e25043a617280ef4c4ba8a81caa59d",
+     "other": "63377e85a8e635cfb5ef03bdfaa9efe5d266fbe964117d391455eabdf19718eb",
+     "revoked": "c1326ccb7c3a5381661adc3245e3bee9f617d754c6038b564e02cb4e18877e7c"
+    },
+    "vault": {
+     ".lock": "",
+     "config.yaml": "YWdlbnRzOgogICAgZml4dHVyZToKICAgICAgICB0aWVyOiBhZG1pbgogICAgICAgIGFwcHJvdmFsTW9kZTogbm9uZQogICAgICAgIGFsbG93ZWRQYXRoczoKICAgICAgICAgICAgLSBwdWJsaWMKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGNhblJlYWRWYWx1ZXM6IHRydWUKICAgICAgICBleHBvc2VWYWx1ZVRvb2xzOiB0cnVlCiAgICBvdGhlcjoKICAgICAgICB0aWVyOiBhZG1pbgogICAgICAgIGFwcHJvdmFsTW9kZTogbm9uZQogICAgICAgIGFsbG93ZWRQYXRoczoKICAgICAgICAgICAgLSBwdWJsaWMKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGNhblJlYWRWYWx1ZXM6IHRydWUKICAgICAgICBleHBvc2VWYWx1ZVRvb2xzOiB0cnVlCnZhdWx0OgogICAgYXV0aE1ldGhvZDogcGFzc3BocmFzZQogICAgZm9ybWF0X3ZlcnNpb246IDIKICAgIGFyZ29uMmlkX3RpbWU6IDIKICAgIGFyZ29uMmlkX21lbW9yeTogMTk0NTYKICAgIGFyZ29uMmlkX3RocmVhZHM6IDEKbWNwOgogICAgYWxsb3dfaW5zZWN1cmVfYmluZDogdHJ1ZQp2YXVsdERpcjogL3Zhci9mb2xkZXJzLzd2LzdicHEwZmpuNDRsZmxweGR5bHN4OHFzNDAwMDBnbi9UL3N5bXZhdWx0LWdvLWNhcHR1cmUtcjMzdTJzbW4vc2VlZC92YXVsdApkZWZhdWx0QWdlbnQ6IGZpeHR1cmUKc2Vzc2lvblRpbWVvdXQ6IDE1bTBzCnNlc3Npb25NYXhMaWZldGltZTogOGgwbTBzCmF1dGhNZXRob2Q6IHBhc3NwaHJhc2UK",
+     "entries/public/fixture.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB3ZzIySGVQR2hRNEVId25vbnZtQll0TTlYSEh6ZEpjcHJlL3V4RVJWbWdNCk5tZHdmUGhDV2ZBdTlEYlZRMndYQVJyWjlHcFVOUEtNdFBtWnk2REg3TVUKLS0tIEFtV1h4ZGhEQjYxUnBBVU5RelNVeWdIN2NxelhkSEdpd2ozR1BqMVJoVkEKAgsvUg18+8DwhXmaC0PkLz3zJf+SKepJjasAc1zYJdrBV+1RKm7Sotj+MzFglDhtuHsGiMXYpqVGSHMO2VTuohS1iVDpG040u434emieJ1ngPMf51Ovm11HsOgnY3kgChFyfV9fauVW/6NihSyWP/MICTXEsP1mu8tyc73hZkKcImevhkNOm5hSGv6EGlH9m/f9+cLqwJ4zq1sJzVJZaqtrZ7U34xBjht6xV0MenZjfF1DAg00IVAkP2KRS7m5JZq8GpPRRvDire8B4hw1rKiWlYxSe74Yzk",
+     "identity.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIExIZTFwdGd5M2RqMEJtdmwwZkM1MEEgdD0yLG09MTk0NTYscD0xCnZEK3ZrTDdCaXlTNkhkUXdtSjdBZHJ2TXNFOEt2THVkQ2FuNXRjajQrK0Q1dUFGMjhaeEliMFl3RW9nCi0tLSBwWDNicnVZUU9uUGlvWXFyUS9tYUNsS2lRLzFNbFg5ODdBcmlOVlRwMTkwCoF6/0mw2xqB1TQQ6+3yjeHKVyMRfC2Kqx6FvVLm1aSx6FhhH3WUnHosRQznoVLZJ6Bt1Q9tuZDgPmbRWeS+C2mRmFmLNYbdpMiOVVjrwnoRYWxABdQ51GHrMwg5xLCysygVQ+heli6YGHM=",
+     "manifest.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBreVFLWVJMSUNRaDhockx2ZlpEVkN6NVlRcm1NZjg5T2RRYXgvVWMwa1NFCk9kaVlrZzJYMkxQSjR6bkk0VUg2aHJSRGRBc1pISGo3N2F6bk5BelQra1kKLS0tIGZ2RlhEMit1OGJ1eUcwcEh5RUFwSCtIY0FCejRwNTR1SVhwZmFZSktHc1EKzbF+WqJ+ZSEJvPKMl/f+ZBsDz9rgioItZgPOukLcM9RJRBQGcTAVRJpJIDgdy15DQ2xqHvtNNdWxmJzytOe8RZVKxCzcTpoRUA0llaD4PNWIT/u13zy6CqeW+23rJRkf3W2+tsPe7u9X9CJM3c3ILmhakmdF/W6locJI93/ehCyZL5iODpaIKJ7aSU00JqFg4Vuaa631W5Th2W61K8H5c11RIZy7zWoqFgf4ULQaSh14SqPwQALSAaubC9j7qtV/FixfP3ZVURkX9e9I95nwAvnf9xxL6WNVmbP5MwU6np8gPWEf8rTOX1wCjTcu7LvKa1xRwUVj6TeC2MPaEy8W1wAmS3SPfLmaaBEm+K9InOZXZul09NTIkF3Ij7Pq1OZlMpIiYcVPiN0=",
+     "mcp-tokens.json": "ewogICJ2ZXJzaW9uIjogMiwKICAidG9rZW5zIjogewogICAgInRvay0yMDI2MTEwMy01M2Y0OGYzOSI6IHsKICAgICAgImlkIjogInRvay0yMDI2MTEwMy01M2Y0OGYzOSIsCiAgICAgICJsYWJlbCI6ICJmdWxsIiwKICAgICAgImhhc2giOiAiZjQ1ZGFiNWUxYjViMmJkNzMxYmYyNWQ4ZjczMWIxZTlmMDc3NmNhYWM5ZWNlMDIwM2FkZjU1ZjBkZWFiNDA1YiIsCiAgICAgICJwcmVmaXgiOiAiMGY2ZCIsCiAgICAgICJhbGxvd2VkX3Rvb2xzIjogWwogICAgICAgICIqIgogICAgICBdLAogICAgICAiYWdlbnRfbmFtZSI6ICJmaXh0dXJlIiwKICAgICAgImNyZWF0ZWRfYXQiOiAiMjAyNi0xMS0wM1QyMzowMDo1Mi44NjI3MTNaIiwKICAgICAgImV4cGlyZXNfYXQiOiAiMjAyNi0xMS0wNFQwMDowMDo1Mi44NjI3MTNaIiwKICAgICAgInJldm9rZWQiOiBmYWxzZQogICAgfSwKICAgICJ0b2stMjAyNjExMDMtNWYwNWVmNzQiOiB7CiAgICAgICJpZCI6ICJ0b2stMjAyNjExMDMtNWYwNWVmNzQiLAogICAgICAibGFiZWwiOiAibWV0YWRhdGEiLAogICAgICAiaGFzaCI6ICIwMTQxZmE2ZmNiNTQ4MzljMGU4NWVmZGQ4YjMzZWM1ODQxMjAxYjQ5ZTY3ZTZmNDljZGE3ZWM2YjZmYjE4YjIyIiwKICAgICAgInByZWZpeCI6ICJmOWFjIiwKICAgICAgImFsbG93ZWRfdG9vbHMiOiBbCiAgICAgICAgImdldF9lbnRyeV9tZXRhZGF0YSIKICAgICAgXSwKICAgICAgImFnZW50X25hbWUiOiAiZml4dHVyZSIsCiAgICAgICJjcmVhdGVkX2F0IjogIjIwMjYtMTEtMDNUMjM6MDA6NTIuODcwNzUzWiIsCiAgICAgICJleHBpcmVzX2F0IjogIjIwMjYtMTEtMDRUMDA6MDA6NTIuODcwNzUzWiIsCiAgICAgICJyZXZva2VkIjogZmFsc2UKICAgIH0sCiAgICAidG9rLTIwMjYxMTAzLTcwYmUxMmQyIjogewogICAgICAiaWQiOiAidG9rLTIwMjYxMTAzLTcwYmUxMmQyIiwKICAgICAgImxhYmVsIjogIm90aGVyIiwKICAgICAgImhhc2giOiAiOTMwZTNhZDgxOGFiNjU3N2QwOWJlNWQ3ZDIzNmFhNWE0NTQyMjM5YzA5YjMwNzY4YmE5NDE5YTc1MGQ5NDE4MSIsCiAgICAgICJwcmVmaXgiOiAiNjMzNyIsCiAgICAgICJhbGxvd2VkX3Rvb2xzIjogWwogICAgICAgICIqIgogICAgICBdLAogICAgICAiYWdlbnRfbmFtZSI6ICJvdGhlciIsCiAgICAgICJjcmVhdGVkX2F0IjogIjIwMjYtMTEtMDNUMjM6MDA6NTIuODc2NTAyWiIsCiAgICAgICJleHBpcmVzX2F0IjogIjIwMjYtMTEtMDRUMDA6MDA6NTIuODc2NTAyWiIsCiAgICAgICJyZXZva2VkIjogZmFsc2UKICAgIH0sCiAgICAidG9rLTIwMjYxMTAzLTg1Y2Q4M2JlIjogewogICAgICAiaWQiOiAidG9rLTIwMjYxMTAzLTg1Y2Q4M2JlIiwKICAgICAgImxhYmVsIjogInJldm9rZWQiLAogICAgICAiaGFzaCI6ICJlNDJiZWVkMzE0YzBiZTFlOGJhNzFmZDAwYTEzMWYzYTI3ZmJmMzZkNWM2Y2RkZWFhYjUyOWQ4ODk3NzY3ZDliIiwKICAgICAgInByZWZpeCI6ICJjMTMyIiwKICAgICAgImFsbG93ZWRfdG9vbHMiOiBbCiAgICAgICAgIioiCiAgICAgIF0sCiAgICAgICJhZ2VudF9uYW1lIjogImZpeHR1cmUiLAogICAgICAiY3JlYXRlZF9hdCI6ICIyMDI2LTExLTAzVDIzOjAwOjUyLjg4NDgzWiIsCiAgICAgICJleHBpcmVzX2F0IjogIjIwMjYtMTEtMDRUMDA6MDA6NTIuODg0ODI5WiIsCiAgICAgICJyZXZva2VkIjogdHJ1ZSwKICAgICAgInJldm9rZWRfYXQiOiAiMjAyNi0xMS0wM1QyMzowMDo1Mi44ODkzWiIKICAgIH0sCiAgICAidG9rLTIwMjYxMTAzLTlkYTEwMzM5IjogewogICAgICAiaWQiOiAidG9rLTIwMjYxMTAzLTlkYTEwMzM5IiwKICAgICAgImxhYmVsIjogImV4cGlyZWQiLAogICAgICAiaGFzaCI6ICI5ZTM5NGUxYjVhZWZjNWFkZWYyNzA1YzJhNjBmNzk5ZjY0ZWY4M2UwZGViYmZmZTY0MmUyYTE5NDgyNWQyYjZhIiwKICAgICAgInByZWZpeCI6ICI2ZGZiIiwKICAgICAgImFsbG93ZWRfdG9vbHMiOiBbCiAgICAgICAgIioiCiAgICAgIF0sCiAgICAgICJhZ2VudF9uYW1lIjogImZpeHR1cmUiLAogICAgICAiY3JlYXRlZF9hdCI6ICIyMDI2LTExLTAzVDIzOjAwOjUyLjg4MDgxOFoiLAogICAgICAiZXhwaXJlc19hdCI6ICIyMDI2LTExLTAzVDIzOjAwOjUyLjg4MDgxODAwMVoiLAogICAgICAicmV2b2tlZCI6IGZhbHNlCiAgICB9LAogICAgInRvay0yMDI2MTEwMy1kOWE0ZWY4OSI6IHsKICAgICAgImlkIjogInRvay0yMDI2MTEwMy1kOWE0ZWY4OSIsCiAgICAgICJsYWJlbCI6ICJoZWFsdGgiLAogICAgICAiaGFzaCI6ICI5OGZlM2VjOGFkYTQyYjVmNGU4NWY1NTViMmEwODNlNjQ0MTZiM2NiYWRhZWYxNDhjOGU2NjhjOTIxZTkyZWJjIiwKICAgICAgInByZWZpeCI6ICJlNzIwIiwKICAgICAgImFsbG93ZWRfdG9vbHMiOiBbCiAgICAgICAgImhlYWx0aCIKICAgICAgXSwKICAgICAgImFnZW50X25hbWUiOiAiZml4dHVyZSIsCiAgICAgICJjcmVhdGVkX2F0IjogIjIwMjYtMTEtMDNUMjM6MDA6NTIuODY2ODY4WiIsCiAgICAgICJleHBpcmVzX2F0IjogIjIwMjYtMTEtMDRUMDA6MDA6NTIuODY2ODY4WiIsCiAgICAgICJyZXZva2VkIjogZmFsc2UKICAgIH0KICB9Cn0K"
+    }
+   }
+  }
+ },
+ "go_version": "go1.26.6",
+ "goarch": "aarch64",
+ "goos": "linux",
+ "normalization": [
+  "seed vault and tokens pinned in the file (each case picks a free port at run time; no port is recorded: peer ports are normalised inside stderr and the response bodies carry none)",
+  "Date header, log timestamps, peer ports",
+  "wall-clock exit_elapsed/peer_closed_after: the real value was asserted inside the case's exit window at capture (in_window) and is recorded as the window midpoint; neither is compared"
+ ],
+ "oracle_commit": "d1cd0f97ac550bc3020bc86b0514989f8d28d95c",
+ "schema": 1
+}

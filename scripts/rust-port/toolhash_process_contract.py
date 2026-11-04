@@ -325,7 +325,10 @@ def capture(args):
         assert any(dict(row).get('token_id') for row in audit), 'Go rows carry token ids'
         assert len(audit) == EXPECTED_AUDIT_ROWS, len(audit)
         data = dict(info=dict(go_binary_sha256=sha256(go_cli), seed_binary_sha256=sha256(go_seed)), recorded_go_hash=recorded,
-                    tokens=tokens, seed_tree=pack_tree(seed_home / 'vault'), shared_tree=pack_tree(shared / 'vault'),
+                    tokens=tokens,
+                    # a re-capture keeps the pinned bytes (the working copies were rebased to the current clock on unpack)
+                    seed_tree=prior['seed_tree'] if prior else pack_tree(seed_home / 'vault'),
+                    shared_tree=prior['shared_tree'] if prior else pack_tree(shared / 'vault'),
                     issue=issue, http=[[name, token_name, list(outcome)] for (name, token_name), outcome in sorted(results.items())],
                     audit=audit)
         toolchain = subprocess.run(['go', 'version', str(go_cli)], capture_output=True, text=True, check=True).stdout.split(':')[-1].strip()

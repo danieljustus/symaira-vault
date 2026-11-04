@@ -1,0 +1,467 @@
+{
+ "contract": "toolhash-process",
+ "contract_args": {},
+ "data": {
+  "audit": [
+   [
+    [
+     "agent",
+     "fixture"
+    ],
+    [
+     "action",
+     "tool_registry_drift"
+    ],
+    [
+     "path",
+     "symaira_search"
+    ],
+    [
+     "transport",
+     "http"
+    ],
+    [
+     "reason",
+     "tool_registry_drift"
+    ],
+    [
+     "token_id",
+     "tok-19700101-00000000"
+    ],
+    [
+     "req_id",
+     "<req>"
+    ],
+    [
+     "sess_id",
+     "<sess>"
+    ],
+    [
+     "ok",
+     false
+    ]
+   ],
+   [
+    [
+     "agent",
+     "fixture"
+    ],
+    [
+     "action",
+     "tool_denied"
+    ],
+    [
+     "path",
+     "symaira_search"
+    ],
+    [
+     "transport",
+     "http"
+    ],
+    [
+     "reason",
+     "tool_denied"
+    ],
+    [
+     "token_id",
+     "tok-19700101-00000000"
+    ],
+    [
+     "req_id",
+     "<req>"
+    ],
+    [
+     "sess_id",
+     "<sess>"
+    ],
+    [
+     "ok",
+     false
+    ]
+   ],
+   [
+    [
+     "agent",
+     "fixture"
+    ],
+    [
+     "action",
+     "get_metadata"
+    ],
+    [
+     "path",
+     "public/fixture"
+    ],
+    [
+     "transport",
+     "http"
+    ],
+    [
+     "token_id",
+     "tok-19700101-00000000"
+    ],
+    [
+     "req_id",
+     "<req>"
+    ],
+    [
+     "sess_id",
+     "<sess>"
+    ],
+    [
+     "ok",
+     true
+    ]
+   ],
+   [
+    [
+     "agent",
+     "fixture"
+    ],
+    [
+     "action",
+     "tool_registry_drift"
+    ],
+    [
+     "path",
+     "get_entry_metadata"
+    ],
+    [
+     "transport",
+     "http"
+    ],
+    [
+     "reason",
+     "tool_registry_drift"
+    ],
+    [
+     "token_id",
+     "tok-19700101-00000000"
+    ],
+    [
+     "req_id",
+     "<req>"
+    ],
+    [
+     "sess_id",
+     "<sess>"
+    ],
+    [
+     "ok",
+     false
+    ]
+   ],
+   [
+    [
+     "agent",
+     "fixture"
+    ],
+    [
+     "action",
+     "get_metadata"
+    ],
+    [
+     "path",
+     "private/x"
+    ],
+    [
+     "transport",
+     "http"
+    ],
+    [
+     "reason",
+     "get_metadata"
+    ],
+    [
+     "token_id",
+     "tok-19700101-00000000"
+    ],
+    [
+     "req_id",
+     "<req>"
+    ],
+    [
+     "sess_id",
+     "<sess>"
+    ],
+    [
+     "ok",
+     false
+    ]
+   ],
+   [
+    [
+     "agent",
+     "fixture"
+    ],
+    [
+     "action",
+     "tool_registry_drift"
+    ],
+    [
+     "path",
+     "get_entry_metadata"
+    ],
+    [
+     "transport",
+     "http"
+    ],
+    [
+     "reason",
+     "tool_registry_drift"
+    ],
+    [
+     "token_id",
+     "tok-19700101-00000000"
+    ],
+    [
+     "req_id",
+     "<req>"
+    ],
+    [
+     "sess_id",
+     "<sess>"
+    ],
+    [
+     "ok",
+     false
+    ]
+   ],
+   [
+    [
+     "agent",
+     "fixture"
+    ],
+    [
+     "action",
+     "tool_denied"
+    ],
+    [
+     "path",
+     "symaira_search"
+    ],
+    [
+     "transport",
+     "http"
+    ],
+    [
+     "reason",
+     "tool_denied"
+    ],
+    [
+     "token_id",
+     "tok-19700101-00000000"
+    ],
+    [
+     "req_id",
+     "<req>"
+    ],
+    [
+     "sess_id",
+     "<sess>"
+    ],
+    [
+     "ok",
+     false
+    ]
+   ],
+   [
+    [
+     "agent",
+     "fixture"
+    ],
+    [
+     "action",
+     "tool_registry_drift"
+    ],
+    [
+     "path",
+     "health"
+    ],
+    [
+     "transport",
+     "http"
+    ],
+    [
+     "reason",
+     "tool_registry_drift"
+    ],
+    [
+     "token_id",
+     "tok-19700101-00000000"
+    ],
+    [
+     "req_id",
+     "<req>"
+    ],
+    [
+     "sess_id",
+     "<sess>"
+    ],
+    [
+     "ok",
+     false
+    ]
+   ]
+  ],
+  "http": [
+   [
+    "health",
+    "go_current",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"{\\\"server\\\":\\\"Symaira Vault MCP\\\",\\\"status\\\":\\\"healthy\\\",\\\"transport\\\":\\\"http\\\",\\\"version\\\":\\\"1.0.0\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n"
+    ]
+   ],
+   [
+    "health",
+    "go_stale",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"tool registry has changed since this token was issued \u2014 re-issue the token with 'symvault agent token new fixture'\",\"type\":\"text\"}],\"isError\":true}}\n"
+    ]
+   ],
+   [
+    "health",
+    "rust_cli_issued",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"{\\\"server\\\":\\\"Symaira Vault MCP\\\",\\\"status\\\":\\\"healthy\\\",\\\"transport\\\":\\\"http\\\",\\\"version\\\":\\\"1.0.0\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n"
+    ]
+   ],
+   [
+    "out-of-scope-tool",
+    "go_stale_scoped_health",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"Tool \\\"symaira_search\\\" requires tier \\\"token_scope\\\"\",\"type\":\"text\"}],\"isError\":true}}\n"
+    ]
+   ],
+   [
+    "policy-allowed-path",
+    "go_current",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"{\\\"auto_rotate\\\":false,\\\"fields\\\":[{\\\"handle\\\":\\\"op://public/fixture/password\\\",\\\"kind\\\":\\\"string\\\",\\\"name\\\":\\\"password\\\",\\\"usage\\\":{\\\"note\\\":\\\"The raw value is never returned to agents. Pass \\\\\\\"public/fixture.password\\\\\\\" as a run_command env reference (SymVault resolves and injects it; the command sees the value, you don't), or use copy_to_clipboard/autotype for interactive use, or request_credential to ask the user directly. Consuming it this way does not require unsealing first.\\\",\\\"run_command\\\":{\\\"env\\\":{\\\"\\\\u003cVAR_NAME\\\\u003e\\\":\\\"public/fixture.password\\\"}}}}],\\\"has_value\\\":true,\\\"meta\\\":{\\\"created\\\":\\\"2026-11-03T23:01:16Z\\\",\\\"updated\\\":\\\"2026-11-03T23:01:16Z\\\",\\\"version\\\":1},\\\"path\\\":\\\"public/fixture\\\",\\\"tags\\\":[],\\\"type\\\":\\\"\\\",\\\"usage_hint\\\":\\\"\\\\u003c!-- DATA_<nonce> label=usage_hint --\\\\u003e\\\\u003c!-- /DATA_<nonce> --\\\\u003e\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n"
+    ]
+   ],
+   [
+    "policy-allowed-path",
+    "go_stale",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"tool registry has changed since this token was issued \u2014 re-issue the token with 'symvault agent token new fixture'\",\"type\":\"text\"}],\"isError\":true}}\n"
+    ]
+   ],
+   [
+    "policy-denied-path",
+    "go_current",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"error\":{\"message\":\"access denied: path \\\"private/x\\\" outside allowed scope\",\"code\":-32603},\"jsonrpc\":\"2.0\",\"id\":2}\n"
+    ]
+   ],
+   [
+    "policy-denied-path",
+    "go_stale",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"tool registry has changed since this token was issued \u2014 re-issue the token with 'symvault agent token new fixture'\",\"type\":\"text\"}],\"isError\":true}}\n"
+    ]
+   ],
+   [
+    "search",
+    "go_cli_issued",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"[\\\"get_auth_status\\\",\\\"set_auth_method\\\"]\",\"type\":\"text\"}],\"isError\":false}}\n"
+    ]
+   ],
+   [
+    "search",
+    "go_current",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"[\\\"get_auth_status\\\",\\\"set_auth_method\\\"]\",\"type\":\"text\"}],\"isError\":false}}\n"
+    ]
+   ],
+   [
+    "search",
+    "go_legacy_empty",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"[\\\"get_auth_status\\\",\\\"set_auth_method\\\"]\",\"type\":\"text\"}],\"isError\":false}}\n"
+    ]
+   ],
+   [
+    "search",
+    "go_stale",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"tool registry has changed since this token was issued \u2014 re-issue the token with 'symvault agent token new fixture'\",\"type\":\"text\"}],\"isError\":true}}\n"
+    ]
+   ],
+   [
+    "search",
+    "go_stale_scoped_health",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"Tool \\\"symaira_search\\\" requires tier \\\"token_scope\\\"\",\"type\":\"text\"}],\"isError\":true}}\n"
+    ]
+   ],
+   [
+    "search",
+    "rust_cli_issued",
+    [
+     "HTTP/1.1 200 OK",
+     "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"text\":\"[\\\"get_auth_status\\\",\\\"set_auth_method\\\"]\",\"type\":\"text\"}],\"isError\":false}}\n"
+    ]
+   ]
+  ],
+  "info": {
+   "go_binary_sha256": "cae5e2c48a9f6fe5ab258ed5d6fab9dab2707db66c17db9ff188db3f6b173635",
+   "seed_binary_sha256": "2d68595900b782c503cd3000e706d6464a808d4c1223ae3137732e32e517f6db"
+  },
+  "issue": {
+   "new": "bccf8c7e8660328030bc4e9bbc0c0d43a650278bae4b8ef60d5543d64c46455d",
+   "rotate": "bccf8c7e8660328030bc4e9bbc0c0d43a650278bae4b8ef60d5543d64c46455d"
+  },
+  "recorded_go_hash": "bccf8c7e8660328030bc4e9bbc0c0d43a650278bae4b8ef60d5543d64c46455d",
+  "seed_tree": {
+   ".lock": "",
+   "config.yaml": "YWdlbnRzOgogICAgZml4dHVyZToKICAgICAgICB0aWVyOiBhZG1pbgogICAgICAgIGFwcHJvdmFsTW9kZTogbm9uZQogICAgICAgIGFsbG93ZWRQYXRoczoKICAgICAgICAgICAgLSBwdWJsaWMKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGNhblJlYWRWYWx1ZXM6IHRydWUKICAgICAgICBleHBvc2VWYWx1ZVRvb2xzOiB0cnVlCnZhdWx0OgogICAgYXV0aE1ldGhvZDogcGFzc3BocmFzZQogICAgZm9ybWF0X3ZlcnNpb246IDIKICAgIGFyZ29uMmlkX3RpbWU6IDIKICAgIGFyZ29uMmlkX21lbW9yeTogMTk0NTYKICAgIGFyZ29uMmlkX3RocmVhZHM6IDEKbWNwOgogICAgYWxsb3dfaW5zZWN1cmVfYmluZDogdHJ1ZQp2YXVsdERpcjogL3Zhci9mb2xkZXJzLzd2LzdicHEwZmpuNDRsZmxweGR5bHN4OHFzNDAwMDBnbi9UL3N5bXZhdWx0LXRvb2xoYXNoLWk2dW4wNjd2L3NlZWQvdmF1bHQKZGVmYXVsdEFnZW50OiBmaXh0dXJlCnNlc3Npb25UaW1lb3V0OiAxNW0wcwpzZXNzaW9uTWF4TGlmZXRpbWU6IDhoMG0wcwphdXRoTWV0aG9kOiBwYXNzcGhyYXNlCg==",
+   "entries/public/fixture.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBwVVU5TDFiUS9CRzd5bHZJRHFCS0t5NC9Ga1pYU0s0Q09Ma1pTSVgva1NNClR6WHFMQWdxd2xsZEhueTdkeUl6MXhPOVBTVGZmRm9vL3F5MDVmdHlkblUKLS0tIFdDalI2VmMyalROZ04vcEppb3ViVGNGMU9mK1E1bEpoNGR6T1lTOTJFaTAKtbQPudPt9Q87UxLdNHydUH49cghq5at+qd1FxBbINlVhXCq+nLxKXkU4IDPLUjlaB5SWsqNYUq/eGGSkETfM9w0mYFot2X7ET78+4juWdKcBbtHJvRsR86+gk+uUp53G8rQFU4Bt0milBRQTQWrcNfpKQO2CWvzVT3I/zjkbeRJZ1KibU6BzC57UqOXZAw3pGF5wSOfZ0MhdYzsaumoMisXimYodo0AWrqu5839xSFH1M/IUsVmgUlYDZ4uX0tVd1qvEyHru2kLKskU6j53AR3Dtp/dg53V7jLwHEQ==",
+   "identity.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEREWklLV1NNUE1ESlVOMFQ3amdqRFEgdD0yLG09MTk0NTYscD0xCitZTkdsaXZaWUdjU0dBMGo4WEwvSlhBZHdlSFIyd0ZEZm11UkNHOWdFR1ZZaTQ0VjAxQ0JXZUhJS0RZCi0tLSB3QSt2ZFBDaTNobllNaUVhMEVrbzZ6YzY2V3krMFdJcTdPdys3cGdLM3pBCtIF7mcl0AZl5fu3zpCVoiviHgxgJlNODBRgMpHJshQ4nb6T5nEUqCgv+6sbpd5CUj/5I3RFifPed6WEN8ubOv/xohsHx12Kmiu8E8X7t7oY+GmeNdZQGCpfBMB9//3G+LIk3LPDZh6VFG0=",
+   "manifest.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA4Zkw0b1A2MkYxWFNOcFQ2MnlhSDIzZUxPL3lrNUxZNlE1azIzUjhlRGlRCkdGM0lETkVjRXg2WW1sQU5DVjFGVmZkMlZSUDBTQUNWaGF1RlA0NUluUHcKLS0tIHNLL3ozd2dvc253VS9XbDI4M0lUV3ZyT0VWOVJUZkFFY0hTbW5ZcUQ1ckUKuAZraq30aawl62mBfQ3wTfNhc+FwhAn1CLmMjdWAqZwOf0wq2+GnniHaoxjIt9HSQQIu2uIqwv87dOa3/jbrb7tiddIEwX1192GNR5cylLuCvBqBZ+fA5HYGoUFvRWwQu4ge4Sc9z4FX/2JbiGl/aGZ7cixnCj89sZr8aKhnGbCg81Z6s7Hil/VA2Bw6T9zWSjfQVxsnXzEz97wM/MzIM+od2fGPwI20cwpEFCI1lC9JzrUayZFsWfAcWaQ3ERrpXBo7DnNF/rV9qnyw+7Ej9nfDRCDo5pCoIzlx3Ru31fawnqnluLxI3Z4iLrxHdenRndjcMN8XnG+X+jfM8MoNgDQZCE1db91DNZuYMnLIkLyPhgDTm2KXu6r0lX0N317yYZH80C7YPuY=",
+   "mcp-tokens.json": "ewogICJ2ZXJzaW9uIjogMiwKICAidG9rZW5zIjogewogICAgInRvay0yMDI2MTEwMy0xMmEyY2I5YiI6IHsKICAgICAgImlkIjogInRvay0yMDI2MTEwMy0xMmEyY2I5YiIsCiAgICAgICJsYWJlbCI6ICJnb19zdGFsZV9zY29wZWRfaGVhbHRoIiwKICAgICAgImhhc2giOiAiM2IxMjk0ODA1ZDY3YzczNjYyZGM3ZjVmZjQwNmMyYzNiZDMzOGM3MzE5MDZlMGJhNDRmOWMxMTYyNTc2MWQwOSIsCiAgICAgICJwcmVmaXgiOiAiMzU2OCIsCiAgICAgICJhbGxvd2VkX3Rvb2xzIjogWwogICAgICAgICJoZWFsdGgiCiAgICAgIF0sCiAgICAgICJ0b29sX3JlZ2lzdHJ5X2hhc2giOiAiMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCIsCiAgICAgICJhZ2VudF9uYW1lIjogImZpeHR1cmUiLAogICAgICAiY3JlYXRlZF9hdCI6ICIyMDI2LTExLTA0VDAyOjI1OjEwLjUzNzAzM1oiLAogICAgICAiZXhwaXJlc19hdCI6ICIyMDI2LTExLTA0VDAzOjI1OjEwLjUzNzAzM1oiLAogICAgICAicmV2b2tlZCI6IGZhbHNlCiAgICB9LAogICAgInRvay0yMDI2MTEwMy0zMDFhN2I0OSI6IHsKICAgICAgImlkIjogInRvay0yMDI2MTEwMy0zMDFhN2I0OSIsCiAgICAgICJsYWJlbCI6ICJnb19sZWdhY3lfZW1wdHkiLAogICAgICAiaGFzaCI6ICJkNDdmYTdmMmY4MTZlNWM1ZTU2ZWFjYTYyZWEzMjE2MTMwNzU5ZjM3ZjY5YjlkN2NiZmU0M2ZjYmE4ZjRlMTY2IiwKICAgICAgInByZWZpeCI6ICIyNTdkIiwKICAgICAgImFsbG93ZWRfdG9vbHMiOiBbCiAgICAgICAgIioiCiAgICAgIF0sCiAgICAgICJhZ2VudF9uYW1lIjogImZpeHR1cmUiLAogICAgICAiY3JlYXRlZF9hdCI6ICIyMDI2LTExLTA0VDAyOjI1OjEwLjUyOTk0MFoiLAogICAgICAiZXhwaXJlc19hdCI6ICIyMDI2LTExLTA0VDAzOjI1OjEwLjUyOTkzOVoiLAogICAgICAicmV2b2tlZCI6IGZhbHNlCiAgICB9LAogICAgInRvay0yMDI2MTEwMy02MjRhMDc0YyI6IHsKICAgICAgImlkIjogInRvay0yMDI2MTEwMy02MjRhMDc0YyIsCiAgICAgICJsYWJlbCI6ICJnb19zdGFsZSIsCiAgICAgICJoYXNoIjogImJmMTdiYjQ4NDRhOWZhODkxNmFlNzM2MDUzZDIzZmI3ODBhZjI5NDU1NTEyYWZiNDI2YjQ4MjY2OTUyMzQyNjIiLAogICAgICAicHJlZml4IjogIjQxMTgiLAogICAgICAiYWxsb3dlZF90b29scyI6IFsKICAgICAgICAiKiIKICAgICAgXSwKICAgICAgInRvb2xfcmVnaXN0cnlfaGFzaCI6ICIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwKICAgICAgImFnZW50X25hbWUiOiAiZml4dHVyZSIsCiAgICAgICJjcmVhdGVkX2F0IjogIjIwMjYtMTEtMDRUMDI6MjU6MTAuNTMzMDkxWiIsCiAgICAgICJleHBpcmVzX2F0IjogIjIwMjYtMTEtMDRUMDM6MjU6MTAuNTMzMDkxWiIsCiAgICAgICJyZXZva2VkIjogZmFsc2UKICAgIH0sCiAgICAidG9rLTIwMjYxMTAzLTZhYThlMDZkIjogewogICAgICAiaWQiOiAidG9rLTIwMjYxMTAzLTZhYThlMDZkIiwKICAgICAgImxhYmVsIjogImdvX2N1cnJlbnQiLAogICAgICAiaGFzaCI6ICI0MDM0ZDM3N2Q3M2MxZjliNDBhYmY1YjkxMmYyNjFiYzA3MzMyNTIzM2VjZmRiZmI4ZjUyNWFhZTk5ZjkwNDUzIiwKICAgICAgInByZWZpeCI6ICI0MTkxIiwKICAgICAgImFsbG93ZWRfdG9vbHMiOiBbCiAgICAgICAgIioiCiAgICAgIF0sCiAgICAgICJ0b29sX3JlZ2lzdHJ5X2hhc2giOiAiYmNjZjhjN2U4NjYwMzI4MDMwYmM0ZTliYmMwYzBkNDNhNjUwMjc4YmFlNGI4ZWY2MGQ1NTQzZDY0YzQ2NDU1ZCIsCiAgICAgICJhZ2VudF9uYW1lIjogImZpeHR1cmUiLAogICAgICAiY3JlYXRlZF9hdCI6ICIyMDI2LTExLTA0VDAyOjI1OjEwLjUyNTk4N1oiLAogICAgICAiZXhwaXJlc19hdCI6ICIyMDI2LTExLTA0VDAzOjI1OjEwLjUyNTk4N1oiLAogICAgICAicmV2b2tlZCI6IGZhbHNlCiAgICB9CiAgfQp9Cg=="
+  },
+  "shared_tree": {
+   ".lock": "",
+   ".symvault-rust": "ewogICJzY2hlbWEiOiAxLAogICJraW5kIjogImdvLXZhdWx0LWJhY2t1cCIsCiAgImNyZWF0ZWRfYXQiOiAiMjAyNi0xMS0wM1QyMzowMToxNi44MTgwMzNaIiwKICAidmF1bHRfaWQiOiAiYWNkNDhmMjE2MDIzOGQ4MWQ3NmVlZmM4NDZlY2RiNzYwNzUzNjdmYTk5NzdjYTViNzgxZTNlZTkxNGY3MWRjMyIsCiAgImJhY2t1cCI6IHsKICAgICJwYXRoIjogIi9wcml2YXRlL3Zhci9mb2xkZXJzLzd2LzdicHEwZmpuNDRsZmxweGR5bHN4OHFzNDAwMDBnbi9UL3N5bXZhdWx0LXRvb2xoYXNoLWk2dW4wNjd2L3NoYXJlZC8ubG9jYWwvc3RhdGUvc3ltdmF1bHQvYmFja3Vwcy9wcmUtcnVzdC12YXVsdC04NjE2MGY3Yy0yMDI2MTEwM1QyMzAxMTZaLnRhci5neiIsCiAgICAic2hhMjU2IjogImVhZjY3ZDQ5MTc4NWU0YjM4OGNmZDMwMzJiZGJmNzk4MTVhYTc4YjIwMzE2OWZmMTYxY2JlMjhiMmY5MGRlMTIiLAogICAgImJ5dGVzIjogMjQwNiwKICAgICJmaWxlcyI6IDYKICB9Cn0K",
+   "config.yaml": "YWdlbnRzOgogICAgZml4dHVyZToKICAgICAgICB0aWVyOiBhZG1pbgogICAgICAgIGFwcHJvdmFsTW9kZTogbm9uZQogICAgICAgIGFsbG93ZWRQYXRoczoKICAgICAgICAgICAgLSBwdWJsaWMKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGNhblJlYWRWYWx1ZXM6IHRydWUKICAgICAgICBleHBvc2VWYWx1ZVRvb2xzOiB0cnVlCnZhdWx0OgogICAgYXV0aE1ldGhvZDogcGFzc3BocmFzZQogICAgZm9ybWF0X3ZlcnNpb246IDIKICAgIGFyZ29uMmlkX3RpbWU6IDIKICAgIGFyZ29uMmlkX21lbW9yeTogMTk0NTYKICAgIGFyZ29uMmlkX3RocmVhZHM6IDEKbWNwOgogICAgYWxsb3dfaW5zZWN1cmVfYmluZDogdHJ1ZQp2YXVsdERpcjogL3Zhci9mb2xkZXJzLzd2LzdicHEwZmpuNDRsZmxweGR5bHN4OHFzNDAwMDBnbi9UL3N5bXZhdWx0LXRvb2xoYXNoLWk2dW4wNjd2L3NlZWQvdmF1bHQKZGVmYXVsdEFnZW50OiBmaXh0dXJlCnNlc3Npb25UaW1lb3V0OiAxNW0wcwpzZXNzaW9uTWF4TGlmZXRpbWU6IDhoMG0wcwphdXRoTWV0aG9kOiBwYXNzcGhyYXNlCg==",
+   "entries/public/fixture.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBwVVU5TDFiUS9CRzd5bHZJRHFCS0t5NC9Ga1pYU0s0Q09Ma1pTSVgva1NNClR6WHFMQWdxd2xsZEhueTdkeUl6MXhPOVBTVGZmRm9vL3F5MDVmdHlkblUKLS0tIFdDalI2VmMyalROZ04vcEppb3ViVGNGMU9mK1E1bEpoNGR6T1lTOTJFaTAKtbQPudPt9Q87UxLdNHydUH49cghq5at+qd1FxBbINlVhXCq+nLxKXkU4IDPLUjlaB5SWsqNYUq/eGGSkETfM9w0mYFot2X7ET78+4juWdKcBbtHJvRsR86+gk+uUp53G8rQFU4Bt0milBRQTQWrcNfpKQO2CWvzVT3I/zjkbeRJZ1KibU6BzC57UqOXZAw3pGF5wSOfZ0MhdYzsaumoMisXimYodo0AWrqu5839xSFH1M/IUsVmgUlYDZ4uX0tVd1qvEyHru2kLKskU6j53AR3Dtp/dg53V7jLwHEQ==",
+   "identity.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEREWklLV1NNUE1ESlVOMFQ3amdqRFEgdD0yLG09MTk0NTYscD0xCitZTkdsaXZaWUdjU0dBMGo4WEwvSlhBZHdlSFIyd0ZEZm11UkNHOWdFR1ZZaTQ0VjAxQ0JXZUhJS0RZCi0tLSB3QSt2ZFBDaTNobllNaUVhMEVrbzZ6YzY2V3krMFdJcTdPdys3cGdLM3pBCtIF7mcl0AZl5fu3zpCVoiviHgxgJlNODBRgMpHJshQ4nb6T5nEUqCgv+6sbpd5CUj/5I3RFifPed6WEN8ubOv/xohsHx12Kmiu8E8X7t7oY+GmeNdZQGCpfBMB9//3G+LIk3LPDZh6VFG0=",
+   "manifest.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA4Zkw0b1A2MkYxWFNOcFQ2MnlhSDIzZUxPL3lrNUxZNlE1azIzUjhlRGlRCkdGM0lETkVjRXg2WW1sQU5DVjFGVmZkMlZSUDBTQUNWaGF1RlA0NUluUHcKLS0tIHNLL3ozd2dvc253VS9XbDI4M0lUV3ZyT0VWOVJUZkFFY0hTbW5ZcUQ1ckUKuAZraq30aawl62mBfQ3wTfNhc+FwhAn1CLmMjdWAqZwOf0wq2+GnniHaoxjIt9HSQQIu2uIqwv87dOa3/jbrb7tiddIEwX1192GNR5cylLuCvBqBZ+fA5HYGoUFvRWwQu4ge4Sc9z4FX/2JbiGl/aGZ7cixnCj89sZr8aKhnGbCg81Z6s7Hil/VA2Bw6T9zWSjfQVxsnXzEz97wM/MzIM+od2fGPwI20cwpEFCI1lC9JzrUayZFsWfAcWaQ3ERrpXBo7DnNF/rV9qnyw+7Ej9nfDRCDo5pCoIzlx3Ru31fawnqnluLxI3Z4iLrxHdenRndjcMN8XnG+X+jfM8MoNgDQZCE1db91DNZuYMnLIkLyPhgDTm2KXu6r0lX0N317yYZH80C7YPuY=",
+   "mcp-tokens.json": "ewogICJ2ZXJzaW9uIjogMiwKICAidG9rZW5zIjogewogICAgInRvay0yMDI2MTEwMy0xMmEyY2I5YiI6IHsKICAgICAgImlkIjogInRvay0yMDI2MTEwMy0xMmEyY2I5YiIsCiAgICAgICJsYWJlbCI6ICJnb19zdGFsZV9zY29wZWRfaGVhbHRoIiwKICAgICAgImhhc2giOiAiM2IxMjk0ODA1ZDY3YzczNjYyZGM3ZjVmZjQwNmMyYzNiZDMzOGM3MzE5MDZlMGJhNDRmOWMxMTYyNTc2MWQwOSIsCiAgICAgICJwcmVmaXgiOiAiMzU2OCIsCiAgICAgICJhbGxvd2VkX3Rvb2xzIjogWwogICAgICAgICJoZWFsdGgiCiAgICAgIF0sCiAgICAgICJ0b29sX3JlZ2lzdHJ5X2hhc2giOiAiMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCIsCiAgICAgICJhZ2VudF9uYW1lIjogImZpeHR1cmUiLAogICAgICAiY3JlYXRlZF9hdCI6ICIyMDI2LTExLTA0VDAyOjI1OjEwLjA3NTYzMVoiLAogICAgICAiZXhwaXJlc19hdCI6ICIyMDI2LTExLTA0VDAzOjI1OjEwLjA3NTYzMVoiLAogICAgICAicmV2b2tlZCI6IGZhbHNlCiAgICB9LAogICAgInRvay0yMDI2MTEwMy0xYWIxYTZjYSI6IHsKICAgICAgImlkIjogInRvay0yMDI2MTEwMy0xYWIxYTZjYSIsCiAgICAgICJsYWJlbCI6ICJzZXJ2ZS1ydXN0IiwKICAgICAgImhhc2giOiAiYjBiODNjYzMyZDNmYmM0YTY1OWNiYTkyMjM3OTAxYTM0MjU1ZjI0YjU2MWViY2I4OGIyNmEwMTY5ZDIzZDM3MSIsCiAgICAgICJwcmVmaXgiOiAiMjYwMiIsCiAgICAgICJhbGxvd2VkX3Rvb2xzIjogWwogICAgICAgICIqIgogICAgICBdLAogICAgICAidG9vbF9yZWdpc3RyeV9oYXNoIjogImJjY2Y4YzdlODY2MDMyODAzMGJjNGU5YmJjMGMwZDQzYTY1MDI3OGJhZTRiOGVmNjBkNTU0M2Q2NGM0NjQ1NWQiLAogICAgICAiYWdlbnRfbmFtZSI6ICJmaXh0dXJlIiwKICAgICAgImNyZWF0ZWRfYXQiOiAiMjAyNi0xMS0wNFQwMjoyNToxMC42MDI5MzdaIiwKICAgICAgImV4cGlyZXNfYXQiOiAiMjAyNi0xMS0wNVQwMjoyNToxMC42MDI5MzdaIiwKICAgICAgInJldm9rZWQiOiBmYWxzZQogICAgfSwKICAgICJ0b2stMjAyNjExMDMtMzAxYTdiNDkiOiB7CiAgICAgICJpZCI6ICJ0b2stMjAyNjExMDMtMzAxYTdiNDkiLAogICAgICAibGFiZWwiOiAiZ29fbGVnYWN5X2VtcHR5IiwKICAgICAgImhhc2giOiAiZDQ3ZmE3ZjJmODE2ZTVjNWU1NmVhY2E2MmVhMzIxNjEzMDc1OWYzN2Y2OWI5ZDdjYmZlNDNmY2JhOGY0ZTE2NiIsCiAgICAgICJwcmVmaXgiOiAiMjU3ZCIsCiAgICAgICJhbGxvd2VkX3Rvb2xzIjogWwogICAgICAgICIqIgogICAgICBdLAogICAgICAiYWdlbnRfbmFtZSI6ICJmaXh0dXJlIiwKICAgICAgImNyZWF0ZWRfYXQiOiAiMjAyNi0xMS0wNFQwMjoyNToxMC4wNjg1MzhaIiwKICAgICAgImV4cGlyZXNfYXQiOiAiMjAyNi0xMS0wNFQwMzoyNToxMC4wNjg1MzdaIiwKICAgICAgInJldm9rZWQiOiBmYWxzZQogICAgfSwKICAgICJ0b2stMjAyNjExMDMtNTlmMzUzNGMiOiB7CiAgICAgICJpZCI6ICJ0b2stMjAyNjExMDMtNTlmMzUzNGMiLAogICAgICAibGFiZWwiOiAic2VydmUtZ28iLAogICAgICAiaGFzaCI6ICI1OWFkMjhlMmFiZDgwMzRkYzJjZDYyYjc1MzRmMmM1NDhlNzUxODdhYjNhMGQ0NmQxMzg0MzVhYWI4OTJhMmU2IiwKICAgICAgInByZWZpeCI6ICI3NWMxIiwKICAgICAgImFsbG93ZWRfdG9vbHMiOiBbCiAgICAgICAgIioiCiAgICAgIF0sCiAgICAgICJ0b29sX3JlZ2lzdHJ5X2hhc2giOiAiYmNjZjhjN2U4NjYwMzI4MDMwYmM0ZTliYmMwYzBkNDNhNjUwMjc4YmFlNGI4ZWY2MGQ1NTQzZDY0YzQ2NDU1ZCIsCiAgICAgICJhZ2VudF9uYW1lIjogImZpeHR1cmUiLAogICAgICAiY3JlYXRlZF9hdCI6ICIyMDI2LTExLTA0VDAyOjI1OjEwLjUxODY3N1oiLAogICAgICAiZXhwaXJlc19hdCI6ICIyMDI2LTExLTA1VDAyOjI1OjEwLjUxODY3N1oiLAogICAgICAicmV2b2tlZCI6IGZhbHNlCiAgICB9LAogICAgInRvay0yMDI2MTEwMy02MjRhMDc0YyI6IHsKICAgICAgImlkIjogInRvay0yMDI2MTEwMy02MjRhMDc0YyIsCiAgICAgICJsYWJlbCI6ICJnb19zdGFsZSIsCiAgICAgICJoYXNoIjogImJmMTdiYjQ4NDRhOWZhODkxNmFlNzM2MDUzZDIzZmI3ODBhZjI5NDU1NTEyYWZiNDI2YjQ4MjY2OTUyMzQyNjIiLAogICAgICAicHJlZml4IjogIjQxMTgiLAogICAgICAiYWxsb3dlZF90b29scyI6IFsKICAgICAgICAiKiIKICAgICAgXSwKICAgICAgInRvb2xfcmVnaXN0cnlfaGFzaCI6ICIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwKICAgICAgImFnZW50X25hbWUiOiAiZml4dHVyZSIsCiAgICAgICJjcmVhdGVkX2F0IjogIjIwMjYtMTEtMDRUMDI6MjU6MTAuMDcxNjg5WiIsCiAgICAgICJleHBpcmVzX2F0IjogIjIwMjYtMTEtMDRUMDM6MjU6MTAuMDcxNjg5WiIsCiAgICAgICJyZXZva2VkIjogZmFsc2UKICAgIH0sCiAgICAidG9rLTIwMjYxMTAzLTZhYThlMDZkIjogewogICAgICAiaWQiOiAidG9rLTIwMjYxMTAzLTZhYThlMDZkIiwKICAgICAgImxhYmVsIjogImdvX2N1cnJlbnQiLAogICAgICAiaGFzaCI6ICI0MDM0ZDM3N2Q3M2MxZjliNDBhYmY1YjkxMmYyNjFiYzA3MzMyNTIzM2VjZmRiZmI4ZjUyNWFhZTk5ZjkwNDUzIiwKICAgICAgInByZWZpeCI6ICI0MTkxIiwKICAgICAgImFsbG93ZWRfdG9vbHMiOiBbCiAgICAgICAgIioiCiAgICAgIF0sCiAgICAgICJ0b29sX3JlZ2lzdHJ5X2hhc2giOiAiYmNjZjhjN2U4NjYwMzI4MDMwYmM0ZTliYmMwYzBkNDNhNjUwMjc4YmFlNGI4ZWY2MGQ1NTQzZDY0YzQ2NDU1ZCIsCiAgICAgICJhZ2VudF9uYW1lIjogImZpeHR1cmUiLAogICAgICAiY3JlYXRlZF9hdCI6ICIyMDI2LTExLTA0VDAyOjI1OjEwLjA2NDU4NVoiLAogICAgICAiZXhwaXJlc19hdCI6ICIyMDI2LTExLTA0VDAzOjI1OjEwLjA2NDU4NVoiLAogICAgICAicmV2b2tlZCI6IGZhbHNlCiAgICB9CiAgfQp9Cg=="
+  },
+  "tokens": {
+   "go_cli_issued": "75c100ed36a86c27a253bee653451eedd901068a1365877f46cf4ca3b12406d7",
+   "go_current": "41917a7603d717df0b1f309cecab94500f2333e3aabc30a8d443430d5bdb19ee",
+   "go_legacy_empty": "257d8dce4061020eea451ed3ee81ec1776d0e41f63e85f5781f085326a7ddd67",
+   "go_stale": "41187206abafa01e633163bd8839f8c5dc39900ef3ee16eff1611c49cf5ec799",
+   "go_stale_scoped_health": "3568b7d20f40e4b79665a2662707432c07a681f6a45a7e5fd40bb9c7bb5d6c00",
+   "rust_cli_issued": "2602833b789ba22d9c0a44fc57f8be52bc78cc7509b8364456774c90aa50c458"
+  }
+ },
+ "go_version": "go1.26.10",
+ "goarch": "aarch64",
+ "goos": "linux",
+ "normalization": [
+  "fixed loopback port",
+  "seed vault, the Go-issued and the Rust-issued CLI tokens (and the shared vault holding them) pinned in the file",
+  "prompt-injection data fence nonce (DATA_<16 hex>) and the audit ids (sess_id/req_id) already masked by the driver",
+  "Rust-issued token minted by the Rust CLI at first capture (needs --rust once); re-captures reuse the pinned shared vault"
+ ],
+ "oracle_commit": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+ "schema": 1
+}
