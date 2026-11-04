@@ -139,6 +139,7 @@ pub fn flag_help(args: &[std::ffi::OsString]) -> Option<&'static str> {
     let mut selected = root();
     let mut seen = Vec::new();
     let mut help = false;
+    let mut bare_help = false;
     let mut i = 1;
     while let Some(word) = args.get(i) {
         let word = word.to_str()?;
@@ -146,6 +147,7 @@ pub fn flag_help(args: &[std::ffi::OsString]) -> Option<&'static str> {
             break;
         }
         if word.starts_with('-') {
+            bare_help |= word == "-h" || word == "--help";
             let f = flag(selected, word)?;
             let inline = word.split_once('=').map(|(_, v)| v);
             let value = if let Some(v) = inline {
@@ -173,6 +175,16 @@ pub fn flag_help(args: &[std::ffi::OsString]) -> Option<&'static str> {
             seen.push(f.name.as_str());
         } else if let Some(next) = child(selected, word) {
             selected = next;
+        } else if selected.path == root().path
+            && word != "help"
+            && !word.starts_with("__")
+            && !bare_help
+        {
+            // An unknown first word is cobra's `unknown command` error (exit 1),
+            // never the root help; the regular path reports it. (A bare `-h` /
+            // `--help` before it is unknown to cobra's `Find`, which then takes
+            // the word as that flag's value, so the root help still wins.)
+            return None;
         }
         i += 1;
     }

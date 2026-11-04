@@ -3,6 +3,7 @@
 mod add_commands;
 mod agent_audit_commands;
 mod agent_doctor_commands;
+mod agent_gate;
 mod agent_install_commands;
 mod agent_list_commands;
 mod agent_profile_commands;
@@ -1386,6 +1387,11 @@ fn run_cli() -> ExitCode {
     symvault_sync::data_safety::install();
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(index) = completion_protocol::request_index(&args) {
+        // Go's hidden `__complete` command runs the root PersistentPreRunE too.
+        if let Some(refusal) = agent_gate::complete_preflight() {
+            eprintln!("Error: {0}\nError: {0}", refusal.message);
+            return ExitCode::from(refusal.code);
+        }
         return completion_protocol::run(&args, index);
     }
     if let Some(code) = completion_commands::go_argument_shapes(&args) {
@@ -6041,6 +6047,18 @@ fn parse_vault_flag(value: &str) -> Result<PathBuf, std::convert::Infallible> {
 }
 
 fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathBuf, String> {
+    resolve_vault_with(explicit, profile, |path| {
+        Config::load(path).map_err(|error| error.to_string())
+    })
+}
+
+/// [`resolve_vault`] with the config loader (and so the wording of its error) chosen
+/// by the caller; the agent-mode gate words it the way Go does.
+fn resolve_vault_with(
+    explicit: Option<&Path>,
+    profile: Option<&str>,
+    load_config: impl FnOnce(&Path) -> Result<Config, String>,
+) -> Result<PathBuf, String> {
     let vault_env = if explicit.is_some() {
         None
     } else {
@@ -6062,7 +6080,7 @@ fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathB
     }
     .resolve(
         &resolver,
-        || Config::load(resolver.config_path()).map_err(|error| error.to_string()),
+        || load_config(&resolver.config_path()),
         expand_vault_path,
     )
 }

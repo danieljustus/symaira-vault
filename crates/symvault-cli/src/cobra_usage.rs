@@ -618,13 +618,26 @@ fn arity_message(path: &str, count: usize, flags: ValidatorFlags) -> Option<Stri
 /// The format the gate refuses for this command, if any: `--json` wins over
 /// `--output`, exactly like the persistent flags it models.
 fn refused_format(path: &str, json_flag: bool, output: Option<&str>) -> Option<String> {
-    if json_flag && JSON_REFUSED.contains(&path) {
+    // cobra's generated `completion <shell>` commands support no other format.
+    let builtin = path.starts_with("completion ");
+    if json_flag && (builtin || JSON_REFUSED.contains(&path)) {
         return Some("json".to_owned());
     }
     output
         .filter(|value| *value != "text")
-        .filter(|_| OUTPUT_REFUSED.contains(&path))
+        .filter(|_| builtin || OUTPUT_REFUSED.contains(&path))
         .map(str::to_owned)
+}
+
+/// The shells cobra generates a `completion <shell>` subcommand for.
+const COMPLETION_SHELLS: &[&str] = &["bash", "fish", "powershell", "zsh"];
+
+/// `completion <shell>` for the `completion` command with a shell positional:
+/// the command cobra actually runs.
+fn completion_shell(path: &str, positionals: &[String]) -> Option<String> {
+    let shell = positionals.first()?;
+    (path == "completion" && COMPLETION_SHELLS.contains(&shell.as_str()))
+        .then(|| format!("completion {shell}"))
 }
 
 /// Cobra's `validateRequiredFlags` message, if a required flag is unset.
@@ -1203,6 +1216,17 @@ struct Parsed {
     validator: ValidatorFlags,
     json_flag: bool,
     output: Option<String>,
+    /// The last `--vault` / `--profile` value (the agent-mode gate resolves the vault).
+    vault: Option<String>,
+    profile: Option<String>,
+    /// pflag's final value of the `help` flag: only a help flag the parse really
+    /// reached (not a flag's value, not behind `--`) with a true value counts.
+    help: bool,
+}
+
+/// pflag's `strconv.ParseBool` truth of an already validated bool-flag value.
+fn bool_enabled(value: &str) -> bool {
+    matches!(value, "1" | "t" | "T" | "TRUE" | "true" | "True")
 }
 
 /// pflag's parse of the remaining tokens against the command's flag set.
@@ -1218,10 +1242,15 @@ fn parse_flags(
         validator: ValidatorFlags::default(),
         json_flag: false,
         output: None,
+        vault: None,
+        profile: None,
+        help: false,
     };
     let mut index = 0;
     let note = |arg: &Arg, value: Option<&str>, parsed: &mut Parsed| match (arg.get_long(), value) {
         (Some("output"), Some(value)) => parsed.output = Some(value.to_owned()),
+        (Some("vault"), Some(value)) => parsed.vault = Some(value.to_owned()),
+        (Some("profile"), Some(value)) => parsed.profile = Some(value.to_owned()),
         (Some("url"), Some(value)) if path == "find" => {
             parsed.validator.url_filter = !value.is_empty();
         }
@@ -1259,6 +1288,13 @@ fn parse_flags(
                 return Err(format!("unknown flag: --{name}"));
             };
             if is_help_arg(arg) {
+                if let Some(value) = inline
+                    && !go_parse_bool(value)
+                {
+                    return Err(invalid_argument(value, arg, "ParseBool", "invalid syntax"));
+                }
+                // Like every bool flag, the last occurrence decides.
+                parsed.help = inline.is_none_or(bool_enabled);
                 continue;
             }
             if let Some(long) = arg.get_long() {
@@ -1288,9 +1324,7 @@ fn parse_flags(
                 }
                 // pflag assigns the parsed value on every occurrence: the last one wins,
                 // so `--json --json=false` leaves the flag unset.
-                let enabled = inline.is_none_or(|value| {
-                    matches!(value, "1" | "t" | "T" | "TRUE" | "true" | "True")
-                });
+                let enabled = inline.is_none_or(bool_enabled);
                 if arg.get_long() == Some("json") {
                     parsed.json_flag = enabled;
                 }
@@ -1326,7 +1360,13 @@ fn parse_flags(
                                 "invalid syntax",
                             ));
                         }
+                        if is_help_arg(arg) {
+                            parsed.help = bool_enabled(&value);
+                        }
                         break;
+                    }
+                    if is_help_arg(arg) {
+                        parsed.help = true;
                     }
                     continue;
                 }
@@ -1496,13 +1536,6 @@ fn resolve<'a>(args: &[String], root: &'a Command) -> Resolution<'a> {
 }
 
 fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdict {
-    if args
-        .iter()
-        .take_while(|token| *token != "--")
-        .any(|token| token == "-h" || token == "--help")
-    {
-        return Verdict::Proceed;
-    }
     root.build();
     let Resolution {
         current,
@@ -1512,7 +1545,28 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
     } = resolve(args, &root);
     match stop {
         Stop::Resolved => {}
-        Stop::Help => return Verdict::Proceed,
+        Stop::Help => {
+            // cobra's `help` command is runnable and requires a vault, so the
+            // agent-mode gate runs before it prints anything, unless the help
+            // command's own help flag was really given.
+            if required {
+                let flags = Flags {
+                    command: &root,
+                    root: &root,
+                };
+                if let Ok(parsed) = parse_flags(&tokens, flags, "help", true)
+                    && !parsed.help
+                    && let Some(refusal) = crate::agent_gate::preflight(
+                        "help",
+                        parsed.vault.as_deref(),
+                        parsed.profile.as_deref(),
+                    )
+                {
+                    return fail(&refusal.message, refusal.code);
+                }
+            }
+            return Verdict::Proceed;
+        }
         Stop::Unknown(word) => return unknown_command(&word),
     }
     let path_text = current.path.join(" ");
@@ -1525,6 +1579,19 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
         Ok(parsed) => parsed,
         Err(message) => return fail_at(&path_text, &message, 1),
     };
+    // cobra checks the help flag right after parsing, before any validator and
+    // before the pre-run (so before the agent-mode gate). Only a help flag the
+    // parse reached counts: `--tools --help` hands `--help` to `--tools` as its
+    // value and the command runs.
+    if parsed.help {
+        // A group prints its own help, also when the command line carries an
+        // unknown subcommand (`agent x -h=true`): cobra's `Find` leaves the group
+        // as the command that handles the help flag.
+        if GROUPS.contains(&path_text.as_str()) {
+            return Verdict::GroupHelp(path_text);
+        }
+        return Verdict::Proceed;
+    }
     if current.path.is_empty() {
         // The root is not runnable: whatever is left (a lone `-`, everything after `--`,
         // only persistent flags) is a positional cobra's legacy check never sees, and
@@ -1547,8 +1614,36 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
     if let Some(message) = arity_message(&path_text, parsed.positionals.len(), parsed.validator) {
         return fail(&message, 1);
     }
-    if let Some(format) = refused_format(&path_text, parsed.json_flag, parsed.output.as_deref()) {
-        return fail(&gate_message(&format, &path_text), 9);
+    // `completion <shell>` is cobra's built-in subcommand: the gate and the
+    // agent check see its full path. `completion` alone only prints group help.
+    let shell_path = completion_shell(&path_text, &parsed.positionals);
+    // The generated shell commands take no arguments (cobra.NoArgs): an extra
+    // positional ends the run before the output-format gate and the agent check.
+    if let Some(shell_path) = &shell_path
+        && let Some(extra) = parsed.positionals.get(1)
+    {
+        let message = format!(
+            "unknown command {} for {}",
+            crate::cli_artifacts::quote_go_string(extra),
+            crate::cli_artifacts::quote_go_string(&format!("symvault {shell_path}"))
+        );
+        return fail(&message, 1);
+    }
+    let command_path = shell_path.as_deref().unwrap_or(&path_text);
+    if let Some(format) = refused_format(command_path, parsed.json_flag, parsed.output.as_deref()) {
+        return fail(&gate_message(&format, command_path), 9);
+    }
+    // Root PersistentPreRunE's last step: the agent-mode gate, before cobra's
+    // required-flag validation.
+    if required
+        && !(path_text == "completion" && shell_path.is_none())
+        && let Some(refusal) = crate::agent_gate::preflight(
+            &path_text,
+            parsed.vault.as_deref(),
+            parsed.profile.as_deref(),
+        )
+    {
+        return fail(&refusal.message, refusal.code);
     }
     if required && let Some(message) = missing_required_flags(&path_text, &parsed.set) {
         return fail(&message, 1);
@@ -1639,16 +1734,56 @@ pub fn clap_arguments(args: Vec<std::ffi::OsString>, mut root: Command) -> Vec<s
     rewritten
 }
 
+/// Arguments that are not UTF-8 stay out of the emulation unless an agent is
+/// set (the regular parser reports them otherwise, as before). In agent mode the
+/// command must not run unless Go's pre-run would let it: the emulation runs on
+/// the lossy text of the arguments and every refusal it reaches (usage error,
+/// output-format gate, agent gate, unresolvable vault path) ends the process.
+/// Messages echo a non-UTF-8 argument with U+FFFD where Go prints the raw bytes.
+fn gate_non_utf8(
+    args: &[std::ffi::OsString],
+    root: Command,
+    agent_mode: bool,
+) -> Option<std::process::ExitCode> {
+    use std::io::Write;
+    if !agent_mode {
+        return None;
+    }
+    let lossy: Vec<String> = args
+        .iter()
+        .skip(1)
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    match evaluate_with_required(&lossy, root) {
+        Verdict::Fail { stderr, code } => {
+            let _ = std::io::stderr().write_all(stderr.as_bytes());
+            Some(std::process::ExitCode::from(code))
+        }
+        Verdict::Proceed | Verdict::GroupHelp(_) => None,
+    }
+}
+
 /// Runs the emulation on the process arguments and prints Go's diagnostic.
 /// `Some(code)` means the process must exit with `code`.
 pub fn check(args: &[std::ffi::OsString], root: Command) -> Option<std::process::ExitCode> {
+    check_with(args, root, crate::agent_gate::agent_active())
+}
+
+/// [`check`] with agent mode (`SYMVAULT_AGENT` non-empty) given explicitly.
+fn check_with(
+    args: &[std::ffi::OsString],
+    root: Command,
+    agent_mode: bool,
+) -> Option<std::process::ExitCode> {
     use std::io::Write;
     let strings: Option<Vec<String>> = args
         .iter()
         .skip(1)
         .map(|arg| arg.to_str().map(str::to_owned))
         .collect();
-    let strings = strings?;
+    let Some(strings) = strings else {
+        return gate_non_utf8(args, root, agent_mode);
+    };
     match evaluate_with_required(&strings, root) {
         Verdict::Proceed => None,
         Verdict::Fail { stderr, code } => {
@@ -1706,6 +1841,135 @@ mod tests {
         ));
         // `evaluate` itself stays at the validator/gate stage.
         assert_eq!(evaluate(&["export".to_owned()], root()), Verdict::Proceed);
+    }
+
+    /// The `help` flag as pflag leaves it after parsing `args` (command words resolved).
+    fn parsed_help(args: &[&str]) -> Result<bool, String> {
+        let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+        let mut command = root();
+        command.build();
+        let resolution = resolve(&args, &command);
+        let flags = Flags {
+            command: resolution.current.command.unwrap_or(&command),
+            root: &command,
+        };
+        let lenient = resolution.current.command.is_none() && !resolution.current.path.is_empty();
+        parse_flags(
+            &resolution.tokens,
+            flags,
+            &resolution.current.path.join(" "),
+            lenient,
+        )
+        .map(|parsed| parsed.help)
+    }
+
+    /// A help token is a help request only when pflag parses it as the help flag:
+    /// not as the value of a flag that takes one, not behind `--`, and the last
+    /// occurrence of the bool flag decides.
+    #[test]
+    fn help_token_is_a_request_only_as_a_help_flag() {
+        let value_of_a_flag: &[&[&str]] = &[
+            &["agent", "token", "new", "x", "--tools", "--help"],
+            &["agent", "token", "new", "--tools", "-h", "x"],
+            &["agent", "token", "new", "x", "--tools=--help"],
+            &["run", "--broker-passthrough", "--help", "true"],
+            &["broker", "--passthrough", "--help"],
+            &["list", "--vault", "-h"],
+            &["list", "--output", "--help"],
+            &["--vault", "--help", "list"],
+            &["list", "--", "--help"],
+            &["list", "--help=false"],
+            &["list", "-h=false"],
+            &["list", "--help", "--help=false"],
+            &["list"],
+        ];
+        for args in value_of_a_flag {
+            assert_eq!(parsed_help(args), Ok(false), "{args:?}");
+        }
+        let requests: &[&[&str]] = &[
+            &["list", "--help"],
+            &["list", "-h"],
+            &["list", "--help=true"],
+            &["list", "-h=true"],
+            &["list", "--help=false", "--help"],
+            &["--help"],
+            &["-h", "list"],
+            &["agent", "token", "new", "x", "--tools", "a", "--help"],
+            &["agent", "token", "new", "x", "--help", "--tools", "a"],
+        ];
+        for args in requests {
+            assert_eq!(parsed_help(args), Ok(true), "{args:?}");
+        }
+        for args in [&["list", "--help=foo"][..], &["list", "-h=foo"]] {
+            assert!(parsed_help(args).is_err(), "{args:?}");
+        }
+    }
+
+    /// The help shortcut must not hide the validators that cobra runs for a
+    /// command whose `--help` is only a flag value.
+    #[test]
+    fn help_shortcut_skips_nothing_when_the_token_is_a_flag_value() {
+        let run = |args: &[&str]| {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            evaluate(&args, root())
+        };
+        assert_eq!(run(&["export", "--help", "extra"]), Verdict::Proceed);
+        assert_eq!(run(&["export", "-h", "extra"]), Verdict::Proceed);
+        for args in [
+            &["export", "--format", "--help", "extra"][..],
+            &["export", "--format", "-h", "extra"],
+            &["export", "--format=--help", "extra"],
+            &["export", "--", "--help", "extra"],
+        ] {
+            assert!(
+                matches!(run(args), Verdict::Fail { code: 1, ref stderr }
+                    if stderr.contains("unknown command \"")),
+                "{args:?}"
+            );
+        }
+        // A parse error ends the run wherever the help flag stands.
+        assert!(matches!(
+            run(&["list", "--help", "--bogus"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+        assert!(matches!(
+            run(&["list", "--bogus", "--help"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+        // An unknown command is an error before its help flag is looked at.
+        assert!(matches!(
+            run(&["nosuch", "--help"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_arguments_are_checked_in_agent_mode_only() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt, process::ExitCode};
+        let args = |tail: &[&[u8]]| -> Vec<OsString> {
+            std::iter::once(OsString::from("symvault"))
+                .chain(tail.iter().map(|arg| OsString::from_vec(arg.to_vec())))
+                .collect()
+        };
+        // Go's usage error comes first (`add` takes one argument); the lossy
+        // text is enough to see it.
+        let usage = args(&[b"add", b"\xff", b"extra", b"more"]);
+        assert_eq!(
+            check_with(&usage, root(), true),
+            Some(ExitCode::from(1)),
+            "agent mode evaluates arguments that are not UTF-8"
+        );
+        assert_eq!(
+            check_with(&usage, root(), false),
+            None,
+            "no agent: unchanged"
+        );
+        // A command that would run (nothing for the emulation to refuse here)
+        // is left to the regular path, whichever mode.
+        let runs = args(&[b"get", b"\xff"]);
+        assert_eq!(check_with(&runs, root(), true), None);
+        assert_eq!(check_with(&runs, root(), false), None);
     }
 
     #[test]
@@ -2107,6 +2371,44 @@ mod tests {
     fn verdict(args: &[&str]) -> Verdict {
         let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
         evaluate(&args, root())
+    }
+
+    /// `completion <shell>` takes no arguments (cobra.NoArgs): that error comes
+    /// before the output-format gate, with or without a format flag.
+    #[test]
+    fn completion_shell_extra_argument_precedes_the_format_gate() {
+        for args in [
+            &["completion", "bash", "extra", "--json"][..],
+            &["completion", "bash", "--json", "extra"],
+            &["completion", "zsh", "extra", "--output", "yaml"],
+        ] {
+            let Verdict::Fail { stderr, code } = verdict(args) else {
+                panic!("{args:?} must fail");
+            };
+            assert_eq!(code, 1, "{args:?}");
+            assert!(
+                stderr.contains("unknown command \"extra\" for \"symvault completion"),
+                "{stderr}"
+            );
+        }
+        // The format gate still decides without an extra argument.
+        assert!(refused(&["completion", "bash", "--json"]));
+    }
+
+    /// A group prints its own help for a true help flag, an unknown subcommand
+    /// included.
+    #[test]
+    fn group_help_flag_wins_over_an_unknown_subcommand() {
+        for args in [
+            &["agent", "x", "-h=true"][..],
+            &["auth", "x", "--help=true"],
+            &["device", "x", "-h=true"],
+        ] {
+            assert!(
+                matches!(verdict(args), Verdict::GroupHelp(_)),
+                "{args:?} must print the group help"
+            );
+        }
     }
 
     fn refused(args: &[&str]) -> bool {
