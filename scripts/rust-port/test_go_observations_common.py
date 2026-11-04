@@ -185,6 +185,17 @@ class OperatorPathTests(unittest.TestCase):
             obs.unpack_tree(packed, target)
             self.assertEqual((target / "vault" / "config.yaml").read_text(), f"vaultDir: {target}/vault\nname: x\n")
 
+    def test_unpack_tree_can_restore_one_fixed_path_for_hashed_contracts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp, "seed")
+            source.mkdir()
+            (source / "config.yaml").write_text(f"vaultDir: {source}\n")
+            packed = obs.pack_tree(source)
+            for name in ("one", "two"):
+                obs.unpack_tree(packed, Path(tmp, name), tree_root="/nonexistent/seed")
+            self.assertEqual((Path(tmp, "one") / "config.yaml").read_bytes(), (Path(tmp, "two") / "config.yaml").read_bytes())
+            self.assertEqual((Path(tmp, "one") / "config.yaml").read_text(), "vaultDir: /nonexistent/seed\n")
+
     def test_pack_tree_refuses_an_operator_path_it_cannot_tokenize(self):
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "note").write_text("see /Users/someone/vault\n")

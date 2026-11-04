@@ -213,8 +213,11 @@ def pack_tree(root):
     return packed
 
 
-def unpack_tree(files, root):
-    """Write a pack_tree() mapping below `root` with private modes (0700 dirs, 0600 files)."""
+def unpack_tree(files, root, tree_root=None):
+    """Write a pack_tree() mapping below `root` with private modes (0700 dirs, 0600 files).
+
+    `@TREE_ROOT@` becomes `root`, or `tree_root` when the contract hashes the restored files and so needs the
+    same bytes on every run (a fixed synthetic directory, not the random per-run one)."""
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     os.chmod(root, 0o700)
@@ -227,7 +230,7 @@ def unpack_tree(files, root):
             target.mkdir(exist_ok=True)
             os.chmod(target, 0o700)
         else:
-            target.write_bytes(restore_paths(base64.b64decode(data), {TREE_ROOT: root}))
+            target.write_bytes(restore_paths(base64.b64decode(data), {TREE_ROOT: tree_root or root}))
             os.chmod(target, 0o600)
 
 

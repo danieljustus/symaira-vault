@@ -50,6 +50,9 @@ EXIT_CLASSES = {'locked-wrong-passphrase': {'go': 1, 'rust': 1},
 COMMAND_OUTPUT = None
 COMMAND_NUMBER = 0
 CAPTURE_OUTPUT = None
+# config.yaml of a recorded seed names its vault directory; restored to this synthetic path on every run so the
+# hashed seeded files are identical (no run uses it: the vault is always passed explicitly).
+SEED_TREE_ROOT = '/nonexistent/symvault-tui-seed'
 OBS_NAME = 'tui-contract'
 DRIVER = ROOT/'scripts/rust-port/tui_driver.py'
 # The Rust `tui-snapshot` example. Set for the Go-free replay: the snapshot of the Rust runs is read
@@ -1000,7 +1003,7 @@ def execute(args, receipt):
                 receipt['keybindings'] = recorded['keybindings']
                 for ttl in [2, 0]:
                     seeds[ttl] = base/('seed-'+str(ttl))
-                    obs.unpack_tree(material['seeds'][str(ttl)], seeds[ttl])
+                    obs.unpack_tree(material['seeds'][str(ttl)], seeds[ttl], tree_root=SEED_TREE_ROOT)
                 receipt['go'] = [dict(row, replayed=True) for row in recorded['rows']]
                 run_cases(['rust'], helper, {'rust': rust}, seeds, base, provider, receipt)
                 for case in CASES[:-1]:
@@ -1075,12 +1078,12 @@ def capture_go(args):
                                                                   'initial_roundtrip_clipboard_seconds',
                                                                   'effective_clipboard_seconds']}
                     keybindings = result['keybindings']
-                    if material is not None:
-                        # The Rust replay runs on the recorded bytes: so does the Go capture, which keeps
-                        # the observation byte-stable from one capture to the next.
-                        shutil.rmtree(seed)
-                        obs.unpack_tree(material['seeds'][str(ttl)], seed)
-                    packed[str(ttl)] = obs.pack_tree(seed)
+                    # The Rust replay runs on the recorded bytes: so does the Go capture, which keeps the observation
+                    # byte-stable from one capture to the next. The seed's own directory is stored as a token and
+                    # restored to one fixed synthetic path: the rows hash config.yaml, so it must not vary per run.
+                    packed[str(ttl)] = material['seeds'][str(ttl)] if material is not None else obs.pack_tree(seed)
+                    shutil.rmtree(seed)
+                    obs.unpack_tree(packed[str(ttl)], seed, tree_root=SEED_TREE_ROOT)
                     seeds[ttl] = seed
                 run_cases(labels, helper, {'go': go, 'rust': rust}, seeds, base, provider, receipts)
                 for label in labels:
