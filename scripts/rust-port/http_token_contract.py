@@ -21,6 +21,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import signal
 import socket
@@ -33,8 +34,18 @@ sys.dont_write_bytecode = True
 from http_oauth_contract import PASSPHRASE, PROBE
 from http_process_contract import SECRET, ProcessCapture, request
 from http_replay_contract import HEALTH, INIT, PING, TOOLS, exchange, transcript
-from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, oracle_build_timeout, remove_worktree, vault_snapshot
+from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, bounded, capture_arguments_ok, checked, go_capture_session,
+                                  inventory, isolated, load_go_observations, pinned_seed, provenance, replay_seed,
+                                  save_go_observations, vault_snapshot, _normalize_bytes)
 
+CONTRACT = 'http-token'
+PORT = 28111  # fixed so request bytes (Host header) are identical in capture and replay
+NORMALIZATION = ['fixed loopback port', 'seed vault pinned in the file (the token registries are generated per run from the wall clock, on both sides)',
+                 'Date header, log timestamps, peer ports',
+                 'wall-clock elapsed_seconds of every exchange recorded as 0.0 (never compared)',
+                 'dynamic scenario: expiry/detection epochs recorded as 0 and the asserted detection delay midpoint (1.5 s of 0..3), '
+                 'registry-change latencies as the midpoint of the asserted bound (2.25 s of 0..4.5); the real values were asserted at capture',
+                 'token_files hashes of a too-deep registry mask ISO timestamps (the registry embeds the run time on both sides)']
 STEPS = [('init', INIT), ('health', HEALTH), ('list', TOOLS), ('ping', PING)]
 LEGACY_TOKEN = 'public-legacy-token'
 
@@ -121,6 +132,7 @@ class Process:
     def __init__(self, binary, home, port):
         self.child = subprocess.Popen([str(binary), '--quiet', 'mcp', '--bind', '127.0.0.1', '--port', str(port)], cwd=home, env=isolated(home),
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.home = home
         self.capture = ProcessCapture(self.child)
         self.child.stdin.write(b'y\n')
         self.child.stdin.close()
@@ -158,7 +170,12 @@ class Process:
         self.child.wait(timeout=15)
         stdout, stderr, complete = self.capture.finish()
         assert complete, 'owned output readers finished'
-        return dict(disposal=disposal, exit=self.child.returncode, stdout=stdout, stderr=stderr)
+        # Log timestamps and the ephemeral peer ports are run noise: normalised for both implementations.
+        def normalized(raw):
+            for spelling in {str(self.home), str(Path(self.home).resolve())}:
+                raw = raw.replace(spelling.encode(), b'__HOME__')
+            return _normalize_bytes(raw)
+        return dict(disposal=disposal, exit=self.child.returncode, stdout=normalized(stdout), stderr=normalized(stderr))
 
 
 def token_files(vault):
@@ -183,7 +200,8 @@ def token_files(vault):
             # Go accepts nesting up to 10000 (duplicate_documents 'depth-9997-unknown'); CPython 3.13's json
             # C scanner refuses that depth.  The exact bytes stand in for the structure, so a file either
             # side rewrote still differs.
-            result[path.name] = 'too-deep:' + hashlib.sha256(path.read_bytes()).hexdigest()
+            masked = re.sub(rb'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', b'<TIMESTAMP>', path.read_bytes())  # the run time is embedded on both sides
+            result[path.name] = 'too-deep:' + hashlib.sha256(masked).hexdigest()
     return result
 
 
@@ -572,12 +590,70 @@ def candidate_paths():
                   or p in {'Cargo.toml', 'Cargo.lock', '.gitattributes'})
 
 
+def zero_elapsed(value):
+    """Wall-clock durations of exchanges are never compared; record them as 0.0."""
+    if isinstance(value, dict):
+        return {k: (0.0 if k == 'elapsed_seconds' and isinstance(v, float) else zero_elapsed(v)) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [zero_elapsed(v) for v in value]
+    return value
+
+
+def normalize_dynamic(observed):
+    assert 0.0 <= observed['live_detected_epoch'] - observed['live_expiry_epoch'] < 3.0
+    observed['live_expiry_epoch'] = 0.0
+    observed['live_detected_epoch'] = 1.5
+    for key in ('added_latency', 'revoke_latency', 'recovered_latency'):
+        observed[key] = bounded(observed[key], 0.0, 4.5, key)
+    return observed
+
+
+def capture(args):
+    """Go half only: build the oracle, observe it, write the committed observations."""
+    with go_capture_session(CONTRACT, args, {'seed': ('httptokenseed', PROBE.read_bytes())}) as session:
+        base = session['base']
+        pinned_seed(session, 'main', base / 'seed',
+                    lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
+        seed_vault = base / 'seed/vault'
+        snapshot = vault_snapshot(seed_vault)
+        raws, body = token_registry()
+        go = session['go']
+        home = prepare(base, 'go', seed_vault, lambda vault: (vault / 'mcp-tokens.json').write_text(body, encoding='utf-8'))
+        matrix = dict(rows=[])
+        observe_cases(go, home, PORT, raws, matrix)
+        startup = [dict(case=scenario[0], go=observe_startup(go, base, seed_vault, PORT, scenario, raws)) for scenario in startup_scenarios(raws, body)]
+        dynamic = normalize_dynamic(observe_dynamic(go, base, seed_vault, PORT, raws, body))
+        reload_codes = observe_duplicate_reload(go, base, seed_vault, PORT, raws, body)
+        stale = [observe_stale_revocation(go, base, seed_vault, PORT, raws, body, mode) for mode in ('corrupt', 'delete')]
+        # the Go-only legs of the original comparisons, so a drifted oracle fails at capture
+        for scenario, row in zip(startup_scenarios(raws, body), startup):
+            check_startup(scenario, row['go'], row['go'])
+        check_dynamic_go(dynamic)
+        check_duplicate_reload(reload_codes, reload_codes)
+        check_stale_revocation(stale, stale)
+        check_token_rows(matrix['rows'], matrix['rows'])
+        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()),
+                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'],
+                    matrix=zero_elapsed(matrix), startup=zero_elapsed(startup), dynamic=dynamic,
+                    duplicate_reload=reload_codes, stale_revocation=stale)
+        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
+    print(f'CAPTURED: {len(matrix["rows"])} Go token-state cases, {len(startup)} startup scenarios -> {path}')
+
+
+def check_dynamic_go(observed):
+    assert observed['live_before_expiry'] == 200 and observed['after_corruption'] == 200
+    assert observed['added_latency'] <= 4.5 and observed['revoke_latency'] <= 4.5 and observed['recovered_latency'] <= 4.5
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rust', type=Path, required=True)
-    parser.add_argument('--receipt', type=Path, required=True)
+    add_capture_arguments(parser, rust_required=False)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
+    if capture_arguments_ok(args):
+        return capture(args)
+    document = load_go_observations(CONTRACT, {})
+    recorded = document['data']
     clean = not checked(['git', 'status', '--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust = args.rust.resolve()
@@ -585,71 +661,51 @@ def main():
     receipt = dict(passed=False, candidate_commit=checked(['git', 'rev-parse', 'HEAD']).decode().strip(), candidate_worktree_clean=clean,
                    candidate_sources=inventory(paths, ROOT), native_os=platform.system(), architecture=platform.machine(), oracle_commit=ORACLE,
                    rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(), driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                   go=dict(rows=[]), rust=dict(rows=[]), startup=[], dynamic={})
+                   go=recorded['matrix'], rust=dict(rows=[]), startup=[], dynamic={}, go_observations=provenance(document),
+                   port=recorded['port'], fixture_snapshot=recorded['fixture_snapshot'], **recorded['info'])
+    port = receipt['port']
     try:
         with tempfile.TemporaryDirectory(prefix='symvault-http-token-') as raw:
-            base, tree = Path(raw), Path(raw) / 'oracle'
-            checked(['git', 'worktree', 'add', '--detach', tree, ORACLE])
-            try:
-                files = checked(['git', 'ls-tree', '-r', '--name-only', ORACLE]).decode().splitlines()
-                sources = sorted(p for p in files if p in {'go.mod', 'go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
-                embedded = sorted(p for p in files if p.startswith('internal/mcp/apitemplates/builtin/'))
-                assert len(embedded) == 17
-                receipt.update(oracle_sources=inventory(sources, tree), oracle_embedded=inventory(embedded, tree), seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest())
-                helper = tree / 'scripts/rust-port/cmd/httptokenseed'
-                helper.mkdir()
-                (helper / 'main.go').write_bytes(PROBE.read_bytes())
-                suffix = '.exe' if os.name == 'nt' else ''
-                go, seed = base / ('go-cli' + suffix), base / ('go-seed' + suffix)
-                checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', go, '.'], tree, timeout=oracle_build_timeout())
-                checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', seed, './scripts/rust-port/cmd/httptokenseed'], tree, timeout=oracle_build_timeout())
-                receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(), seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
-                seed_home = base / 'seed'
-                seed_home.mkdir()
-                json.loads(checked([seed, '--root', seed_home / 'vault'], seed_home, isolated(seed_home)))
-                snapshot = vault_snapshot(seed_home / 'vault')
-                receipt['fixture_snapshot'] = snapshot
-                raws, body = token_registry()
-                with socket.socket() as selection:
-                    selection.bind(('127.0.0.1', 0))
-                    port = selection.getsockname()[1]
-                receipt['port'] = port
-                # A: the shared token-state matrix
-                for implementation, binary in [('go', go), ('rust', rust)]:
-                    home = prepare(base, implementation, seed_home / 'vault', lambda vault: (vault / 'mcp-tokens.json').write_text(body, encoding='utf-8'))
-                    observe_cases(binary, home, port, raws, receipt[implementation])
-                check_token_rows(receipt['go']['rows'], receipt['rust']['rows'])
-                receipt['token_cases'] = len(receipt['go']['rows'])
-                # B: startup / storage states
-                for scenario in startup_scenarios(raws, body):
-                    pair = [observe_startup(binary, base, seed_home / 'vault', port, scenario, raws) for binary in (go, rust)]
-                    check_startup(scenario, *pair)
-                    receipt['startup'].append(dict(case=scenario[0], go=pair[0], rust=pair[1]))
-                # C: dynamic clock / out-of-band changes
-                dynamic = [observe_dynamic(binary, base, seed_home / 'vault', port, raws, body) for binary in (go, rust)]
-                check_dynamic(*dynamic)
-                receipt['dynamic'] = dict(go=dynamic[0], rust=dynamic[1])
-                # C2: duplicate-key / invalid-UTF-8 documents written while running
-                reload_codes = [observe_duplicate_reload(binary, base, seed_home / 'vault', port, raws, body) for binary in (go, rust)]
-                check_duplicate_reload(*reload_codes)
-                receipt['duplicate_reload'] = dict(go=reload_codes[0], rust=reload_codes[1])
-                # D: revoke -> no request -> wait > poll -> corrupt / delete -> request (cache must not outlive the revocation)
-                stale = {impl: [observe_stale_revocation(binary, base, seed_home / 'vault', port, raws, body, mode) for mode in ('corrupt', 'delete')]
-                         for impl, binary in (('go', go), ('rust', rust))}
-                check_stale_revocation(stale['go'], stale['rust'])
-                receipt['stale_revocation'] = stale
-                assert inventory(paths, ROOT) == receipt['candidate_sources'] and candidate_paths() == paths, 'candidate changed during observations'
-                assert hashlib.sha256(rust.read_bytes()).hexdigest() == receipt['rust_binary_sha256']
-                receipt['candidate_worktree_clean_at_end'] = not checked(['git', 'status', '--porcelain=v1']).strip()
-                assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
-                receipt['passed'] = True
-            finally:
-                remove_worktree(lambda: checked(['git', 'worktree', 'remove', '--force', tree]), 'oracle worktree')
+            base = Path(raw)
+            seed_home = base / 'seed'
+            replay_seed(recorded, 'main', seed_home)
+            assert vault_snapshot(seed_home / 'vault') == receipt['fixture_snapshot'], 'recorded seed vault bytes changed'
+            raws, body = token_registry()
+            # A: the shared token-state matrix
+            home = prepare(base, 'rust', seed_home / 'vault', lambda vault: (vault / 'mcp-tokens.json').write_text(body, encoding='utf-8'))
+            observe_cases(rust, home, port, raws, receipt['rust'])
+            check_token_rows(receipt['go']['rows'], receipt['rust']['rows'])
+            receipt['token_cases'] = len(receipt['go']['rows'])
+            # B: startup / storage states
+            scenarios = startup_scenarios(raws, body)
+            assert [s[0] for s in scenarios] == [r['case'] for r in recorded['startup']], 'recorded startup scenarios changed'
+            for scenario, go_row in zip(scenarios, recorded['startup'], strict=True):
+                pair = [go_row['go'], observe_startup(rust, base, seed_home / 'vault', port, scenario, raws)]
+                check_startup(scenario, *pair)
+                receipt['startup'].append(dict(case=scenario[0], go=pair[0], rust=pair[1]))
+            # C: dynamic clock / out-of-band changes
+            dynamic = [recorded['dynamic'], observe_dynamic(rust, base, seed_home / 'vault', port, raws, body)]
+            check_dynamic(*dynamic)
+            receipt['dynamic'] = dict(go=dynamic[0], rust=dynamic[1])
+            # C2: duplicate-key / invalid-UTF-8 documents written while running
+            reload_codes = [[tuple(x) for x in recorded['duplicate_reload']], observe_duplicate_reload(rust, base, seed_home / 'vault', port, raws, body)]
+            check_duplicate_reload(*reload_codes)
+            receipt['duplicate_reload'] = dict(go=reload_codes[0], rust=reload_codes[1])
+            # D: revoke -> no request -> wait > poll -> corrupt / delete -> request (cache must not outlive the revocation)
+            stale = {'go': recorded['stale_revocation'],
+                     'rust': [observe_stale_revocation(rust, base, seed_home / 'vault', port, raws, body, mode) for mode in ('corrupt', 'delete')]}
+            check_stale_revocation(stale['go'], stale['rust'])
+            receipt['stale_revocation'] = stale
+            assert inventory(paths, ROOT) == receipt['candidate_sources'] and candidate_paths() == paths, 'candidate changed during observations'
+            assert hashlib.sha256(rust.read_bytes()).hexdigest() == receipt['rust_binary_sha256']
+            receipt['candidate_worktree_clean_at_end'] = not checked(['git', 'status', '--porcelain=v1']).strip()
+            assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
+            receipt['passed'] = True
     finally:
         args.receipt.write_text(json.dumps(receipt, indent=2, default=str) + '\n', encoding='utf-8')
     print(f"PASS: {receipt['token_cases']} token-state cases, {len(receipt['startup'])} startup/storage scenarios and 1 dynamic clock/out-of-band scenario and "
           f"{len(receipt['duplicate_reload']['go'])} duplicate-key reload steps and "
-          f"{len(receipt['stale_revocation']['go'])} stale-revocation scenarios per implementation on {platform.system()}")
+          f"{len(receipt['stale_revocation']['go'])} stale-revocation scenarios per implementation on {platform.system()} (Go side replayed from {receipt['go_observations']['path']})")
 
 
 if __name__ == '__main__':

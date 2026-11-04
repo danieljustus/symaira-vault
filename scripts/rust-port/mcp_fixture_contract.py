@@ -21,8 +21,19 @@ import subprocess
 import sys
 import tempfile
 
+import base64
+import gzip
+
 from mcp_oracle import CONTRACT, HISTORICAL, ORDERED, inventory, git, pinned_go, validate_reference
 import mcp_compiler_adapter as compiler_adapter
+from mcp_process_contract import go_version_of, load_go_observations, provenance, save_go_observations
+
+OBSERVATION = 'mcp-ordered-fixtures'
+NORMALIZATION = ['the recording is the byte content each Go lane produced for every fixture (historical lane: its sha256, asserted equal to '
+                 'the anchored historical bytes at capture; corrected and product-source lanes: gzip+base64 of the exact bytes) plus the '
+                 'verdict rows of the Go steps (exit status, executed generator tests); no per-run value is recorded',
+                 'Go compiler identity/paths, generator binary hashes and temp directories are not recorded: they are properties of the capture '
+                 'machine, not of the fixtures']
 
 ROOT = Path(__file__).resolve().parents[2]
 PRODUCT_SOURCE = '58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9'
@@ -427,9 +438,15 @@ def main():
                         help='bounded two-reference acceptance for ordinary Go generator tests')
     parser.add_argument('--approval-generator', choices=['original', 'approval-lifetime-v1'], default='original',
                         help='explicit corrected-generator execution on both sources; not historical replay')
+    parser.add_argument('--capture-go', action='store_true',
+                        help='run the Go generators on all lanes and write the committed Go observations (Go required)')
     args = parser.parse_args()
     if sys.flags.optimize:
         parser.error('unoptimized Python is required')
+    replay = not args.capture_go
+    contract_args = dict(approval_generator=args.approval_generator, generator=args.generator)
+    recorded = load_go_observations(OBSERVATION, contract_args) if replay else None
+    observed = {'lanes': {}, 'product_replay': None}
     if args.approval_generator != 'original' and args.generator:
         parser.error('corrected approval execution requires the full two-lane fixture gate')
     validate_reference(ROOT)
@@ -459,7 +476,11 @@ def main():
     selected = {name:count for name,count in FIXTURES.items()
                 if not args.generator or Path(name).stem==args.generator}
     try:
-        go, env, compiler = pinned_go(os.environ.copy(), ROOT)
+        if replay:
+            go, env, compiler = None, None, recorded['data']['compiler']
+            receipt['go_observations'] = provenance(recorded)
+        else:
+            go, env, compiler = pinned_go(os.environ.copy(), ROOT)
         receipt['compiler'] = compiler
         for lane,commit in [('historical',HISTORICAL),('corrected',ORDERED),('product-source',PRODUCT_SOURCE)]:
             execution = lane if args.approval_generator == 'original' else lane+'-'+args.approval_generator
@@ -484,59 +505,81 @@ def main():
                     if lane == 'product-source':
                         validate_product_source(tree)
                         row['capture_identities'] = {name: product_capture_identity(tree, name) for name in selected}
-                    home=base/'home'
-                    home.mkdir(mode=0o700)
-                    isolated={k:v for k,v in env.items() if not k.startswith(('SYMVAULT_','SYMAIRA_'))}
-                    isolated.update(HOME=str(home),USERPROFILE=str(home),XDG_CONFIG_HOME=str(home/'config'),
-                                    XDG_DATA_HOME=str(home/'data'),XDG_CACHE_HOME=str(home/'cache'),
-                                    SYMVAULT_TEST_KEYRING='memory',SYMVAULT_RUN_WINDOWS_CROSSLANG='1',
-                                    SYMVAULT_SECUREUI='none',SYMVAULT_NO_NOTIFY='1',TZ='UTC')
-                    mode = 'CHECK' if lane=='historical' else 'GENERATE'
-                    isolated.update({'SYMAIRA_'+mode+'_MCP_'+flag+'_FIXTURE':'1' for flag,_,_ in CASES.values()})
-                    if mapping is not None:
-                        # New bytes cannot pass original historical CHECK. Only
-                        # this fixture is generated on H; the other 25 stay CHECK.
-                        isolated.pop('SYMAIRA_CHECK_MCP_WRITE_APPROVAL_FIXTURE', None)
-                        isolated['SYMAIRA_GENERATE_MCP_WRITE_APPROVAL_FIXTURE'] = '1'
+                    isolated = None
+                    if not replay:
+                        home=base/'home'
+                        home.mkdir(mode=0o700)
+                        isolated={k:v for k,v in env.items() if not k.startswith(('SYMVAULT_','SYMAIRA_'))}
+                        isolated.update(HOME=str(home),USERPROFILE=str(home),XDG_CONFIG_HOME=str(home/'config'),
+                                        XDG_DATA_HOME=str(home/'data'),XDG_CACHE_HOME=str(home/'cache'),
+                                        SYMVAULT_TEST_KEYRING='memory',SYMVAULT_RUN_WINDOWS_CROSSLANG='1',
+                                        SYMVAULT_SECUREUI='none',SYMVAULT_NO_NOTIFY='1',TZ='UTC')
+                        mode = 'CHECK' if lane=='historical' else 'GENERATE'
+                        isolated.update({'SYMAIRA_'+mode+'_MCP_'+flag+'_FIXTURE':'1' for flag,_,_ in CASES.values()})
+                        if mapping is not None:
+                            # New bytes cannot pass original historical CHECK. Only
+                            # this fixture is generated on H; the other 25 stay CHECK.
+                            isolated.pop('SYMAIRA_CHECK_MCP_WRITE_APPROVAL_FIXTURE', None)
+                            isolated['SYMAIRA_GENERATE_MCP_WRITE_APPROVAL_FIXTURE'] = '1'
                     # Bind the entire immutable tree plus overlaid generators.
                     # Only the explicitly captured output files may change.
                     names = git(tree,'ls-files').decode().splitlines()
                     inputs = sorted((set(names) | set(generators)) - set(FIXTURES))
                     row['build_inputs'] = inventory(tree,inputs)
-                    row['build_environment'] = dict(isolated)
-                    check = ['-check'] if lane=='historical' else []
-                    if not args.generator or args.generator=='tools-call':
-                        run_step([go,'run','./scripts/rust-port/cmd/mcpcallgen',*check],tree,isolated,lane_out,'tools-call',row['steps'])
-                    if not args.generator or args.generator=='http-initialize':
-                        run_step([go,'run','./scripts/rust-port/cmd/http001initgen',*check],tree,isolated,lane_out,'http-initialize',row['steps'])
-                    tests = ['TestGenerateMCP'+name+'Fixture' for name in CASES
-                             if not args.generator or CASES[name][1]=='execute-with-secret.json']
-                    if not args.generator or args.generator=='execute-with-secret':
-                        isolated,row['compiler_adapter'] = compiler_adapter.prepare(
-                            go,isolated,tree,lane_out/'compiler-adapter',row['steps'],run_step)
-                        row['generator_environment'] = dict(isolated)
-                        # go test prepends GOROOT/bin to PATH. Compile first,
-                        # then run the unmodified test binary from its package
-                        # directory so our separately recorded PATH is effective.
-                        binary=lane_out/('generators.test.exe' if os.name=='nt' else 'generators.test')
-                        run_step([go,'test','-c','./internal/mcp/server','-o',str(binary)],
-                                 tree,isolated,lane_out,'generators-build',row['steps'])
-                        row['generator_binary_sha256']=hashlib.sha256(binary.read_bytes()).hexdigest()
-                        if mapping is not None:
-                            run_step([go,'version','-m',str(binary)],tree,isolated,lane_out,
-                                     'generators-build-info',row['steps'])
-                        run_generators(binary, tests, tree, isolated, lane_out, row['steps'])
-                        compiler_adapter.verify(row['compiler_adapter'])
-                        if hashlib.sha256(binary.read_bytes()).hexdigest() != row['generator_binary_sha256']:
-                            raise ValueError('generator binary changed during execution')
-                    if lane=='corrected' and not args.generator:
-                        regressions=['TestAnomalyDispatch'+suffix for suffix in [
-                            'CompletionOrder','GenuineToolChain','EOFAuditLifetime','Timestamp',
-                            'BusyWorkerDoesNotBlockTools','CloseDrainsAdmittedTool']]
-                        run_step([go,'test','-race','./internal/mcp/server','-run','^TestAnomalyDispatch','-count=1','-timeout=8m','-v'],
-                                 tree,isolated,lane_out,'anomaly-race',row['steps'],regressions)
+                    if replay:
+                        row['replayed_from_go_observations'] = True
+                        row['steps'] = recorded['data']['lanes'][execution]['steps']
+                        assert all(step['passed'] and not step['timed_out'] and step['exit'] == 0 for step in row['steps']), 'recorded Go step failed'
+                        lane_captures = recorded['data']['lanes'][execution]['captures']
+                    else:
+                        lane_captures = None
+                    if not replay:
+                        row['build_environment'] = dict(isolated)
+                    if not replay:
+                        check = ['-check'] if lane=='historical' else []
+                        if not args.generator or args.generator=='tools-call':
+                            run_step([go,'run','./scripts/rust-port/cmd/mcpcallgen',*check],tree,isolated,lane_out,'tools-call',row['steps'])
+                        if not args.generator or args.generator=='http-initialize':
+                            run_step([go,'run','./scripts/rust-port/cmd/http001initgen',*check],tree,isolated,lane_out,'http-initialize',row['steps'])
+                        tests = ['TestGenerateMCP'+name+'Fixture' for name in CASES
+                                 if not args.generator or CASES[name][1]=='execute-with-secret.json']
+                        if not args.generator or args.generator=='execute-with-secret':
+                            isolated,row['compiler_adapter'] = compiler_adapter.prepare(
+                                go,isolated,tree,lane_out/'compiler-adapter',row['steps'],run_step)
+                            row['generator_environment'] = dict(isolated)
+                            # go test prepends GOROOT/bin to PATH. Compile first,
+                            # then run the unmodified test binary from its package
+                            # directory so our separately recorded PATH is effective.
+                            binary=lane_out/('generators.test.exe' if os.name=='nt' else 'generators.test')
+                            run_step([go,'test','-c','./internal/mcp/server','-o',str(binary)],
+                                     tree,isolated,lane_out,'generators-build',row['steps'])
+                            row['generator_binary_sha256']=hashlib.sha256(binary.read_bytes()).hexdigest()
+                            if mapping is not None:
+                                run_step([go,'version','-m',str(binary)],tree,isolated,lane_out,
+                                         'generators-build-info',row['steps'])
+                            run_generators(binary, tests, tree, isolated, lane_out, row['steps'])
+                            compiler_adapter.verify(row['compiler_adapter'])
+                            if hashlib.sha256(binary.read_bytes()).hexdigest() != row['generator_binary_sha256']:
+                                raise ValueError('generator binary changed during execution')
+                        if lane=='corrected' and not args.generator:
+                            regressions=['TestAnomalyDispatch'+suffix for suffix in [
+                                'CompletionOrder','GenuineToolChain','EOFAuditLifetime','Timestamp',
+                                'BusyWorkerDoesNotBlockTools','CloseDrainsAdmittedTool']]
+                            run_step([go,'test','-race','./internal/mcp/server','-run','^TestAnomalyDispatch','-count=1','-timeout=8m','-v'],
+                                     tree,isolated,lane_out,'anomaly-race',row['steps'],regressions)
                     for name,count in selected.items():
-                        captured=(tree/name).read_bytes()
+                        if replay:
+                            entry = lane_captures[name]
+                            if lane == 'historical':
+                                captured = historical_file(ROOT,name).read_bytes()
+                                if hashlib.sha256(captured).hexdigest() != entry['sha256']:
+                                    raise ValueError('recorded historical Go capture differs from the anchored bytes: '+name)
+                            else:
+                                captured = gzip.decompress(base64.b64decode(entry['gzip_base64']))
+                                if hashlib.sha256(captured).hexdigest() != entry['sha256']:
+                                    raise ValueError('recorded Go capture is corrupt: '+name)
+                        else:
+                            captured=(tree/name).read_bytes()
                         (lane_out/Path(name).name).write_bytes(captured)
                         old=json.loads(historical_file(ROOT,name).read_bytes())
                         if lane == 'product-source':
@@ -552,6 +595,17 @@ def main():
                         raise ValueError('oracle build inputs changed during execution')
                     row.update(passed=True,fixtures=len(selected),cases=sum(selected.values()),
                                captures=inventory(lane_out,[Path(p).name for p in selected]))
+                    if not replay:
+                        entries = {}
+                        for name in selected:
+                            data = (lane_out/Path(name).name).read_bytes()
+                            entry = {'sha256': hashlib.sha256(data).hexdigest()}
+                            if lane != 'historical':
+                                entry['gzip_base64'] = base64.b64encode(gzip.compress(data, 9, mtime=0)).decode()
+                            entries[name] = entry
+                        observed['lanes'][execution] = {
+                            'captures': entries,
+                            'steps': [{k: step.get(k) for k in ('name','exit','timed_out','passed','executed_tests')} for step in row['steps']]}
                 finally:
                     # Preserve available outputs even when a generator fails.
                     for name in FIXTURES:
@@ -565,21 +619,31 @@ def main():
             product_out.mkdir()
             product={'passed':False,'steps':[]}
             receipt['product_replay']=product
-            with tempfile.TemporaryDirectory(prefix='mcp-product-fixtures-') as raw:
-                home=Path(raw)
-                current=dict(env,HOME=str(home),USERPROFILE=str(home),
-                             XDG_CONFIG_HOME=str(home/'config'),XDG_DATA_HOME=str(home/'data'),
-                             XDG_CACHE_HOME=str(home/'cache'),SYMVAULT_TEST_KEYRING='memory',
-                             SYMVAULT_RUN_WINDOWS_CROSSLANG='1',SYMVAULT_SECUREUI='none',SYMVAULT_NO_NOTIFY='1',TZ='UTC')
-                names=['CopyClipboard','SecureInput','ExecuteWithSecret']
-                current.update({'SYMAIRA_CHECK_MCP_'+CASES[n][0]+'_FIXTURE':'1' for n in names})
-                tests=['TestGenerateMCP'+n+'Fixture' for n in names]
-                run_step([go,'test','./internal/mcp/server','-run','^('+'|'.join(tests)+')$','-count=1','-timeout=8m','-v'],
-                         ROOT,current,product_out,'generators',product['steps'],tests)
+            if replay:
+                product['steps'] = recorded['data']['product_replay']['steps']
+                assert product['steps'] and all(step['passed'] and step['exit'] == 0 for step in product['steps']), 'recorded Go product replay failed'
+                product['replayed_from_go_observations'] = True
+            else:
+                with tempfile.TemporaryDirectory(prefix='mcp-product-fixtures-') as raw:
+                    home=Path(raw)
+                    current=dict(env,HOME=str(home),USERPROFILE=str(home),
+                                 XDG_CONFIG_HOME=str(home/'config'),XDG_DATA_HOME=str(home/'data'),
+                                 XDG_CACHE_HOME=str(home/'cache'),SYMVAULT_TEST_KEYRING='memory',
+                                 SYMVAULT_RUN_WINDOWS_CROSSLANG='1',SYMVAULT_SECUREUI='none',SYMVAULT_NO_NOTIFY='1',TZ='UTC')
+                    names=['CopyClipboard','SecureInput','ExecuteWithSecret']
+                    current.update({'SYMAIRA_CHECK_MCP_'+CASES[n][0]+'_FIXTURE':'1' for n in names})
+                    tests=['TestGenerateMCP'+n+'Fixture' for n in names]
+                    run_step([go,'test','./internal/mcp/server','-run','^('+'|'.join(tests)+')$','-count=1','-timeout=8m','-v'],
+                             ROOT,current,product_out,'generators',product['steps'],tests)
+                observed['product_replay'] = {'steps': [{k: step.get(k) for k in ('name','exit','timed_out','passed','executed_tests')} for step in product['steps']]}
             product['passed']=True
         if receipt['candidate_inputs'] != inventory(ROOT,receipt['candidate_inputs']):
             raise ValueError('candidate inputs changed during fixture acceptance')
         receipt['passed']=True
+        if args.capture_go:
+            data = dict(compiler={k: compiler[k] for k in ('version',)}, lanes=observed['lanes'], product_replay=observed['product_replay'])
+            path = save_go_observations(OBSERVATION, data, contract_args, NORMALIZATION, compiler['version'])
+            print(f'CAPTURED: Go lane captures for {len(selected)} fixtures x {len(observed["lanes"])} lanes -> {path}')
     finally:
         (output/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
     mode = 'historical replay' if args.approval_generator == 'original' else 'new approval-lifetime-v1 generator executions'

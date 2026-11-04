@@ -25,9 +25,22 @@ from http_oauth_contract import PASSPHRASE, PROBE, Server
 from http_process_contract import SECRET, request
 from http_tls_contract import IDENTITY, NativeServer, context, exchange as tls_exchange
 from http_head_contract import exchange as tcp_exchange
-from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vault_snapshot
-from oracle_build import build_go, remove_oracle_worktree
+from http_tls_contract import secure_identities
+from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, bounded, canonical_close, capture_arguments_ok, checked,
+                                  go_capture_session, inventory, isolated, load_go_observations, pack_tree, pinned_seed,
+                                  provenance, replay_seed, save_go_observations, unpack_tree, vault_snapshot)
+from oracle_build import remove_oracle_worktree
 
+CONTRACT='http-write'
+PORT=28107  # fixed so request bytes (Host header) are identical in capture and replay
+NORMALIZATION=['fixed loopback port','one seed vault/tokens (bulk entry included) plus the per-profile/budget config.yaml, and the TLS identities, pinned in the file',
+               'Date header, log timestamps, peer ports',
+               'output profiles are recorded for every budget of OUTPUT_BUDGETS so the Rust retry ladder keeps a Go counterpart',
+               'wall-clock/host measurements are asserted against the comparison bounds at capture and recorded as the bound itself '
+               '(see normalize_write): body_completed_seconds=2.4, handshake elapsed=midpoint of .6..2, sent_hello_bytes=9, '
+               'slow_read_calls=4, slow_received_bytes=4096, fast_drain_started_seconds=budget+4, received_chunk_bytes=declared_chunk_length-1',
+               'random TLS bytes (client_hello_sha256, post_tls_error_wire), socket observations, load averages, wall-clock ns and the server pid are not stored',
+               'the Go partial response is stored truncated to its first 4096 bytes (status line, headers and the start of the chunk)']
 TLS_OUTPUT=('tls-output','30s',ssl.TLSVersion.TLSv1_3)
 # #1470, owner decision 2026-10-24: the Go oracle's plain-TCP write deadline does not interrupt an in-flight
 # Windows send, so only that one cell is a declared platform difference. Rust stays strictly checked everywhere.
@@ -280,13 +293,168 @@ def observe(binary,home,port,tokens,identities,profile,version,result,budget=30)
     finally:server.close()
 
 
+SEED_BULK=b'bulk := &vault.Entry{Data: map[string]any{"notes": "public"}}\n for i := 0; i < 128; i++ { bulk.Metadata.Tags = append(bulk.Metadata.Tags, strings.Repeat("\\\"", 50000)) }\n if err = vault.WriteEntry(*root, "public/bulk", bulk, identity); err != nil { panic(err) }\n '
+
+
+def write_seed_source():
+    seed_source=PROBE.read_bytes();old=b'flag.Parse()';assert seed_source.count(old)==1
+    seed_source=seed_source.replace(b'"time"',b'"time"\n "strings"',1)
+    seed_source=seed_source.replace(old,b'write := flag.Duration("write-timeout", 0, "fixture write budget")\n secure := flag.Bool("secure", false, "fixture TLS selection")\n flag.Parse()',1)
+    old=b'AllowInsecureBind: true, RateLimit: 1000';assert seed_source.count(old)==1
+    seed_source=seed_source.replace(old,b'AllowInsecureBind: !*secure, RateLimit: 1000, WriteTimeout: *write',1)
+    old=b'registry := auth.NewTokenRegistry';assert seed_source.count(old)==1
+    extra=SEED_BULK
+    return seed_source.replace(old,extra+old,1)
+
+
+def check_write(receipt,implementation,profile,version,certificate_sha):
+    """The per-implementation verdict of one profile (unchanged assertions); idempotent apart from declared differences."""
+    budget=receipt['profiles'][profile]['write_budget']
+    row=receipt[implementation][profile]['late_body']
+    assert row['sent_body_suffix_bytes']==16 and row['body_completed_seconds']>=2.4
+    assert row['peer_terminal_observed'] and not row['forced_client_close']
+    if version:assert row['server_certificate_sha256']==certificate_sha
+    if profile in {'tcp-five','tcp-output','tls-output'}:assert_response(row['response'],200,PING_BODY)
+    else:assert not base64.b64decode(row['received_base64']),'expired absolute write budget produced a late HTTP response'
+    observed=receipt[implementation][profile]
+    if version and profile!='tls-output':
+        peer=observed['handshake_peer']
+        assert peer['sender_joined'] and peer['peer_terminal_observed'] and not peer['forced_client_close']
+        assert 9<=peer['sent_hello_bytes']<peer['client_hello_length'] and .6<=peer['elapsed_seconds']<=2
+    if profile in {'tcp-output','tls-output'}:
+        output=observed['slow_output']
+        if version:
+            assert output['tls_version']=='TLSv1.3'
+            assert output['server_certificate_sha256']==certificate_sha
+        assert output['peer_terminal_observed'] and not output['forced_client_close']
+        assert output_progressing(output),'actual progressing output required'
+        assert output['fast_drain_started_seconds']>=budget_seconds(budget)+4
+        if output['received_base64']:
+            assert output['declared_chunk_length']>=10*1024*1024
+            # Diagnostics go to stderr; the mutation negative control pins the exact assertion message.
+            print(f"write-deadline {implementation}/{profile}: {output['received_chunk_bytes']}/{output['declared_chunk_length']} chunk bytes received",file=sys.stderr,flush=True)
+            declared=declared_write_difference(implementation,profile,receipt['native_os'],output)
+            if declared:receipt['declared_differences'].append(declared)
+            else:assert output['received_chunk_bytes']<output['declared_chunk_length'],'expired write resumed after fast client drain'
+            response=output['partial_response']
+            assert response['status_line']=='HTTP/1.1 200 OK'
+            assert response['headers_without_date']==sorted([('connection','close'),('content-type','application/json'),('transfer-encoding','chunked')])
+
+
+PARTIAL_RESPONSE_KEEP=4096
+
+
+def normalize_write(result,profile,budget,version):
+    """Capture-time normalisation of one Go profile record (the verdict ran on the real values before)."""
+    late=result['late_body']
+    late['body_completed_seconds']=2.4
+    late['elapsed_seconds']=0.0
+    late.pop('post_tls_error_wire_base64',None)
+    late['tls_read_errors']=[{**e,'message':''} for e in late['tls_read_errors']]
+    if late.get('peer_terminal_kind') in ('connection-reset','connection-aborted'):late['peer_terminal_kind']='eof'
+    if result['handshake_peer']:
+        peer=result['handshake_peer']
+        peer['elapsed_seconds']=bounded(peer['elapsed_seconds'],.6,2,'handshake elapsed')
+        peer['sent_hello_bytes']=9
+        peer['client_hello_sha256']='0'*64
+        peer['peer_terminal_kind']='eof'
+        peer['received_base64']=''
+    if result['slow_output']:
+        out=result['slow_output']
+        out['slow_read_calls']=4;out['slow_received_bytes']=4096
+        out['fast_drain_started_seconds']=budget_seconds(budget)+4
+        out['elapsed_seconds']=0.0;out['first_byte_seconds']=0.0
+        for key in ('socket_observations','socket_observation_errors'):out[key]=[]
+        out['load_average_before']=None
+        for key in ('request_start_wall_ns_before','request_start_wall_ns_after','receive_end_wall_ns_before','receive_end_wall_ns_after'):out[key]=0
+        out['peer_terminal_kind']='eof'
+        if out['received_base64']:
+            kept=base64.b64decode(out['received_base64'])[:PARTIAL_RESPONSE_KEEP]
+            out['received_base64']=base64.b64encode(kept).decode()
+            out['partial_response']=parse_response(kept)
+            out['received_chunk_bytes']=out['declared_chunk_length']-1
+    result['server_process_id']=0
+    return result
+
+
+def capture(args):
+    """Go half only: build the oracle, observe it, write the committed observations."""
+    with go_capture_session(CONTRACT, args, {'seed': ('httpwriteseed', write_seed_source()), 'identity': ('httpwriteidentity', IDENTITY.read_bytes())}) as session:
+        base = session['base']
+        prior = session['prior']
+        identities = base / 'identities'
+        if prior:
+            unpack_tree(prior['identities']['tree'], identities)
+        else:
+            checked([session['helpers']['identity'], '--root', identities], base)
+        session['identities'] = dict(tree=pack_tree(identities))
+        identity_paths = sorted(p.name for p in identities.iterdir())
+        certificate_sha = hashlib.sha256(ssl.PEM_cert_to_DER_cert((identities/'server.pem').read_text())).hexdigest()
+        recorded = {}
+        # One bulk-bearing seed vault serves every profile (the 12.8 MB encrypted entry is incompressible); only
+        # config.yaml (write_timeout, allow_insecure_bind) differs per profile/budget and is recorded separately.
+        tokens = pinned_seed(session, 'base', base / 'seed-base', lambda home: json.loads(checked(
+            [session['helpers']['seed'], '--root', home / 'vault', '--write-timeout', '30s', '--secure=false'], home, isolated(home))))
+        session['configs'] = {}
+        for profile, budget, version in PROFILES:
+            output_profile = profile in {'tcp-output', 'tls-output'}
+            recorded[profile] = {}
+            for tried in (OUTPUT_BUDGETS if output_profile else (budget,)):
+                key = profile + '-' + tried
+                prior_config = ((session['prior'] or {}).get('configs') or {}).get(key)
+                if prior_config is None:
+                    scratch = base / ('config-' + key)
+                    scratch.mkdir()
+                    checked([session['helpers']['seed'], '--root', scratch / 'vault', '--write-timeout', tried, '--secure=' + ('true' if version else 'false')], scratch, isolated(scratch))
+                    prior_config = base64.b64encode((scratch / 'vault/config.yaml').read_bytes()).decode()
+                session['configs'][key] = prior_config
+                seed_home = base / ('seed-' + key)
+                shutil.copytree(base / 'seed-base/vault', seed_home / 'vault')
+                (seed_home / 'vault/config.yaml').write_bytes(base64.b64decode(prior_config))
+                snapshot = vault_snapshot(seed_home / 'vault')
+                home = base / ('go-' + profile + '-' + tried)
+                home.mkdir()
+                shutil.copytree(seed_home / 'vault', home / 'vault')
+                assert vault_snapshot(home / 'vault') == snapshot
+                result = dict(rows=[], processes=[], late_body={}, handshake_peer={}, slow_output={})
+                print(f'capture-go: {profile} write budget {tried}', file=sys.stderr, flush=True)
+                try:
+                    observe(session['go'], home, PORT, tokens, identities, profile, version, result, budget_seconds(tried))
+                except OutputPreconditionUnmet:
+                    recorded[profile][tried] = dict(unmet=True, fixture_snapshot=snapshot)
+                    continue
+                except Exception as error:
+                    # The Rust retry ladder only reaches a budget when the shorter ones were unmet; Go never ran there
+                    # before. Keep the budgets Go cannot serve cleanly out of the ladder (never the first one).
+                    if not any(not e['unmet'] for e in recorded[profile].values()):
+                        raise
+                    print(f'capture-go: {profile} budget {tried} not recordable: {type(error).__name__}', file=sys.stderr)
+                    recorded[profile][tried] = dict(unmet=True, fixture_snapshot=snapshot, unavailable=type(error).__name__)
+                    continue
+                receipt = dict(native_os=platform.system(), profiles={profile: dict(write_budget=tried)}, go={profile: result}, declared_differences=[])
+                check_write(receipt, 'go', profile, version, certificate_sha)
+                recorded[profile][tried] = dict(unmet=False, fixture_snapshot=snapshot,
+                                                go=normalize_write(result, profile, tried, version), declared=receipt['declared_differences'])
+            assert any(not e['unmet'] for e in recorded[profile].values()), ('no usable Go observation', profile)
+        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest(),
+                              identity_probe_sha256=hashlib.sha256(IDENTITY.read_bytes()).hexdigest(),
+                              actual_write_seed_source_sha256=hashlib.sha256(write_seed_source()).hexdigest()),
+                    port=PORT, seeds=session['seeds'], configs=session['configs'], identities=session['identities'],
+                    identity_inventory=inventory(identity_paths, identities), server_certificate_sha256=certificate_sha,
+                    profiles=recorded)
+        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
+    print(f'CAPTURED: Go write observations for {len(recorded)} profiles -> {path}')
+
+
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--rust',type=Path,required=True)
-    parser.add_argument('--receipt',type=Path,required=True)
+    add_capture_arguments(parser, rust_required=False)
     parser.add_argument('--allow-dirty-for-development',action='store_true')
     parser.add_argument('--tls-output-probe-only',action='store_true',help='Run only the additional TLS backpressure probe, not full HTTP acceptance')
     args=parser.parse_args()
+    if capture_arguments_ok(args):
+        return capture(args)
+    document=load_go_observations(CONTRACT,{});recorded=document['data']
     profiles=[TLS_OUTPUT] if args.tls_output_probe_only else PROFILES
     clean=not checked(['git','status','--porcelain=v1']).strip();assert clean or args.allow_dirty_for_development
     rust=args.rust.resolve()
@@ -297,105 +465,60 @@ def main():
                  candidate_sources=inventory(paths,ROOT),native_os=platform.system(),architecture=platform.machine(),
                  rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),oracle_commit=ORACLE,
                  scope='tls-output-probe-only' if args.tls_output_probe_only else 'full',
-                 go={},rust={},profiles={},differences=[],declared_differences=[])
+                 go={},rust={},profiles={},differences=[],declared_differences=[],
+                 go_observations=provenance(document),port=recorded['port'],identity_inventory=recorded['identity_inventory'],
+                 server_certificate_sha256=recorded['server_certificate_sha256'],**recorded['info'])
+    port=receipt['port'];certificate_sha=receipt['server_certificate_sha256']
     try:
         with tempfile.TemporaryDirectory(prefix='symvault-http-write-') as raw:
-            base,tree=Path(raw),Path(raw)/'oracle';checked(['git','worktree','add','--detach',tree,ORACLE])
-            try:
-                files=checked(['git','ls-tree','-r','--name-only',ORACLE]).decode().splitlines()
-                sources=sorted(p for p in files if p in {'go.mod','go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
-                embedded=sorted(p for p in files if p.startswith('internal/mcp/apitemplates/builtin/'));assert len(embedded)==17
-                receipt.update(oracle_sources=inventory(sources,tree),oracle_embedded=inventory(embedded,tree),seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest(),identity_probe_sha256=hashlib.sha256(IDENTITY.read_bytes()).hexdigest())
-                seed_source=PROBE.read_bytes();old=b'flag.Parse()';assert seed_source.count(old)==1
-                seed_source=seed_source.replace(b'"time"',b'"time"\n "strings"',1)
-                seed_source=seed_source.replace(old,b'write := flag.Duration("write-timeout", 0, "fixture write budget")\n secure := flag.Bool("secure", false, "fixture TLS selection")\n flag.Parse()',1)
-                old=b'AllowInsecureBind: true, RateLimit: 1000';assert seed_source.count(old)==1
-                seed_source=seed_source.replace(old,b'AllowInsecureBind: !*secure, RateLimit: 1000, WriteTimeout: *write',1)
-                old=b'registry := auth.NewTokenRegistry';assert seed_source.count(old)==1
-                extra=b'bulk := &vault.Entry{Data: map[string]any{"notes": "public"}}\n for i := 0; i < 128; i++ { bulk.Metadata.Tags = append(bulk.Metadata.Tags, strings.Repeat("\\\"", 50000)) }\n if err = vault.WriteEntry(*root, "public/bulk", bulk, identity); err != nil { panic(err) }\n '
-                seed_source=seed_source.replace(old,extra+old,1)
-                receipt['actual_write_seed_source_sha256']=hashlib.sha256(seed_source).hexdigest()
-                for name,source in [('httpwriteseed',seed_source),('httpwriteidentity',IDENTITY.read_bytes())]:
-                    helper=tree/'scripts/rust-port/cmd'/name;helper.mkdir();(helper/'main.go').write_bytes(source)
-                suffix='.exe' if os.name=='nt' else ''
-                go,seed,identity=[base/(name+suffix) for name in ['go-cli','go-seed','go-identity']]
-                builds=receipt.setdefault('oracle_builds',[])
-                for binary,package in [(go,'.'),(seed,'./scripts/rust-port/cmd/httpwriteseed'),(identity,'./scripts/rust-port/cmd/httpwriteidentity')]:build_go(tree,binary,package,builds)
-                receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest(),identity_binary_sha256=hashlib.sha256(identity.read_bytes()).hexdigest())
-                identities=base/'identities';checked([identity,'--root',identities],base)
-                identity_paths=sorted(p.name for p in identities.iterdir());receipt['identity_inventory']=inventory(identity_paths,identities)
-                certificate_sha=hashlib.sha256(ssl.PEM_cert_to_DER_cert((identities/'server.pem').read_text())).hexdigest();receipt['server_certificate_sha256']=certificate_sha
-                with socket.socket() as selection:selection.bind(('127.0.0.1',0));port=selection.getsockname()[1]
-                receipt['port']=port
-                for profile,budget,version in profiles:
-                    output_profile=profile in {'tcp-output','tls-output'}
-                    unmet=[]
-                    for tried in (OUTPUT_BUDGETS if output_profile else (budget,)):
-                        seed_home=base/('seed-'+profile+'-'+tried);seed_home.mkdir()
-                        tokens=json.loads(checked([seed,'--root',seed_home/'vault','--write-timeout',tried,'--secure='+('true' if version else 'false')],seed_home,isolated(seed_home)))
-                        snapshot=vault_snapshot(seed_home/'vault');receipt['profiles'][profile]=dict(write_budget=tried,fixture_snapshot=snapshot,unmet_precondition_attempts=unmet)
-                        try:
-                            for implementation,binary in [('go',go),('rust',rust)]:
-                                home=base/(implementation+'-'+profile+'-'+tried);home.mkdir();shutil.copytree(seed_home/'vault',home/'vault');assert vault_snapshot(home/'vault')==snapshot
-                                result=dict(rows=[],processes=[],late_body={},handshake_peer={},slow_output={});receipt[implementation][profile]=result
-                                try:observe(binary,home,port,tokens,identities,profile,version,result,budget_seconds(tried))
-                                except OutputPreconditionUnmet:
-                                    so=result['slow_output'];unmet.append(dict(write_budget=tried,implementation=implementation,slow_read_calls=so['slow_read_calls'],
-                                        slow_received_bytes=so['slow_received_bytes'],first_byte_seconds=so.get('first_byte_seconds'),load_average_before=so.get('load_average_before')))
-                                    raise
-                        except OutputPreconditionUnmet:continue
-                        break
-                    else:assert False,'actual progressing output required'
-                for profile,budget,version in profiles:
-                    a,b=receipt['go'][profile],receipt['rust'][profile]
-                    assert len(a['rows'])==len(b['rows'])==3
-                    for left,right in zip(a['rows'],b['rows'],strict=True):
-                        assert left['case']==right['case'] and left['request_sha256']==right['request_sha256']
-                        if any(left['response'][k]!=right['response'][k] for k in ['status_line','headers_without_date','body_base64']):receipt['differences'].append(dict(profile=profile,case=left['case'],go=left['response'],rust=right['response']))
-                    assert a['late_body']['request_sha256']==b['late_body']['request_sha256']
-                    for implementation in ['go','rust']:
-                        row=receipt[implementation][profile]['late_body']
-                        assert row['sent_body_suffix_bytes']==16 and row['body_completed_seconds']>=2.4
-                        assert row['peer_terminal_observed'] and not row['forced_client_close']
-                        if version:assert row['server_certificate_sha256']==certificate_sha
-                        if profile in {'tcp-five','tcp-output','tls-output'}:assert_response(row['response'],200,PING_BODY)
-                        else:assert not base64.b64decode(row['received_base64']),'expired absolute write budget produced a late HTTP response'
-                        observed=receipt[implementation][profile]
-                        if version and profile!='tls-output':
-                            peer=observed['handshake_peer']
-                            assert peer['sender_joined'] and peer['peer_terminal_observed'] and not peer['forced_client_close']
-                            assert 9<=peer['sent_hello_bytes']<peer['client_hello_length'] and .6<=peer['elapsed_seconds']<=2
-                        if profile in {'tcp-output','tls-output'}:
-                            output=observed['slow_output']
-                            if version:
-                                assert output['tls_version']=='TLSv1.3'
-                                assert output['server_certificate_sha256']==certificate_sha
-                            assert output['peer_terminal_observed'] and not output['forced_client_close']
-                            assert output_progressing(output),'actual progressing output required'
-                            assert output['fast_drain_started_seconds']>=budget_seconds(receipt['profiles'][profile]['write_budget'])+4
-                            if output['received_base64']:
-                                assert output['declared_chunk_length']>=10*1024*1024
-                                # Diagnostics go to stderr; the mutation negative control pins the exact assertion message.
-                                print(f"write-deadline {implementation}/{profile}: {output['received_chunk_bytes']}/{output['declared_chunk_length']} chunk bytes received",file=sys.stderr,flush=True)
-                                declared=declared_write_difference(implementation,profile,receipt['native_os'],output)
-                                if declared:receipt['declared_differences'].append(declared)
-                                else:assert output['received_chunk_bytes']<output['declared_chunk_length'],'expired write resumed after fast client drain'
-                                response=output['partial_response']
-                                assert response['status_line']=='HTTP/1.1 200 OK'
-                                assert response['headers_without_date']==sorted([('connection','close'),('content-type','application/json'),('transfer-encoding','chunked')])
-                assert not receipt['differences']
-                assert inventory(paths,ROOT)==receipt['candidate_sources'] and inventory(identity_paths,identities)==receipt['identity_inventory']
-                assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
-                assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256']
-                receipt['candidate_worktree_clean_at_end']=not checked(['git','status','--porcelain=v1']).strip();assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
-                receipt['passed']=True
-            finally:remove_oracle_worktree(tree,receipt,checked)
+            base=Path(raw)
+            identities=unpack_tree(recorded['identities']['tree'],base/'identities');secure_identities(identities)
+            identity_paths=sorted(p.name for p in identities.iterdir())
+            assert inventory(identity_paths,identities)==receipt['identity_inventory'],'recorded TLS identities changed'
+            assert hashlib.sha256(ssl.PEM_cert_to_DER_cert((identities/'server.pem').read_text())).hexdigest()==certificate_sha
+            for profile,budget,version in profiles:
+                output_profile=profile in {'tcp-output','tls-output'}
+                unmet=[]
+                for tried in (OUTPUT_BUDGETS if output_profile else (budget,)):
+                    entry=recorded['profiles'][profile][tried]
+                    if entry['unmet']:
+                        unmet.append(dict(write_budget=tried,implementation='go',recorded_unmet=True));continue
+                    seed_home=base/('seed-'+profile+'-'+tried)
+                    tokens=replay_seed(recorded,'base',seed_home)
+                    (seed_home/'vault/config.yaml').write_bytes(base64.b64decode(recorded['configs'][profile+'-'+tried]))
+                    snapshot=vault_snapshot(seed_home/'vault');assert snapshot==entry['fixture_snapshot'],'recorded seed vault bytes changed'
+                    receipt['profiles'][profile]=dict(write_budget=tried,fixture_snapshot=snapshot,unmet_precondition_attempts=unmet)
+                    receipt['go'][profile]=entry['go'];receipt['declared_differences']+=entry['declared']
+                    home=base/('rust-'+profile+'-'+tried);home.mkdir();shutil.copytree(seed_home/'vault',home/'vault');assert vault_snapshot(home/'vault')==snapshot
+                    result=dict(rows=[],processes=[],late_body={},handshake_peer={},slow_output={});receipt['rust'][profile]=result
+                    try:observe(rust,home,port,tokens,identities,profile,version,result,budget_seconds(tried))
+                    except OutputPreconditionUnmet:
+                        so=result['slow_output'];unmet.append(dict(write_budget=tried,implementation='rust',slow_read_calls=so['slow_read_calls'],
+                            slow_received_bytes=so['slow_received_bytes'],first_byte_seconds=so.get('first_byte_seconds'),load_average_before=so.get('load_average_before')))
+                        continue
+                    break
+                else:assert False,'actual progressing output required'
+            for profile,budget,version in profiles:
+                a,b=receipt['go'][profile],receipt['rust'][profile]
+                assert len(a['rows'])==len(b['rows'])==3
+                for left,right in zip(a['rows'],b['rows'],strict=True):
+                    assert left['case']==right['case'] and left['request_sha256']==right['request_sha256']
+                    if any(left['response'][k]!=right['response'][k] for k in ['status_line','headers_without_date','body_base64']):receipt['differences'].append(dict(profile=profile,case=left['case'],go=left['response'],rust=right['response']))
+                assert a['late_body']['request_sha256']==b['late_body']['request_sha256']
+                for implementation in ['go','rust']:
+                    check_write(receipt,implementation,profile,version,certificate_sha)
+            assert not receipt['differences']
+            assert inventory(paths,ROOT)==receipt['candidate_sources'] and inventory(identity_paths,identities)==receipt['identity_inventory']
+            assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
+            assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256']
+            receipt['candidate_worktree_clean_at_end']=not checked(['git','status','--porcelain=v1']).strip();assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
+            receipt['passed']=True
     except BaseException as error:
         receipt['passed']=False
         receipt.setdefault('primary_failure',{'type':type(error).__name__,'message':str(error)[-2000:]})
         raise
     finally:args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
-    print(f'PASS: {receipt["scope"]}: {3*len(profiles)} runtime response pairs, {len(profiles)} admitted-body controls and verified output controls on {platform.system()}')
+    print(f'PASS: {receipt["scope"]}: {3*len(profiles)} runtime response pairs, {len(profiles)} admitted-body controls and verified output controls on {platform.system()} (Go side replayed from {receipt["go_observations"]["path"]})')
 
 
 if __name__=='__main__':main()

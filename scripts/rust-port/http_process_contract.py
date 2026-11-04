@@ -18,8 +18,18 @@ import time
 from urllib.parse import urlencode
 
 sys.dont_write_bytecode = True
-from mcp_process_contract import ORACLE, checked, oracle_build_timeout, remove_worktree, isolated, inventory, vault_snapshot, signal_suite
+from mcp_process_contract import (ORACLE, add_capture_arguments, bounded, capture_arguments_ok, checked, go_capture_session, inventory,
+                                  isolated, load_go_observations, pinned_seed, provenance, replay_seed, save_go_observations,
+                                  signal_suite, vault_snapshot)
 
+CONTRACT = 'http-process'
+PORT = 28109  # fixed so request bytes (Host header) are identical in capture and replay
+NORMALIZATION = ['fixed loopback port', 'seed vault and tokens pinned in the file', 'Date header, log timestamps, peer ports',
+                 'per-run metadata marker id (DATA_<16 hex>) replaced by a fixed id of the same length (the contract pairs it with the Rust id)',
+                 'wall-clock elapsed_seconds: exchange rows 0.0 (the <3s early-invalid bound was asserted at capture); stalled clients '
+                 'the midpoint of their asserted bounds (4..8 idle, 9..15 incomplete body)',
+                 "Go's incomplete-request-body stalled client races a complete 400 JSON error against a bare EOF; both pass the same assertions "
+                 'and the recording is canonicalised to the bare EOF (silent-eof)']
 ROOT = Path(__file__).resolve().parents[2]
 PROBE = ROOT/'scripts/rust-port/http_process_seed.go.txt'
 SECRET = 'public-http-secret-729c'
@@ -428,10 +438,65 @@ def signals_main(args):
     print(f"PASS: {receipt['executed']['http']} http signal runs on {platform.system()}")
 
 
+def normalize_process(go_rows, startup, stalled, process):
+    for row in go_rows:
+        row['response']['elapsed_seconds'] = 0.0
+    for row in stalled:
+        minimum, maximum = {'idle-before-request': (4, 8), 'incomplete-request-body': (9, 15)}[row['case']]
+        row['elapsed_seconds'] = bounded(row['elapsed_seconds'], minimum, maximum, ('stalled', row['case']))
+        row['received_base64'] = ''
+        row['response_class'] = 'silent-eof'
+        assert row['peer_eof'] and row['passed']
+    return go_rows
+
+
+def capture(args):
+    """Go half only: build the oracle, observe it, write the committed observations."""
+    with go_capture_session(CONTRACT, args, {'seed': ('httpprocessseed', PROBE.read_bytes())}) as session:
+        base = session['base']
+        tokens = pinned_seed(session, 'main', base / 'seed',
+                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], cwd=home, env=isolated(home))))
+        snapshot = vault_snapshot(base / 'seed/vault')
+        home = base / 'go'
+        home.mkdir()
+        shutil.copytree(base / 'seed/vault', home / 'vault')
+        assert vault_snapshot(home / 'vault') == snapshot
+        record = dict(go=[], go_process={}, go_startup_denials=[], go_stalled_clients=[])
+        startup_denials(session['go'], home, PORT, tokens, record['go_startup_denials'])
+        observe(session['go'], home, PORT, tokens, record['go'], record['go_process'], record['go_stalled_clients'], 'go')
+        check_oracle_rows(record['go'], 'go')
+        normalize_process(record['go'], record['go_startup_denials'], record['go_stalled_clients'], record['go_process'])
+        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()),
+                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'], **record)
+        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
+    print(f'CAPTURED: {len(record["go"])} Go HTTP CLI transcripts -> {path}')
+
+
+EXPECTED_STATUS = {'mcp-initialize':200,'mcp-ping':200,'mcp-body-exact-limit':200,'mcp-body-over-limit':413,
+    'health-token-call':200,'metadata-token-permitted-call':200,'metadata-token-health-denied':200,
+    'mcp-invalid-json':400,'mcp-repeated-accept':200,
+    'resource-discovery-head':200,'authorization-discovery-head':200,
+    'oauth-authorize-invalid-head':400,'oauth-authorize-foreign-origin-head':403,
+    'mcp-early-invalid-oversized-invalid-byte':400,'mcp-early-invalid-oversized-invalid-object':400}
+
+
+def check_oracle_rows(rows, implementation):
+    """Positive/negative controls on one implementation's transcript (unchanged assertions)."""
+    expected = dict(EXPECTED_STATUS)
+    expected.update(('mcp-early-invalid-oversized-'+name,status) for name,_,status in EARLY_INVALID_ADMISSION_CASES)
+    responses = {r['case']:r['response'] for r in rows}
+    for name,status in expected.items():
+        assert int(responses[name]['status_line'].split()[1])==status, (implementation,name,'positive/negative control')
+    for name in ['mcp-initialize','mcp-ping','health-token-call','metadata-token-permitted-call']:
+        frame=json.loads(responses[name]['body_utf8'])
+        assert 'result' in frame and not frame['result'].get('isError'), 'real successful handler control'
+    denied=json.loads(responses['metadata-token-health-denied']['body_utf8'])
+    assert 'error' in denied or denied['result']['isError'], 'scoped token must deny unauthorized tool'
+
+
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--rust',type=Path,required=True)
-    parser.add_argument('--receipt',type=Path,required=True)
+    add_capture_arguments(parser, rust_required=False)
     parser.add_argument('--allow-dirty-for-development',action='store_true')
     parser.add_argument('--signals',action='store_true',
         help='run only the SIGINT/SIGTERM HTTP contract against prebuilt binaries')
@@ -441,6 +506,9 @@ def main():
     if args.signals:
         assert args.go_cli and args.go_http_seed, '--signals needs --go-cli and --go-http-seed'
         return signals_main(args)
+    if capture_arguments_ok(args):
+        return capture(args)
+    document=load_go_observations(CONTRACT,{});recorded=document['data']
     clean=not checked(['git','status','--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust=args.rust.resolve()
@@ -450,75 +518,44 @@ def main():
         'candidate_source_files':paths,'candidate_source_digest':inventory(paths,ROOT),
         'oracle_commit':ORACLE,'rust_binary_sha256':hashlib.sha256(rust.read_bytes()).hexdigest(),
         'driver_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-        'seed_probe_sha256':hashlib.sha256(PROBE.read_bytes()).hexdigest(),'go':[],'rust':[],
-        'go_startup_denials':[],'rust_startup_denials':[],'go_stalled_clients':[],'rust_stalled_clients':[],
-        'differences':[],'declared_differences':[]}
+        'go':recorded['go'],'rust':[],'go_process':recorded['go_process'],
+        'go_startup_denials':recorded['go_startup_denials'],'rust_startup_denials':[],
+        'go_stalled_clients':recorded['go_stalled_clients'],'rust_stalled_clients':[],
+        'differences':[],'declared_differences':[],'go_observations':provenance(document),
+        'port':recorded['port'],'fixture_snapshot':recorded['fixture_snapshot'],**recorded['info']}
+    port=receipt['port']
     try:
         with tempfile.TemporaryDirectory(prefix='symvault-http-process-') as raw:
-            base=Path(raw);tree=base/'oracle'
-            checked(['git','worktree','add','--detach',tree,ORACLE])
-            try:
-                files=checked(['git','ls-tree','-r','--name-only',ORACLE]).decode().splitlines()
-                sources=sorted(p for p in files if p in {'go.mod','go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
-                embedded=sorted(p for p in files if p.startswith('internal/mcp/apitemplates/builtin/'))
-                assert len(embedded)==17
-                receipt.update(oracle_source_files=sources,oracle_source_digest=inventory(sources,tree),
-                    oracle_embedded_files=embedded,oracle_embedded_digest=inventory(embedded,tree))
-                helper=tree/'scripts/rust-port/cmd/httpprocessseed';helper.mkdir()
-                (helper/'main.go').write_bytes(PROBE.read_bytes())
-                suffix='.exe' if os.name=='nt' else ''
-                go,seed=base/('go-cli'+suffix),base/('go-seed'+suffix)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree,timeout=oracle_build_timeout())
-                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpprocessseed'],tree,timeout=oracle_build_timeout())
-                receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
-                seed_home=base/'seed';seed_home.mkdir()
-                tokens=json.loads(checked([seed,'--root',seed_home/'vault'],cwd=seed_home,env=isolated(seed_home)))
-                snapshot=vault_snapshot(seed_home/'vault');receipt['fixture_snapshot']=snapshot
-                with socket.socket() as selection:
-                    selection.bind(('127.0.0.1',0));port=selection.getsockname()[1]
-                receipt['port']=port
-                for implementation,binary in [('go',go),('rust',rust)]:
-                    home=base/implementation;home.mkdir();shutil.copytree(seed_home/'vault',home/'vault')
-                    assert vault_snapshot(home/'vault')==snapshot
-                    receipt[implementation+'_process']={}
-                    startup_denials(binary,home,port,tokens,receipt[implementation+'_startup_denials'])
-                    observe(binary,home,port,tokens,receipt[implementation],receipt[implementation+'_process'],receipt[implementation+'_stalled_clients'],implementation)
-                validate_stalled_observations(receipt)
-                for a,b in zip(receipt['go'],receipt['rust'],strict=True):
-                    assert a['case']==b['case'] and a['request_sha256']==b['request_sha256']
-                    left,right=a['response'],b['response']
-                    if any(left[k]!=right[k] for k in ['status_line','headers_without_date','body_base64','wire_body_base64']):
-                        difference={'case':a['case'],'go':left,'rust':right}
-                        declared=declared_difference(a['case'],left,right)
-                        if declared:receipt['declared_differences'].append(dict(difference,decision=declared))
-                        else:receipt['differences'].append(difference)
-                expected={'mcp-initialize':200,'mcp-ping':200,'mcp-body-exact-limit':200,'mcp-body-over-limit':413,
-                    'health-token-call':200,'metadata-token-permitted-call':200,'metadata-token-health-denied':200,
-                    'mcp-invalid-json':400,'mcp-repeated-accept':200,
-                    'resource-discovery-head':200,'authorization-discovery-head':200,
-                    'oauth-authorize-invalid-head':400,'oauth-authorize-foreign-origin-head':403,
-                    'mcp-early-invalid-oversized-invalid-byte':400,'mcp-early-invalid-oversized-invalid-object':400}
-                expected.update(('mcp-early-invalid-oversized-'+name,status) for name,_,status in EARLY_INVALID_ADMISSION_CASES)
-                for implementation in ['go','rust']:
-                    responses={r['case']:r['response'] for r in receipt[implementation]}
-                    for name,status in expected.items():
-                        assert int(responses[name]['status_line'].split()[1])==status, (implementation,name,'positive/negative control')
-                    for name in ['mcp-initialize','mcp-ping','health-token-call','metadata-token-permitted-call']:
-                        frame=json.loads(responses[name]['body_utf8'])
-                        assert 'result' in frame and not frame['result'].get('isError'), 'real successful handler control'
-                    denied=json.loads(responses['metadata-token-health-denied']['body_utf8'])
-                    assert 'error' in denied or denied['result']['isError'], 'scoped token must deny unauthorized tool'
-                assert len(receipt['declared_differences'])==4
-                assert receipt['go_startup_denials']==receipt['rust_startup_denials'], 'complete native startup failure bytes'
-                assert candidate_paths()==paths and inventory(paths,ROOT)==receipt['candidate_source_digest'], 'candidate changed during actual observations'
-                assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
-                assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256'], 'candidate executable changed'
-                if not args.allow_dirty_for_development:
-                    assert not checked(['git','status','--porcelain=v1']).strip(), 'candidate became dirty'
-                assert not receipt['differences'],'actual HTTP differences retained'
-                receipt['passed']=True
-            finally:
-                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
+            base=Path(raw)
+            seed_home=base/'seed'
+            tokens=replay_seed(recorded,'main',seed_home)
+            snapshot=vault_snapshot(seed_home/'vault')
+            assert snapshot==receipt['fixture_snapshot'],'recorded seed vault bytes changed'
+            home=base/'rust';home.mkdir();shutil.copytree(seed_home/'vault',home/'vault')
+            assert vault_snapshot(home/'vault')==snapshot
+            receipt['rust_process']={}
+            startup_denials(rust,home,port,tokens,receipt['rust_startup_denials'])
+            observe(rust,home,port,tokens,receipt['rust'],receipt['rust_process'],receipt['rust_stalled_clients'],'rust')
+            validate_stalled_observations(receipt)
+            for a,b in zip(receipt['go'],receipt['rust'],strict=True):
+                assert a['case']==b['case'] and a['request_sha256']==b['request_sha256']
+                left,right=a['response'],b['response']
+                if any(left[k]!=right[k] for k in ['status_line','headers_without_date','body_base64','wire_body_base64']):
+                    difference={'case':a['case'],'go':left,'rust':right}
+                    declared=declared_difference(a['case'],left,right)
+                    if declared:receipt['declared_differences'].append(dict(difference,decision=declared))
+                    else:receipt['differences'].append(difference)
+            for implementation in ['go','rust']:
+                check_oracle_rows(receipt[implementation],implementation)
+            assert len(receipt['declared_differences'])==4
+            assert receipt['go_startup_denials']==receipt['rust_startup_denials'], 'complete native startup failure bytes'
+            assert candidate_paths()==paths and inventory(paths,ROOT)==receipt['candidate_source_digest'], 'candidate changed during actual observations'
+            assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
+            assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256'], 'candidate executable changed'
+            if not args.allow_dirty_for_development:
+                assert not checked(['git','status','--porcelain=v1']).strip(), 'candidate became dirty'
+            assert not receipt['differences'],'actual HTTP differences retained'
+            receipt['passed']=True
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
         receipt['candidate_worktree_clean_at_end'] = not checked(
@@ -527,7 +564,7 @@ def main():
             receipt['passed'] = False
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
         assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
-    print(f"PASS: {len(receipt['go'])} actual Go/Rust HTTP CLI transcripts and five startup denials on {platform.system()}")
+    print(f"PASS: {len(receipt['go'])} actual Go/Rust HTTP CLI transcripts and five startup denials on {platform.system()} (Go side replayed from {receipt['go_observations']['path']})")
 
 
 if __name__=='__main__':

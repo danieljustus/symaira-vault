@@ -22,8 +22,17 @@ from http_head_contract import parse_response
 from http_origin_contract import assert_validation_response
 from http_oauth_contract import PASSPHRASE, PROBE
 from http_process_contract import ProcessCapture, SECRET, request
-from mcp_process_contract import ORACLE, ROOT, checked, oracle_build_timeout, remove_worktree, inventory, isolated, vault_snapshot
+from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, bounded, canonical_close, capture_arguments_ok, checked,
+                                  go_capture_session, inventory, isolated, load_go_observations, pack_tree, pinned_seed, provenance,
+                                  replay_seed, save_go_observations, unpack_tree, vault_snapshot)
 
+CONTRACT='http-tls'
+PORT=28106  # fixed so request bytes (Host header) are identical in capture and replay
+NORMALIZATION=['fixed loopback port','seed vault, tokens and the TLS/mTLS identities pinned in the file',
+               'Date header, log timestamps, peer ports',
+               'random TLS wire bytes (encrypted_sent/received, record_sha256) are not stored: no comparison reads them',
+               'wall-clock values (elapsed_seconds) and the encrypted sender progress count are asserted against the comparison bounds at '
+               'capture and recorded as the bounds midpoint / minimum (see check_profile/normalize_profile)']
 IDENTITY = ROOT/'scripts/rust-port/http_tls_identity.go.txt'
 FIELDS = ['status_line','headers_without_date','body_base64']
 
@@ -349,110 +358,167 @@ def observe(implementation,binary,home,port,tokens,identities,profile,result):
     finally:server.close()
 
 
+def tls_seed_source():
+    seed_source=PROBE.read_bytes()
+    assert seed_source.count(b'AllowInsecureBind: true')==1
+    return seed_source.replace(b'AllowInsecureBind: true',b'AllowInsecureBind: false',1)
+
+
+PROFILES=['tls12','tls13','mtls12','mtls13']
+
+
+def check_profile(observed,implementation,profile,certificate_sha):
+    """The per-implementation verdict of one profile (unchanged assertions); idempotent."""
+    expected=4 if profile.startswith('mtls') else 2
+    assert len(observed['identity_controls'])==expected and all(r['rejected'] for r in observed['identity_controls'])
+    for row in observed['rows']+observed['encrypted_peers']:
+        assert row['server_certificate_sha256']==certificate_sha
+        assert row['tls_version']==('TLSv1.2' if profile.endswith('12') else 'TLSv1.3')
+    assert len(observed['encrypted_peers'])==2
+    for row in observed['encrypted_peers']:
+        assert row['sent_record_bytes']>=4 and row['sent_record_bytes']<row['record_length']
+        assert row['sender_joined'] and row['peer_terminal_observed'] and not row['forced_client_close'],'progressing encrypted record escaped the absolute read deadline'
+        raw=base64.b64decode(row['received_base64'])
+        if raw:
+            assert implementation=='go' and row['case']=='encrypted-body-record','unexpected expired TLS response bytes'
+            row['response']=parse_response(raw)
+            assert_response(row['response'],400,JSON_ERROR)
+            row['termination']='complete-go-json-error-before-write-deadline'
+        else:row['termination']='actual-empty-eof-or-reset'
+        minimum,maximum=(8,12.5) if row['case']=='encrypted-body-record' else (3.5,7.5)
+        assert minimum<=row['elapsed_seconds']<=maximum
+
+
+def normalize_profile(observed):
+    for row in observed['encrypted_peers']:
+        minimum,maximum=(8,12.5) if row['case']=='encrypted-body-record' else (3.5,7.5)
+        row['elapsed_seconds']=bounded(row['elapsed_seconds'],minimum,maximum,('elapsed',row['case']))
+        assert row['sent_record_bytes']>=4
+        row['sent_record_bytes']=4
+        for key in ('encrypted_received_base64','encrypted_sent_base64'):row[key]=''
+        row['record_sha256']='0'*64
+        row['tls_read_errors']=[]
+        canonical_close(row)
+
+
+def pinned_identities(session, base):
+    prior = (session['prior'] or {}).get('identities')
+    identities = base / 'identities'
+    if prior:
+        unpack_tree(prior['tree'], identities)
+        parameters = prior['parameters']
+    else:
+        parameters = json.loads(checked([session['helpers']['identity'], '--root', identities], base))
+    session['identities'] = dict(parameters=parameters, tree=pack_tree(identities))
+    return identities, parameters
+
+
+def secure_identities(identities):
+    """Replay: restore the owner-only modes the Go identity helper creates."""
+    if os.name!='nt':
+        identities.chmod(0o700)
+        for p in identities.iterdir():p.chmod(0o600)
+
+
+def capture(args):
+    """Go half only: build the oracle, observe it, write the committed observations."""
+    with go_capture_session(CONTRACT, args, {'seed': ('httptlsseed', tls_seed_source()), 'identity': ('httptlsidentity', IDENTITY.read_bytes())}) as session:
+        base = session['base']
+        identities, parameters = pinned_identities(session, base)
+        identity_paths = sorted(p.name for p in identities.iterdir())
+        certificate_sha = hashlib.sha256(ssl.PEM_cert_to_DER_cert((identities/'server.pem').read_text())).hexdigest()
+        tokens = pinned_seed(session, 'main', base / 'seed',
+                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
+        snapshot = vault_snapshot(base / 'seed/vault')
+        result = {}
+        for profile in PROFILES:
+            home = base / ('go-' + profile)
+            home.mkdir()
+            shutil.copytree(base / 'seed/vault', home / 'vault')
+            assert vault_snapshot(home / 'vault') == snapshot
+            observed = dict(rows=[], processes=[], identity_controls=[], encrypted_peers=[], alpn_offers=[])
+            observe('go', session['go'], home, PORT, tokens, identities, profile, observed)
+            check_profile(observed, 'go', profile, certificate_sha)
+            normalize_profile(observed)
+            result[profile] = observed
+        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest(),
+                              identity_probe_sha256=hashlib.sha256(IDENTITY.read_bytes()).hexdigest(),
+                              actual_tls_seed_source_sha256=hashlib.sha256(tls_seed_source()).hexdigest()),
+                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'], identities=session['identities'],
+                    identity_parameters=parameters, identity_inventory=inventory(identity_paths, identities),
+                    server_certificate_sha256=certificate_sha, go=result)
+        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
+    print(f'CAPTURED: {sum(len(p["rows"]) for p in result.values())} Go TLS/mTLS responses -> {path}')
+
+
 def main():
-    parser=argparse.ArgumentParser()
-    parser.add_argument('--rust',type=Path,required=True)
-    parser.add_argument('--receipt',type=Path,required=True)
-    parser.add_argument('--allow-dirty-for-development',action='store_true')
-    args=parser.parse_args()
+    parser = argparse.ArgumentParser()
+    add_capture_arguments(parser, rust_required=False)
+    parser.add_argument('--allow-dirty-for-development', action='store_true')
+    args = parser.parse_args()
+    if capture_arguments_ok(args):
+        return capture(args)
+    document = load_go_observations(CONTRACT, {})
+    recorded = document['data']
     clean=not checked(['git','status','--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust=args.rust.resolve()
     paths=sorted(p for p in checked(['git','ls-files','--cached','--others','--exclude-standard']).decode().splitlines()
                  if p.startswith(('crates/','third_party/','testdata/','scripts/rust-port/','internal/mcp/apitemplates/builtin/'))
                  or p in {'Cargo.toml','Cargo.lock','.gitattributes','.github/workflows/rust-http-tls.yml'})
-    profiles=['tls12','tls13','mtls12','mtls13']
+    profiles=PROFILES
     receipt=dict(passed=False,candidate_commit=checked(['git','rev-parse','HEAD']).decode().strip(),candidate_worktree_clean=clean,
                  candidate_sources=inventory(paths,ROOT),native_os=platform.system(),architecture=platform.machine(),
                  rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),oracle_commit=ORACLE,
-                 go={},rust={},differences=[],declared_differences=[],alpn_declared_differences=[])
+                 go=recorded['go'],rust={},differences=[],declared_differences=[],alpn_declared_differences=[],
+                 go_observations=provenance(document),port=recorded['port'],fixture_snapshot=recorded['fixture_snapshot'],
+                 identity_parameters=recorded['identity_parameters'],identity_inventory=recorded['identity_inventory'],
+                 server_certificate_sha256=recorded['server_certificate_sha256'],**recorded['info'])
     try:
         with tempfile.TemporaryDirectory(prefix='symvault-http-tls-') as raw:
-            base,tree=Path(raw),Path(raw)/'oracle'
-            checked(['git','worktree','add','--detach',tree,ORACLE])
-            try:
-                files=checked(['git','ls-tree','-r','--name-only',ORACLE]).decode().splitlines()
-                sources=sorted(p for p in files if p in {'go.mod','go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
-                embedded=sorted(p for p in files if p.startswith('internal/mcp/apitemplates/builtin/'));assert len(embedded)==17
-                receipt.update(oracle_sources=inventory(sources,tree),oracle_embedded=inventory(embedded,tree),
-                               seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest(),identity_probe_sha256=hashlib.sha256(IDENTITY.read_bytes()).hexdigest())
-                seed_source=PROBE.read_bytes()
-                assert seed_source.count(b'AllowInsecureBind: true')==1
-                seed_source=seed_source.replace(b'AllowInsecureBind: true',b'AllowInsecureBind: false',1)
-                receipt['actual_tls_seed_source_sha256']=hashlib.sha256(seed_source).hexdigest()
-                for name,source in [('httptlsseed',seed_source),('httptlsidentity',IDENTITY.read_bytes())]:
-                    helper=tree/'scripts/rust-port/cmd'/name;helper.mkdir();(helper/'main.go').write_bytes(source)
-                suffix='.exe' if os.name=='nt' else ''
-                go,seed,identity=[base/(name+suffix) for name in ['go-cli','go-seed','go-identity']]
-                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree,timeout=oracle_build_timeout())
-                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httptlsseed'],tree,timeout=oracle_build_timeout())
-                checked(['go','build','-trimpath','-buildvcs=false','-o',identity,'./scripts/rust-port/cmd/httptlsidentity'],tree,timeout=oracle_build_timeout())
-                receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest(),identity_binary_sha256=hashlib.sha256(identity.read_bytes()).hexdigest())
-                identities=base/'identities'
-                receipt['identity_parameters']=json.loads(checked([identity,'--root',identities],base))
-                identity_paths=sorted(p.name for p in identities.iterdir())
-                receipt['identity_inventory']=inventory(identity_paths,identities)
-                server_der=ssl.PEM_cert_to_DER_cert((identities/'server.pem').read_text())
-                certificate_sha=hashlib.sha256(server_der).hexdigest();receipt['server_certificate_sha256']=certificate_sha
-                if os.name!='nt':
-                    assert identities.stat().st_mode&0o777==0o700
-                    assert all((identities/p).stat().st_mode&0o777==0o600 for p in identity_paths)
-                seed_home=base/'seed';seed_home.mkdir()
-                tokens=json.loads(checked([seed,'--root',seed_home/'vault'],seed_home,isolated(seed_home)))
-                snapshot=vault_snapshot(seed_home/'vault');receipt['fixture_snapshot']=snapshot
-                with socket.socket() as selection:selection.bind(('127.0.0.1',0));port=selection.getsockname()[1]
-                receipt['port']=port
-                for implementation,binary in [('go',go),('rust',rust)]:
-                    for profile in profiles:
-                        home=base/(implementation+'-'+profile);home.mkdir();shutil.copytree(seed_home/'vault',home/'vault')
-                        assert vault_snapshot(home/'vault')==snapshot
-                        result=dict(rows=[],processes=[],identity_controls=[],encrypted_peers=[],alpn_offers=[]);receipt[implementation][profile]=result
-                        observe(implementation,binary,home,port,tokens,identities,profile,result)
-                for profile in profiles:
-                    left,right=receipt['go'][profile],receipt['rust'][profile]
-                    assert len(left['rows'])==len(right['rows'])==len(packets(port,{}))==12
-                    for a,b in zip(left['rows'],right['rows'],strict=True):
-                        assert a['case']==b['case'] and a['request_sha256']==b['request_sha256']
-                        decision=semantic_control(a['case'],a['response'],b['response'],port)
-                        observation=dict(profile=profile,case=a['case'],go=a['response'],rust=b['response'])
-                        if decision:receipt['declared_differences'].append(dict(observation,decision=decision))
-                        elif any(a['response'][k]!=b['response'][k] for k in FIELDS):receipt['differences'].append(observation)
-                    declared,undeclared=alpn_compare(profile,left['alpn_offers'],right['alpn_offers'])
-                    receipt['alpn_declared_differences']+=declared;receipt['differences']+=undeclared
-                    for implementation in ['go','rust']:
-                        observed=receipt[implementation][profile]
-                        expected=4 if profile.startswith('mtls') else 2
-                        assert len(observed['identity_controls'])==expected and all(r['rejected'] for r in observed['identity_controls'])
-                        for row in observed['rows']+observed['encrypted_peers']:
-                            assert row['server_certificate_sha256']==certificate_sha
-                            assert row['tls_version']==('TLSv1.2' if profile.endswith('12') else 'TLSv1.3')
-                        assert len(observed['encrypted_peers'])==2
-                        for row in observed['encrypted_peers']:
-                            assert row['sent_record_bytes']>=4 and row['sent_record_bytes']<row['record_length']
-                            assert row['sender_joined'] and row['peer_terminal_observed'] and not row['forced_client_close'],'progressing encrypted record escaped the absolute read deadline'
-                            raw=base64.b64decode(row['received_base64'])
-                            if raw:
-                                assert implementation=='go' and row['case']=='encrypted-body-record','unexpected expired TLS response bytes'
-                                row['response']=parse_response(raw)
-                                assert_response(row['response'],400,JSON_ERROR)
-                                row['termination']='complete-go-json-error-before-write-deadline'
-                            else:row['termination']='actual-empty-eof-or-reset'
-                            minimum,maximum=(8,12.5) if row['case']=='encrypted-body-record' else (3.5,7.5)
-                            assert minimum<=row['elapsed_seconds']<=maximum
-                    for a,b in zip(left['encrypted_peers'],right['encrypted_peers'],strict=True):
-                        assert a['case']==b['case'] and a['request_prefix_sha256']==b['request_prefix_sha256']
-                assert inventory(identity_paths,identities)==receipt['identity_inventory']
-                assert inventory(paths,ROOT)==receipt['candidate_sources']
-                assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
-                assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256']
-                receipt['candidate_worktree_clean_at_end']=not checked(['git','status','--porcelain=v1']).strip()
-                assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
-                assert not receipt['differences'],'actual undeclared live TLS/mTLS differences retained'
-                assert len(receipt['alpn_declared_differences'])==6,'ADR 0034 item 20: Go selects a protocol on both plain-TLS profiles, Rust none'
-                receipt['passed']=True
-            finally:remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
-    finally:args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
-    print(f'PASS: 48 verified TLS/mTLS response pairs, 12 identity denials, 12 ALPN offers (6 declared ADR 0034 item 20 differences) and eight progressing encrypted records per implementation on {platform.system()}')
+            base=Path(raw)
+            identities=unpack_tree(recorded['identities']['tree'],base/'identities');secure_identities(identities)
+            identity_paths=sorted(p.name for p in identities.iterdir())
+            assert inventory(identity_paths,identities)==receipt['identity_inventory'],'recorded TLS identities changed'
+            certificate_sha=hashlib.sha256(ssl.PEM_cert_to_DER_cert((identities/'server.pem').read_text())).hexdigest()
+            assert certificate_sha==receipt['server_certificate_sha256']
+            seed_home=base/'seed'
+            tokens=replay_seed(recorded,'main',seed_home)
+            snapshot=vault_snapshot(seed_home/'vault')
+            assert snapshot==receipt['fixture_snapshot'],'recorded seed vault bytes changed'
+            port=receipt['port']
+            for profile in profiles:
+                home=base/('rust-'+profile);home.mkdir();shutil.copytree(seed_home/'vault',home/'vault')
+                assert vault_snapshot(home/'vault')==snapshot
+                result=dict(rows=[],processes=[],identity_controls=[],encrypted_peers=[],alpn_offers=[]);receipt['rust'][profile]=result
+                observe('rust',rust,home,port,tokens,identities,profile,result)
+            for profile in profiles:
+                left,right=receipt['go'][profile],receipt['rust'][profile]
+                assert len(left['rows'])==len(right['rows'])==len(packets(port,{}))==12
+                for a,b in zip(left['rows'],right['rows'],strict=True):
+                    assert a['case']==b['case'] and a['request_sha256']==b['request_sha256']
+                    decision=semantic_control(a['case'],a['response'],b['response'],port)
+                    observation=dict(profile=profile,case=a['case'],go=a['response'],rust=b['response'])
+                    if decision:receipt['declared_differences'].append(dict(observation,decision=decision))
+                    elif any(a['response'][k]!=b['response'][k] for k in FIELDS):receipt['differences'].append(observation)
+                declared,undeclared=alpn_compare(profile,left['alpn_offers'],right['alpn_offers'])
+                receipt['alpn_declared_differences']+=declared;receipt['differences']+=undeclared
+                for implementation in ['go','rust']:
+                    check_profile(receipt[implementation][profile],implementation,profile,certificate_sha)
+                for a,b in zip(left['encrypted_peers'],right['encrypted_peers'],strict=True):
+                    assert a['case']==b['case'] and a['request_prefix_sha256']==b['request_prefix_sha256']
+            assert inventory(identity_paths,identities)==receipt['identity_inventory']
+            assert inventory(paths,ROOT)==receipt['candidate_sources']
+            assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
+            assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256']
+            receipt['candidate_worktree_clean_at_end']=not checked(['git','status','--porcelain=v1']).strip()
+            assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
+            assert not receipt['differences'],'actual undeclared live TLS/mTLS differences retained'
+            assert len(receipt['alpn_declared_differences'])==6,'ADR 0034 item 20: Go selects a protocol on both plain-TLS profiles, Rust none'
+            receipt['passed']=True
+    finally:
+        args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
+    print(f'PASS: 48 verified TLS/mTLS response pairs, 12 identity denials, 12 ALPN offers (6 declared ADR 0034 item 20 differences) and eight progressing encrypted records per implementation on {platform.system()} (Go side replayed from {receipt["go_observations"]["path"]})')
 
 
 if __name__=='__main__':main()

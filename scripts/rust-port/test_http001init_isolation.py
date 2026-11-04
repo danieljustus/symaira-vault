@@ -21,10 +21,15 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 from build_timeout import oracle_build_timeout
 from mcp_oracle import HISTORICAL, tool_environment
-from mcp_process_contract import checked
+from mcp_process_contract import checked, load_go_observations, native_goos, provenance, save_go_observations
 from mcp_fixture_contract import generator_paths, fixture_anchor, materialize_inputs
 
 
+OBSERVATION = 'http001init-isolation'
+NORMALIZATION = ['no per-run value: the recording is the count of init-time OS-keyring helper calls and the exit/backend verdicts of the Go generator '
+                 'probe (macOS only: the instrumentation replaces the absolute /usr/bin/security path of go-keyring)']
+EXPECTED = dict(control_helper_calls=4, control_exit=0, safe_backends=['memory'], safe_helper_calls=0, unsafe_exit_nonzero=True,
+                unsafe_helper_calls=4, unsafe_backends=['unset', 'generator_rc=0'])
 KEYRING_IMPORT = "github.com/zalando/go-keyring"
 FIXTURE = ROOT / "testdata/port/mcp/http-initialize.json"
 GO_TOOLCHAIN = "go1.26.6"
@@ -149,11 +154,7 @@ def historical_context(tmpdir):
         checked(["git", "worktree", "remove", "--force", tree], ROOT, env)
 
 
-def main():
-    if sys.platform != "darwin":
-        print("SKIP: absolute-keychain-helper instrumentation is macOS-specific")
-        return 0
-
+def run_probe():
     target = ROOT / "target"
     target.mkdir(exist_ok=True)
     fixture_before = FIXTURE.read_bytes()
@@ -357,12 +358,44 @@ def main():
 
     if scratch_path is None or scratch_path.exists():
         raise AssertionError(f"probe scratch directory was not torn down: {scratch_path}")
+    return dict(control_helper_calls=len(control_pids), control_exit=control_rc, safe_backends=safe_backends,
+                safe_helper_calls=0, unsafe_exit_nonzero=unsafe_rc != 0,
+                unsafe_helper_calls=len(unsafe_pids), unsafe_backends=unsafe_backends)
+
+
+def check_probe(measured, source):
+    """The verdicts the live probe asserts (Go 1.26.6 executable negative control, safe Make generate, missing-export control)."""
+    assert measured == EXPECTED, (source, 'isolation probe verdicts differ from the contract', measured)
     print(
-        "PASS: Go 1.26.6 executable negative control reached the instrumented helper "
-        f"({len(control_pids)} calls, exit {control_rc}); safe Make generate selected memory before Go startup "
+        f"PASS ({source}): Go 1.26.6 executable negative control reached the instrumented helper "
+        f"({measured['control_helper_calls']} calls, exit {measured['control_exit']}); safe Make generate selected memory before Go startup "
         "with zero helper calls; missing-export Make control failed with inherited overrides scrubbed "
-        f"({len(unsafe_pids)} fake-helper calls); helper processes exited; fixture bytes and temp cleanup verified."
+        f"({measured['unsafe_helper_calls']} fake-helper calls); helper processes exited; fixture bytes and temp cleanup verified."
     )
+
+
+def history_checks():
+    """Go-free half of the probe: the committed HTTP initialize fixture is the immutable historical byte string."""
+    generators = generator_paths()
+    fixture_anchor(ROOT, generators)
+    # The independent anchor manifest authenticates the candidate bytes of the HTTP initialize fixture
+    # (what the live probe checked as "candidate HTTP fixture differs from immutable historical bytes").
+    fixture_anchor(ROOT, ["testdata/port/mcp/http-initialize.json"])
+
+
+def main():
+    if sys.platform != "darwin":
+        print("SKIP: absolute-keychain-helper instrumentation is macOS-specific")
+        return 0
+    if "--capture-go" in sys.argv:
+        measured = run_probe()
+        check_probe(measured, "live Go")
+        path = save_go_observations(OBSERVATION, measured, {}, NORMALIZATION, GO_TOOLCHAIN, oracle=HISTORICAL)
+        print(f"CAPTURED: {path}")
+        return 0
+    document = load_go_observations(OBSERVATION, {}, oracle=HISTORICAL)
+    history_checks()
+    check_probe(document["data"], "recorded Go " + provenance(document)["path"])
     return 0
 
 

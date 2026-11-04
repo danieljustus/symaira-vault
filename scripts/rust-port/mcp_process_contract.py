@@ -351,12 +351,29 @@ def canonical_json(value):
 
 DATE_HEADER = re.compile(rb'(?i)(\r?\n|^)(date: )[A-Za-z]{3}, \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT')
 LOG_TIMESTAMP = re.compile(rb'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}')
-PEER_PORT = re.compile(rb'(remote=\[?(?:127\.0\.0\.1|::1)\]?:)\d{5}')
+PEER_PORT = re.compile(rb'((?:remote=|from |->)\[?(?:127\.0\.0\.1|::1)\]?:)\d{5}')
 EPOCH_DATE = 'Thu, 01 Jan 1970 00:00:00 GMT'
 LARGE_REQUEST_BASE64 = 65536
 
 
+DATA_MARKER = re.compile(rb'(DATA_)[0-9a-f]{16}')
+
+
+OFF_HOURS_LINE = re.compile(rb'(?m)^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} WARN anomaly detected type=off_hours[^\n]*\n')
+REQUEST_ID = re.compile(rb'(request_id=)[0-9a-f]{16}')
+HEALTH_TIMESTAMP = re.compile(rb'("timestamp":")\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z')
+
+
+TOKEN_ID_BYTES = re.compile(rb'tok-\d{8}-[0-9a-f]{8}')
+
+
 def _normalize_bytes(raw):
+    raw = TOKEN_ID_BYTES.sub(b'tok-19700101-00000000', raw)
+    # The off-hours detector logs only outside UTC working hours: a time-of-day dependent line, not an observation.
+    raw = OFF_HOURS_LINE.sub(b'', raw)
+    raw = REQUEST_ID.sub(lambda m: m[1] + b'0' * 16, raw)
+    raw = HEALTH_TIMESTAMP.sub(lambda m: m[1] + b'1970-01-01T00:00:00Z', raw)
+    raw = DATA_MARKER.sub(lambda m: m[1] + b'0123456789abcdef', raw)
     raw = DATE_HEADER.sub(lambda m: m[1] + m[2] + EPOCH_DATE.encode(), raw)
     raw = LOG_TIMESTAMP.sub(b'1970/01/01 00:00:00', raw)
     return PEER_PORT.sub(lambda m: m[1] + b'00000', raw)
@@ -378,7 +395,7 @@ def normalize_go_record(value):
         for key, item in value.items():
             if key == 'request_base64' and isinstance(item, str) and len(item) > LARGE_REQUEST_BASE64:
                 result[key] = ''
-            elif key.endswith('_base64') and isinstance(item, str):
+            elif (key.endswith('_base64') or key in ('stdout', 'stderr')) and isinstance(item, str) and (key.endswith('_base64') or item[:1] and re.fullmatch(r'[A-Za-z0-9+/]+={0,2}', item)):
                 try:
                     raw = base64.b64decode(item, validate=True)
                 except Exception:
@@ -388,6 +405,8 @@ def normalize_go_record(value):
             else:
                 result[key] = normalize_go_record(item)
         return result
+    if isinstance(value, str) and len(value) < 4_000_000:
+        return _normalize_bytes(value.encode('utf-8', 'surrogatepass')).decode('utf-8', 'surrogatepass')
     return value
 
 
@@ -403,9 +422,9 @@ def save_go_observations(contract, data, contract_args, normalization, go_versio
     return path
 
 
-def load_go_observations(contract, contract_args=None, oracle=None, required=True):
+def load_go_observations(contract, contract_args=None, oracle=None, required=True, goos=None):
     """Return the committed document; missing/mismatched observations FAIL (never skip)."""
-    path = go_obs_path(contract)
+    path = go_obs_path(contract, goos)
     if not path.is_file():
         if not required:
             return None
@@ -414,7 +433,7 @@ def load_go_observations(contract, contract_args=None, oracle=None, required=Tru
     raw = path.read_bytes()
     document = json.loads(raw)
     assert document.get('schema') == GO_OBS_SCHEMA, (contract, 'observation schema')
-    assert document['contract'] == contract and document['goos'] == native_goos(), (contract, 'observation identity')
+    assert document['contract'] == contract and document['goos'] == (goos or native_goos()), (contract, 'observation identity')
     assert document['oracle_commit'] == (oracle or ORACLE), (contract, 'observation oracle commit')
     assert contract_args is None or document['contract_args'] == contract_args, (contract, 'observation contract args',
                                                                                   document['contract_args'], contract_args)
@@ -426,6 +445,7 @@ def load_go_observations(contract, contract_args=None, oracle=None, required=Tru
 
 
 PAIR_LISTS = {'headers', 'headers_without_date'}
+TUPLE_ROWS = {'entries'}
 
 
 def restore_pairs(value):
@@ -434,6 +454,7 @@ def restore_pairs(value):
         return [restore_pairs(v) for v in value]
     if isinstance(value, dict):
         return {k: ([tuple(pair) for pair in v] if k in PAIR_LISTS and isinstance(v, list) and all(isinstance(p, list) and len(p) == 2 for p in v)
+                    else [tuple(e) for e in v] if k in TUPLE_ROWS and isinstance(v, list) and all(isinstance(e, list) for e in v)
                     else restore_pairs(v)) for k, v in value.items()}
     return value
 
@@ -445,19 +466,45 @@ def provenance(document):
                 normalization=document['normalization'])
 
 
+BLOB_THRESHOLD = 256 * 1024
+
+
 def pack_tree(root):
-    """{relative path: base64 bytes} of every file below root."""
+    """{relative path: base64 bytes} of every file below root; files above 256 KiB become content-addressed blobs.
+
+    A blob is stored once, as raw bytes, in go-observations/blobs/<sha256> (shared by every observation and OS that records the same
+    bytes) and referenced as {"blob": sha256}.
+    """
     import base64
-    return {p.relative_to(root).as_posix(): base64.b64encode(p.read_bytes()).decode()
-            for p in sorted(Path(root).rglob('*')) if p.is_file()}
+    packed = {}
+    for p in sorted(Path(root).rglob('*')):
+        if not p.is_file():
+            continue
+        data = p.read_bytes()
+        name = p.relative_to(root).as_posix()
+        if len(data) > BLOB_THRESHOLD:
+            digest = hashlib.sha256(data).hexdigest()
+            blob = GO_OBS_DIR / 'blobs' / digest
+            blob.parent.mkdir(parents=True, exist_ok=True)
+            if not blob.exists():
+                blob.write_bytes(data)
+            packed[name] = {'blob': digest, 'bytes': len(data)}
+        else:
+            packed[name] = base64.b64encode(data).decode()
+    return packed
 
 
 def unpack_tree(packed, root):
     import base64
-    for name, text in packed.items():
+    for name, entry in packed.items():
         target = Path(root) / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(base64.b64decode(text))
+        if isinstance(entry, dict):
+            data = (GO_OBS_DIR / 'blobs' / entry['blob']).read_bytes()
+            assert hashlib.sha256(data).hexdigest() == entry['blob'] and len(data) == entry['bytes'], ('observation blob corrupt', entry['blob'])
+            target.write_bytes(data)
+        else:
+            target.write_bytes(base64.b64decode(entry))
     return Path(root)
 
 
@@ -502,6 +549,7 @@ def at_least_recorded(value, minimum, what):
 EPOCH_FIELD = re.compile(r'("[a-z_]*_at\\?"\s*:\s*)(\d{9,11})')
 ISO_TIMESTAMP = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})')
 TOKEN_ID = re.compile(r'tok-\d{8}-[0-9a-f]{8}')
+OAUTH_LABEL = re.compile(r'oauth-[0-9a-f]{8}')
 
 
 def scrub_parts(record, keys, seen=None):
@@ -533,6 +581,7 @@ def stable_entropy(value, seen=None):
         text = EPOCH_FIELD.sub(lambda m: m[1] + '0' * len(m[2]), text)
         text = ISO_TIMESTAMP.sub('1970-01-01T00:00:00Z', text)
         text = TOKEN_ID.sub('tok-19700101-00000000', text)
+        text = OAUTH_LABEL.sub('oauth-00000000', text)
         return hexish.sub(placeholder, text)
 
     def walk(item):
@@ -540,10 +589,11 @@ def stable_entropy(value, seen=None):
             return scrub_text(item)
         if isinstance(item, float):
             return 0.0
-        if isinstance(item, list):
+        if isinstance(item, (list, tuple)):
             return [walk(v) for v in item]
         if isinstance(item, dict):
-            return {scrub_text(k): (walk_b64(v) if k.endswith('_base64') and isinstance(v, str) else walk(v)) for k, v in item.items()}
+            return {scrub_text(k): ('0000' if k == 'prefix' and isinstance(v, str) and len(v) == 4 else
+                                    walk_b64(v) if k.endswith('_base64') and isinstance(v, str) else walk(v)) for k, v in item.items()}
         return item
 
     def walk_b64(text):
@@ -586,6 +636,14 @@ def go_capture_session(contract, args, helpers, builder=None, reference=ORACLE, 
     pinned seed vault / identities unless --reseed) and the oracle receipt fields.
     """
     prior = None if args.reseed else load_go_observations(contract, required=False)
+    if prior is None and not args.reseed:
+        # The encrypted seed vaults are OS independent: a first capture on another OS reuses the pinned seeds of an existing
+        # observation (so Go and Rust see identical vault bytes on every OS and the large blobs are stored once).
+        for other in ('darwin', 'linux'):
+            if other != native_goos():
+                prior = load_go_observations(contract, required=False, goos=other)
+                if prior is not None:
+                    break
     build_env = env
     with oracle_checkout(reference) as (base, tree):
         sources, embedded = oracle_inventory(tree, reference)
@@ -596,6 +654,9 @@ def go_capture_session(contract, args, helpers, builder=None, reference=ORACLE, 
         def build(binary, package):
             if builder is not None:
                 builder(tree, binary, package)
+            elif os.environ.get('SYMVAULT_ORACLE_BUILD_RUNNER'):
+                from oracle_build import build_go
+                build_go(tree, binary, package, [])
             else:
                 checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', binary, package], tree, build_env,
                         timeout=oracle_build_timeout())
@@ -989,10 +1050,155 @@ def candidate_paths():
                            '.github/workflows/rust-mcp-process.yml'})
 
 
+PROCESS_CONTRACT = 'mcp-process'
+PROCESS_NORMALIZATION = [
+    'seed vaults (22 profiles; the last one doubles as the hostile-input vault) and the Go loaded-profile documents pinned in the file',
+    'fixture HOME prefix replaced by __HOME__ in the retained stdin/stdout/stderr text, off-hours anomaly warnings (time-of-day dependent) '
+    'removed from retained stderr, measured duration_ms in retained stdout set to 0 and the random DATA_ ids to a fixed id (frames were already '
+    'normalised by the driver and are what is compared)',
+    'compiler recorded as version, binary sha256 and build settings (cache paths are machine specific)']
+RAW_KEYS = ('stdin_raw', 'stdout_raw', 'stderr_raw')
+DURATION = re.compile(r'(duration_ms\\*"?:)\d+')
+
+
+def scrub_process_row(row, home):
+    for key in RAW_KEYS:
+        if key in row:
+            row[key] = DURATION.sub(lambda m: m[1] + '0', row[key].replace(str(home), '__HOME__'))
+    if 'stdin_raw' in row:
+        row['stdin_sha256'] = hashlib.sha256(row['stdin_raw'].encode()).hexdigest()  # of the HOME-normalised text
+    return row
+
+
+def check_profile_row(implementation, name, row):
+    """Value-permission and credential controls on one implementation's profile row (unchanged assertions)."""
+    if name.endswith('-real-child'):
+        expected_marker = {'received_expected_secret': True} if name == 'tier-admin-real-child' else None
+        assert all(marker == expected_marker for marker in row['child_markers'].values()), (implementation, name, 'actual executor control')
+    allowed_value = name in {'tier-admin', 'admin-value-visible', 'readonly-capability-overrides',
+                             'admin-command-disabled', 'tier-read-only-real-child',
+                             'tier-standard-real-child', 'tier-admin-real-child'}
+    if implementation == 'go':
+        allowed_value |= name in {'legacy', 'admin-tools-health-only', 'admin-tools-self-only', 'admin-api-explicit'}
+    value_frame = next(frame for frame in row['frames'] if frame['id'] == 8)
+    assert all((c in json.dumps(value_frame)) == allowed_value for c in CANARIES), (implementation, name, 'value permission control')
+    for frame in row['frames']:
+        if frame['id'] not in [8, 18]:
+            assert not any(c in json.dumps(frame) for c in CANARIES), (implementation, name, 'credential outside authorized value frame')
+    fetch_frame = next(frame for frame in row['frames'] if frame['id'] == 18)
+    assert all((c in json.dumps(fetch_frame)) == (allowed_value and name != 'legacy')
+               for c in CANARIES), (implementation, name, 'fetch value permission control')
+    unicode_frames = [frame for frame in row['frames'] if UNICODE_FIXTURE in json.dumps(frame, ensure_ascii=False)]
+    expected_unicode_frames = [value_frame, fetch_frame] if name == 'admin-value-visible' else []
+    assert unicode_frames == expected_unicode_frames, (implementation, name, 'Unicode encrypted-store permission control')
+    assert UNICODE_FIXTURE not in row['stderr_raw'], (implementation, name, 'Unicode value in stderr')
+
+
+def observe_hostile(binary, base, seed_vault, name, data, implementation):
+    home = base / ('hostile-' + name + '-' + implementation)
+    home.mkdir()
+    shutil.copytree(seed_vault, home / 'vault')
+    result = run([binary, '--quiet', 'mcp', '--stdio', '--agent', 'fixture'], home, isolated(home), data)
+    retained = {'case': name, 'exit': result.returncode, 'input_bytes': len(data), 'input_sha256': hashlib.sha256(data).hexdigest(),
+                'stdout_raw': result.stdout.decode('utf-8', errors='replace'),
+                'stderr_raw': result.stderr.decode('utf-8', errors='replace')}
+    raw, stderr, frames = protocol_bytes(result, home, name, implementation, 'fixture')
+    assert result.returncode == 0 and not any(c in raw for c in CANARIES)
+    retained.update(stdout_raw=raw, stderr_raw=stderr, frames=frames, stdout_is_only_protocol=True)
+    return retained
+
+
+def compare_profiles(receipt):
+    for left, right in zip(receipt['go'], receipt['rust'], strict=True):
+        go_names = next(frame for frame in left['frames'] if frame['id'] == 6)['result']['content'][0]['text']['json_text']
+        for a, b in zip(left['frames'], right['frames'], strict=True):
+            if a != b:
+                difference = {'case': left['case'], 'id': a.get('id'), 'go': a, 'rust': b}
+                declared = declared_profile_difference(dict(profiles())[left['case']], a, b, go_names)
+                if declared:
+                    receipt['declared_differences'].append(dict(difference, decision=declared))
+                else:
+                    receipt['differences'].append(difference)
+
+
+def seed_profile(go_seed_tools, base, name, profile):
+    """Seed one profile's encrypted vault with the Go helper; returns (seed_home, loaded document, agent)."""
+    seed_home = base / (name + '-seed')
+    seed_home.mkdir()
+    profile_file = seed_home / 'profile.json'
+    profile = dict(profile)
+    builtin = profile.pop('__builtin', '')
+    agent = builtin or 'fixture'
+    profile_file.write_text(json.dumps(profile), encoding='utf-8')
+    profile_seed = go_seed_tools['unicode'] if name == 'admin-value-visible' else go_seed_tools['seed']
+    loaded = checked([profile_seed, '--root', seed_home / 'vault', '--profile', profile_file,
+                      '--builtin', builtin, '--agent', agent], seed_home, isolated(seed_home))
+    return seed_home, json.loads(loaded), agent
+
+
+def capture_process(args):
+    """Go half only: build the corrected oracle, observe every profile and hostile input, write the observations."""
+    reference = ORDERED
+    validate_reference(ROOT)
+    prior = None if args.reseed else load_go_observations(PROCESS_CONTRACT, dict(reference=args.reference), oracle=reference, required=False)
+    with oracle_checkout(reference) as (base, tree):
+        sources, embedded = oracle_inventory(tree, reference)
+        info = dict(oracle_source_files=sources, oracle_source_digest=inventory(sources, tree),
+                    oracle_embedded_files=embedded, oracle_embedded_digest=inventory(embedded, tree))
+        helper = tree / 'scripts/rust-port/cmd/mcpprocessseed'
+        helper.mkdir()
+        seed_source = PROBE.read_bytes()
+        username_field = b'"username":"public-fixture-user"'
+        assert seed_source.count(username_field) == 1
+        unicode_seed_source = seed_source.replace(
+            username_field, ('"username":' + json.dumps(UNICODE_FIXTURE, ensure_ascii=True)).encode(), 1)
+        (helper / 'main.go').write_bytes(seed_source)
+        unicode_helper = tree / 'scripts/rust-port/cmd/mcpprocessseedunicode'
+        unicode_helper.mkdir()
+        (unicode_helper / 'main.go').write_bytes(unicode_seed_source)
+        build_inputs = sorted(checked(['git', 'ls-files'], tree).decode().splitlines() + [
+            'scripts/rust-port/cmd/mcpprocessseed/main.go', 'scripts/rust-port/cmd/mcpprocessseedunicode/main.go'])
+        info.update(oracle_build_inputs=build_inputs, oracle_build_input_digest=inventory(build_inputs, tree),
+                    seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest())
+        go_compiler, build_env, compiler = pinned_go(os.environ.copy(), ROOT)
+        suffix = '.exe' if os.name == 'nt' else ''
+        go, seed, unicode_seed = base / ('go-cli' + suffix), base / ('go-seed' + suffix), base / ('go-seed-unicode' + suffix)
+        for binary, package in [(go, '.'), (seed, './scripts/rust-port/cmd/mcpprocessseed'), (unicode_seed, './scripts/rust-port/cmd/mcpprocessseedunicode')]:
+            checked([go_compiler, 'build', '-trimpath', '-buildvcs=false', '-o', binary, package], tree, build_env, timeout=oracle_build_timeout())
+        info.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(), seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest(),
+                    unicode_seed_binary_sha256=hashlib.sha256(unicode_seed.read_bytes()).hexdigest())
+        prior_seeds = ((prior or {}).get('data') or {}).get('seeds') or {}
+        seeds, rows, loaded_profiles, snapshots = {}, [], {}, {}
+        for name, profile in profiles():
+            seed_home, loaded, agent = seed_profile({'seed': seed, 'unicode': unicode_seed}, base, name, profile)
+            if name in prior_seeds:
+                shutil.rmtree(seed_home / 'vault')
+                unpack_tree(prior_seeds[name]['vault'], seed_home / 'vault')
+                loaded = prior_seeds[name]['loaded']
+            seeds[name] = dict(vault=pack_tree(seed_home / 'vault'), loaded=loaded)
+            assert loaded['Name'] == agent
+            loaded_profiles[name] = loaded
+            snapshots[name] = vault_snapshot(seed_home / 'vault')
+            home = base / (name + '-go')
+            home.mkdir()
+            shutil.copytree(seed_home / 'vault', home / 'vault')
+            assert vault_snapshot(home / 'vault') == snapshots[name], 'actual Go encrypted input equality'
+            row = observe(go, home, name, agent, 'go', [])
+            check_profile_row('go', name, row)
+            rows.append(scrub_process_row(row, home))
+        hostile = []
+        for name, data in hostile_inputs():
+            retained = observe_hostile(go, base, seed_home / 'vault', name, data, 'go')
+            hostile.append(scrub_process_row(retained, base / ('hostile-' + name + '-go')))
+        payload = dict(info=info, compiler={k: compiler[k] for k in ('version', 'compiler_sha256', 'build_settings')}, go=rows, go_hostile=hostile,
+                       seeds=seeds, loaded_go_profiles=loaded_profiles, fixture_snapshots=snapshots)
+        path = save_go_observations(PROCESS_CONTRACT, payload, dict(reference=args.reference), PROCESS_NORMALIZATION, compiler['version'], oracle=reference)
+    print(f'CAPTURED: {len(rows)} Go MCP profiles and {len(hostile)} hostile stdio cases -> {path}')
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rust',type=Path,required=True)
-    parser.add_argument('--receipt',type=Path,required=True)
+    add_capture_arguments(parser, rust_required=False)
     parser.add_argument('--allow-dirty-for-development',action='store_true')
     parser.add_argument('--reference', choices=['historical', CONTRACT])
     parser.add_argument('--signals',action='store_true',
@@ -1001,12 +1207,18 @@ def main():
     parser.add_argument('--go-seed',type=Path,help='prebuilt Go fixture seed helper (with --signals)')
     args = parser.parse_args()
     if args.signals:
+        assert args.rust and args.receipt, '--signals needs --rust and --receipt'
         assert args.go_cli and args.go_seed, '--signals needs --go-cli and --go-seed'
         return signals_main(args)
     assert args.reference, '--reference is required unless --signals is used'
     reference = ORACLE if args.reference=='historical' else ORDERED
     if reference == ORDERED:
         validate_reference(ROOT)
+    if capture_arguments_ok(args):
+        assert args.reference == CONTRACT, 'Go observations are recorded for the ordered reference only'
+        return capture_process(args)
+    document = load_go_observations(PROCESS_CONTRACT, dict(reference=args.reference), oracle=reference)
+    recorded = document['data']
     rust = args.rust.resolve()
     clean = not checked(['git','status','--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
@@ -1017,133 +1229,41 @@ def main():
         'rust_binary_sha256':hashlib.sha256(rust.read_bytes()).hexdigest(), 'oracle_commit':reference,
         'reference_contract':args.reference, 'historical_oracle_commit':ORACLE,
         'driver_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-        'seed_probe_sha256':hashlib.sha256(PROBE.read_bytes()).hexdigest(), 'profiles':dict(profiles()),
-        'loaded_go_profiles':{},'fixture_snapshots':{},'declared_differences':[],
+        'profiles':dict(profiles()),
+        'loaded_go_profiles':recorded['loaded_go_profiles'],'fixture_snapshots':recorded['fixture_snapshots'],'declared_differences':[],
         'normalizations':['JSON object key order and nested JSON text','actual fixture HOME prefix',
                           'paired 16-hex random security data IDs with unchanged label/content',
                           'validated actual nonnegative command duration_ms, raw values retained'],
         'fixture_kdf':{'algorithm':'argon2id','memory_kib':19456,'iterations':2,'lanes':1}, 'requests':messages(Path('__HOME__')),
-        'go':[],'rust':[],'go_hostile':[],'rust_hostile':[],'differences':[]}
+        'go':recorded['go'],'rust':[],'go_hostile':recorded['go_hostile'],'rust_hostile':[],'differences':[],
+        'compiler':recorded['compiler'],'go_observations':provenance(document),**recorded['info']}
     try:
-        go_compiler, build_env, compiler = pinned_go(os.environ.copy(), ROOT)
-        receipt['compiler'] = compiler
         with tempfile.TemporaryDirectory(prefix='symvault-mcp-process-') as raw:
             base = Path(raw)
-            tree = base/'oracle'
-            checked(['git','worktree','add','--detach',tree,reference])
-            try:
-                sources = checked(['git','ls-tree','-r','--name-only',reference]).decode().splitlines()
-                sources = sorted(p for p in sources if p in {'go.mod','go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
-                embedded = sorted(p for p in checked(['git','ls-tree','-r','--name-only',reference]).decode().splitlines()
-                                  if p.startswith('internal/mcp/apitemplates/builtin/'))
-                assert len(embedded)==17
-                receipt.update(oracle_source_files=sources,oracle_source_digest=inventory(sources,tree),
-                               oracle_embedded_files=embedded,oracle_embedded_digest=inventory(embedded,tree))
-                helper = tree/'scripts/rust-port/cmd/mcpprocessseed'
-                helper.mkdir()
-                seed_source = PROBE.read_bytes()
-                username_field = b'"username":"public-fixture-user"'
-                assert seed_source.count(username_field)==1
-                unicode_seed_source = seed_source.replace(
-                    username_field, ('"username":'+json.dumps(UNICODE_FIXTURE,ensure_ascii=True)).encode(), 1)
-                (helper/'main.go').write_bytes(seed_source)
-                unicode_helper = tree/'scripts/rust-port/cmd/mcpprocessseedunicode'
-                unicode_helper.mkdir()
-                (unicode_helper/'main.go').write_bytes(unicode_seed_source)
-                build_inputs = sorted(checked(['git','ls-files'],tree).decode().splitlines()+[
-                    'scripts/rust-port/cmd/mcpprocessseed/main.go',
-                    'scripts/rust-port/cmd/mcpprocessseedunicode/main.go'])
-                receipt['oracle_build_inputs'] = build_inputs
-                receipt['oracle_build_input_digest'] = inventory(build_inputs,tree)
-                suffix = '.exe' if os.name=='nt' else ''
-                go, seed = base/('go-cli'+suffix), base/('go-seed'+suffix)
-                unicode_seed = base/('go-seed-unicode'+suffix)
-                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',go,'.'],tree,build_env,timeout=oracle_build_timeout())
-                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/mcpprocessseed'],tree,build_env,timeout=oracle_build_timeout())
-                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',unicode_seed,'./scripts/rust-port/cmd/mcpprocessseedunicode'],tree,build_env,timeout=oracle_build_timeout())
-                receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),
-                               seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest(),
-                               unicode_seed_binary_sha256=hashlib.sha256(unicode_seed.read_bytes()).hexdigest())
-                for name,profile in profiles():
-                    seed_home = base/(name+'-seed')
-                    seed_home.mkdir()
-                    profile_file = seed_home/'profile.json'
-                    profile = dict(profile)
-                    builtin = profile.pop('__builtin','')
-                    agent = builtin or 'fixture'
-                    profile_file.write_text(json.dumps(profile),encoding='utf-8')
-                    profile_seed = unicode_seed if name=='admin-value-visible' else seed
-                    loaded = checked([profile_seed,'--root',seed_home/'vault','--profile',profile_file,
-                                      '--builtin',builtin,'--agent',agent],seed_home,isolated(seed_home))
-                    receipt['loaded_go_profiles'][name] = json.loads(loaded)
-                    assert receipt['loaded_go_profiles'][name]['Name']==agent
-                    snapshot = vault_snapshot(seed_home/'vault')
-                    receipt['fixture_snapshots'][name] = snapshot
-                    homes = {}
-                    for implementation in ['go','rust']:
-                        home = base/(name+'-'+implementation)
-                        home.mkdir()
-                        shutil.copytree(seed_home/'vault',home/'vault')
-                        assert vault_snapshot(home/'vault')==snapshot, 'actual Go/Rust encrypted input equality'
-                        homes[implementation] = home
-                    for implementation,binary in [('go',go),('rust',rust)]:
-                        row = observe(binary,homes[implementation],name,agent,implementation,receipt[implementation])
-                        if name.endswith('-real-child'):
-                            expected_marker = {'received_expected_secret':True} if name=='tier-admin-real-child' else None
-                            assert all(marker==expected_marker for marker in row['child_markers'].values()), (implementation,name,'actual executor control')
-                        allowed_value = name in {'tier-admin','admin-value-visible','readonly-capability-overrides',
-                                                'admin-command-disabled','tier-read-only-real-child',
-                                                'tier-standard-real-child','tier-admin-real-child'}
-                        if implementation=='go':
-                            allowed_value |= name in {'legacy','admin-tools-health-only','admin-tools-self-only','admin-api-explicit'}
-                        value_frame = next(frame for frame in row['frames'] if frame['id']==8)
-                        assert all((c in json.dumps(value_frame))==allowed_value for c in CANARIES), (implementation,name,'value permission control')
-                        for frame in row['frames']:
-                            if frame['id'] not in [8,18]:
-                                assert not any(c in json.dumps(frame) for c in CANARIES), (implementation,name,'credential outside authorized value frame')
-                        fetch_frame = next(frame for frame in row['frames'] if frame['id']==18)
-                        assert all((c in json.dumps(fetch_frame))==(allowed_value and name!='legacy')
-                                   for c in CANARIES), (implementation,name,'fetch value permission control')
-                        unicode_frames = [frame for frame in row['frames']
-                                         if UNICODE_FIXTURE in json.dumps(frame,ensure_ascii=False)]
-                        expected_unicode_frames = [value_frame,fetch_frame] if name=='admin-value-visible' else []
-                        assert unicode_frames==expected_unicode_frames, (implementation,name,'Unicode encrypted-store permission control')
-                        assert UNICODE_FIXTURE not in row['stderr_raw'], (implementation,name,'Unicode value in stderr')
-                for left,right in zip(receipt['go'],receipt['rust'],strict=True):
-                    go_names = next(frame for frame in left['frames'] if frame['id']==6)['result']['content'][0]['text']['json_text']
-                    for a,b in zip(left['frames'],right['frames'],strict=True):
-                        if a!=b:
-                            difference = {'case':left['case'],'id':a.get('id'),'go':a,'rust':b}
-                            declared = declared_profile_difference(dict(profiles())[left['case']],a,b,go_names)
-                            if declared:
-                                receipt['declared_differences'].append(dict(difference,decision=declared))
-                            else:
-                                receipt['differences'].append(difference)
-                for name,data in hostile_inputs():
-                    for implementation,binary in [('go',go),('rust',rust)]:
-                        home = base/('hostile-'+name+'-'+implementation)
-                        home.mkdir()
-                        shutil.copytree(seed_home/'vault',home/'vault')
-                        result = run([binary,'--quiet','mcp','--stdio','--agent','fixture'],home,isolated(home),data)
-                        retained = {'case':name,'exit':result.returncode,
-                            'input_bytes':len(data),'input_sha256':hashlib.sha256(data).hexdigest(),
-                            'stdout_raw':result.stdout.decode('utf-8',errors='replace'),
-                            'stderr_raw':result.stderr.decode('utf-8',errors='replace')}
-                        receipt[implementation+'_hostile'].append(retained)
-                        raw,stderr,frames = protocol_bytes(result,home,name,implementation,'fixture')
-                        assert result.returncode==0 and not any(c in raw for c in CANARIES)
-                        retained.update(stdout_raw=raw,stderr_raw=stderr,frames=frames,stdout_is_only_protocol=True)
-                    ordinary = next((row['frames'][0] for row in receipt['go_hostile'] if row['case']=='crlf'),None)
-                    receipt['declared_differences'] += compare_hostile(name,receipt['go_hostile'][-1],receipt['rust_hostile'][-1],ordinary)
-                assert not receipt['differences'], 'actual MCP/profile differences retained in receipt'
-                assert inventory(build_inputs,tree)==receipt['oracle_build_input_digest'], 'oracle build inputs changed during observation'
-                assert inventory(sources,tree)==receipt['oracle_source_digest'], 'oracle source changed during observation'
-                assert inventory(embedded,tree)==receipt['oracle_embedded_digest'], 'oracle embedded inputs changed during observation'
-                assert candidate_paths()==paths and inventory(paths,ROOT)==receipt['candidate_source_digest'], 'candidate changed during native observation'
-                assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
-                receipt['passed'] = True
-            finally:
-                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'MCP oracle worktree')
+            for (name,profile),go_row in zip(profiles(),receipt['go'],strict=True):
+                assert go_row['case'] == name
+                agent = recorded['seeds'][name]['loaded']['Name']
+                seed_home = base/(name+'-seed')
+                unpack_tree(recorded['seeds'][name]['vault'], seed_home/'vault')
+                snapshot = vault_snapshot(seed_home/'vault')
+                assert snapshot == receipt['fixture_snapshots'][name], 'recorded seed vault bytes changed'
+                home = base/(name+'-rust')
+                home.mkdir()
+                shutil.copytree(seed_home/'vault',home/'vault')
+                assert vault_snapshot(home/'vault')==snapshot, 'actual Go/Rust encrypted input equality'
+                row = observe(rust,home,name,agent,'rust',receipt['rust'])
+                check_profile_row('go',name,go_row)
+                check_profile_row('rust',name,row)
+            compare_profiles(receipt)
+            for (name,data),go_row in zip(hostile_inputs(),receipt['go_hostile'],strict=True):
+                assert go_row['case'] == name and go_row['input_sha256'] == hashlib.sha256(data).hexdigest()
+                receipt['rust_hostile'].append(observe_hostile(rust,base,seed_home/'vault',name,data,'rust'))
+                ordinary = next((row['frames'][0] for row in receipt['go_hostile'] if row['case']=='crlf'),None)
+                receipt['declared_differences'] += compare_hostile(name,go_row,receipt['rust_hostile'][-1],ordinary)
+            assert not receipt['differences'], 'actual MCP/profile differences retained in receipt'
+            assert candidate_paths()==paths and inventory(paths,ROOT)==receipt['candidate_source_digest'], 'candidate changed during native observation'
+            assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
+            receipt['passed'] = True
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
         receipt['candidate_worktree_clean_at_end'] = not checked(
@@ -1152,7 +1272,7 @@ def main():
             receipt['passed'] = False
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
         assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
-    print(f"PASS: {len(receipt['go'])} actual Go/Rust native MCP profiles and {len(receipt['go_hostile'])} hostile stdio cases on {platform.system()}")
+    print(f"PASS: {len(receipt['go'])} actual Go/Rust native MCP profiles and {len(receipt['go_hostile'])} hostile stdio cases on {platform.system()} (Go side replayed from {receipt['go_observations']['path']})")
 
 
 if __name__=='__main__':

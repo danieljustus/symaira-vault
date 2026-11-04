@@ -25,8 +25,16 @@ import time
 sys.dont_write_bytecode = True
 from http_oauth_contract import PASSPHRASE, PROBE, Server
 from http_process_contract import SECRET, request
-from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, oracle_build_timeout, remove_worktree, vault_snapshot
+from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, capture_arguments_ok, checked, go_capture_session, inventory,
+                                  isolated, load_go_observations, pinned_seed, provenance, replay_seed, save_go_observations,
+                                  vault_snapshot)
 
+CONTRACT = 'http-replay'
+PORT = 28110  # fixed so request bytes (Host header) are identical in capture and replay
+NORMALIZATION = ['fixed loopback port', 'seed vault and tokens pinned in the file', 'Date header, log timestamps, peer ports',
+                 'the health document clock (timestamp) is recorded as the epoch (its format and the Go/Rust agreement within 120 s were asserted '
+                 'at capture); replay checks the Rust clock against the wall clock instead',
+                 'wall-clock elapsed_seconds of every exchange recorded as 0.0 (never compared)']
 INIT = b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"public-replay-fixture","version":"1"},"capabilities":{}}}'
 PING = b'{"jsonrpc":"2.0","id":2,"method":"ping"}'
 NOTIF = b'{"jsonrpc":"2.0","method":"notifications/initialized"}'
@@ -398,7 +406,7 @@ def transcript(row):
             for r in row['responses']]
 
 
-def health_equal_except_clock(left, right, port):
+def health_equal_except_clock(left, right, port, recorded_go_clock=False):
     for row in [left, right]:
         assert len(row['responses']) == 1 and row['responses'][0]['code'] == 200
     bodies = [json.loads(base64.b64decode(row['responses'][0]['body_base64'])) for row in [left, right]]
@@ -406,13 +414,17 @@ def health_equal_except_clock(left, right, port):
         assert sorted(body) == ['port', 'status', 'timestamp', 'version'] and body['port'] == port and body['status'] == 'healthy'
         assert body['version'] == 'dev' and re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', body['timestamp']), 'complete health document'
     stamps = [time.mktime(time.strptime(b['timestamp'], '%Y-%m-%dT%H:%M:%SZ')) - time.timezone for b in bodies]
-    assert abs(stamps[0] - stamps[1]) < 120, 'health clocks agree within the sequential run'
+    if recorded_go_clock:
+        # The Go document was recorded with its clock normalised to the epoch; the Rust clock must agree with the wall clock.
+        assert abs(stamps[1] - time.time()) < 120, 'Rust health clock agrees with the wall clock'
+    else:
+        assert abs(stamps[0] - stamps[1]) < 120, 'health clocks agree within the sequential run'
     first = transcript(left)[0]
     assert first[1] == transcript(right)[0][1], 'health header multiset'
     return True
 
 
-def compare(go_rows, rust_rows, port=None):
+def compare(go_rows, rust_rows, port=None, recorded_go_clock=False):
     """Pure comparison + policy; returns (identical, declared, semantic, interim_only).  Raises AssertionError on any violation."""
     assert [r['case'] for r in go_rows] == [r['case'] for r in rust_rows], 'same case inventory'
     names = [r['case'] for r in go_rows]
@@ -430,7 +442,7 @@ def compare(go_rows, rust_rows, port=None):
                 assert 'text/event-stream' not in [v for k, v in r.get('headers', []) if k == 'content-type'], (name, 'Go has no event stream')
                 assert not any(k in {'mcp-session-id', 'last-event-id'} for k, _ in r.get('headers', [])), (name, 'no session/replay header')
         if name in HEALTH_CASES and not name.endswith('head-health'):
-            semantic.append(name if health_equal_except_clock(left, right, port) else None)
+            semantic.append(name if health_equal_except_clock(left, right, port, recorded_go_clock) else None)
             continue
         if name == 'route-head-health':
             assert transcript(left)[0][0] == transcript(right)[0][0] == 'HTTP/1.1 200 OK' and not any(b[2] for b in transcript(left) + transcript(right))
@@ -467,12 +479,36 @@ def candidate_paths():
                   or p in {'Cargo.toml', 'Cargo.lock', '.gitattributes'})
 
 
+def capture(args):
+    """Go half only: build the oracle, observe it, write the committed observations."""
+    with go_capture_session(CONTRACT, args, {'seed': ('httpreplayseed', PROBE.read_bytes())}) as session:
+        base = session['base']
+        tokens = pinned_seed(session, 'main', base / 'seed',
+                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
+        snapshot = vault_snapshot(base / 'seed/vault')
+        result = dict(rows=[], processes=[])
+        home = base / 'go'
+        home.mkdir()
+        shutil.copytree(base / 'seed/vault', home / 'vault')
+        assert vault_snapshot(home / 'vault') == snapshot
+        observe(session['go'], home, PORT, tokens, result)
+        for row in result['rows']:
+            row['elapsed_seconds'] = 0.0
+        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()),
+                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'], go=result)
+        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
+    print(f'CAPTURED: {len(result["rows"])} Go replay/SSE/envelope/route/framing cases -> {path}')
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rust', type=Path, required=True)
-    parser.add_argument('--receipt', type=Path, required=True)
+    add_capture_arguments(parser, rust_required=False)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
+    if capture_arguments_ok(args):
+        return capture(args)
+    document = load_go_observations(CONTRACT, {})
+    recorded = document['data']
     clean = not checked(['git', 'status', '--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust = args.rust.resolve()
@@ -481,55 +517,34 @@ def main():
                    candidate_sources=inventory(paths, ROOT), native_os=platform.system(), architecture=platform.machine(),
                    rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(), oracle_commit=ORACLE,
                    driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                   go=dict(rows=[], processes=[]), rust=dict(rows=[], processes=[]), declared_differences=[])
+                   go=recorded['go'], rust=dict(rows=[], processes=[]), declared_differences=[],
+                   go_observations=provenance(document), port=recorded['port'], fixture_snapshot=recorded['fixture_snapshot'],
+                   **recorded['info'])
     try:
         with tempfile.TemporaryDirectory(prefix='symvault-http-replay-') as raw:
-            base, tree = Path(raw), Path(raw) / 'oracle'
-            checked(['git', 'worktree', 'add', '--detach', tree, ORACLE])
-            try:
-                files = checked(['git', 'ls-tree', '-r', '--name-only', ORACLE]).decode().splitlines()
-                sources = sorted(p for p in files if p in {'go.mod', 'go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
-                embedded = sorted(p for p in files if p.startswith('internal/mcp/apitemplates/builtin/'))
-                assert len(embedded) == 17
-                receipt.update(oracle_sources=inventory(sources, tree), oracle_embedded=inventory(embedded, tree), seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest())
-                helper = tree / 'scripts/rust-port/cmd/httpreplayseed'
-                helper.mkdir()
-                (helper / 'main.go').write_bytes(PROBE.read_bytes())
-                suffix = '.exe' if os.name == 'nt' else ''
-                go, seed = base / ('go-cli' + suffix), base / ('go-seed' + suffix)
-                checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', go, '.'], tree, timeout=oracle_build_timeout())
-                checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', seed, './scripts/rust-port/cmd/httpreplayseed'], tree, timeout=oracle_build_timeout())
-                receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(), seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
-                seed_home = base / 'seed'
-                seed_home.mkdir()
-                tokens = json.loads(checked([seed, '--root', seed_home / 'vault'], seed_home, isolated(seed_home)))
-                snapshot = vault_snapshot(seed_home / 'vault')
-                receipt['fixture_snapshot'] = snapshot
-                with socket.socket() as selection:
-                    selection.bind(('127.0.0.1', 0))
-                    port = selection.getsockname()[1]
-                receipt['port'] = port
-                for implementation, binary in [('go', go), ('rust', rust)]:
-                    home = base / implementation
-                    home.mkdir()
-                    shutil.copytree(seed_home / 'vault', home / 'vault')
-                    assert vault_snapshot(home / 'vault') == snapshot
-                    observe(binary, home, port, tokens, receipt[implementation])
-                identical, declared, semantic, interim_only = compare(receipt['go']['rows'], receipt['rust']['rows'], port)
-                receipt.update(declared_differences=declared, identical_cases=len(identical), semantic_cases=len(semantic), interim_only_cases=interim_only)
-                assert inventory(paths, ROOT) == receipt['candidate_sources'] and candidate_paths() == paths, 'candidate changed during observations'
-                assert hashlib.sha256(rust.read_bytes()).hexdigest() == receipt['rust_binary_sha256']
-                receipt['candidate_worktree_clean_at_end'] = not checked(['git', 'status', '--porcelain=v1']).strip()
-                assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
-                receipt['passed'] = True
-            finally:
-                remove_worktree(lambda: checked(['git', 'worktree', 'remove', '--force', tree]), 'oracle worktree')
+            base = Path(raw)
+            seed_home = base / 'seed'
+            tokens = replay_seed(recorded, 'main', seed_home)
+            snapshot = vault_snapshot(seed_home / 'vault')
+            assert snapshot == receipt['fixture_snapshot'], 'recorded seed vault bytes changed'
+            home = base / 'rust'
+            home.mkdir()
+            shutil.copytree(seed_home / 'vault', home / 'vault')
+            assert vault_snapshot(home / 'vault') == snapshot
+            observe(rust, home, receipt['port'], tokens, receipt['rust'])
+            identical, declared, semantic, interim_only = compare(receipt['go']['rows'], receipt['rust']['rows'], receipt['port'], recorded_go_clock=True)
+            receipt.update(declared_differences=declared, identical_cases=len(identical), semantic_cases=len(semantic), interim_only_cases=interim_only)
+            assert inventory(paths, ROOT) == receipt['candidate_sources'] and candidate_paths() == paths, 'candidate changed during observations'
+            assert hashlib.sha256(rust.read_bytes()).hexdigest() == receipt['rust_binary_sha256']
+            receipt['candidate_worktree_clean_at_end'] = not checked(['git', 'status', '--porcelain=v1']).strip()
+            assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
+            receipt['passed'] = True
     finally:
         args.receipt.write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
     total = len(receipt['go']['rows'])
     print(f"PASS: {total} replay/SSE/envelope/route/framing cases per implementation on {platform.system()}: "
           f"{receipt['identical_cases']} identical, {len(receipt['declared_differences'])} declared, {receipt['semantic_cases']} semantic (health clock), "
-          f"{len(receipt['interim_only_cases'])} final-identical (Go-only interim 100 Continue)")
+          f"{len(receipt['interim_only_cases'])} final-identical (Go-only interim 100 Continue) (Go side replayed from {receipt['go_observations']['path']})")
 
 
 if __name__ == '__main__':

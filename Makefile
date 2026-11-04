@@ -602,7 +602,7 @@ mcp-http-init-fixtures-generate:
 	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http001initgen --output $(PORT_MCP_HTTP_INIT_FIXTURE)
 
 mcp-http-init-fixtures-check: mcp-ordered-fixtures-check
-	PYTHONDONTWRITEBYTECODE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/test_http001init_isolation.py
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_http001init_isolation.py
 
 mcp-http-init-fixtures-run: mcp-http-init-fixtures-check
 
@@ -1230,16 +1230,30 @@ worktree-prune-check:
 # The http-*/mcp-* process contracts below replay them and run Rust only, with no Go on the PATH.
 # This is the ONE target that needs Go: it builds the pinned Go oracle and re-records the Go half
 # (GOTOOLCHAIN=go1.26.6; run once per OS, on Linux inside the gate image). Two consecutive runs are
-# byte-identical; commit the changed files.
+# byte-identical; commit the changed files. CAPTURE_ARGS=--reseed regenerates the pinned seed vaults/identities.
+# A first capture on a new OS reuses the seeds of an existing OS (encrypted vaults are OS independent). The shutdown Go
+# tests and the toolhash first capture need the Rust CLI (AREA_BUILD_CLI) only as the Go test harness input.
 GO_OBSERVATION_CAPTURES := \
 	http_framing_contract.py http_head_contract.py http_origin_contract.py http_slow_peer_contract.py \
-	http_timeout_contract.py
+	http_timeout_contract.py http_tls_contract.py http_write_contract.py http_oauth_contract.py \
+	http_process_contract.py http_drain_contract.py http_replay_contract.py http_token_contract.py
 .PHONY: go-observations-capture-http
-go-observations-capture-http:
+go-observations-capture-http: area-oracle-runner
+	@mkdir -p "$(AREA_EVIDENCE)"
 	@for script in $(GO_OBSERVATION_CAPTURES); do \
 		echo "capture-go: $$script"; \
-		$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/$$script --capture-go $(CAPTURE_ARGS) || exit 1; \
+		$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/$$script --capture-go $(CAPTURE_ARGS) || exit 1; \
 	done
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/mcp_process_contract.py --reference mcp-anomaly-ordered-v1 --capture-go $(CAPTURE_ARGS)
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)" --capture-go
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/test_http001init_isolation.py --capture-go
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/go_timestamp_fixtures.py --record-go
+	$(AREA_BUILD_CLI)
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/mcp_http_shutdown_go_tests.py --capture-go
+	$(AREA_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-cli" .
+	$(AREA_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-seed" ./scripts/rust-port/cmd/toolhashseed
+	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) -B scripts/rust-port/toolhash_process_contract.py --capture-go \
+		--go-cli "$(AREA_BIN)/toolhash-go-cli" --go-seed "$(AREA_BIN)/toolhash-go-seed" --rust "$(AREA_CLI)" $(CAPTURE_ARGS)
 
 http-framing-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
@@ -1281,7 +1295,7 @@ http-tls-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_tls_contract.py
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_tls_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/http_tls_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-tls.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-tls.json" --profile http-tls
 
@@ -1294,22 +1308,22 @@ http-tls-contract:
 # restore the file) should the live tree change anyway.
 AREA_MUTATION_TREE := $(AREA_EVIDENCE)/mutation-tree
 AREA_MUTATION_TARGET := $(AREA_EVIDENCE)/mutation-target
-http-write-contract: area-oracle-runner
+http-write-contract:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_write_contract.py
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/http_write_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) -B scripts/rust-port/http_write_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-tls-output.json" --tls-output-probe-only
 	rm -f "$(AREA_EVIDENCE)"/native-tls-output-mutation*.json
 	scripts/rust-port/area_http_write_mutation.sh "$(CURDIR)" "$(AREA_MUTATION_TREE)" "$(AREA_MUTATION_TARGET)" "$(RUST_BINARY)" \
-		"$(AREA_EVIDENCE)/native-tls-output-mutation.json" "$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON)"
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) scripts/rust-port/http_write_contract.py \
+		"$(AREA_EVIDENCE)/native-tls-output-mutation.json" "$(AREA_ENV) $(AREA_PYTHON)"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/http_write_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-write.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-write.json" --profile http-write
 
 # rust-http-oauth.yml
-http-oauth-contract: area-oracle-runner
+http-oauth-contract:
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) scripts/rust-port/http_oauth_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/http_oauth_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-oauth.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-oauth.json" --profile http-oauth
 
@@ -1318,7 +1332,7 @@ http-process-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_process_contract.py
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/http_process_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/http_process_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-process.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-process.json" --profile http-process
 
@@ -1329,7 +1343,7 @@ mcp-http-replay-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_replay_contract.py
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/http_replay_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) -B scripts/rust-port/http_replay_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-replay.json" $(HTTP_CONTRACT_ARGS)
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-replay.json" --profile http-replay
 
@@ -1340,28 +1354,23 @@ mcp-http-token-contract: timestamp-fixtures-check
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_replay_contract.py
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/http_token_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) -B scripts/rust-port/http_token_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-token.json" $(HTTP_CONTRACT_ARGS)
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-token.json" --profile http-token
 
-# TOOLHASH-001 (no workflow step): Go CLI and Go seed built from this checkout
-# (the driver takes prebuilt binaries); both CLIs stamp the Go-recorded registry
-# hash, the actual Go and Rust servers answer 14 HTTP outcomes identically and
-# write identical audit rows. Negative control: with the Rust audit ids dropped
+# TOOLHASH-001 (no workflow step): the Go side (CLI issuance hash, 14 HTTP outcomes, audit rows) is the committed
+# toolhash-process observation; the Rust CLI stamps the Go-recorded registry hash, its server answers the 14 HTTP
+# outcomes identically and writes identical audit rows. Negative control: with the Rust audit ids dropped
 # the comparison must fail on the audit rows, not on anything else.
 toolhash-process-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_toolhash_process_contract.py
 	$(AREA_BUILD_CLI)
-	$(AREA_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-cli" .
-	$(AREA_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-seed" ./scripts/rust-port/cmd/toolhashseed
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/toolhash_process_contract.py \
-		--go-cli "$(AREA_BIN)/toolhash-go-cli" --go-seed "$(AREA_BIN)/toolhash-go-seed" --rust "$(AREA_CLI)" \
-		--receipt "$(AREA_EVIDENCE)/native-toolhash.json"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/toolhash_process_contract.py \
+		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-toolhash.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-toolhash.json" --profile toolhash
-	! $(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/toolhash_process_contract.py \
-		--go-cli "$(AREA_BIN)/toolhash-go-cli" --go-seed "$(AREA_BIN)/toolhash-go-seed" --rust "$(AREA_CLI)" \
-		--drop-audit-ids > "$(AREA_EVIDENCE)/native-toolhash-drop-ids.txt" 2>&1
+	! $(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/toolhash_process_contract.py \
+		--rust "$(AREA_CLI)" --drop-audit-ids > "$(AREA_EVIDENCE)/native-toolhash-drop-ids.txt" 2>&1
 	grep -q "Go/Rust audit rows differ" "$(AREA_EVIDENCE)/native-toolhash-drop-ids.txt"
 
 # The cargo runs next to the HTTP, MCP-process and API-transport contracts of
@@ -1405,7 +1414,6 @@ mcp-named-tests:
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/native-mcp-cli-tests.txt" \
 		cli_runtime_executes_source_bound_api_template_fixture api_template_fixture_slow_setup_preserves_serving_budget \
 		--exact-prefix "" --contains "test result: ok. 2 passed; 0 failed; 0 ignored;"
-	test "$$($(AREA_HTTP_GO) $(GO) env GOVERSION)" = go1.26.6
 
 # rust-mcp-process.yml (unit controls, ordered approval fixtures, contract).
 # The inline diagnostic and receipt-finalization controls live in
@@ -1416,8 +1424,7 @@ mcp-process-contract:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_mcp_process_contract.py
 	$(MAKE) mcp-ordered-fixtures-check
 	$(AREA_BUILD_CLI)
-	test "$$($(AREA_HTTP_GO) $(GO) env GOVERSION)" = go1.26.6
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/mcp_process_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/mcp_process_contract.py \
 		--reference mcp-anomaly-ordered-v1 --rust "$(AREA_CLI)" \
 		--receipt "$(AREA_EVIDENCE)/native-mcp-process.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-mcp-process.json" --profile mcp-process
@@ -1662,20 +1669,15 @@ read-resource-policy-contract:
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/rust-read-template.log" template_resolutions_share_the_operation_allowance
 	$(AREA_CHECK) log-ok "$(AREA_EVIDENCE)/rust-read-mcp.log" run_command_secret_refs_share_one_resource_allowance
 
-# mcp-http-shutdown.yml (live Go -race tests of the frozen oracle), plus the
+# mcp-http-shutdown.yml (the Go -race tests of the frozen oracle are the committed
+# mcp-http-shutdown-go-tests observation, replayed into the same jsonl), plus the
 # Rust leg (MCP-003/HTTP-004/CLI-007): the real Go oracle and the Rust CLI each
 # drain a real `mcp` HTTP server on SIGINT/SIGTERM/SIGQUIT with a request in
 # flight (finishing inside the 5 s window and exceeding it); the unit tests
 # are the HttpShutdown drain controls it relies on.
 mcp-http-shutdown-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(GO) test -race -json \
-		./internal/mcp/serverbootstrap ./internal/secureui ./internal/approval ./internal/policy -count=1 \
-		> "$(AREA_EVIDENCE)/native-http-shutdown.jsonl"
-	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/run_go_tests.py $(CARGO) -- $(GO) test -race -json \
-		./internal/mcp/server -count=1 \
-		-run "TestApprovalCancellation|TestApprovalUninterruptible|^TestAuthorize|TestScopeCheckHook|TestHandleGet_OutsideScope|TestHandleDelete_OutsideScope|TestHandleGetMetadata_OutsideScope" \
-		>> "$(AREA_EVIDENCE)/native-http-shutdown.jsonl"
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/mcp_http_shutdown_go_tests.py --replay "$(AREA_EVIDENCE)/native-http-shutdown.jsonl"
 	$(AREA_CHECK) go-json "$(AREA_EVIDENCE)/native-http-shutdown.jsonl" \
 		TestHTTPShutdownActiveFactoryContract/drain TestHTTPShutdownActiveFactoryContract/deadline \
 		TestHTTPShutdownIdleTransportContract TestHTTPShutdownPartialRequestDoesNotReachFactory \
@@ -1691,7 +1693,7 @@ mcp-http-shutdown-contract:
 		drain_lets_the_request_in_flight_finish_cooperative_io drain_force_closes_at_the_deadline_cooperative_io \
 		drain_without_connections_is_clean_and_immediate --results-ok
 	$(AREA_BUILD_CLI)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/http_drain_contract.py \
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/http_drain_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-drain.json"
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-drain.json" --profile http-drain
 
@@ -2230,7 +2232,7 @@ mcp-oracle-controls:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_compiler_adapter.py
 
 mcp-ordered-fixtures-check: mcp-oracle-controls
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)"
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)"
 
 mcp-call-differential: mcp-call-fixtures-check mcp-authz-differential policy-context-differential mcp-copy-clipboard-differential mcp-secure-input-differential mcp-execute-api-https-differential mcp-execute-with-secret-differential mcp-write-tty-approval-differential mcp-execute-api-request-differential api-templates-differential
 	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --test tools_secret_unseal --test tools_sharing_contract --locked

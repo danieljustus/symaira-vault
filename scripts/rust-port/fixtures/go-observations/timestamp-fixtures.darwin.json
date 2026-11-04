@@ -1,0 +1,24 @@
+{
+ "contract": "timestamp-fixtures",
+ "contract_args": {},
+ "data": {
+  "cases": 1055,
+  "cases_sha256": "61ec33800be3f723747e4b02e6a06eaed49f646e2cff11b32f46ee131b804fb7",
+  "display": 317,
+  "display_sha256": "46d9299ca69fac088ee48a5484dfc3449cc04383c9e0cc32a287629226fe888c",
+  "toolchain": "go1.26.6",
+  "zones": [
+   "UTC",
+   "America/New_York",
+   "Pacific/Kiritimati"
+  ]
+ },
+ "go_version": "go1.26.6",
+ "goarch": "arm64",
+ "goos": "darwin",
+ "normalization": [
+  "no per-run data: the recording is a pure function of the committed oracle source and raw values (TZ-independent, asserted over ZONES)"
+ ],
+ "oracle_commit": "go_timestamp_oracle.go.txt:4a6c71c6a75859bd95544d1bf215dae57732c17259a9ffc01bef48dd15411bbb",
+ "schema": 1
+}
