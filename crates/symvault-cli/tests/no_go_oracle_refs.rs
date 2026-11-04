@@ -11,13 +11,17 @@
 //! * `SYMVAULT_[A-Z0-9_]*GO_BINARY`, `SYMVAULT_FFI_GO_DRIVER`, `SYMVAULT_GO_ORACLE`
 //! * `[A-Z_]*REQUIRE_GO_ORACLE`
 //! * `GOTOOLCHAIN`
-//! * `Command::new("go"` and `Command::new(&go`
+//! * `Command::new("go"`, `Command::new(&go`, `Command::new(go)` and `Command::new(go_bin)` (a `go`/`go_*` variable)
+//! * absolute Go paths: `/usr/local/go/bin/go`, `<anything>/bin/go`
+//! * `shutil.which('go')`, `exec go`
+//! * Makefile variable references `$(GO)`, `$(AREA_GO)`, `$(GO_TOOLCHAIN)`, `$(GOROOT)` (a `GO` name segment or a
+//!   `GO*` environment name) and a recipe line that starts a command with `go` (`@go \`)
 //! * `setup-go`
 //! * `\bgo (build|test|run|vet|install)\b`
 //! * `golangci`, `govulncheck`
 //! * `skipping Go`
 //! * list/argv forms: `['go', 'build'|'test'|'run'|'vet'|'env'|'version'|'mod'|'list'|…`
-//!   (also with double quotes, or a `go` variable such as `[go, 'env'`)
+//!   (also with double quotes, or a `go` variable or constant such as `[go, 'env'`, `[GO, "build"`, `[GO_BIN, 'test'`)
 //! * `go_compiler`, `pinned_go(`, the `oracle_build` module (`import`/`from`/`oracle_build_timeout`/
 //!   `oracle_build.`) and the `oraclebuild` runner
 //! * `go.mod` / `go.sum` named as files
@@ -39,9 +43,10 @@
 //! file spells the patterns and excludes itself.
 //!
 //! `ALLOWLIST` is empty (P40c-3): no file may build or drive a Go oracle; the
-//! size assertion below keeps it that way. `LINE_ALLOW` lists user-facing
-//! guidance strings of the Rust CLI that must say `go install` / `go build`
-//! because they tell the user how to update a binary that was installed that way.
+//! size assertion below keeps it that way. `LINE_ALLOW` lists single lines, each tied to its file and compared as the
+//! whole trimmed line (a longer line that merely contains an allowed string is still scanned): user-facing guidance
+//! of the Rust CLI that must say `go install` / `go build` because it tells the user how to update a binary that was
+//! installed that way, a recorded argv a Rust test asserts verbatim, and the module-file names of three digest readers.
 //!
 //! The matchers are hand-written (this crate has no `regex` dev-dependency and
 //! the manifests are owned by the integration branch);
@@ -71,16 +76,67 @@ const ALLOWLIST: [&str; 0] = [];
 /// This file spells the patterns it looks for.
 const SELF: &str = "crates/symvault-cli/tests/no_go_oracle_refs.rs";
 
-/// Guidance strings of the Rust CLI for binaries installed with the Go toolchain.
-const LINE_ALLOW: [&str; 4] = [
-    "go install github.com/danieljustus/symaira-vault@latest",
-    "git pull && go build ./cmd/symvault",
+/// Single lines exempt from the lint: `(file, whole trimmed line)`. Nothing else on the line is exempt, so a real
+/// reference hidden next to an allowed string is still reported.
+const LINE_ALLOW: [(&str, &str); 11] = [
+    // Guidance strings of the Rust CLI for binaries installed with the Go toolchain.
+    (
+        "crates/symvault-cli/src/update_commands.rs",
+        "GO_INSTALL => \"Update via Go: go install github.com/danieljustus/symaira-vault@latest\",",
+    ),
+    (
+        "crates/symvault-cli/src/update_commands.rs",
+        "BUILD_FROM_SOURCE => \"Rebuild from source: git pull && go build ./cmd/symvault\",",
+    ),
     // A recorded argv the Rust test asserts verbatim (frozen fixture data, never executed).
-    "assert_eq!(command, [\"go\", \"run\", \"<fixture-child-go-source>\"]);",
-    // fixtures_verify.py: names of the blobs excluded from the frozen source digest; read from
-    // git objects, never from the working tree.
-    "MODULE_FILES = (\"go.mod\", \"go.sum\")",
+    (
+        "crates/symvault-mcp/tests/execute_with_secret_contract.rs",
+        "assert_eq!(command, [\"go\", \"run\", \"<fixture-child-go-source>\"]);",
+    ),
+    // The replay harness (`go_oracle::output`) intercepts a command whose program is the recorded oracle path; these
+    // `Command` values are built for that interception and never spawn a Go binary.
+    (
+        "crates/symvault-cli/tests/audit_export_commands.rs",
+        "Command::new(go)",
+    ),
+    (
+        "crates/symvault-cli/tests/mcp_set_auth_method_differential.rs",
+        "let mut init = Command::new(go);",
+    ),
+    (
+        "crates/symvault-cli/tests/setup_wizard_differential.rs",
+        "let output = Command::new(go)",
+    ),
+    // value-gate compares against a release binary of the previous Go version that the operator supplies; no Go
+    // toolchain or source is involved.
+    (
+        "Makefile",
+        "@test -n \"$(GO_BIN)\" || { echo \"value-gate: set GO_BIN=<Go release binary> (RUST_BIN defaults to $(RUST_BIN))\" >&2; exit 2; }",
+    ),
+    (
+        "Makefile",
+        "python3 -B scripts/rust-port/valuegate.py measure --go \"$(GO_BIN)\" --rust \"$(RUST_BIN)\" --out \"$(VALUE_GATE_OUT)\" $(VALUE_GATE_FLAGS)",
+    ),
+    // Names of the blobs excluded from the frozen source digest; read from git objects, never from the working tree.
+    (
+        "scripts/rust-port/fixtures_verify.py",
+        "MODULE_FILES = (\"go.mod\", \"go.sum\")",
+    ),
+    (
+        "scripts/rust-port/frozen_generator_replay.py",
+        "MODULE_FILES = (\"go.mod\", \"go.sum\")",
+    ),
+    (
+        "scripts/rust-port/mcp_authz_matrix.py",
+        "MODULE_FILES = (\"go.mod\", \"go.sum\")",
+    ),
 ];
+
+fn line_allowed(relative: &str, line: &str) -> bool {
+    LINE_ALLOW
+        .iter()
+        .any(|(file, allowed)| *file == relative && line.trim() == *allowed)
+}
 
 /// Scan roots: directories (recursive) and single files.
 const ROOTS: [&str; 4] = ["crates", "scripts", ".github", "Makefile"];
@@ -128,7 +184,18 @@ const GO_VERBS: [&str; 14] = [
     "get", "work", "fmt",
 ];
 
-/// Argv/list form: `['go', 'build'`, `["go","test"`, `[go, 'env'`, `(go, "run"`.
+/// Names a Go binary is held in when it is not spelled as the quoted string `go`: `go`, `GO` and the usual
+/// `*_bin|binary|exe|cli|path` forms in either case.
+fn go_binary_name(token: &str) -> bool {
+    let lower = token.to_ascii_lowercase();
+    matches!(
+        lower.as_str(),
+        "go" | "gobin" | "go_bin" | "go_binary" | "go_exe" | "go_cli" | "go_path" | "go_cmd"
+    )
+}
+
+/// Argv/list form: `['go', 'build'`, `[\"go\",\"test\"`, `[go, 'env'`, `(go, \"run\"`, `[GO, \"build\"`,
+/// `[GO_BIN, 'test'`.
 fn go_argv(line: &str) -> bool {
     let bytes = line.as_bytes();
     let skip = |mut at: usize| {
@@ -137,33 +204,28 @@ fn go_argv(line: &str) -> bool {
         }
         at
     };
-    line.match_indices("go").any(|(at, _)| {
-        // The token must be exactly `go`, optionally quoted, opening a list.
-        let (quoted, start) = match at.checked_sub(1).map(|i| bytes[i]) {
-            Some(q @ (b'\'' | b'"')) => (Some(q), at - 1),
-            Some(b) if is_word(b) || b == b'.' || b == b'/' || b == b'-' => return false,
-            _ => (None, at),
-        };
-        let mut end = at + 2;
-        if let Some(q) = quoted {
-            if bytes.get(end) != Some(&q) {
-                return false;
+    bytes.iter().enumerate().any(|(open, byte)| {
+        if !matches!(byte, b'[' | b'(') {
+            return false;
+        }
+        // The first element: a quoted `go`, or an identifier naming the Go binary.
+        let start = skip(open + 1);
+        let end = match bytes.get(start) {
+            Some(q @ (b'\'' | b'"')) => {
+                if !line[start + 1..].starts_with("go") || bytes.get(start + 3) != Some(q) {
+                    return false;
+                }
+                start + 4
             }
-            end += 1;
-        } else if bytes
-            .get(end)
-            .is_some_and(|b| is_word(*b) || *b == b'-' || *b == b'.')
-        {
-            return false;
-        }
-        // Preceded by `[` or `(` (after blanks), followed by `,`.
-        let mut before = start;
-        while before > 0 && bytes[before - 1] == b' ' {
-            before -= 1;
-        }
-        if !matches!(before.checked_sub(1).map(|i| bytes[i]), Some(b'[' | b'(')) {
-            return false;
-        }
+            Some(b) if is_word(*b) => {
+                let run = bytes[start..].iter().take_while(|b| is_word(**b)).count();
+                if !go_binary_name(&line[start..start + run]) {
+                    return false;
+                }
+                start + run
+            }
+            _ => return false,
+        };
         let next = skip(end);
         if bytes.get(next) != Some(&b',') {
             return false;
@@ -177,6 +239,101 @@ fn go_argv(line: &str) -> bool {
             .iter()
             .any(|verb| word.starts_with(verb) && word.as_bytes().get(verb.len()) == Some(&q))
     })
+}
+
+/// `Command::new("go"`, `Command::new(&go`, `Command::new(go)`, `Command::new(go_bin)`: a Go binary spawned from
+/// a literal or from a variable named `go` / `go_*`.
+fn go_command(line: &str) -> bool {
+    line.match_indices("Command::new(").any(|(at, _)| {
+        let rest = line[at + "Command::new(".len()..].trim_start_matches(['&', ' ']);
+        if rest.starts_with("\"go\"") {
+            return true;
+        }
+        let run = rest.bytes().take_while(|b| is_word(*b)).count();
+        let name = &rest[..run];
+        name == "go" || (name.starts_with("go_") && go_binary_name(name))
+    })
+}
+
+/// An absolute or relative path to the Go executable: `/usr/local/go/bin/go`, `$HOME/sdk/go1.26/bin/go`,
+/// `.../bin/go.exe`. `/bin/gofmt`, `/bin/go-task` and `/bin/good` are other programs.
+fn go_executable_path(line: &str) -> bool {
+    line.match_indices("/bin/go").any(|(at, _)| {
+        let rest = &line[at + "/bin/go".len()..];
+        match rest.bytes().next() {
+            None => true,
+            Some(b'.') => {
+                rest.starts_with(".exe") && !rest.as_bytes().get(4).is_some_and(|b| is_word(*b))
+            }
+            Some(b) => !is_word(b) && b != b'-',
+        }
+    })
+}
+
+/// `shutil.which('go')`, `which("go")`, `which(['go']`: looking the Go toolchain up on `PATH`.
+fn go_lookup(line: &str) -> bool {
+    line.match_indices("which(").any(|(at, _)| {
+        let rest = line[at + "which(".len()..].trim_start_matches(['[', ' ']);
+        rest.starts_with("'go'") || rest.starts_with("\"go\"")
+    })
+}
+
+/// `exec go` (a shell handing its process over to the Go tool).
+fn exec_go(line: &str) -> bool {
+    let bytes = line.as_bytes();
+    line.match_indices("exec go").any(|(at, _)| {
+        let before = at.checked_sub(1).map(|i| bytes[i]);
+        let after = bytes.get(at + "exec go".len()).copied();
+        !before.is_some_and(|b| is_word(b) || b == b'-')
+            && !after.is_some_and(|b| is_word(b) || b == b'-' || b == b'.')
+    })
+}
+
+/// A Makefile (or shell) reference to the Go toolchain: `$(GO)`, `${GO}`, `$(AREA_GO)`, `$(AREA_HTTP_GO)`,
+/// `$(GO_TOOLCHAIN)`, `$(GOROOT)`. A name qualifies when one of its `_` segments is exactly `GO`, or when it is
+/// one of Go's own environment names. `$(GOOD)`, `$(CARGO)` and `$(MONGO)` do not.
+fn go_make_variable(line: &str) -> bool {
+    // GOOS / GOARCH are release-asset naming (target triples), not the toolchain, and stay allowed.
+    const GO_ENV: [&str; 9] = [
+        "GOROOT",
+        "GOPATH",
+        "GOFLAGS",
+        "GOCACHE",
+        "GOMODCACHE",
+        "GOBIN",
+        "GOWORK",
+        "GOPROXY",
+        "GOENV",
+    ];
+    line.match_indices("$").any(|(at, _)| {
+        let rest = &line[at + 1..];
+        let (open, close) = match rest.bytes().next() {
+            Some(b'(') => ('(', ')'),
+            Some(b'{') => ('{', '}'),
+            _ => return false,
+        };
+        let inner = &rest[open.len_utf8()..];
+        let Some(end) = inner.find(close) else {
+            return false;
+        };
+        let name = &inner[..end];
+        !name.is_empty()
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+            && (name.split('_').any(|segment| segment == "GO") || GO_ENV.contains(&name))
+    })
+}
+
+/// A Makefile recipe line (starts with a tab) whose command is `go`, with the `@`/`-`/`+` markers stripped:
+/// `\t@go \\`, `\tgo`. Anything after `go` may sit on a continuation line.
+fn go_recipe_start(line: &str) -> bool {
+    let Some(body) = line.strip_prefix('\t') else {
+        return false;
+    };
+    let body = body.trim_start_matches(['@', '-', '+', ' ']);
+    body.strip_prefix("go")
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '\t', '\\']))
 }
 
 /// The oracle build harness: `import oracle_build`, `from oracle_build`,
@@ -231,16 +388,18 @@ fn matches(line: &str) -> Vec<&'static str> {
     check("SYMVAULT_GO_ORACLE", line.contains("SYMVAULT_GO_ORACLE"));
     check("*REQUIRE_GO_ORACLE", line.contains("REQUIRE_GO_ORACLE"));
     check("GOTOOLCHAIN", line.contains("GOTOOLCHAIN"));
-    check(
-        "Command::new(go)",
-        line.contains("Command::new(\"go\"") || line.contains("Command::new(&go"),
-    );
+    check("Command::new(go)", go_command(line));
     check("setup-go", line.contains("setup-go"));
     check("go build|test|run|vet|install", go_subcommand(line));
     check("golangci", line.contains("golangci"));
     check("govulncheck", line.contains("govulncheck"));
     check("skipping Go", line.contains("skipping Go"));
     check("go argv list", go_argv(line));
+    check("go executable path", go_executable_path(line));
+    check("go PATH lookup", go_lookup(line));
+    check("exec go", exec_go(line));
+    check("go make variable", go_make_variable(line));
+    check("go recipe line", go_recipe_start(line));
     check("go_compiler", line.contains("go_compiler"));
     check("pinned_go(", line.contains("pinned_go("));
     check("oracle_build", oracle_build(line));
@@ -287,7 +446,7 @@ fn scan_file(path: &Path, root: &Path, hits: &mut Hits, scanned: &mut usize) {
     };
     *scanned += 1;
     for (number, line) in text.lines().enumerate() {
-        if LINE_ALLOW.iter().any(|allowed| line.contains(allowed)) {
+        if line_allowed(&relative, line) {
             continue;
         }
         let comment = {
@@ -411,6 +570,36 @@ fn matcher_semantics_fire_on_references_and_not_on_lookalikes() {
         ("GOTOOLCHAIN=go1.26.6", "GOTOOLCHAIN"),
         ("Command::new(\"go\")", "Command::new(go)"),
         ("Command::new(&go)", "Command::new(go)"),
+        (
+            "let out = Command::new(go).arg(\"version\");",
+            "Command::new(go)",
+        ),
+        ("Command::new(go_bin).arg(\"build\")", "Command::new(go)"),
+        ("Command::new( &go_cli )", "Command::new(go)"),
+        ("let go = \"/usr/local/go/bin/go\";", "go executable path"),
+        ("GO=$(HOME)/sdk/go1.26.6/bin/go", "go executable path"),
+        (
+            "p = Path('/opt/toolchain/bin/go.exe')",
+            "go executable path",
+        ),
+        ("checked([GO, \"build\", \"-o\", out])", "go argv list"),
+        ("run([GO_BIN, 'test', './...'])", "go argv list"),
+        ("run((go_path, \"vet\"))", "go argv list"),
+        ("go = shutil.which('go')", "go PATH lookup"),
+        ("if shutil.which([\"go\"]):", "go PATH lookup"),
+        ("exec go \"$@\"", "exec go"),
+        ("  exec go", "exec go"),
+        ("\t$(GO) generate ./...", "go make variable"),
+        (
+            "\t@$(AREA_GO) $(AREA_ORACLE) python3 x.py",
+            "go make variable",
+        ),
+        ("\t$(AREA_HTTP_GO) $(PY)", "go make variable"),
+        ("TOOLCHAIN := ${GO_TOOLCHAIN}", "go make variable"),
+        ("\tGOROOT=$(GOROOT) make x", "go make variable"),
+        ("\t@go \\", "go recipe line"),
+        ("\tgo", "go recipe line"),
+        ("\t-go \\", "go recipe line"),
         ("uses: actions/setup-go@v5", "setup-go"),
         ("\tgo build ./...", "go build|test|run|vet|install"),
         ("run: go test ./...", "go build|test|run|vet|install"),
@@ -487,6 +676,36 @@ fn matcher_semantics_fire_on_references_and_not_on_lookalikes() {
         "crates/symvault-core/src/internal/mod.rs",
         "README for cmd/",
         "- 'scripts/rust-port/oracle_build.py'",
+        "Command::new(good)",
+        "Command::new(gopher)",
+        "Command::new(go_to_rust)",
+        "Command::new(\"gofmt-check\")",
+        "let p = \"/usr/local/go/bin/gofmt\";",
+        "/usr/bin/go-task run",
+        "/usr/bin/good",
+        "/bin/gold",
+        "cp x /usr/bin/go_to",
+        "x = [GOLD, 'build']",
+        "x = ['GO_TO', \"build\"]",
+        "x = [GO, \"builder\"]",
+        "x = (go_tests, 'run')",
+        "y = shutil.which('gofmt')",
+        "y = shutil.which('cargo')",
+        "which(good)",
+        "exec good",
+        "exec gofmt",
+        "exec cargo",
+        "regexec go",
+        "\t$(GOOD) x",
+        "\t$(CARGO) test",
+        "\t$(MONGO) x",
+        "\t$(CARGO_TARGET_DIR)/debug",
+        "X := $(ARGO_X)",
+        "\t$(GOLDEN_FILE)",
+        "\t@gofmt -l .",
+        "\t@good \\",
+        "\tgo-task x",
+        "    go to the next section",
     ];
     for line in quiet {
         assert!(
@@ -548,10 +767,66 @@ fn scanner_detects_planted_references_in_every_scan_root_kind() {
             ".github/workflows/ci.yml:2: setup-go",
             ".github/workflows/ci.yml:3: golangci",
             "Makefile:2: go build|test|run|vet|install",
+            "Makefile:2: go recipe line",
             "crates/x.rs:1: SYMVAULT_*GO_BINARY",
             "scripts/rust-port/argv.py:1: go argv list",
             "scripts/rust-port/argv.py:2: go argv list",
             "scripts/rust-port/argv.py:3: go.mod|go.sum",
         ]
     );
+}
+
+/// The line allowance is per file and per whole trimmed line: it cannot hide a second reference that shares a line
+/// with an allowed string.
+#[test]
+fn line_allow_is_exact_per_file_and_does_not_hide_a_second_reference() {
+    let (file, allowed) = LINE_ALLOW[0];
+    assert!(line_allowed(file, allowed));
+    assert!(line_allowed(file, &format!("        {allowed}   ")));
+    assert!(
+        !line_allowed("scripts/x.py", allowed),
+        "allowed only in its own file"
+    );
+    assert!(!line_allowed(file, &format!("{allowed} // more")));
+    let planted = r#"Command::new("go").arg("build"); // go install github.com/danieljustus/symaira-vault@latest"#;
+    assert!(!line_allowed(file, planted));
+    assert!(
+        matches(planted).contains(&"Command::new(go)"),
+        "{:?}",
+        matches(planted)
+    );
+    // The same planted line is reported by a scan of the allowed file itself.
+    let dir = std::env::temp_dir().join(format!("no-go-oracle-line-allow-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let source = dir.join(file);
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, format!("{allowed}\n{planted}\n")).unwrap();
+    let mut hits = Hits::new();
+    let mut scanned = 0;
+    scan(&dir.join("crates"), &dir, &mut hits, &mut scanned);
+    fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(scanned, 1);
+    let lines: Vec<&String> = hits.get(file).into_iter().flatten().collect();
+    assert!(
+        lines.iter().all(|l| l.starts_with("2:"))
+            && lines.iter().any(|l| l.ends_with("Command::new(go)")),
+        "only the planted line 2 is reported: {lines:?}"
+    );
+}
+
+/// Every allowed line still exists verbatim in its file (a stale entry must be removed).
+#[test]
+fn line_allow_entries_exist_verbatim() {
+    let root = repo_root();
+    for (file, allowed) in LINE_ALLOW {
+        let text = fs::read_to_string(root.join(file)).unwrap_or_else(|e| panic!("{file}: {e}"));
+        assert!(
+            text.lines().any(|line| line.trim() == allowed),
+            "stale LINE_ALLOW entry for {file}: {allowed}"
+        );
+        assert!(
+            !matches(allowed).is_empty(),
+            "{file}: entry no longer needs its exemption: {allowed}"
+        );
+    }
 }
