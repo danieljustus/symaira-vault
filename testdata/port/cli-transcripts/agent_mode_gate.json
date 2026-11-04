@@ -16698,6 +16698,652 @@
         }
       ]
     },
+    "agent_gate_non_utf8_agent_and_profile_names_match_nothing": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "50b317029c18431af55417f5584ef21810912d98df204c860c5937ef73cf05c5",
+          "request": {
+            "args": [
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha�",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"alpha\\xff\" not found in config: agent \"alpha\\xff\" not found in config\nError: agent mode: agent \"alpha\\xff\" not found in config: agent \"alpha\\xff\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a364090ff65a90c23e2aac8b9ba542c09ea33b2a359fde807b60fdc43f00026a",
+          "request": {
+            "args": [
+              "get",
+              "x"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha�",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "audit-alpha�.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            }
+          ]
+        },
+        {
+          "key": "0b36f3825af864f1ee472b6b6527159ee843be98385ca8ede2e58bb5a6d3f920",
+          "request": {
+            "args": [
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "�",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"\\xff\" not found in config: agent \"\\xff\" not found in config\nError: agent mode: agent \"\\xff\" not found in config: agent \"\\xff\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "546b2eda8c130d3afe857a505d7e85d74840e83b0b68cf937b9bb070fb918fca",
+          "request": {
+            "args": [
+              "find",
+              "x"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "al�pha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"al\\xffpha\" not found in config: agent \"al\\xffpha\" not found in config\nError: agent mode: agent \"al\\xffpha\" not found in config: agent \"al\\xffpha\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9490465144e385a57e2028072d64c95bf2e9a766dcbf9e5abc031f6ac299a453",
+          "request": {
+            "args": [
+              "version"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha�",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "symvault dev\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b25916a1ce7284d5a5af9bfac99dd6e8d340011996431278d9ed43f7b91ad0fa",
+          "request": {
+            "args": [
+              "list",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha�",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "List password entries\n\nUsage:\n  symvault list [prefix] [flags]\n\nAliases:\n  list, ls\n\nExamples:\n  # List all entries\n  symvault list\n\n  # List entries under \"work/\" prefix\n  symvault list work/\n\n  # JSON output\n  symvault list --output json\n\nFlags:\n  -h, --help   help for list\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "87679d7c2dd3cc1c8a5bfa8cb79a6565636199ad3f8109b2dd9a511160d0009e",
+          "request": {
+            "args": [
+              "list",
+              "--vault",
+              "<ROOT:0>/missing"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha�",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:0>/missing/config.yaml: open <ROOT:0>/missing/config.yaml: no such file or directory: load config from <ROOT:0>/missing/config.yaml: open <ROOT:0>/missing/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:0>/missing/config.yaml: open <ROOT:0>/missing/config.yaml: no such file or directory: load config from <ROOT:0>/missing/config.yaml: open <ROOT:0>/missing/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "294b30b53d48853e791b775fcd61605ecc3b005f5ecaea06efecad636b872845",
+          "request": {
+            "args": [
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": "p�",
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: resolve profile: cannot load config: open <ROOT:1>/config/symaira-vault/config.yaml: no such file or directory\nError: resolve profile: cannot load config: open <ROOT:1>/config/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "67fd984791dcd06317b5b8b1473f1e56a7b77059a6bfd326286cb110747d341e",
+          "request": {
+            "args": [
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha�",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": "p�",
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: resolve profile: cannot load config: open <ROOT:1>/config/symaira-vault/config.yaml: no such file or directory\nError: resolve profile: cannot load config: open <ROOT:1>/config/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f20385e73fa66a50561a94d3f3e8486a44bcd31662bc190f04ae21307d5f4c4d",
+          "request": {
+            "args": [
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": "p�",
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: resolve profile: cannot load config: open <ROOT:1>/config/symaira-vault/config.yaml: no such file or directory\nError: resolve profile: cannot load config: open <ROOT:1>/config/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "294b30b53d48853e791b775fcd61605ecc3b005f5ecaea06efecad636b872845",
+          "request": {
+            "args": [
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": "p�",
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: resolve profile: profile \"p\\xff\" not found\nError: resolve profile: profile \"p\\xff\" not found\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4414fc31165510734d045a783808ecf4e238406dd7147613af6c80683f77f17f",
+          "request": {
+            "args": [
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": " p� ",
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: resolve profile: profile \"p\\xff\" not found\nError: resolve profile: profile \"p\\xff\" not found\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f20385e73fa66a50561a94d3f3e8486a44bcd31662bc190f04ae21307d5f4c4d",
+          "request": {
+            "args": [
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": "p�",
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: resolve profile: profile \"p\\xff\" not found\nError: resolve profile: profile \"p\\xff\" not found\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9b61b5d4d87bf9b45061fbe969a90123cb8549448bda1085e5a0fdf6f02771d9",
+          "request": {
+            "args": [
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": " p� ",
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: resolve profile: profile \"p\\xff\" not found\nError: resolve profile: profile \"p\\xff\" not found\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "792ae4d0b9c6a88856d1ed83ad1d942a4d70cb6b2717d3bc8f007e146dad2ac7",
+          "request": {
+            "args": [
+              "version"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": "p�",
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "symvault dev\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "374b9eca218e9de406b957c7ca49315a5f19a04857c935378c98e548b5013097",
+          "request": {
+            "args": [
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": "p�",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "audit-alpha.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            }
+          ]
+        },
+        {
+          "key": "e8e99bd2f9524a782673d14c4b8c5186c3d0452c1511a94c7181ed5a4860593f",
+          "request": {
+            "args": [
+              "list",
+              "--vault",
+              "<ROOT:0>"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": "p�",
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7cd28b5130d2b87392b7e206c650fad74291b5497bcc2bdf87e6381b908fb208",
+          "request": {
+            "args": [
+              "list",
+              "--profile",
+              "p"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": "p�",
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
     "agent_gate_ordering_flags_and_output_modes": {
       "seeds": [],
       "calls": [

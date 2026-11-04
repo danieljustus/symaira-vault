@@ -77,6 +77,38 @@ pub fn quote_go_string(value: &str) -> String {
     symvault_core::go_quote(value)
 }
 
+/// Go `%q` of bytes that may not be UTF-8 (an environment value): each invalid
+/// byte is written `\xNN`, where Go prints the byte and not U+FFFD.
+pub fn quote_go_bytes(bytes: &[u8]) -> String {
+    let mut quoted = String::from("\"");
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        match std::str::from_utf8(rest) {
+            Ok(valid) => {
+                quoted.push_str(&inner_quote(valid));
+                break;
+            }
+            Err(error) => {
+                let (valid, tail) = rest.split_at(error.valid_up_to());
+                quoted.push_str(&inner_quote(std::str::from_utf8(valid).unwrap_or_default()));
+                let bad = error.error_len().unwrap_or(tail.len());
+                for byte in &tail[..bad] {
+                    quoted.push_str(&format!("\\x{byte:02x}"));
+                }
+                rest = &tail[bad..];
+            }
+        }
+    }
+    quoted.push('"');
+    quoted
+}
+
+/// [`quote_go_string`] without the surrounding quotes.
+fn inner_quote(value: &str) -> String {
+    let quoted = quote_go_string(value);
+    quoted[1..quoted.len() - 1].to_owned()
+}
+
 pub fn children(command: &Command) -> impl Iterator<Item = &'static Command> {
     let prefix = format!("{} ", command.path);
     DATA.commands.iter().filter(move |c| {
@@ -255,7 +287,19 @@ fn unknown_first_command(args: &[std::ffi::OsString]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{root, strip_flags};
+    use super::{quote_go_bytes, root, strip_flags};
+
+    #[test]
+    fn go_quote_of_bytes_writes_each_invalid_byte_as_hex() {
+        assert_eq!(quote_go_bytes(b"alpha"), "\"alpha\"");
+        assert_eq!(quote_go_bytes(b"alpha\xff"), "\"alpha\\xff\"");
+        assert_eq!(quote_go_bytes(b"a\xe2\x82b\"\n"), "\"a\\xe2\\x82b\\\"\\n\"");
+        assert_eq!(
+            quote_go_bytes("alpha\u{FFFD}".as_bytes()),
+            "\"alpha\u{FFFD}\""
+        );
+        assert_eq!(quote_go_bytes(b"\xf0\x9f"), "\"\\xf0\\x9f\"");
+    }
 
     /// cobra's `stripFlags` with the help flag still unknown: a bare `-h` / `--help`
     /// takes exactly the next word, the empty string is no command, `--` ends it.
