@@ -157,7 +157,7 @@ impl Observations {
             let recording = load(file).unwrap_or_else(|| {
                 panic!(
                     "go_oracle_ext: recording {} is missing; run the capture against the \
-                     pinned Go oracle (scripts/rust-port/capture_cli_b.sh)",
+                     pinned Go oracle (docs/rust-port/go-oracle-archive.md, \"Recapture\")",
                     path_of(file).display()
                 )
             });
