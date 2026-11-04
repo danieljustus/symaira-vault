@@ -55,11 +55,13 @@ MANIFEST = "testdata/port/FROZEN.sha256"
 ORACLE_MANIFEST = "testdata/port/FROZEN.oracle.json"
 
 # The frozen set.  Relative to the repository root, '**' recurses.
+# "dir/**/*", not "dir/**": before Python 3.13 a trailing "**" matches only
+# directories, so the linux gate container (3.12) would see no frozen files.
 FROZEN_GLOBS = [
-    "testdata/**",  # incl. testdata/port/**, testdata/importer/**
-    "crates/*/tests/fixtures/**",
-    "crates/symvault-mcp/testdata/**",
-    "scripts/rust-port/fixtures/**",
+    "testdata/**/*",  # incl. testdata/port/**, testdata/importer/**
+    "crates/*/tests/fixtures/**/*",
+    "crates/symvault-mcp/testdata/**/*",
+    "scripts/rust-port/fixtures/**/*",
     "scripts/rust-port/*.go.txt",  # frozen detached Go oracle programs
 ]
 IGNORED_NAMES = {".DS_Store"}
