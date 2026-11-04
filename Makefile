@@ -2275,7 +2275,7 @@ GO_OBS_HELPER_HTTP := $(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-po
 .PHONY: go-attest-other
 go-observations-capture-other: go-observations-capture-other-tests
 go-observations-capture-other-tests:
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/mcp_authz_matrix.py --capture-go
+	$(AREA_ENV) $(AREA_HTTP_GO) python3 scripts/rust-port/mcp_authz_matrix.py --capture-go
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py capture update
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py capture kdf-policy
 	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) scripts/rust-port/frozen_generator_replay.py capture read-policy

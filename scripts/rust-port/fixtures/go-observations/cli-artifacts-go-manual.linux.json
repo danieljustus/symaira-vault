@@ -1,0 +1,36 @@
+{
+  "args": [
+    "go",
+    "test",
+    "./internal/manpages",
+    "./scripts/rust-port/cmd/portgen",
+    "-count=1",
+    "-v"
+  ],
+  "contract": "cli-artifacts-go-manual",
+  "go_version": "go1.26.10",
+  "goarch": "arm64",
+  "goos": "linux",
+  "observations": {
+    "lines": [
+      "--- PASS: TestBuildDocumentCapturesCriticalContracts (0.00s)",
+      "--- PASS: TestBuildDocumentIsDeterministic (0.00s)",
+      "--- PASS: TestManpageLiteralText (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored/SYMVAULTLITERALCONFIGPATH (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored/a![b](c)d (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored/a&amp;b (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored/a<b>c (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored/a[b](c)d (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored/a_.PS__\\x1b (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored/a__b__c (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored/a`b`c (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored/ordinary (0.00s)",
+      "--- PASS: TestManualConfigPathIsLiteralAndDescriptionsAreRestored/s__b0nk_ (0.00s)",
+      "--- PASS: TestManualLiteralPathDoesNotRewriteOtherDescriptions (0.00s)",
+      "--- PASS: TestReadDocumentRejectsUnknownSchema (0.00s)"
+    ]
+  },
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "schema": 1
+}

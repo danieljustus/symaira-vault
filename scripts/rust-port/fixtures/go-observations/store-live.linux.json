@@ -1,0 +1,341 @@
+{
+  "args": [
+    "go",
+    "test",
+    "./internal/vault",
+    "-run",
+    "^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance|TestEncryptedIndexBuildEmptyGoRust)$",
+    "-count=1",
+    "-timeout=15m",
+    "-json"
+  ],
+  "contract": "store-live",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "linux",
+  "observations": {
+    "events": [
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/backup_codes_lines/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/backup_codes_lines/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/backup_codes_padded/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/backup_codes_padded/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/backup_codes_structured/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/backup_codes_structured/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/backup_codes_whitespace/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/backup_codes_whitespace/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/empty_string/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/empty_string/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/empty_vault/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/empty_vault/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/explicit_null/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/explicit_null/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/mixed_entries/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/mixed_entries/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/nested_backup_codes/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/nested_backup_codes/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/nested_empty/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/nested_empty/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/nested_string/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/nested_string/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/non_strings/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/non_strings/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/omitted_value/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/omitted_value/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/whitespace_string/absent_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexBuildEmptyGoRust/whitespace_string/existing_index"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEncryptedIndexGoRustLiveAcceptance"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance/go-single_write_pseudonym_false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance/go-single_write_pseudonym_true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance/go_invalid_recipient_unchanged"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance/go_write_pseudonym_false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance/go_write_pseudonym_true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance/rust-single_write_pseudonym_false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance/rust-single_write_pseudonym_true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance/rust_invalid_recipient_unchanged"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance/rust_write_pseudonym_false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestEntryWriterGoRustLiveAcceptance/rust_write_pseudonym_true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/DELETE-MANIFEST-001/pseudonymize=false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/DELETE-MANIFEST-001/pseudonymize=true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-BOUNDARY-UPDATE-REMOVE-001/pseudonymize=false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-BOUNDARY-UPDATE-REMOVE-001/pseudonymize=true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-BOUNDARY-UPDATE-REMOVE-002/pseudonymize=false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-BOUNDARY-UPDATE-REMOVE-002/pseudonymize=true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-GENERATION-I64MAX-001/pseudonymize=false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-GENERATION-I64MAX-001/pseudonymize=true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-MALFORMED-001/pseudonymize=false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-MALFORMED-001/pseudonymize=true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-MALFORMED-002/pseudonymize=false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-MALFORMED-002/pseudonymize=true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-MISSING-001/pseudonymize=false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-MISSING-001/pseudonymize=true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-MISSING-002/pseudonymize=false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/MANIFEST-MISSING-002/pseudonymize=true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/WRITE-MANIFEST-001/pseudonymize=false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/WRITE-MANIFEST-001/pseudonymize=true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/WRITE-MANIFEST-002/pseudonymize=false"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceGoRustDifferential/WRITE-MANIFEST-002/pseudonymize=true"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestManifestSequenceJSONTransportControls"
+      }
+    ]
+  },
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "schema": 1
+}

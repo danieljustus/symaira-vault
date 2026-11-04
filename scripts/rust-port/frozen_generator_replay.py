@@ -155,6 +155,9 @@ def update_files():
 
 def update_capture():
     env = dict(os.environ, GOWORK="off")
+    # `go list -m -json` (inside the generator) reports the module directory only once the module is in the
+    # module cache, which a fresh Linux GOMODCACHE lacks; the generator itself is hashed into the fixtures.
+    subprocess.run(["go", "mod", "download", "github.com/danieljustus/symaira-corekit@v0.18.2"], cwd=ROOT, env=env, check=True)
     subprocess.run([sys.executable, str(HERE / "refresh-update-fixtures.py"), "--commit", UPDATE_COMMIT, "--check"],
                    cwd=ROOT, env=env, check=True)
     return {"fixtures": {f: sha256(f) for f in update_files()}, "commit": UPDATE_COMMIT}, UPDATE_COMMIT

@@ -1,0 +1,22 @@
+{
+  "args": [
+    "go",
+    "run",
+    "./scripts/rust-port/cmd/portgen",
+    "--check",
+    "--output",
+    "testdata/port/cli/command-tree.json"
+  ],
+  "contract": "cli-artifacts-port-fixture",
+  "go_version": "go1.26.10",
+  "goarch": "arm64",
+  "goos": "linux",
+  "observations": {
+    "check_exit": 0,
+    "files": {
+      "testdata/port/cli/command-tree.json": "12c170475eac5f177e55498e212014a73b723c494a659b693ccb3f9038292d4a"
+    }
+  },
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "schema": 1
+}

@@ -1,0 +1,46 @@
+{
+  "args": [
+    "go",
+    "test",
+    "-race",
+    "./internal/vault",
+    "-run",
+    "^TestKDFPolicyMigration",
+    "-count=1",
+    "-json"
+  ],
+  "contract": "kdf-go-vault",
+  "go_version": "go1.26.10",
+  "goarch": "arm64",
+  "goos": "linux",
+  "observations": {
+    "events": [
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestKDFPolicyMigrationAcceptsNullVaultConfig"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestKDFPolicyMigrationRollsBackAfterConfigReplacementFailure"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestKDFPolicyMigrationVerifiesIdentityAndRetainsBothBackups"
+      },
+      {
+        "Action": "pass",
+        "Package": "github.com/danieljustus/symaira-vault/internal/vault",
+        "Test": "TestKDFPolicyMigrationWrongPassphraseAndExistingBackupLeaveFilesIntact"
+      }
+    ]
+  },
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "schema": 1
+}
