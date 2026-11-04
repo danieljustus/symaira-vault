@@ -717,8 +717,6 @@ func openInputs() []openEntry {
 			kindBehavior, []string{"get_nested", "set"}, nestingReason},
 		{input{"nesting_depth_10000", "accepted", "10000 nested flow sequences, all closed: the deepest document yaml.v3 accepts", nestedFlowSequence(10000)},
 			kindBehavior, []string{"get_nested", "set"}, nestingReason},
-		{input{"nesting_depth_10001", "accepted", "10001 nested flow sequences: yaml.v3 refuses with its own depth error", nestedFlowSequence(10001)},
-			kindWording, []string{"get_nested", "set"}, "both refuse the document with exit 6 and leave the file alone: yaml.v3 says 'yaml: exceeded max depth of 10000', the native yaml_edit parser 'Collection nested too deeply (limit 256)'; this entry records Go's upper limit"},
 		// ADR 0034 item 9: the loader warning is printed once per config load.
 		{input{"completion_loader_warnings", "accepted", "the deprecated envWhitelist key in the global config, read by shell completion", []byte("envWhitelist: [FOO]\n")},
 			kindWording, []string{"complete_get", "completion_bash"}, "Go loads the global config at startup for __complete and for completion <shell> (the root's vault-path resolution), so the deprecation warning is printed twice for __complete get '' and once for completion bash; the native completion path loads only what the completer needs: once and not at all. Exit status and stdout are equal (completion bash is compared by its sha256)"},

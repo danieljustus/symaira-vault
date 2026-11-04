@@ -123,7 +123,7 @@ const LOAD_CASES: usize = 90;
 /// each kind of scalar and how the section merge treats it.
 const SECTION_CASES: usize = 58;
 /// Inputs on which the native CLI is known to differ from Go.
-const OPEN_DIVERGENCES: usize = 35;
+const OPEN_DIVERGENCES: usize = 34;
 /// The `nest_*` cases (ADR 0034 item 6): yaml.v3's two scanner limits of 10000.
 const NEST_CASES: usize = 26;
 
@@ -1347,25 +1347,8 @@ const RATIFIED: &[Ratified] = &[
         stderr: Some(NESTING_REFUSAL),
         config_unchanged: Some(true),
     },
-    // Go's own limit: both refuse, with different wording.
-    Ratified {
-        name: "nesting_depth_10001",
-        item: "ADR 0034 item 6",
-        command: "get_nested",
-        exit_code: None,
-        stdout: None,
-        stderr: Some(NESTING_REFUSAL),
-        config_unchanged: None,
-    },
-    Ratified {
-        name: "nesting_depth_10001",
-        item: "ADR 0034 item 6",
-        command: "set",
-        exit_code: None,
-        stdout: None,
-        stderr: Some(NESTING_REFUSAL),
-        config_unchanged: None,
-    },
+    // Go's own limit (10001 levels) is no longer a divergence: the loader enforces
+    // it with Go's wording, pinned by the `nest_flow_sequence_10001` cases.
     // Item 9: shell completion loads the global config fewer times.
     Ratified {
         name: "completion_loader_warnings",
@@ -1487,7 +1470,6 @@ fn ratified_native_behaviour_of_adr_0034_items_6_and_9_is_pinned() {
     for name in [
         "nesting_depth_257",
         "nesting_depth_10000",
-        "nesting_depth_10001",
         "completion_loader_warnings",
     ] {
         let divergence = fixture
@@ -1503,13 +1485,9 @@ fn ratified_native_behaviour_of_adr_0034_items_6_and_9_is_pinned() {
             );
         }
     }
-    // Go's side of the nesting limit: 10000 levels are read and written, one
-    // more is refused by yaml.v3 itself.
-    for (name, exit) in [
-        ("nesting_depth_257", 0),
-        ("nesting_depth_10000", 0),
-        ("nesting_depth_10001", 6),
-    ] {
+    // Go's side of the nesting limit: 10000 levels are read and written (the
+    // refusal one level further is pinned by the `nest_*` cases).
+    for (name, exit) in [("nesting_depth_257", 0), ("nesting_depth_10000", 0)] {
         let divergence = fixture
             .open_divergences
             .iter()
@@ -1523,19 +1501,6 @@ fn ratified_native_behaviour_of_adr_0034_items_6_and_9_is_pinned() {
             );
         }
     }
-    let go_get_257 = fixture
-        .open_divergences
-        .iter()
-        .find(|divergence| divergence.name == "nesting_depth_10001")
-        .and_then(|divergence| divergence.observations.first())
-        .expect("10001 get");
-    assert!(
-        go_get_257
-            .stderr
-            .contains("yaml: exceeded max depth of 10000"),
-        "{}",
-        go_get_257.stderr
-    );
     let complete = fixture
         .open_divergences
         .iter()
