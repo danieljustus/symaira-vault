@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import socket
 import ssl
@@ -40,7 +41,8 @@ NORMALIZATION=['fixed loopback port','one seed vault/tokens (bulk entry included
                '(see normalize_write): body_completed_seconds=2.4, handshake elapsed=midpoint of .6..2, sent_hello_bytes=9, '
                'slow_read_calls=4, slow_received_bytes=4096, fast_drain_started_seconds=budget+4, received_chunk_bytes=declared_chunk_length-1',
                'random TLS bytes (client_hello_sha256, post_tls_error_wire), socket observations, load averages, wall-clock ns and the server pid are not stored',
-               'the Go partial response is stored truncated to its first 4096 bytes (status line, headers and the start of the chunk)']
+               'the Go partial response is stored truncated to its first 4096 bytes (status line, headers and the start of the chunk)',
+               'Go server log lines per closed/admitted connection (TLS handshake error, request without Origin header) are dropped from the stored stderr: their count races the server stop and no comparison reads them']
 TLS_OUTPUT=('tls-output','30s',ssl.TLSVersion.TLSv1_3)
 # #1470, owner decision 2026-10-24: the Go oracle's plain-TCP write deadline does not interrupt an in-flight
 # Windows send, so only that one cell is a declared platform difference. Rust stays strictly checked everywhere.
@@ -379,6 +381,11 @@ def check_write(receipt,implementation,profile,version,certificate_sha):
 PARTIAL_RESPONSE_KEEP=4096
 
 
+# Go logs these per connection it closes or admits, asynchronously with the observation: how many of them reached stderr before the
+# server was stopped varies between captures, and no comparison reads them (stderr is only checked for secrets).
+VOLATILE_STDERR=re.compile(rb'\d{4}/\d\d/\d\d \d\d:\d\d:\d\d (?:http: TLS handshake error|WARN MCP request received without Origin header)')
+
+
 def normalize_write(result,profile,budget,version):
     """Capture-time normalisation of one Go profile record (the verdict ran on the real values before)."""
     late=result['late_body']
@@ -408,6 +415,10 @@ def normalize_write(result,profile,budget,version):
             out['received_base64']=base64.b64encode(kept).decode()
             out['partial_response']=parse_response(kept)
             out['received_chunk_bytes']=out['declared_chunk_length']-1
+    for process in result['processes']:
+        if process.get('stderr_base64'):
+            raw=base64.b64decode(process['stderr_base64'])
+            process['stderr_base64']=base64.b64encode(b''.join(l for l in raw.splitlines(True) if not VOLATILE_STDERR.match(l))).decode()
     result['server_process_id']=0
     return result
 
