@@ -541,7 +541,8 @@ fn add_form_matches_the_go_oracle() {
         let (go_run, rust_run) = thread::scope(|scope| {
             let go_run = scope.spawn(|| {
                 observations.observe(scenario.name, |go| {
-                    serde_json::to_value(run_scenario(go, "go", scenario)).expect("go run json")
+                    serde_json::to_value(run_scenario(go, "go", scenario))
+                        .expect("recorded Go scenario json")
                 })
             });
             let rust_run = scope.spawn(|| run_scenario(&rust, "rust", scenario));

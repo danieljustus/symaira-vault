@@ -1,6 +1,6 @@
 //! Source-pinned byte replay of Go's early-return path for `update check`
 //! when AppVersion is not a stable semantic version. The pinned oracle is
-//! `go run .` at `ff50daf1`, with the three source files named in the fixture.
+//! the Go `main` package at `ff50daf1` (run from source), with the three source files named in the fixture.
 
 use std::path::Path;
 use std::process::{Command, Output};

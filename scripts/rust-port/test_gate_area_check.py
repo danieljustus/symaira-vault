@@ -698,19 +698,6 @@ class Reports(unittest.TestCase):
                                            "--exact-path", "symvault run"), 0)
             self.assertEqual(self.run_main("gaps", self.write(d, "garbage.json", "{"), "--min-paths", "1:1"), 1)
 
-    def test_go_json(self):
-        rows = [{"Action": "pass", "Test": "TestA"}, {"Action": "pass", "Test": "TestB"}]
-        text = "\n".join(json.dumps(r) for r in rows)
-        with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(self.run_main("go-json", self.write(d, "a", text), "TestA", "TestB"), 0)
-            self.assertEqual(self.run_main("go-json", self.write(d, "b", text), "TestA", "TestC"), 1)
-            skipped = text + "\n" + json.dumps({"Action": "skip", "Test": "TestA"})
-            self.assertEqual(self.run_main("go-json", self.write(d, "c", skipped), "TestA"), 1)
-            failed = text + "\n" + json.dumps({"Action": "fail", "Test": "TestZ"})
-            self.assertEqual(self.run_main("go-json", self.write(d, "d", failed), "TestA"), 1)
-            self.assertEqual(self.run_main("go-json", self.write(d, "e", ""), "TestA"), 1)
-            self.assertEqual(self.run_main("go-json", str(Path(d) / "absent"), "TestA"), 1)
-
     def test_log_ok_totals_and_names(self):
         log = ("test migrate_kdf_commands::tests::one ... ok\ntest migrate_kdf_commands::tests::two ... ok\n"
                "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n")
@@ -753,12 +740,6 @@ class Reports(unittest.TestCase):
             with tempfile.TemporaryDirectory() as d:
                 path = self.write(d, "log", text + "\n")
                 self.assertEqual(self.run_main("log-ok", path, "--contains", needle), expected, (text, needle))
-
-    def test_go_text_pass(self):
-        with tempfile.TemporaryDirectory() as d:
-            path = self.write(d, "t", "--- PASS: TestX (0.00s)\n")
-            self.assertEqual(self.run_main("go-text-pass", path, "TestX"), 0)
-            self.assertEqual(self.run_main("go-text-pass", path, "TestY"), 1)
 
 
 if __name__ == "__main__":

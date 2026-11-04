@@ -1,4 +1,4 @@
-//! Capture/replay harness for the Go-oracle CLI differentials.
+//! Replay harness for the Go-oracle CLI differentials.
 //!
 //! Default mode is **replay**: a call to the Go "binary" is answered from the
 //! committed transcript `testdata/port/cli-transcripts/<test file>.json`
@@ -7,8 +7,9 @@
 //! that the test no longer makes, and a missing transcript are test FAILURES,
 //! never skips.
 //!
-//! `SYMVAULT_ORACLE=capture` plus `SYMVAULT_GO_BINARY=<oracle binary>` runs the
-//! real Go binary and rewrites the transcript entries of the tests that ran.
+//! The transcripts were recorded once from the pinned Go oracle; there is no
+//! capture mode any more. Recapturing needs the archived Go tree (tag
+//! `legacy/go-oracle`, see `docs/rust-port/go-oracle-archive.md`).
 //!
 //! Temp directories differ per run, so every temp root that appears in a
 //! request is replaced by a stable `<ROOT:n>` placeholder (n = order of first
@@ -26,17 +27,13 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
     rc::Rc,
-    sync::Mutex,
 };
 
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-#[path = "operator_paths.rs"]
-mod operator_paths;
-
-/// Oracle pinned by `scripts/rust-port/check_config_cli.sh` and the Makefile.
+/// Oracle revision the config-cli transcripts were recorded from.
 pub const CONFIG_CLI_ORACLE: &str = "fca3f89401833b5e14ec4ec74ef736b0f63bca74";
 
 /// A test-supplied output normalization (see [`GoOracle::stable_under`]).
@@ -47,22 +44,7 @@ pub type Normalizer = fn(&[u8]) -> Vec<u8>;
 /// validate in another run.
 const LIVE_MARKER: &str = ".symvault-rust";
 const SENTINEL: &str = "/nonexistent/symvault-go-oracle-replay";
-const MAX_CAPTURED_FILE: u64 = 8 * 1024 * 1024;
-static TRANSCRIPT_LOCK: Mutex<()> = Mutex::new(());
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Mode {
-    Replay,
-    Capture,
-}
-
-pub fn mode() -> Mode {
-    match env::var("SYMVAULT_ORACLE").as_deref() {
-        Ok("capture") => Mode::Capture,
-        Ok("") | Err(_) => Mode::Replay,
-        Ok(other) => panic!("SYMVAULT_ORACLE={other:?} is not recognised (use `capture`)"),
-    }
-}
+const MAX_RECORDED_FILE: u64 = 8 * 1024 * 1024;
 
 /// UTF-8 text when possible, base64 otherwise.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,7 +140,7 @@ fn default_replay_platforms() -> Vec<String> {
 
 /// A frozen set-up step (typically `symvault init`, whose keys are random).
 /// Replay installs the recorded tree instead of re-running the step, so the
-/// recorded Go calls see exactly the state they were captured against.
+/// recorded Go calls see exactly the state they were recorded against.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Seed {
     pub name: String,
@@ -189,7 +171,6 @@ pub struct TestRecord {
 struct State {
     file: String,
     test: String,
-    mode: Mode,
     go_path: PathBuf,
     roots: Vec<PathBuf>,
     /// Canonical spelling of each root (equals the raw one when identical).
@@ -198,14 +179,9 @@ struct State {
     ports: Vec<String>,
     recorded: Vec<Entry>,
     consumed: Vec<bool>,
-    captured: Vec<Entry>,
-    /// Existing record (replay: the source of truth; capture: kept stable).
+    /// The recording of this test (the source of truth).
     prior: TestRecord,
     seeds_used: Vec<String>,
-    seeds_captured: Vec<Seed>,
-    /// The test's own output normalization (timestamps, key previews, ...),
-    /// used only to decide whether a recapture changed anything meaningful.
-    stable: Option<Normalizer>,
     apply_effects: bool,
 }
 
@@ -219,14 +195,9 @@ pub struct GoOracle {
 }
 
 fn transcript_path(file: &str) -> PathBuf {
-    // SYMVAULT_ORACLE_DIR redirects transcripts (capture determinism checks).
-    let dir = env::var_os("SYMVAULT_ORACLE_DIR")
-        .filter(|d| !d.is_empty())
-        .map_or_else(
-            || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/cli-transcripts"),
-            PathBuf::from,
-        );
-    dir.join(format!("{file}.json"))
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/port/cli-transcripts")
+        .join(format!("{file}.json"))
 }
 
 fn load(file: &str) -> Option<Transcript> {
@@ -280,92 +251,66 @@ fn temp_bases() -> Vec<String> {
 
 impl GoOracle {
     /// Start one test. `file` is the test file stem, `test` the test function.
-    /// `expected_commit` pins the oracle revision a capture must come from.
+    /// `expected_commit` pins the oracle revision the recording must come from.
     pub fn begin(file: &str, test: &str, expected_commit: Option<&str>) -> Self {
-        let mode = mode();
-        let (go_path, oracle, prior) = match mode {
-            Mode::Capture => {
-                // A test pinned to another revision finds its binary in
-                // SYMVAULT_GO_BINARY_<first 8 hex of the commit>.
-                let binary = expected_commit
-                    .and_then(|c| env::var_os(format!("SYMVAULT_GO_BINARY_{}", &c[..8])))
-                    .or_else(|| env::var_os("SYMVAULT_GO_BINARY"))
-                    .expect("SYMVAULT_ORACLE=capture requires SYMVAULT_GO_BINARY");
-                let binary = PathBuf::from(binary);
-                let oracle = inspect_oracle(&binary, expected_commit);
-                let prior = load(file)
-                    .and_then(|t| t.tests.get(test).cloned())
-                    .unwrap_or_default();
-                (binary, Some(oracle), prior)
-            }
-            Mode::Replay => {
-                let transcript = load(file).unwrap_or_else(|| {
-                    panic!(
-                        "go_oracle: transcript {} is missing; run the capture target against the \
-                         pinned Go oracle (make config-cli-capture)",
-                        transcript_path(file).display()
-                    )
-                });
-                let record = transcript.tests.get(test).cloned().unwrap_or_else(|| {
-                    panic!(
-                        "go_oracle: transcript {} has no entry for test `{test}`; recapture",
-                        transcript_path(file).display()
-                    )
-                });
-                if let Some(expected) = expected_commit {
-                    assert_eq!(
-                        transcript.oracle.commit, expected,
-                        "go_oracle: transcript oracle commit differs from the pinned one"
-                    );
-                }
-                let platforms = record
-                    .replay_platforms
-                    .as_ref()
-                    .unwrap_or(&transcript.replay_platforms);
-                let host = env::consts::OS;
-                assert!(
-                    platforms.iter().any(|p| p == host),
-                    "go_oracle: SKIP ({} recording) on {host}: {file}::{test} replays only on \
-                     {platforms:?}; gate the test with #[cfg_attr(not(target_os = ...), ignore = \
-                     \"SKIP (...)\")]",
-                    transcript.oracle.goos
-                );
-                note_platform(file, &transcript);
-                (PathBuf::from(SENTINEL), Some(transcript.oracle), record)
-            }
-        };
-        let recorded = if mode == Mode::Replay {
-            prior.calls.clone()
-        } else {
-            Vec::new()
-        };
+        let transcript = load(file).unwrap_or_else(|| {
+            panic!(
+                "go_oracle: transcript {} is missing; recapture it from the archived Go oracle \
+                 (tag legacy/go-oracle)",
+                transcript_path(file).display()
+            )
+        });
+        let prior = transcript.tests.get(test).cloned().unwrap_or_else(|| {
+            panic!(
+                "go_oracle: transcript {} has no entry for test `{test}`; recapture",
+                transcript_path(file).display()
+            )
+        });
+        if let Some(expected) = expected_commit {
+            assert_eq!(
+                transcript.oracle.commit, expected,
+                "go_oracle: transcript oracle commit differs from the pinned one"
+            );
+        }
+        let platforms = prior
+            .replay_platforms
+            .as_ref()
+            .unwrap_or(&transcript.replay_platforms);
+        let host = env::consts::OS;
+        assert!(
+            platforms.iter().any(|p| p == host),
+            "go_oracle: SKIP ({} recording) on {host}: {file}::{test} replays only on \
+             {platforms:?}; gate the test with #[cfg_attr(not(target_os = ...), ignore = \
+             \"SKIP (...)\")]",
+            transcript.oracle.goos
+        );
+        note_platform(file, &transcript);
+        let recorded = prior.calls.clone();
         let consumed = vec![false; recorded.len()];
         let state = Rc::new(RefCell::new(State {
             file: file.to_owned(),
             test: test.to_owned(),
-            mode,
-            go_path,
+            go_path: PathBuf::from(SENTINEL),
             roots: Vec::new(),
             real_roots: Vec::new(),
             ports: Vec::new(),
             recorded,
             consumed,
-            captured: Vec::new(),
             prior,
             seeds_used: Vec::new(),
-            seeds_captured: Vec::new(),
-            stable: None,
             apply_effects: true,
         }));
         CURRENT.with(|c| *c.borrow_mut() = Some(state.clone()));
-        Self { state, oracle }
+        Self {
+            state,
+            oracle: Some(transcript.oracle),
+        }
     }
 
-    /// Declare the test's own output normalization. Recapturing keeps the
-    /// committed entry when the new answer is equal under it.
-    pub fn stable_under(&self, normalize: Normalizer) {
-        self.state.borrow_mut().stable = Some(normalize);
-    }
+    /// Kept for call-site compatibility. A test's own output normalization
+    /// only mattered when recapturing; replay compares what Rust prints with
+    /// the recorded answer exactly.
+    pub fn stable_under(&self, _normalize: Normalizer) {}
 
     /// Path to give to `Command::new` for the Go side.
     pub fn binary(&self) -> PathBuf {
@@ -397,14 +342,14 @@ impl GoOracle {
         self.state.borrow_mut().apply_effects = apply;
     }
 
-    /// True when Go calls are answered from the transcript.
+    /// Go calls are always answered from the transcript.
     pub fn replaying(&self) -> bool {
-        self.state.borrow().mode == Mode::Replay
+        true
     }
 
-    /// Run (capture) or install (replay) one set-up step whose result is
-    /// random. `roots` are every directory the step creates or changes.
-    /// Returns the step's result when it actually ran.
+    /// Install one recorded set-up step whose result was random. `roots` are
+    /// every directory the step creates or changes. Returns `None`: the step
+    /// is never re-run (a missing recording fails the test).
     pub fn seed<R>(&self, name: &str, roots: &[&Path], setup: impl FnOnce() -> R) -> Option<R> {
         self.freeze(name, roots, setup)
     }
@@ -414,7 +359,7 @@ impl GoOracle {
     /// shape it produced are compared with the recording (exit status,
     /// normalized stdout/stderr, file set, modes, age/JSON/YAML structure),
     /// and only then the recorded state is installed so that the recorded Go
-    /// calls see exactly what they saw on capture. A Rust command that stops
+    /// calls see exactly what they saw when recorded. A Rust command that stops
     /// behaving like the recording therefore fails the test instead of being
     /// papered over by the frozen state. Returns the live output.
     pub fn seed_run(&self, name: &str, roots: &[&Path], setup: impl FnOnce() -> Output) -> Output {
@@ -448,7 +393,7 @@ impl GoOracle {
             .nth(nth)
             .cloned();
         assert!(
-            recorded.is_some() || st.mode == Mode::Capture,
+            recorded.is_some(),
             "go_oracle: {}::{} has no recorded seed `{name}`; recapture",
             st.file,
             st.test
@@ -497,37 +442,30 @@ impl GoOracle {
         };
         let mut problems = Vec::new();
         let seed = match recorded {
-            Some(mut seed) => {
+            Some(seed) => {
                 problems.extend(shape_diff(&live_ops, &seed.fs_delta));
                 if check_output {
                     match &seed.output {
                         Some(recorded_output) => {
                             problems.extend(output_diff(recorded_output, &live_output));
                         }
-                        None if st.mode == Mode::Replay => problems.push(format!(
+                        None => problems.push(format!(
                             "recording of seed `{name}` carries no command output; recapture"
                         )),
-                        None => seed.output = Some(live_output.clone()),
                     }
                 }
                 Some(seed)
             }
             None => None,
         };
-        let seed = match (st.mode, seed, problems.is_empty()) {
-            (Mode::Replay, _, false) => panic!(
+        let seed = match (seed, problems.is_empty()) {
+            (_, false) => panic!(
                 "go_oracle: {}::{} live `{name}` differs from the recording:\n  {}",
                 st.file,
                 st.test,
                 problems.join("\n  ")
             ),
-            // Recapture of a drifted set-up step: record the live state.
-            (Mode::Capture, Some(_), false) | (Mode::Capture, None, _) => Seed {
-                name: name.to_owned(),
-                fs_delta: live_ops,
-                output: check_output.then_some(live_output),
-            },
-            (_, Some(seed), true) => {
+            (Some(seed), true) => {
                 // Install the recorded state (random keys and clocks) over
                 // the live one. Directories keep their identity (the data
                 // safety marker binds to the vault's inode), live files the
@@ -564,16 +502,14 @@ impl GoOracle {
                 apply(&st, &install);
                 seed
             }
-            (Mode::Replay, None, _) => unreachable!("checked above"),
+            (None, true) => unreachable!("checked above"),
         };
+        let _ = seed;
         st.seeds_used.push(name.to_owned());
-        if st.mode == Mode::Capture {
-            st.seeds_captured.push(seed);
-        }
         output
     }
 
-    fn freeze<R>(&self, name: &str, roots: &[&Path], setup: impl FnOnce() -> R) -> Option<R> {
+    fn freeze<R>(&self, name: &str, roots: &[&Path], _setup: impl FnOnce() -> R) -> Option<R> {
         let mut st = self.state.borrow_mut();
         for root in roots {
             let text = root.to_string_lossy().into_owned();
@@ -588,59 +524,21 @@ impl GoOracle {
             .filter(|s| s.name == name)
             .nth(nth)
             .cloned();
-        if let Some(seed) = &recorded {
-            apply(&st, &seed.fs_delta);
-            st.seeds_used.push(name.to_owned());
-            if st.mode == Mode::Capture {
-                st.seeds_captured.push(seed.clone());
-            }
-            return None;
-        }
-        assert!(
-            st.mode == Mode::Capture,
-            "go_oracle: {}::{} has no recorded seed `{name}`; recapture",
-            st.file,
-            st.test
-        );
-        let tracked: Vec<(usize, PathBuf)> = roots
-            .iter()
-            .map(|r| {
-                let index = st
-                    .roots
-                    .iter()
-                    .position(|known| r.starts_with(known))
-                    .or_else(|| st.real_roots.iter().position(|real| r.starts_with(real)))
-                    .expect("seed root registered");
-                (index, st.roots[index].clone())
-            })
-            .collect();
-        let before: Vec<_> = tracked
-            .iter()
-            .map(|(_, r)| snapshot(r, GitMode::Full))
-            .collect();
-        drop(st);
-        let result = setup();
-        let mut st = self.state.borrow_mut();
-        let mut ops = Vec::new();
-        for ((index, root), before) in tracked.iter().zip(&before) {
-            ops.extend(delta(&st, *index, before, &snapshot(root, GitMode::Full)));
-        }
-        st.seeds_captured.push(Seed {
-            name: name.to_owned(),
-            fs_delta: ops,
-            output: None,
-        });
+        let Some(seed) = recorded else {
+            panic!(
+                "go_oracle: {}::{} has no recorded seed `{name}`; recapture",
+                st.file, st.test
+            );
+        };
+        apply(&st, &seed.fs_delta);
         st.seeds_used.push(name.to_owned());
-        Some(result)
+        None
     }
 
-    /// Number of Go calls answered (replay) or recorded (capture) so far.
+    /// Number of recorded Go calls answered so far.
     pub fn calls(&self) -> usize {
         let state = self.state.borrow();
-        match state.mode {
-            Mode::Replay => state.consumed.iter().filter(|c| **c).count(),
-            Mode::Capture => state.captured.len(),
-        }
+        state.consumed.iter().filter(|c| **c).count()
     }
 }
 
@@ -834,96 +732,46 @@ impl Drop for GoOracle {
             return;
         }
         let state = self.state.borrow();
-        match state.mode {
-            Mode::Replay => {
-                let unused: Vec<usize> = state
-                    .consumed
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, c)| !**c)
-                    .map(|(i, _)| i)
-                    .collect();
-                assert!(
-                    unused.is_empty(),
-                    "go_oracle: {}::{} did not replay recorded entries {unused:?} (stale \
-                     transcript; recapture)",
-                    state.file,
-                    state.test
-                );
-                assert_eq!(
-                    state.seeds_used.len(),
-                    state.prior.seeds.len(),
-                    "go_oracle: {}::{} did not install every recorded seed (stale transcript)",
-                    state.file,
-                    state.test
-                );
-                let oracle = self.oracle.as_ref().expect("oracle");
-                let _ = writeln!(
-                    std::io::stderr(),
-                    "go_oracle: replayed {} cases for {}::{} (oracle {} {} {}/{})",
-                    state.recorded.len(),
-                    state.file,
-                    state.test,
-                    &oracle.commit[..12.min(oracle.commit.len())],
-                    oracle.go_version,
-                    oracle.goos,
-                    oracle.goarch
-                );
-                assert!(
-                    !state.recorded.is_empty(),
-                    "go_oracle: {}::{} replayed zero cases",
-                    state.file,
-                    state.test
-                );
-            }
-            Mode::Capture => {
-                assert!(
-                    !state.captured.is_empty(),
-                    "go_oracle: {}::{} captured zero cases",
-                    state.file,
-                    state.test
-                );
-                write_capture(
-                    &state.file,
-                    &state.test,
-                    self.oracle.as_ref().expect("oracle"),
-                    TestRecord {
-                        seeds: state.seeds_captured.clone(),
-                        calls: state.captured.clone(),
-                        replay_platforms: state.prior.replay_platforms.clone(),
-                    },
-                );
-            }
-        }
+        let unused: Vec<usize> = state
+            .consumed
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| !**c)
+            .map(|(i, _)| i)
+            .collect();
+        assert!(
+            unused.is_empty(),
+            "go_oracle: {}::{} did not replay recorded entries {unused:?} (stale \
+             transcript; recapture)",
+            state.file,
+            state.test
+        );
+        assert_eq!(
+            state.seeds_used.len(),
+            state.prior.seeds.len(),
+            "go_oracle: {}::{} did not install every recorded seed (stale transcript)",
+            state.file,
+            state.test
+        );
+        let oracle = self.oracle.as_ref().expect("oracle");
+        let _ = writeln!(
+            std::io::stderr(),
+            "go_oracle: replayed {} cases for {}::{} (oracle {} {} {}/{})",
+            state.recorded.len(),
+            state.file,
+            state.test,
+            &oracle.commit[..12.min(oracle.commit.len())],
+            oracle.go_version,
+            oracle.goos,
+            oracle.goarch
+        );
+        assert!(
+            !state.recorded.is_empty(),
+            "go_oracle: {}::{} replayed zero cases",
+            state.file,
+            state.test
+        );
     }
-}
-
-fn write_capture(file: &str, test: &str, oracle: &Oracle, record: TestRecord) {
-    let _guard = TRANSCRIPT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let path = transcript_path(file);
-    let mut transcript = load(file).unwrap_or_else(|| Transcript {
-        schema: 1,
-        oracle: oracle.clone(),
-        platform_note: platform_note(oracle),
-        replay_platforms: vec![host_name(&oracle.goos)],
-        tests: BTreeMap::new(),
-    });
-    assert_eq!(
-        &transcript.oracle,
-        oracle,
-        "capture oracle differs from the one already recorded in {}; delete the transcript \
-         to recapture it from scratch",
-        path.display()
-    );
-    transcript.tests.insert(test.to_owned(), record);
-    operator_paths::assert_clean(
-        &format!("go_oracle: transcript {file}::{test}"),
-        &serde_json::to_value(&transcript).expect("transcript value"),
-    );
-    fs::create_dir_all(path.parent().expect("parent")).expect("transcript dir");
-    let mut text = serde_json::to_string_pretty(&transcript).expect("serialize");
-    text.push('\n');
-    fs::write(&path, text).expect("write transcript");
 }
 
 /// Masks per-invocation values (fresh age keys, token ids, wall-clock
@@ -1039,79 +887,6 @@ fn volatile_equal(stable: Option<Normalizer>, old: &[u8], new: &[u8]) -> bool {
         }
     };
     masked(old) == masked(new)
-}
-
-fn equivalent(stable: Option<Normalizer>, old: &Response, new: &Response) -> bool {
-    old == new
-        || (old.exit_code == new.exit_code
-            && old.signal == new.signal
-            && volatile_equal(stable, &old.stdout.decode(), &new.stdout.decode())
-            && volatile_equal(stable, &old.stderr.decode(), &new.stderr.decode()))
-}
-
-/// `GOOS` spelled like `std::env::consts::OS`.
-fn host_name(goos: &str) -> String {
-    if goos == "darwin" { "macos" } else { goos }.to_owned()
-}
-
-fn platform_note(oracle: &Oracle) -> String {
-    format!(
-        "recorded on {}/{}; replay on other hosts compares the live Rust binary against this \
-         recording and has not been separately verified there",
-        oracle.goos, oracle.goarch
-    )
-}
-
-fn inspect_oracle(binary: &Path, expected_commit: Option<&str>) -> Oracle {
-    let go = env::var("GO").unwrap_or_else(|_| "go".to_owned());
-    let output = Command::new(&go)
-        .args(["version", "-m"])
-        .arg(binary)
-        .env_remove("GOFLAGS")
-        .output()
-        .expect("run `go version -m` on the oracle binary");
-    assert!(
-        output.status.success(),
-        "go version -m failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let text = String::from_utf8_lossy(&output.stdout).into_owned();
-    let go_version = text
-        .lines()
-        .next()
-        .and_then(|l| l.split_whitespace().nth(1))
-        .unwrap_or_default()
-        .to_owned();
-    let setting = |key: &str| {
-        text.lines()
-            .filter_map(|l| l.trim().strip_prefix("build"))
-            .filter_map(|l| l.trim().strip_prefix(&format!("{key}=")))
-            .next()
-            .unwrap_or_default()
-            .to_owned()
-    };
-    let oracle = Oracle {
-        commit: setting("vcs.revision"),
-        go_version,
-        goos: setting("GOOS"),
-        goarch: setting("GOARCH"),
-        vcs_modified: setting("vcs.modified"),
-    };
-    assert!(
-        !oracle.commit.is_empty(),
-        "oracle binary carries no vcs.revision (build with -buildvcs=true from a clean clone)"
-    );
-    assert_eq!(
-        oracle.vcs_modified, "false",
-        "oracle binary is built from a dirty tree"
-    );
-    if let Some(expected) = expected_commit {
-        assert_eq!(
-            oracle.commit, expected,
-            "oracle binary is not the pinned commit"
-        );
-    }
-    oracle
 }
 
 // ---------------------------------------------------------------------------
@@ -1386,29 +1161,6 @@ enum GitMode {
     Full,
 }
 
-/// Snapshot taken after a Go call. A repository the call created is kept
-/// whole (it is self-consistent when replayed); for repositories that already
-/// existed only `.git/config` is tracked.
-fn snapshot_after(root: &Path, before: &BTreeMap<String, Node>) -> BTreeMap<String, Node> {
-    let existing: Vec<String> = before
-        .keys()
-        .filter_map(|k| k.strip_suffix(".git/config").map(str::to_owned))
-        .collect();
-    snapshot(root, GitMode::Full)
-        .into_iter()
-        .filter(|(path, _)| {
-            let Some(at) = path
-                .find(".git/")
-                .or_else(|| path.ends_with(".git").then(|| path.len() - 4))
-            else {
-                return true;
-            };
-            let prefix = &path[..at];
-            !existing.iter().any(|e| e == prefix) || path.ends_with(".git/config")
-        })
-        .collect()
-}
-
 fn snapshot(root: &Path, git: GitMode) -> BTreeMap<String, Node> {
     let mut map = BTreeMap::new();
     if fs::symlink_metadata(root).is_ok() {
@@ -1492,7 +1244,7 @@ fn walk(root: &Path, dir: &Path, git: GitMode, map: &mut BTreeMap<String, Node>)
             walk(root, &path, git, map);
         } else if meta.is_file() {
             assert!(
-                meta.len() <= MAX_CAPTURED_FILE,
+                meta.len() <= MAX_RECORDED_FILE,
                 "go_oracle: {} is too large to record",
                 path.display()
             );
@@ -1654,8 +1406,8 @@ fn status_parts(status: &std::process::ExitStatus) -> (Option<i32>, Option<i32>)
     }
 }
 
-/// True when `program` is the Go oracle of the running test (the recorded or
-/// captured side). Lets a test harden only the Rust side of a pair without
+/// True when `program` is the Go oracle of the running test (the recorded
+/// side). Lets a test harden only the Rust side of a pair without
 /// changing the recorded Go request keys.
 pub fn is_oracle_binary(program: &Path) -> bool {
     current().is_some_and(|state| state.borrow().go_path == program)
@@ -1667,7 +1419,7 @@ fn current() -> Option<Rc<RefCell<State>>> {
 
 /// Drop-in for `Command::output()`. Commands that do not run the Go oracle
 /// are executed normally (and their temp roots are registered so that the
-/// placeholder numbering is identical in capture and replay).
+/// placeholder numbering is the same as when the transcript was recorded).
 pub fn output(command: &mut Command) -> std::io::Result<Output> {
     output_with_input(command, None)
 }
@@ -1728,118 +1480,39 @@ pub fn output_with_input(command: &mut Command, stdin: Option<&[u8]>) -> std::io
         hex::encode(Sha256::digest(canonical))
     };
 
-    let mode = state.borrow().mode;
-    match mode {
-        Mode::Capture => {
-            let roots: Vec<(usize, PathBuf)> =
-                state.borrow().roots.iter().cloned().enumerate().collect();
-            let before: Vec<_> = roots
-                .iter()
-                .map(|(_, r)| snapshot(r, GitMode::ConfigOnly))
-                .collect();
-            let result = run_real(command, stdin)?;
-            let mut st = state.borrow_mut();
-            // Roots first mentioned by the Go process output are not tracked.
-            let mut ops = Vec::new();
-            for ((index, root), before) in roots.iter().zip(&before) {
-                ops.extend(delta(&st, *index, before, &snapshot_after(root, before)));
-            }
-            for stream in [&result.stdout, &result.stderr] {
-                let before = (st.roots.len(), st.ports.len());
-                st.scan(stream);
-                assert_eq!(
-                    (st.roots.len(), st.ports.len()),
-                    before,
-                    "go_oracle: the oracle printed a temp directory no request mentions; \
-                     call GoOracle::track / track_port on it"
-                );
-            }
-            let (exit_code, signal) = status_parts(&result.status);
-            let response = Response {
-                stdout: Bytes::encode(&st.normalize(&result.stdout)),
-                stderr: Bytes::encode(&st.normalize(&result.stderr)),
-                exit_code,
-                signal,
-            };
-            // Keep the committed entry (and its recorded effects) when the oracle
-            // still answers identically, so recapturing is byte-stable even
-            // though effects such as ciphertext are random.
-            let ordinal = st.captured.len();
-            let by_ordinal =
-                st.prior.calls.get(ordinal).is_some_and(|e| {
-                    e.request.args.len() == request.args.len()
-                        && e.request.args.iter().zip(&request.args).all(|(a, b)| {
-                            mask_volatile(a.as_bytes()) == mask_volatile(b.as_bytes())
-                        })
-                        && e.request.env == request.env
-                        && equivalent(st.stable, &e.response, &response)
-                });
-            let kept = st
-                .prior
-                .calls
-                .get(ordinal)
-                .filter(|e| e.key == key && equivalent(st.stable, &e.response, &response))
-                .or_else(|| {
-                    st.prior
-                        .calls
-                        .iter()
-                        .find(|e| e.key == key && equivalent(st.stable, &e.response, &response))
-                })
-                .or_else(|| {
-                    if by_ordinal {
-                        st.prior.calls.get(ordinal)
-                    } else {
-                        None
-                    }
-                });
-            let entry = match kept {
-                Some(prior) => prior.clone(),
-                None => Entry {
-                    key,
-                    request,
-                    response,
-                    fs_delta: ops,
-                },
-            };
-            st.captured.push(entry);
-            Ok(result)
-        }
-        Mode::Replay => {
-            let mut st = state.borrow_mut();
-            let position = st
-                .recorded
-                .iter()
-                .enumerate()
-                .position(|(i, e)| !st.consumed[i] && e.key == key);
-            let Some(position) = position else {
-                let stale = st
-                    .recorded
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, _)| !st.consumed[*i])
-                    .map(|(i, e)| format!("  #{i}: {:?}", e.request.args))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                panic!(
-                    "go_oracle: no recorded Go call for {}::{} with request {request:#?}\n\
-                     unconsumed recorded calls:\n{stale}\nrecapture with the pinned oracle \
-                     (make config-cli-capture)",
-                    st.file, st.test
-                );
-            };
-            st.consumed[position] = true;
-            let entry = st.recorded[position].clone();
-            if st.apply_effects {
-                apply(&st, &entry.fs_delta);
-            }
-            let response = &entry.response;
-            Ok(Output {
-                status: raw_status(response.exit_code, response.signal),
-                stdout: st.denormalize(&response.stdout.decode()),
-                stderr: st.denormalize(&response.stderr.decode()),
-            })
-        }
+    let mut st = state.borrow_mut();
+    let position = st
+        .recorded
+        .iter()
+        .enumerate()
+        .position(|(i, e)| !st.consumed[i] && e.key == key);
+    let Some(position) = position else {
+        let stale = st
+            .recorded
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !st.consumed[*i])
+            .map(|(i, e)| format!("  #{i}: {:?}", e.request.args))
+            .collect::<Vec<_>>()
+            .join("\n");
+        panic!(
+            "go_oracle: no recorded Go call for {}::{} with request {request:#?}\n\
+             unconsumed recorded calls:\n{stale}\nrecapture with the pinned oracle \
+             (tag legacy/go-oracle)",
+            st.file, st.test
+        );
+    };
+    st.consumed[position] = true;
+    let entry = st.recorded[position].clone();
+    if st.apply_effects {
+        apply(&st, &entry.fs_delta);
     }
+    let response = &entry.response;
+    Ok(Output {
+        status: raw_status(response.exit_code, response.signal),
+        stdout: st.denormalize(&response.stdout.decode()),
+        stderr: st.denormalize(&response.stderr.decode()),
+    })
 }
 
 fn run_real(command: &mut Command, stdin: Option<&[u8]>) -> std::io::Result<Output> {
@@ -1862,11 +1535,6 @@ fn run_real(command: &mut Command, stdin: Option<&[u8]>) -> std::io::Result<Outp
             Ok(output)
         }
     }
-}
-
-/// Whether the active oracle is running in capture mode.
-pub fn capturing() -> bool {
-    current().is_some_and(|s| s.borrow().mode == Mode::Capture)
 }
 
 /// Environment variables are passed through unchanged; helper kept for tests

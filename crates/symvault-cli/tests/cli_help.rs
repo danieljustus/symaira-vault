@@ -69,7 +69,7 @@ fn help_matches_recorded_go_command_tree() {
         "help_matches_recorded_go_command_tree",
         Some(ORACLE_COMMIT),
     );
-    let go_binary = oracle.binary();
+    let oracle_bin = oracle.binary();
     let mut cases = 0;
     for args in [
         &["help"][..],
@@ -81,7 +81,7 @@ fn help_matches_recorded_go_command_tree() {
         &["help", "get", "missing"][..],
         &["help", "list", "missing"][..],
     ] {
-        let go = go_oracle::output(Command::new(&go_binary).args(args)).expect("Go help");
+        let go = go_oracle::output(Command::new(&oracle_bin).args(args)).expect("Go help");
         let rust = run(args);
         assert_eq!(rust.status.code(), go.status.code(), "status {args:?}");
         assert_eq!(rust.stdout, go.stdout, "stdout {args:?}");
