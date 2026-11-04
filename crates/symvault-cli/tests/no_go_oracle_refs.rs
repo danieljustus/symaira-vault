@@ -38,9 +38,8 @@
 //! their oracle provenance blocks quote the historical build command). This
 //! file spells the patterns and excludes itself.
 //!
-//! `ALLOWLIST` names the files still owned by in-flight packets that build or
-//! drive a Go oracle (`P40c-2: owned by <packet>`); each entry dies when its
-//! packet retires or replays the script. `LINE_ALLOW` lists user-facing
+//! `ALLOWLIST` is empty (P40c-3): no file may build or drive a Go oracle; the
+//! size assertion below keeps it that way. `LINE_ALLOW` lists user-facing
 //! guidance strings of the Rust CLI that must say `go install` / `go build`
 //! because they tell the user how to update a binary that was installed that way.
 //!
@@ -65,34 +64,9 @@ const PATH_PATTERNS: [&str; 5] = [
     "Go source tree",
 ];
 
-/// Files that still drive a Go oracle and belong to the in-flight cap-proc packet (P40c-3). Every entry
-/// dies when cap-proc is merged and its scripts are converted to replay or deleted.
-const ALLOWLIST: [&str; 24] = [
-    "scripts/rust-port/build_timeout.py",
-    "scripts/rust-port/mcp_compiler_adapter.py",
-    "scripts/rust-port/test_mcp_compiler_adapter.py",
-    "scripts/rust-port/mcp_fixture_contract.py",
-    "scripts/rust-port/mcp_oracle.py",
-    "scripts/rust-port/test_mcp_oracle.py",
-    "scripts/rust-port/test_http001init_isolation.py",
-    "scripts/rust-port/http_drain_contract.py",
-    "scripts/rust-port/http_framing_contract.py",
-    "scripts/rust-port/http_head_contract.py",
-    "scripts/rust-port/http_oauth_contract.py",
-    "scripts/rust-port/http_origin_contract.py",
-    "scripts/rust-port/http_process_contract.py",
-    "scripts/rust-port/http_replay_contract.py",
-    "scripts/rust-port/http_slow_peer_contract.py",
-    "scripts/rust-port/http_timeout_contract.py",
-    "scripts/rust-port/http_tls_contract.py",
-    "scripts/rust-port/http_token_contract.py",
-    "scripts/rust-port/http_write_contract.py",
-    "scripts/rust-port/mcp_process_contract.py",
-    "scripts/rust-port/oracle_build.py",
-    "scripts/rust-port/test_oracle_build.py",
-    "scripts/rust-port/test_build_timeout.py",
-    "scripts/rust-port/toolhash_process_contract.py",
-];
+/// Files exempt from the lint. Empty since the Go removal sweep (P40c-3): every script that used to build or drive a
+/// Go oracle now replays committed observations. Recapturing means checking out the tag `legacy/go-oracle`.
+const ALLOWLIST: [&str; 0] = [];
 
 /// This file spells the patterns it looks for.
 const SELF: &str = "crates/symvault-cli/tests/no_go_oracle_refs.rs";
@@ -401,8 +375,7 @@ fn scan_roots_cover_makefile_workflows_crates_and_scripts() {
     }
     let (hits, scanned) = hits_under(&ROOTS);
     assert!(scanned > 100, "scanner saw only {scanned} files");
-    // The allowlist names real files, none is scanned, and every entry still
-    // needs its exemption (an entry without a hit must be removed).
+    // The allowlist is empty; were an entry ever added it must name a real file that still needs its exemption.
     for allowed in ALLOWLIST {
         let path = root.join(allowed);
         assert!(path.is_file(), "stale allowlist entry {allowed}");
@@ -415,8 +388,8 @@ fn scan_roots_cover_makefile_workflows_crates_and_scripts() {
     }
     assert_eq!(
         ALLOWLIST.len(),
-        24,
-        "allowlist grew: document the new entry"
+        0,
+        "the Go-oracle allowlist must stay empty"
     );
 }
 
