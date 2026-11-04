@@ -72,9 +72,39 @@ exit 1.
 ## Archived Go oracle
 
 The Go backend, the generators and the tools that built them live at the tag
-`legacy/go-oracle` (created by the coordinator at the last Go-green commit; the
-local-history tag `rust-port/local-history` marks the same line). Nothing in
-the current tree needs them.
+`legacy/go-oracle`: the last pre-delete commit that contains every capture tool
+(integ8 plus the cap-proc merge), created by the coordinator before push. The
+local-history tag `rust-port/local-history` marks the same line. The current
+tree replays what those tools recorded; it does not run them. The only
+exception is the cap-proc scripts listed under "Scripts that still drive Go"
+below, which still read the old tree until P40c-3 converts them.
+
+### Capture, attest and live-Go modes are gone (P40c-2)
+
+No script in this tree builds or runs Go. The capture side of every committed
+Go observation (`scripts/rust-port/fixtures/go-observations/**`) and the
+reverse-check attestations
+(`docs/rust-port/evidence/go-removal-attestations/`) is recorded at
+`legacy/go-oracle`; to re-record, check out that tag and run the old command
+there (see [go-removal-attestations/README.md](evidence/go-removal-attestations/README.md)).
+What was removed here:
+
+- `go_observations_common.py`: `capture-go-json`, `capture-go-text`,
+  `capture-checked`, `capture-verdict`, `attest`, `attest-ci`; `replay-*` and
+  `verify-attestation` stay.
+- `--capture-go` of `api_transport_contract.py`, `connect_contract.py`,
+  `egress_contract.py`, `serve_contract.py`, `signal_process_contract.py`,
+  `intake_watch_contract.py`, `device_list_differential.py`,
+  `cli_artifacts_contract.py` (also `--capture`), `mcp_authz_matrix.py` (also
+  `--generate`), `data_safety_contract.py` (also `--go`), `tui_contract.py`
+  (also `--reference-rust-out`) and `native_closeout.py` (also `--live-go`,
+  `--attest-go`).
+- `frozen_generator_replay.py capture KIND`, `reencrypt_journal_fixture.py`,
+  `manual_path_probe.py` and the live-Go branch of `manual_path_contract.py`,
+  `tui_driver_equivalence.py` proof mode, `go-observations-capture-linux.sh`.
+- Makefile: `go-observations-capture-other`, `go-observations-capture-tui`,
+  `go-attest-other`, `go-attest-native-keyring`, the Go build of the
+  data-safety oracle.
 
 To regenerate a fixture deliberately:
 
@@ -86,7 +116,7 @@ make <removed-target>        # the target from the table below, run in the old t
 # current tree: python3 scripts/rust-port/fixtures_verify.py --write
 ```
 
-Requirements are those of the old tree (Go toolchain pinned in `go.mod`, a
+Requirements are those of the old tree (Go toolchain pinned in its `go.mod`, a
 clean worktree whose oracle sources equal the pinned blobs; the generators
 refuse a stale pin). Regeneration must preserve all case payloads and security
 controls or receive a separate semantic review (`docs/rust-port/README.md`,
@@ -149,6 +179,32 @@ replay. The CLI scripts `check_yaml_syntax_cli.sh`, `check_error_taxonomy_cli.sh
 system `gpg` and fails closed without it). `scripts/rust-port/gen_config_schema.py`
 is gone: `crates/symvault-core/src/config_schema.rs` is hand-maintained.
 
+### Scripts that still drive Go (P40c-3, owned by local/cap-proc)
+
+These scripts build a Go oracle out of the old tree (`oracle_build.py`,
+`build_timeout.py`, `mcp_oracle.py`, `mcp_compiler_adapter.py`) and drive it
+next to the Rust binary. They are allowlisted in
+`crates/symvault-cli/tests/no_go_oracle_refs.rs` and nothing else is:
+
+- HTTP process contracts: `http_drain_contract.py`, `http_framing_contract.py`,
+  `http_head_contract.py`, `http_oauth_contract.py`, `http_origin_contract.py`,
+  `http_process_contract.py`, `http_replay_contract.py`,
+  `http_slow_peer_contract.py`, `http_timeout_contract.py`,
+  `http_tls_contract.py`, `http_token_contract.py`, `http_write_contract.py`
+- MCP process / fixture contracts: `mcp_process_contract.py`,
+  `mcp_fixture_contract.py`, `toolhash_process_contract.py`
+- Oracle harness: `oracle_build.py`, `build_timeout.py`, `mcp_oracle.py`,
+  `mcp_compiler_adapter.py` and their tests (`test_oracle_build.py`,
+  `test_build_timeout.py`, `test_mcp_oracle.py`, `test_mcp_compiler_adapter.py`),
+  `test_http001init_isolation.py`
+
+P40c-3 converts each of them to replay of a committed observation (as P40c-2 did
+for the others) or deletes it, and then empties the allowlist. Until then the
+`make` targets built on them (`mcp-oracle-controls`, `http-*-contract`,
+`mcp-process-contract`, `mcp-http-*-contract`, `mcp-ordered-fixtures-check`,
+`mcp-http-init-fixtures-check` and everything that depends on them) need the
+archived tree and fail in this one.
+
 ## Go-free test replay: what the Rust tests replay, and what was retired
 
 The Rust tests in the CAP-CLI-B families no longer run Go. Each one either
@@ -181,8 +237,9 @@ python3 scripts/rust-port/fixtures_verify.py --write
 ```
 
 The same applies to every removed `*-capture` / `go-attest-*` /
-`go-observations-capture*` Makefile target: the recipes are in the Makefile at
-`legacy/go-oracle`. Capture is deterministic: two consecutive captures of the same test
+`go-observations-capture*` Makefile target and every removed `--capture-go` /
+`--live-go` / `--attest-go` script mode: the recipes are in the Makefile and the
+scripts at `legacy/go-oracle`. Capture is deterministic: two consecutive captures of the same test
 produce byte-identical files.
 
 Recordings never carry the capturing machine's paths. Per-run directories are

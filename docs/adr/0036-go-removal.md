@@ -11,8 +11,8 @@ Rust-only: build, test, lint, fuzz, packaging (Nix, GoReleaser's Rust builder),
 CI and release no longer use a Go toolchain, and no Go fallback is kept.
 
 The last tree that still contains Go is archived at the tag
-**`legacy/go-oracle`** (created at push time by the coordinator at the last
-pre-delete commit `ccaf3bdc`). The frozen fixtures, the recordings under
+**`legacy/go-oracle`**: the last pre-delete commit that contains every capture
+tool (integ8 plus the cap-proc merge), created by the coordinator before push. The frozen fixtures, the recordings under
 `testdata/port/**`, the `*.go.txt` detached oracle programs and the
 `FROZEN.sha256` / `FROZEN.oracle.json` manifests stay in the tree;
 `make fixtures-verify` and `make oracle-reachability-check` prove they are
@@ -54,7 +54,25 @@ fixture or recapturing a recording needs a worktree of the tag.
 * **Capture side.** `SYMVAULT_ORACLE=capture` of `common/go_oracle.rs` and
   `go_oracle_ext.rs` is removed from the Rust tests (replay-or-fail). Recapture
   = check out `legacy/go-oracle`, build the oracle, run the old capture command
-  there.
+  there. P40c-2 removed the same modes from the Python side: the capture,
+  attest and live-Go subcommands of `go_observations_common.py`, every
+  `--capture-go` / `--live-go` / `--attest-go` / `--generate` mode of the
+  contract scripts, and the capture-only scripts. Lost with them:
+  * re-generating an attestation or a go-observation from this tree (replay and
+    `verify-attestation` stay; the files are static, historical claims);
+  * the live-Go branch of `native_closeout.py` (portable policy regeneration,
+    keyring write/verify) and of `manual_path_contract.py` (Go/legacy-Go/Rust
+    three-binary manual comparison, `manual_path_probe.py`);
+  * the re-proof of `tui_driver_equivalence` (Python driver vs the Go helper) and
+    of the data-safety reverse reads; the darwin `tui-contract` gap is now
+    permanent, not "closes when rust-tui.yml passes";
+  * byte checks of the retired generator scripts: `frozen_generator_replay.py
+    replay` no longer hashes `kdf_policy_fixtures.py`,
+    `refresh-read-policy-fixtures.py` (script bytes), or
+    `refresh-update-fixtures.py` (it recomputes the oracle source and generator
+    blob digests from git instead; those scripts' own digests are pinned only by
+    the frozen fixture bytes);
+  * `mcp_authz_matrix.py --generate` (the matrix is verified, not regenerated).
 * **Harness self-tests** of the Go build (`differential-go-selftest`,
   `rust-version-contract`, `store004-isolation-check`; `mcp-oracle-controls`
   stays with its owned script until P40c-2), Go lint/security/fuzz/
@@ -65,12 +83,29 @@ fixture or recapturing a recording needs a worktree of the tag.
   [go-oracle-archive.md](../rust-port/go-oracle-archive.md) stays unverified.
 * Residual divergences accepted before removal: ADR 0032, 0034, 0035.
 
-## Still reading the Go oracle (P40c-2)
+## Still reading the Go oracle (P40c-3)
 
-Python contract scripts owned by in-flight packets still build or run Go from
-the old tree. They are allowlisted in
-`crates/symvault-cli/tests/no_go_oracle_refs.rs` and are converted to replay
-by P40c-2; until then their `make` targets fail without the archived tree.
+P40c-2 converted every script outside the cap-proc packet to replay or deleted
+it. What still builds or drives a Go oracle from the old tree is owned by
+`local/cap-proc` and is the only allowlist of
+`crates/symvault-cli/tests/no_go_oracle_refs.rs` (24 files):
+
+* HTTP process contracts: `http_{drain,framing,head,oauth,origin,process,replay,
+  slow_peer,timeout,tls,token,write}_contract.py`;
+* MCP: `mcp_process_contract.py`, `mcp_fixture_contract.py`,
+  `toolhash_process_contract.py`;
+* oracle harness: `oracle_build.py`, `build_timeout.py`, `mcp_oracle.py`,
+  `mcp_compiler_adapter.py`, `test_oracle_build.py`, `test_build_timeout.py`,
+  `test_mcp_oracle.py`, `test_mcp_compiler_adapter.py`,
+  `test_http001init_isolation.py`.
+
+Their `make` targets (`mcp-oracle-controls`, `http-*-contract`,
+`mcp-process-contract`, `mcp-http-*-contract`, `mcp-ordered-fixtures-check`,
+`mcp-http-init-fixtures-check`) need the archived tree and fail here until
+P40c-3 converts or deletes the scripts and empties the allowlist. The lint also
+fails on argv-form Go calls (`['go', 'build', ...]`), `go_compiler`, `pinned_go(`,
+the `oracle_build` harness, `go.mod`/`go.sum` and Go source trees read from
+scripts, `.github/` or the Makefile, so a new script cannot start Go unnoticed.
 
 ## Package to crate mapping
 

@@ -7,41 +7,40 @@ the end of the numeric range and existing values are never repurposed.
 
 ## Categories
 
-| Code | Constant                  | Meaning                                                                           |
+| Code | Variant                         | Meaning                                                                           |
 | ---- | ------------------------- | --------------------------------------------------------------------------------- |
-| 0    | `ExitSuccess`             | Command completed successfully.                                                   |
-| 1    | `ExitGeneralError`        | General error. Reserved for failures that do not match a more specific category.   |
-| 2    | `ExitNotFound`            | The requested entry, field, or resource was not found.                            |
-| 3    | `ExitNotInitialized`      | The vault has not been initialized.                                               |
-| 4    | `ExitLocked`              | The vault is locked or the passphrase is missing.                                 |
-| 5    | `ExitPermissionDenied`    | The agent or user is not permitted to perform the operation.                      |
-| 6    | `ExitConfigError`         | The on-disk configuration is malformed or invalid.                                |
-| 7    | `ExitDoctorWarn`          | `symvault doctor` found warnings.                                                 |
-| 8    | `ExitDoctorFail`          | `symvault doctor` found failures.                                                 |
-| 9    | `ExitInvalidInput`        | User input failed validation (empty argument, malformed value, parse failure).    |
-| 10   | `ExitUpdateAvailable`     | A new version is available for download.                                          |
+| 0    | `ExitCode::Success`             | Command completed successfully.                                                   |
+| 1    | `ExitCode::General`        | General error. Reserved for failures that do not match a more specific category.   |
+| 2    | `ExitCode::NotFound`            | The requested entry, field, or resource was not found.                            |
+| 3    | `ExitCode::NotInitialized`      | The vault has not been initialized.                                               |
+| 4    | `ExitCode::Locked`              | The vault is locked or the passphrase is missing.                                 |
+| 5    | `ExitCode::PermissionDenied`    | The agent or user is not permitted to perform the operation.                      |
+| 6    | `ExitCode::Config`         | The on-disk configuration is malformed or invalid.                                |
+| 7    | `ExitCode::DoctorWarn`          | `symvault doctor` found warnings.                                                 |
+| 8    | `ExitCode::DoctorFail`          | `symvault doctor` found failures.                                                 |
+| 9    | `ExitCode::InvalidInput`        | User input failed validation (empty argument, malformed value, parse failure).    |
+| 10   | `ExitCode::UpdateAvailable`     | A new version is available for download.                                          |
 
 Codes 11+ are reserved for future use. New categories are added at the next
 free number and documented here.
 
 ## Authoring rules
 
-- Every `RunE` handler **must** return an error built from the constructors
-  in `internal/errors` (`errors.NotFound`, `errors.InvalidInput`,
-  `errors.Wrap`, ...). Bare `fmt.Errorf` collapses every failure into
-  `ExitGeneralError` and is rejected by the `clierror` passlint analyzer.
-- The `clierror` analyzer is part of the `make vet` and `make passlint`
-  targets and runs in CI on every PR.
-- The `Exit*` constants in `internal/errors` are the single source of truth
-  for numeric values. Do not hard-code the numbers in `cmd/` packages.
+- The numeric values live in one place: the `ExitCode` enum in
+  `crates/symvault-core/src/error.rs`. Command handlers return a `CliError` whose
+  `code()` is one of its variants (see `error.rs`); do not
+  hard-code the numbers in `crates/symvault-cli`. An error without a category
+  maps to `ExitCode::General`, which hides the failure class from scripts, so
+  pick the specific variant.
+- `crates/symvault-cli/tests/error_taxonomy.rs` replays the frozen Go-recorded
+  error taxonomy (message, stream and exit code per failure) against the Rust CLI
+  and is the regression gate for the table above.
 
 ## Adding a new category
 
-1. Add a new constant at the end of the `ExitCode` block in
-   `internal/errors/errors.go` (next free number).
-2. Add a corresponding typed constructor in the same file (e.g.
-   `func MyCategory(...) *CLIError`).
-3. Add a row to the table above.
-4. Add a test case to `internal/errors/errors_test.go` covering the new
-   constructor and its exit-code mapping.
-5. Update existing `cmd/` packages that should now use the new category.
+1. Add a new variant at the end of the `ExitCode` enum in
+   `crates/symvault-core/src/error.rs` (next free number).
+2. Add a row to the table above.
+3. Add a test in `crates/symvault-core` covering the numeric mapping.
+4. Use the new variant in the CLI paths that should report it and add a CLI test
+   for the exit code.

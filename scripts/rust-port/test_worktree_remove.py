@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Scratch-repository tests of worktree_remove.sh (shared by area_http_write_mutation.sh
-and area_pairing_oracle.sh).
+"""Scratch-repository tests of worktree_remove.sh (used by area_http_write_mutation.sh).
 
 Every case builds its own repository under a temp dir, with a *foreign* worktree
 `wtA` next to the scratch tree that is to be removed, and asserts the foreign
@@ -231,8 +230,8 @@ class LegacyFunction(Scratch):
 
 
 class CallSites(unittest.TestCase):
-    def test_both_scripts_use_the_shared_helper_and_no_private_copy(self):
-        for name in ("area_http_write_mutation.sh", "area_pairing_oracle.sh"):
+    def test_the_script_uses_the_shared_helper_and_no_private_copy(self):
+        for name in ("area_http_write_mutation.sh",):
             text = (HERE / name).read_text()
             self.assertIn("worktree_remove.sh", text, name)
             self.assertNotIn("remove_worktree_only() {", text, name)

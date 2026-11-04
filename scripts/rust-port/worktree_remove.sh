@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sourced by area_http_write_mutation.sh and area_pairing_oracle.sh (tested by
+# Sourced by area_http_write_mutation.sh (tested by
 # test_worktree_remove.py): unregister and delete exactly one scratch worktree.
 #
 # Never `git worktree prune`: it is global to the shared common dir, and in the

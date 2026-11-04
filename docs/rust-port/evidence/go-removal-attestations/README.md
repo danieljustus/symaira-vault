@@ -32,45 +32,45 @@ and the run states in its output that the 11 reverse verdicts are attested by th
 re-checked (earlier the recording simply returned the recorded exit code and stdout, which proved nothing
 about what Rust wrote).
 
-`ffi-differential`: `crates/symvault-ffi/tests/interop.rs` prints `SKIP` without the Go driver. On this
-branch the target accepts that SKIP only because the attestation (recorded with SKIP forbidden) is verified
-in the same target. `local/cap-cli-b` rewrote `interop.rs` into a Go-free replay of
-`testdata/port/cli-observations/ffi_interop.json`; with that merged the SKIP no longer occurs and the
-attestation remains the record of the live Go run.
+`ffi-differential`: `crates/symvault-ffi/tests/interop.rs` is a Go-free replay of
+`testdata/port/cli-observations/ffi_interop.json` and prints no `SKIP`; the attestation (recorded with SKIP
+forbidden) remains the record of the live Go run of the same test and is verified in the same target.
 
 `native_closeout.py keyring` on a workstation is refused (it needs a disposable runner); on darwin its Go
 attestation is the CI-run record. The darwin `tui-contract` has **no** attestation: it is an
 `ACCEPTED_GAPS` entry printed by `make tui-harness-check` (text in `go_observations_common.py`).
 
-Regenerate (needs Go, built Rust): `make go-attest-other` on each OS; Linux through
-`scripts/rust-port/go-observations-capture-linux.sh NAME 'make go-attest-other'`. `data-safety-contract`
-is recorded together with its seed observation by `data_safety_contract.py --capture-go` (part of
-`make go-observations-capture-other`). A CI-run attestation is written by
-`go_observations_common.py attest-ci` and is accepted only with run URL, job id, commit and a digest of the
-exercised sources that matches the tree.
+Re-recording: **check out tag `legacy/go-oracle`** (the last pre-delete commit that contains every capture
+tool; see [go-oracle-archive.md](../../go-oracle-archive.md)) and run the old commands there: `make
+go-attest-other` on each OS (Linux through `scripts/rust-port/go-observations-capture-linux.sh NAME 'make
+go-attest-other'`), `data_safety_contract.py --capture-go` for `data-safety-contract` together with its seed
+observation, `go_observations_common.py attest-ci` for a CI-run attestation. This tree has none of those modes
+(P40c-2 removed them); it only runs `verify-attestation`. A CI-run attestation is accepted only with run URL, job id,
+commit and a digest of the exercised sources that matches the tree.
 
 Go observations that replay Rust live against recorded Go output are in
-`scripts/rust-port/fixtures/go-observations/`; `make go-observations-capture-other` rewrites them. They
+`scripts/rust-port/fixtures/go-observations/`; only the capture tools at tag `legacy/go-oracle` write them. They
 record no host paths: temporary roots are stored as `@TREE_ROOT@` / `@WORK@` and restored on replay, and
 `make go-observations-selftest` scans this directory and `docs/rust-port/evidence` (decoding base64) for
 operator workstation paths (macOS volume, user-home, per-user temp and private-var roots; the regex is
 `OPERATOR_PATH` in `go_observations_common.py`) and mkdtemp directories below the Linux temp root. The README
 therefore does not spell those prefixes out.
 
-## Oracle build harness checks to retire with Go (not deleted here)
+## Oracle build harness checks (P40c-3, cap-proc)
 
-- `store004-isolation-check` (`test_store004_isolation.py`) – tests the Go oracle build isolation.
-- `mcp-oracle-controls` (`test_build_timeout.py`, `test_mcp_oracle.py`) – tests the oracle build/timeout harness.
-- `test_oracle_build.py` (run by the area target at Makefile `AREA_ORACLE`) – oracle build harness selftest.
-- `scripts/rust-port/build_timeout.py` – Go oracle compile budget; still imported by the capture scripts
-  (`reencrypt_journal_fixture.py`, `intake_watch_contract.py`, ...), so it goes when the last capture script goes.
-- `scripts/rust-port/cmd/cligap` (+ `cligap.py`, `test_cligap.py`) – Go command-tree extractor for the CLI gap inventory.
-- `scripts/rust-port/cmd/devicelistdriver` – the Go supervised device-list driver; the Python
-  `device_list_differential.py` replaces it (Windows supervision was dropped, see below).
-- The `GoOracle` live mode of `data_safety_contract.py` and the data-safety *reverse* checks: from the day Go is
-  removed they exist only as the attestation above.
-- `reencrypt_journal_probe.go.txt` + `reencrypt_journal_fixture.py capture`: the one-time Go capture of the
-  frozen crash states (`testdata/port/store/reencrypt-journal.json`).
+Still in this tree and still allowlisted (they build a Go oracle from the old tree; see
+[go-oracle-archive.md](../../go-oracle-archive.md), "Scripts that still drive Go"):
+
+- `mcp-oracle-controls` (`test_build_timeout.py`, `test_mcp_oracle.py`, `test_mcp_compiler_adapter.py`) - tests the
+  oracle build/timeout harness.
+- `test_oracle_build.py` (run by the area target at Makefile `AREA_ORACLE`) - oracle build harness selftest.
+- `scripts/rust-port/build_timeout.py`, `oracle_build.py`, `mcp_oracle.py`, `mcp_compiler_adapter.py` - the Go
+  oracle compile budget and builder, used by the HTTP and MCP process contracts.
+
+Retired in P40c-2: the `GoOracle` live mode of `data_safety_contract.py` (the data-safety *reverse* checks exist only
+as the attestation above), `reencrypt_journal_fixture.py` and its one-time Go capture of the frozen crash states
+(`testdata/port/store/reencrypt-journal.json`; `reencrypt_journal_probe.go.txt` stays as frozen text),
+`manual_path_probe.py`, and the `scripts/rust-port/cmd/cligap` Go tool (`cligap.py` is its Python port).
 
 ## Go-only tests dropped from make targets
 
@@ -106,7 +106,7 @@ a backup has no provenance: a changed target there is still refused and nothing 
 - `mcp-secure-input-fixtures-check`: `secure-input-unicode` observation (`go run secure_input_unicode` accepted
   `go_unicode_print_15.rs`; the file keeps those bytes). Its prerequisite `mcp-ordered-fixtures-check` is the MCP
   fixture regeneration owned by the MCP packet (still live Go here until `local/cap-proc` lands).
-- `native_closeout.py` (Go-free by default; `--live-go` keeps the hosted-CI runs):
+- `native_closeout.py` (Go-free; the former `--live-go` hosted-CI runs, `--capture-go` and `--attest-go` are removed):
   - `portable`: `native-closeout-policy.<goos>.json` records that native Go `policygen` regeneration
     (+ `--check`) reproduced `testdata/port/core/policy-contract.json` byte for byte; darwin and linux captured.
   - `keyring`: see the table above.
@@ -116,8 +116,9 @@ a backup has no provenance: a changed target there is still refused and nothing 
   side is `tui-contract.<goos>.json` (normalized rows + the Go-made seed vaults), and
   `tui-driver-equivalence.<goos>.json` records that the Python driver produced identical Rust-side rows
   (15 cases, 84 store snapshots, config readbacks, exit/console/editor facts) to the Go helper on the same Rust
-  binary and seeds. `make go-observations-capture-tui` (Go, Xvfb) re-records both; editing `tui_driver.py`,
-  `tui-snapshot.rs` or the observation without re-proving makes `tui_driver_equivalence.py check` fail.
+  binary and seeds. The tag `legacy/go-oracle` re-records both (`make go-observations-capture-tui` there); editing `tui_driver.py`,
+  `tui-snapshot.rs` or the observation makes `tui_driver_equivalence.py check` fail, and the proof can no longer
+  be repeated in this tree (the Go helper and the proof mode are gone).
   Only **linux** is captured; darwin is the accepted gap named above.
 
 ## Not converted (still need Go, or a Go-built helper)
