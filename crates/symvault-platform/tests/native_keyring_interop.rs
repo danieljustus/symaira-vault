@@ -99,7 +99,9 @@ fn native_keyring_rust_half_set_update_read_delete() {
         keyring.get(&key).is_err(),
         "native namespace preflight must be missing"
     );
-    keyring.set(&key, GO_PAYLOAD).expect("Rust store Go payload");
+    keyring
+        .set(&key, GO_PAYLOAD)
+        .expect("Rust store Go payload");
     assert_eq!(keyring.get(&key).expect("Rust read-back"), GO_PAYLOAD);
     keyring
         .set(&key, RUST_PAYLOAD)

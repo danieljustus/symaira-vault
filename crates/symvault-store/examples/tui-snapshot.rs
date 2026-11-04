@@ -41,7 +41,9 @@ fn go_escape(compact: &str) -> String {
 fn clipboard_seconds(root: &std::path::Path) -> Result<i64, String> {
     let config = Config::load(root.join("config.yaml")).map_err(|error| error.to_string())?;
     // `Config::load` of a configuration without a clipboard section is the default (30).
-    Ok(config.clipboard.map_or(30, |clipboard| clipboard.auto_clear_duration))
+    Ok(config
+        .clipboard
+        .map_or(30, |clipboard| clipboard.auto_clear_duration))
 }
 
 fn run() -> Result<(), String> {
@@ -61,7 +63,9 @@ fn run() -> Result<(), String> {
     }
     let mut rows = Vec::new();
     for path in store.list(&identity).map_err(|error| error.to_string())? {
-        let entry = store.get(&path, &identity).map_err(|error| error.to_string())?;
+        let entry = store
+            .get(&path, &identity)
+            .map_err(|error| error.to_string())?;
         let data = serde_json::to_string(&entry.data).map_err(|error| error.to_string())?;
         let digest = Sha256::digest(go_escape(&data).as_bytes());
         let tags = if entry.metadata.tags.is_empty() {
