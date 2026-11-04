@@ -22,6 +22,14 @@ overwrite a recording with a different value unless the test declares the
 normalization under which two captures are the same. Capture is deterministic:
 two consecutive captures of the same test produce byte-identical files.
 
+Recordings never carry the capturing machine's paths. Per-run directories are
+stored as placeholders (`<ROOT:n>` / `<TMPFILE>` in transcripts; `<ROOT>`,
+`<HOME>`, `<VAULT>`, `<TMP>` inside the base64 file bodies of frozen vault
+trees, restored to the current run's directories on replay), and a capture
+refuses to write a recording containing `/Volumes/`, `/Users/`, `/var/folders/`
+or `/private/var/` (`common/operator_paths.rs`, base64 decoded).
+`recordings_have_no_operator_paths.rs` rescans every committed recording.
+
 ## Conversions
 
 | Family | Go-free mechanism |
