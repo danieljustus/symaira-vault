@@ -2220,6 +2220,8 @@ mcp-secure-input-fixtures-check: mcp-ordered-fixtures-check
 mcp-secure-input-differential: mcp-secure-input-fixtures-check
 	$(CARGO) test -p symvault-mcp --test secure_input_contract --locked
 	$(CARGO) test -p symvault-platform --lib --locked -- approval::tests::secure_input_
+	# Go's TestPrompt_TTYBackend_SignalCancel is covered by this Rust test, which the prefix above does not match.
+	$(CARGO) test -p symvault-platform --lib --locked -- approval::tests::stdio_prompt_signal_cancel_maps_to_go_context_canceled --exact
 
 .PHONY: mcp-approval-pty-acceptance
 mcp-approval-pty-acceptance:
@@ -2295,8 +2297,8 @@ REENCRYPT_UNIT_TESTS := reencrypt_journal::tests::lexical_root_alias_is_normaliz
 .PHONY: reencrypt-journal-differential
 reencrypt-journal-differential:
 	@set -eu; mkdir -p target/reencrypt-journal; log=target/reencrypt-journal/fixture.txt; units=target/reencrypt-journal/units.txt; \
-	$(CARGO) test -p symvault-store --locked --test reencrypt_journal_go_fixture -- $(foreach t,$(REENCRYPT_FIXTURE_TESTS),--exact $(t)) --nocapture > "$$log" 2>&1 || { cat "$$log"; exit 1; }; \
-	$(CARGO) test -p symvault-store --locked --lib -- $(foreach t,$(REENCRYPT_UNIT_TESTS),--exact $(t)) --nocapture > "$$units" 2>&1 || { cat "$$units"; exit 1; }; \
+	$(CARGO) test -p symvault-store --locked --test reencrypt_journal_go_fixture -- --exact $(REENCRYPT_FIXTURE_TESTS) --nocapture > "$$log" 2>&1 || { cat "$$log"; exit 1; }; \
+	$(CARGO) test -p symvault-store --locked --lib -- --exact $(REENCRYPT_UNIT_TESTS) --nocapture > "$$units" 2>&1 || { cat "$$units"; exit 1; }; \
 	$(AREA_CHECK) log-ok "$$log" --exact-prefix "" $(REENCRYPT_FIXTURE_TESTS) --sum-passed $(words $(REENCRYPT_FIXTURE_TESTS)); \
 	$(AREA_CHECK) log-ok "$$units" --exact-prefix "" $(REENCRYPT_UNIT_TESTS) --sum-passed $(words $(REENCRYPT_UNIT_TESTS)); \
 	echo "matched tests:"; grep -h '^test .* \.\.\. ok$$' "$$log" "$$units" | sed 's/^/  /'

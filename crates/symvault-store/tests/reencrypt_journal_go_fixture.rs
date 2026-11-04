@@ -46,7 +46,8 @@ struct Scenario {
 }
 
 fn fixture() -> Fixture {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/port/store/reencrypt-journal.json");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/port/store/reencrypt-journal.json");
     serde_json::from_slice(&fs::read(path).expect("fixture")).expect("fixture JSON")
 }
 
@@ -62,7 +63,9 @@ fn materialize(scenario: &Scenario, root: &Path) {
                 fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
             }
             Some(encoded) => {
-                let bytes = base64::engine::general_purpose::STANDARD.decode(encoded).unwrap();
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .unwrap();
                 // The journal and config.yaml carry the capture-time vault root as a token.
                 let text = String::from_utf8_lossy(&bytes);
                 let bytes = if text.contains(TREE_ROOT) {
@@ -82,7 +85,11 @@ fn tree(root: &Path) -> BTreeMap<String, String> {
     fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, String>) {
         for entry in fs::read_dir(dir).unwrap() {
             let path: PathBuf = entry.unwrap().path();
-            let name = path.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+            let name = path
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
             if path.is_dir() {
                 out.insert(name, "dir".to_owned());
                 walk(root, &path, out);
@@ -106,11 +113,21 @@ fn tree(root: &Path) -> BTreeMap<String, String> {
 /// The differences between what recovery left and what Go's recovery left. Only data files are compared
 /// byte for byte; `manifest.age` is re-encrypted (random) and is checked by decryption instead.
 fn differences(go: &BTreeMap<String, String>, rust: &BTreeMap<String, String>) -> Vec<String> {
-    let go: BTreeMap<_, _> = go.iter().filter(|(k, _)| !GO_ARTIFACTS.contains(&k.as_str())).collect();
-    let rust: BTreeMap<_, _> = rust.iter().filter(|(k, _)| !RUST_ARTIFACTS.contains(&k.as_str())).collect();
+    let go: BTreeMap<_, _> = go
+        .iter()
+        .filter(|(k, _)| !GO_ARTIFACTS.contains(&k.as_str()))
+        .collect();
+    let rust: BTreeMap<_, _> = rust
+        .iter()
+        .filter(|(k, _)| !RUST_ARTIFACTS.contains(&k.as_str()))
+        .collect();
     let rewritten = |key: &str| GO_REWRITES.contains(&key);
     let mut found = Vec::new();
-    for key in go.keys().chain(rust.keys()).collect::<std::collections::BTreeSet<_>>() {
+    for key in go
+        .keys()
+        .chain(rust.keys())
+        .collect::<std::collections::BTreeSet<_>>()
+    {
         match (go.get(*key), rust.get(*key)) {
             (Some(_), None) => found.push(format!("missing after Rust recovery: {key}")),
             (None, Some(_)) => found.push(format!("extra after Rust recovery: {key}")),
@@ -133,11 +150,18 @@ fn go_written_crash_states_recover_to_the_tree_go_recovery_leaves() {
         let temp = tempfile::tempdir_in(Path::new("/tmp").canonicalize().unwrap()).unwrap();
         let root = temp.path().join("vault");
         materialize(scenario, &root);
-        assert!(root.join(".reencrypt.journal").is_file(), "{}: no journal to recover", scenario.name);
+        assert!(
+            root.join(".reencrypt.journal").is_file(),
+            "{}: no journal to recover",
+            scenario.name
+        );
         let before = tree(&root);
         let identity = parse_identity(&scenario.identity).unwrap();
 
-        let opened = Store::open(symvault_store::data_safety::test_support_pre_marked(&root), &identity);
+        let opened = Store::open(
+            symvault_store::data_safety::test_support_pre_marked(&root),
+            &identity,
+        );
         if scenario.name == "staged" {
             // DECLARED DIVERGENCE (reported, not hidden): the crash window between staging the replacement
             // and journaling the backup. Go recovery sees a target that is not the staged digest and no
@@ -145,22 +169,41 @@ fn go_written_crash_states_recover_to_the_tree_go_recovery_leaves() {
             // finishes. Rust refuses to open and leaves everything in place (journal, temp file and
             // original), which loses nothing but needs manual repair. The test pins the refusal so that
             // changing it to Go's roll-back is a deliberate act.
-            let error = opened.err().expect("Rust refuses the staged-before-backup state").to_string();
-            assert!(error.contains("re-encryption target changed without an original backup"), "{error}");
+            let error = match opened {
+                Err(error) => error.to_string(),
+                Ok(_) => panic!("Rust refuses the staged-before-backup state"),
+            };
+            assert!(
+                error.contains("re-encryption target changed without an original backup"),
+                "{error}"
+            );
             let refused = tree(&root);
-            assert_eq!(differences(&before, &refused), Vec::<String>::new(), "a refused recovery must not change the vault");
+            assert_eq!(
+                differences(&before, &refused),
+                Vec::<String>::new(),
+                "a refused recovery must not change the vault"
+            );
             assert!(refused.contains_key(".reencrypt.journal"));
             continue;
         }
-        let store = opened.unwrap_or_else(|error| panic!("{}: recovery failed: {error}", scenario.name));
+        let store =
+            opened.unwrap_or_else(|error| panic!("{}: recovery failed: {error}", scenario.name));
 
         let after = tree(&root);
         let found = differences(&scenario.go_post_recovery, &after);
         assert!(found.is_empty(), "{}: {found:?}", scenario.name);
         for name in GO_REWRITES {
-            assert_eq!(before[name], after[name], "{}: recovery must not rewrite {name}", scenario.name);
+            assert_eq!(
+                before[name], after[name],
+                "{}: recovery must not rewrite {name}",
+                scenario.name
+            );
         }
-        assert!(!after.contains_key(".reencrypt.journal"), "{}", scenario.name);
+        assert!(
+            !after.contains_key(".reencrypt.journal"),
+            "{}",
+            scenario.name
+        );
         assert!(
             after.keys().all(|name| !name.contains(".reencrypt")),
             "{}: temporary or backup file left behind: {after:?}",
@@ -169,14 +212,26 @@ fn go_written_crash_states_recover_to_the_tree_go_recovery_leaves() {
         // The frozen state really was a crash state, and recovery really changed it.
         assert_ne!(before, after, "{}", scenario.name);
         // The manifest Rust re-built decrypts with the identity and lists the recovered entry.
-        assert_eq!(store.list(&identity).unwrap(), vec![scenario.entry.clone()], "{}", scenario.name);
+        assert_eq!(
+            store.list(&identity).unwrap(),
+            vec![scenario.entry.clone()],
+            "{}",
+            scenario.name
+        );
         let recovered = store.get(&scenario.entry, &identity).unwrap();
         assert_eq!(recovered.data["value"], scenario.value, "{}", scenario.name);
         let verified = store.verify_manifest(&identity).unwrap();
-        assert!(verified.tampered.is_empty() && verified.missing.is_empty(), "{}", scenario.name);
+        assert!(
+            verified.tampered.is_empty() && verified.missing.is_empty(),
+            "{}",
+            scenario.name
+        );
         recovered_scenarios += 1;
     }
-    assert_eq!(recovered_scenarios, 1, "the committed state is recovered; the staged state is the declared refusal");
+    assert_eq!(
+        recovered_scenarios, 1,
+        "the committed state is recovered; the staged state is the declared refusal"
+    );
 }
 
 #[test]
@@ -186,17 +241,32 @@ fn the_comparison_notices_a_wrong_tree() {
     let mut rust = go.clone();
     rust.remove(".symvault-migrated");
     rust.insert(".symvault-rust".to_owned(), "x".to_owned());
-    assert!(differences(go, &rust).is_empty(), "declared artifacts are ignored");
+    assert!(
+        differences(go, &rust).is_empty(),
+        "declared artifacts are ignored"
+    );
 
     let mut stale = rust.clone();
-    stale.insert("entries/.cross-language.age.backup.reencrypt-ab".to_owned(), "x".to_owned());
-    assert_eq!(differences(go, &stale), vec!["extra after Rust recovery: entries/.cross-language.age.backup.reencrypt-ab"]);
+    stale.insert(
+        "entries/.cross-language.age.backup.reencrypt-ab".to_owned(),
+        "x".to_owned(),
+    );
+    assert_eq!(
+        differences(go, &stale),
+        vec!["extra after Rust recovery: entries/.cross-language.age.backup.reencrypt-ab"]
+    );
 
     let mut rolled_back = rust.clone();
     rolled_back.insert("entries/cross-language.age".to_owned(), "0".repeat(64));
-    assert_eq!(differences(go, &rolled_back), vec!["differs from Go recovery: entries/cross-language.age"]);
+    assert_eq!(
+        differences(go, &rolled_back),
+        vec!["differs from Go recovery: entries/cross-language.age"]
+    );
 
     let mut missing = rust;
     missing.remove("identity.age");
-    assert_eq!(differences(go, &missing), vec!["missing after Rust recovery: identity.age"]);
+    assert_eq!(
+        differences(go, &missing),
+        vec!["missing after Rust recovery: identity.age"]
+    );
 }
