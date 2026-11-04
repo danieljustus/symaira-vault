@@ -25,9 +25,18 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 sys.dont_write_bytecode = True
 from http_process_contract import ProcessCapture, SECRET, exchange, request
-from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vault_snapshot
-from oracle_build import build_go, remove_oracle_worktree
+from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, capture_arguments_ok, checked, go_capture_session,
+                                  inventory, isolated, load_go_observations, pinned_seed, provenance, replay_seed,
+                                  save_go_observations, scrub_parts, vault_snapshot)
 
+CONTRACT = 'http-oauth'
+PORT = 28108  # fixed so request bytes (Host header) are identical in capture and replay
+NORMALIZATION = ['fixed loopback port', 'seed vaults and tokens (main and 2s-TTL profile) pinned in the file',
+                 'Date header, log timestamps, peer ports',
+                 'per-run OAuth entropy (client ids, codes, access/refresh tokens, token ids/hashes/prefixes, issued-at and ISO timestamps, '
+                 'vault byte snapshots) replaced by same-length deterministic placeholders; token/client registries recorded as their shape (counts, member names, revocations): those 26 rows carry '
+                 'a semantic_control, were asserted explicitly against the real Go values at capture, and are never compared byte-for-byte',
+                 'the independent-entropy disjointness of Go and Rust values cannot be re-observed in replay; replay asserts Rust uniqueness only']
 PROBE = ROOT / 'scripts/rust-port/http_oauth_seed.go.txt'
 PASSPHRASE = 'correct horse battery staple'
 VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
@@ -434,12 +443,54 @@ def observe_ttl(implementation, binary, home, port, seeded_tokens, result):
         server.close()
 
 
+def capture(args):
+    """Go half only: build the oracle, observe it, write the committed observations."""
+    with go_capture_session(CONTRACT, args, {'seed': ('httpoauthseed', PROBE.read_bytes())}) as session:
+        base = session['base']
+        tokens = pinned_seed(session, 'main', base / 'seed',
+                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
+        ttl_tokens = pinned_seed(session, 'ttl', base / 'ttl-seed', lambda home: json.loads(checked(
+            [session['helpers']['seed'], '--root', home / 'vault', '--access-ttl', '2s', '--refresh-ttl', '1m'], home, isolated(home))))
+        result = dict(rows=[], ttl_rows=[], processes=[], client_snapshots=[], token_snapshots=[], ttl_token_snapshots=[])
+        snapshot, ttl_snapshot = vault_snapshot(base / 'seed/vault'), vault_snapshot(base / 'ttl-seed/vault')
+        home = base / 'go'
+        home.mkdir()
+        shutil.copytree(base / 'seed/vault', home / 'vault')
+        assert vault_snapshot(home / 'vault') == snapshot
+        observe('go', session['go'], home, PORT, tokens, result)
+        home = base / 'go-ttl'
+        home.mkdir()
+        shutil.copytree(base / 'ttl-seed/vault', home / 'vault')
+        assert vault_snapshot(home / 'vault') == ttl_snapshot
+        observe_ttl('go', session['go'], home, PORT, ttl_tokens, result)
+        assert len(result['rows']) == 35 and len(result['ttl_rows']) == 11
+        assert len(result['processes']) == 3 and all(p['output_capture_complete'] for p in result['processes'])
+        for key in ('state_before_restart', 'final_snapshot', 'ttl_final_snapshot'):
+            result[key] = {}
+        # Registries are keyed by random ids: record their shape (counts, member names, revocations), not the ids.
+        for key in ('token_snapshots', 'ttl_token_snapshots'):
+            result[key] = [dict(version=r['version'], tokens=len(r['tokens']), revoked=sum(1 for v in r['tokens'].values() if v.get('revoked')),
+                                fields=sorted({f for v in r['tokens'].values() for f in v})) for r in result[key]]
+        result['client_snapshots'] = [dict(version=r['version'], clients=len(r['clients']),
+                                           redirect_uris=sorted(u for c in r['clients'].values() for u in c['redirect_uris']),
+                                           fields=sorted({f for c in r['clients'].values() for f in c})) for r in result['client_snapshots']]
+        scrub_parts(result, ('rows', 'ttl_rows', 'codes', 'token_sha256', 'client_snapshots', 'token_snapshots', 'ttl_token_snapshots'))
+        result['codes'] = sorted(result['codes'])  # the sort order of random values is itself random
+        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()), port=PORT,
+                    fixture_snapshot=snapshot, ttl_fixture_snapshot=ttl_snapshot, seeds=session['seeds'], go=result)
+        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
+    print(f'CAPTURED: {len(result["rows"]) + len(result["ttl_rows"])} Go OAuth cases -> {path}')
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rust', type=Path, required=True)
-    parser.add_argument('--receipt', type=Path, required=True)
+    add_capture_arguments(parser, rust_required=False)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
+    if capture_arguments_ok(args):
+        return capture(args)
+    document = load_go_observations(CONTRACT, {})
+    recorded = document['data']
     clean = not checked(['git', 'status', '--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust = args.rust.resolve()
@@ -449,86 +500,57 @@ def main():
     result: dict = dict(passed=False, candidate_commit=checked(['git', 'rev-parse', 'HEAD']).decode().strip(), candidate_worktree_clean=clean,
                   candidate_source_files=paths, candidate_source_digest=inventory(paths, ROOT), oracle_commit=ORACLE,
                   native_os=platform.system(), architecture=platform.machine(), rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),
-                  driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest(),
-                  go=dict(rows=[], ttl_rows=[], processes=[], client_snapshots=[], token_snapshots=[], ttl_token_snapshots=[]),
-                  rust=dict(rows=[], ttl_rows=[], processes=[], client_snapshots=[], token_snapshots=[], ttl_token_snapshots=[]), differences=[], semantic_controls=[])
+                  driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                  go=recorded['go'],
+                  rust=dict(rows=[], ttl_rows=[], processes=[], client_snapshots=[], token_snapshots=[], ttl_token_snapshots=[]), differences=[], semantic_controls=[],
+                  go_observations=provenance(document), port=recorded['port'], fixture_snapshot=recorded['fixture_snapshot'],
+                  ttl_fixture_snapshot=recorded['ttl_fixture_snapshot'], **recorded['info'])
+    port = result['port']
     try:
         with tempfile.TemporaryDirectory(prefix='symvault-http-oauth-') as raw:
             base = Path(raw)
-            tree = base / 'oracle'
-            checked(['git', 'worktree', 'add', '--detach', tree, ORACLE])
-            try:
-                files = checked(['git', 'ls-tree', '-r', '--name-only', ORACLE]).decode().splitlines()
-                sources = sorted(p for p in files if p in {'go.mod', 'go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
-                embedded = sorted(p for p in files if p.startswith('internal/mcp/apitemplates/builtin/'))
-                assert len(embedded) == 17
-                result.update(oracle_source_files=sources, oracle_source_digest=inventory(sources, tree),
-                              oracle_embedded_files=embedded, oracle_embedded_digest=inventory(embedded, tree))
-                helper = tree / 'scripts/rust-port/cmd/httpoauthseed'
-                helper.mkdir()
-                (helper / 'main.go').write_bytes(PROBE.read_bytes())
-                suffix = '.exe' if os.name == 'nt' else ''
-                go, seed = base / ('go-cli' + suffix), base / ('go-seed' + suffix)
-                builds = result.setdefault('oracle_builds', [])
-                build_go(tree, go, '.', builds)
-                build_go(tree, seed, './scripts/rust-port/cmd/httpoauthseed', builds)
-                result.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(), seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
-                seed_home = base / 'seed'
-                seed_home.mkdir()
-                tokens = json.loads(checked([seed, '--root', seed_home / 'vault'], seed_home, isolated(seed_home)))
-                snapshot = vault_snapshot(seed_home / 'vault')
-                result['fixture_snapshot'] = snapshot
-                with socket.socket() as selection:
-                    selection.bind(('127.0.0.1', 0))
-                    port = selection.getsockname()[1]
-                result['port'] = port
-                for implementation, binary in [('go', go), ('rust', rust)]:
-                    home = base / implementation
-                    home.mkdir()
-                    shutil.copytree(seed_home / 'vault', home / 'vault')
-                    assert vault_snapshot(home / 'vault') == snapshot
-                    observe(implementation, binary, home, port, tokens, result[implementation])
-                ttl_seed = base / 'ttl-seed'
-                ttl_seed.mkdir()
-                ttl_tokens = json.loads(checked([seed, '--root', ttl_seed / 'vault', '--access-ttl', '2s', '--refresh-ttl', '1m'], ttl_seed, isolated(ttl_seed)))
-                ttl_snapshot = vault_snapshot(ttl_seed / 'vault')
-                result['ttl_fixture_snapshot'] = ttl_snapshot
-                for implementation, binary in [('go', go), ('rust', rust)]:
-                    home = base / (implementation + '-ttl')
-                    home.mkdir()
-                    shutil.copytree(ttl_seed / 'vault', home / 'vault')
-                    assert vault_snapshot(home / 'vault') == ttl_snapshot
-                    observe_ttl(implementation, binary, home, port, ttl_tokens, result[implementation])
-                for implementation in ['go', 'rust']:
-                    assert len(result[implementation]['rows']) == 35 and len(result[implementation]['ttl_rows']) == 11
-                    assert len(result[implementation]['processes']) == 3 and all(p['output_capture_complete'] for p in result[implementation]['processes'])
-                assert set(result['go']['codes']).isdisjoint(result['rust']['codes']), 'independent real code entropy'
-                assert set(result['go']['token_sha256'][len(tokens):]).isdisjoint(result['rust']['token_sha256'][len(tokens):]), 'independent real token entropy'
-                assert set(result['go']['client_snapshots'][-1]['clients']).isdisjoint(result['rust']['client_snapshots'][-1]['clients']), 'independent real client entropy'
-                left = result['go']['rows'] + result['go']['ttl_rows']
-                right = result['rust']['rows'] + result['rust']['ttl_rows']
-                for a, b in zip(left, right, strict=True):
-                    assert a['case'] == b['case'] and a['semantic_control'] == b['semantic_control']
-                    if a['semantic_control'] is not None:
-                        result['semantic_controls'].append(dict(case=a['case'], decision=a['semantic_control']))
-                    elif any(a['response'][k] != b['response'][k] for k in ['status_line', 'headers_without_date', 'body_base64', 'wire_body_base64']):
-                        result['differences'].append(dict(case=a['case'], go=a['response'], rust=b['response']))
-                assert not result['differences'], 'unexpected actual OAuth HTTP difference retained'
-                assert inventory(paths, ROOT) == result['candidate_source_digest']
-                assert checked(['git', 'rev-parse', 'HEAD']).decode().strip() == result['candidate_commit']
-                assert hashlib.sha256(rust.read_bytes()).hexdigest() == result['rust_binary_sha256']
-                result['candidate_worktree_clean_at_end'] = not checked(['git', 'status', '--porcelain=v1']).strip()
-                assert result['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
-                result['passed'] = True
-            finally:
-                remove_oracle_worktree(tree, result, checked)
+            seed_home = base / 'seed'
+            tokens = replay_seed(recorded, 'main', seed_home)
+            assert vault_snapshot(seed_home / 'vault') == result['fixture_snapshot'], 'recorded seed vault bytes changed'
+            home = base / 'rust'
+            home.mkdir()
+            shutil.copytree(seed_home / 'vault', home / 'vault')
+            observe('rust', rust, home, port, tokens, result['rust'])
+            ttl_seed = base / 'ttl-seed'
+            ttl_tokens = replay_seed(recorded, 'ttl', ttl_seed)
+            assert vault_snapshot(ttl_seed / 'vault') == result['ttl_fixture_snapshot'], 'recorded ttl seed vault bytes changed'
+            home = base / 'rust-ttl'
+            home.mkdir()
+            shutil.copytree(ttl_seed / 'vault', home / 'vault')
+            observe_ttl('rust', rust, home, port, ttl_tokens, result['rust'])
+            for implementation in ['go', 'rust']:
+                assert len(result[implementation]['rows']) == 35 and len(result[implementation]['ttl_rows']) == 11
+                assert len(result[implementation]['processes']) == 3 and all(p['output_capture_complete'] for p in result[implementation]['processes'])
+            assert len(set(result['rust']['codes'])) == len(result['rust']['codes']), 'real code entropy'
+            assert len(set(result['rust']['token_sha256'][len(tokens):])) == len(result['rust']['token_sha256'][len(tokens):]), 'real token entropy'
+            assert len(result['rust']['client_snapshots'][-1]['clients']) == 2, 'real client entropy'
+            left = result['go']['rows'] + result['go']['ttl_rows']
+            right = result['rust']['rows'] + result['rust']['ttl_rows']
+            for a, b in zip(left, right, strict=True):
+                assert a['case'] == b['case'] and a['semantic_control'] == b['semantic_control']
+                if a['semantic_control'] is not None:
+                    result['semantic_controls'].append(dict(case=a['case'], decision=a['semantic_control']))
+                elif any(a['response'][k] != b['response'][k] for k in ['status_line', 'headers_without_date', 'body_base64', 'wire_body_base64']):
+                    result['differences'].append(dict(case=a['case'], go=a['response'], rust=b['response']))
+            assert not result['differences'], 'unexpected actual OAuth HTTP difference retained'
+            assert inventory(paths, ROOT) == result['candidate_source_digest']
+            assert checked(['git', 'rev-parse', 'HEAD']).decode().strip() == result['candidate_commit']
+            assert hashlib.sha256(rust.read_bytes()).hexdigest() == result['rust_binary_sha256']
+            result['candidate_worktree_clean_at_end'] = not checked(['git', 'status', '--porcelain=v1']).strip()
+            assert result['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
+            result['passed'] = True
     except BaseException as error:
         result['passed'] = False
         result.setdefault('primary_failure', {'type': type(error).__name__, 'message': str(error)[-2000:]})
         raise
     finally:
         args.receipt.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
-    print(f"PASS: {len(result['go']['rows']) + len(result['go']['ttl_rows'])} actual OAuth HTTP cases per implementation and three owned process lifetimes on {platform.system()}")
+    print(f"PASS: {len(result['go']['rows']) + len(result['go']['ttl_rows'])} actual OAuth HTTP cases per implementation and three owned process lifetimes on {platform.system()} (Go side replayed from {result['go_observations']['path']})")
 
 
 if __name__ == '__main__':

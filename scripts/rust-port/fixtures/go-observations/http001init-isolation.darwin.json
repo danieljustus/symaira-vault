@@ -1,0 +1,26 @@
+{
+ "contract": "http001init-isolation",
+ "contract_args": {},
+ "data": {
+  "control_exit": 0,
+  "control_helper_calls": 4,
+  "safe_backends": [
+   "memory"
+  ],
+  "safe_helper_calls": 0,
+  "unsafe_backends": [
+   "unset",
+   "generator_rc=0"
+  ],
+  "unsafe_exit_nonzero": true,
+  "unsafe_helper_calls": 4
+ },
+ "go_version": "go1.26.6",
+ "goarch": "arm64",
+ "goos": "darwin",
+ "normalization": [
+  "no per-run value: the recording is the count of init-time OS-keyring helper calls and the exit/backend verdicts of the Go generator probe (macOS only: the instrumentation replaces the absolute /usr/bin/security path of go-keyring)"
+ ],
+ "oracle_commit": "d1cd0f97ac550bc3020bc86b0514989f8d28d95c",
+ "schema": 1
+}
