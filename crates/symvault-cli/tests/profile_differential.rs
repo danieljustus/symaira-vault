@@ -209,10 +209,7 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
 #[cfg(unix)]
 #[test]
 fn profile_add_keeps_symlink_destination_and_target_unchanged() {
-    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
-        eprintln!("skipping Rust profile safety test: Rust binary is not set");
-        return;
-    };
+    let rust_binary = std::ffi::OsString::from(env!("CARGO_BIN_EXE_symvault"));
     use std::os::unix::fs::symlink;
 
     let home = temporary_root("symlink");
@@ -244,10 +241,7 @@ fn profile_add_keeps_symlink_destination_and_target_unchanged() {
 #[cfg(unix)]
 #[test]
 fn profile_add_keeps_invalid_existing_config_unchanged() {
-    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
-        eprintln!("skipping Rust profile safety test: Rust binary is not set");
-        return;
-    };
+    let rust_binary = std::ffi::OsString::from(env!("CARGO_BIN_EXE_symvault"));
     let home = temporary_root("invalid");
     let config = home.join(".symvault/config.yaml");
     fs::create_dir_all(config.parent().expect("legacy parent")).expect("legacy directory");

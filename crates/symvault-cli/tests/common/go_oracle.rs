@@ -717,15 +717,30 @@ fn significant(op: &FsOp) -> bool {
 }
 
 fn age_stanza_type(bytes: &[u8]) -> Option<String> {
+    // Every recipient stanza: its type plus the deterministic `k=v` arguments
+    // (KDF cost parameters). Random salts, ephemeral keys and bodies are
+    // dropped; the count and order of non-grease stanzas are kept.
     let text = bytes.strip_prefix(b"age-encryption.org/v1\n")?;
-    let line = text.split(|b| *b == b'\n').next()?;
-    let line = std::str::from_utf8(line).ok()?;
-    Some(
-        line.split_whitespace()
-            .take(2)
-            .collect::<Vec<_>>()
-            .join(" "),
-    )
+    let mut stanzas = Vec::new();
+    for line in text.split(|b| *b == b'\n') {
+        if line.starts_with(b"---") {
+            break;
+        }
+        let Some(rest) = line.strip_prefix(b"-> ") else {
+            continue;
+        };
+        let rest = std::str::from_utf8(rest).ok()?;
+        let mut parts = rest.split_whitespace();
+        let kind = parts.next()?;
+        if kind.ends_with("-grease") {
+            // age adds random grease stanzas (random type and arguments).
+            continue;
+        }
+        let mut shape = vec![kind.to_string()];
+        shape.extend(parts.filter(|arg| arg.contains('=')).map(str::to_string));
+        stanzas.push(shape.join(" "));
+    }
+    (!stanzas.is_empty()).then(|| stanzas.join("\n"))
 }
 
 fn content_matches(path: &str, recorded: &[u8], live: &[u8]) -> bool {
