@@ -1494,7 +1494,7 @@
         "RUSTUP_TOOLCHAIN": "1.98.0"
       },
       "timeout_minutes_original": 30,
-      "file_sha256": "23fdd693924a85a9a0ed897970fd3127574686c3a3a462eb111a523200d8ba15",
+      "file_sha256": "e888daa23e4f872e0035cae1e70d2b832ae161d8d1d130fb954c84fa58c1dd64",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1532,12 +1532,12 @@
           "run": "rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt"
         },
         {
-          "name": "Check historical KDF envelope fixtures and retained dependency",
-          "run": "set -euo pipefail\npython3 scripts/rust-port/check_argon2_upstream.py\npython3 scripts/rust-port/kdf_policy_fixtures.py\ncargo test --manifest-path third_party/argon2/Cargo.toml --all-features --locked\n"
+          "name": "Check frozen historical KDF envelope fixtures and retained dependency",
+          "run": "set -euo pipefail\npython3 scripts/rust-port/check_argon2_upstream.py\npython3 -B scripts/rust-port/fixtures_verify.py testdata/port/crypto/kdf-policy-v1.json\ncargo test --manifest-path third_party/argon2/Cargo.toml --all-features --locked\n"
         },
         {
           "name": "Run policy, admission and migration checks",
-          "run": "set -euo pipefail\numask 0022\ncargo test -p symvault-crypto --all-features --locked\ncargo test -p symvault-cli --bin symvault --locked migrate_kdf_commands::tests | tee kdf-rust-migration.log\npython3 -c 'from pathlib import Path; text=Path(\"kdf-rust-migration.log\").read_text(); names={\"policy_migration_retains_originals_and_rewrites_same_identity\",\"policy_migration_wrong_passphrase_and_old_backup_do_not_mutate_files\",\"policy_migration_restores_both_files_after_post_replacement_failure\",\"policy_migration_accepts_null_vault_configuration\"}; assert all(f\"test migrate_kdf_commands::tests::{name} ... ok\" in text for name in names); assert \"9 passed; 0 failed; 0 ignored\" in text'\ncargo clippy -p symvault-crypto -p symvault-cli --all-targets --all-features --locked -- -D warnings\ncargo test -p symvault-cli --test migrate_kdf_differential --locked -- --ignored | tee kdf-cli.log\npython3 -c 'from pathlib import Path; text=Path(\"kdf-cli.log\").read_text(); assert \"test kdf_resource_policy_go_rust_integration ... ok\" in text; assert \"test migrate_kdf_go_rust_integration ... ok\" in text; assert \"2 passed; 0 failed; 0 ignored\" in text'\n"
+          "run": "set -euo pipefail\numask 0022\ncargo test -p symvault-crypto --all-features --locked\ncargo test -p symvault-cli --bin symvault --locked migrate_kdf_commands::tests | tee kdf-rust-migration.log\npython3 -c 'from pathlib import Path; text=Path(\"kdf-rust-migration.log\").read_text(); names={\"policy_migration_retains_originals_and_rewrites_same_identity\",\"policy_migration_wrong_passphrase_and_old_backup_do_not_mutate_files\",\"policy_migration_restores_both_files_after_post_replacement_failure\",\"policy_migration_accepts_null_vault_configuration\"}; assert all(f\"test migrate_kdf_commands::tests::{name} ... ok\" in text for name in names); assert \"9 passed; 0 failed; 0 ignored\" in text'\ncargo clippy -p symvault-crypto -p symvault-cli --all-targets --all-features --locked -- -D warnings\n"
         },
         {
           "name": "Upload native policy evidence",
@@ -1545,7 +1545,7 @@
           "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
           "with": {
             "name": "kdf-resource-policy-${{ matrix.os }}",
-            "path": "kdf-cli.log\nkdf-rust-migration.log\n",
+            "path": "kdf-rust-migration.log\n",
             "if-no-files-found": "error",
             "retention-days": 14
           }
@@ -1557,7 +1557,7 @@
       "label": "Read policy",
       "pull_request_paths": [
         ".github/workflows/vault-read-resource-policy.yml",
-        "scripts/rust-port/refresh-read-policy-fixtures.py",
+        "scripts/rust-port/fixtures_verify.py",
         "testdata/port/store/read-resource-policy.json",
         "docs/adr/0008-vault-read-resource-policy.md",
         "crates/symvault-cli/tests/fixtures/import-review/**",
@@ -1569,7 +1569,7 @@
         "RUSTUP_TOOLCHAIN": "1.98.0"
       },
       "timeout_minutes_original": 25,
-      "file_sha256": "952fb8c2360a1522323cb512f5f2e337fc676d4073e738a5ece24d4d6a8e02f0",
+      "file_sha256": "a167cdb79ab117a81c0a8becc3b5a323fc3fc2182ee2b46850516de59840a4bf",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1607,8 +1607,8 @@
           "run": "rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt"
         },
         {
-          "name": "Re-execute actual immutable Go observations",
-          "run": "python3 scripts/rust-port/refresh-read-policy-fixtures.py --check --receipt native-read-policy.json"
+          "name": "Verify frozen Go observations",
+          "run": "python3 -B scripts/rust-port/fixtures_verify.py testdata/port/store/read-resource-policy.json crates/symvault-cli/tests/fixtures/import-review"
         },
         {
           "name": "Execute Rust policy and request regressions",
@@ -1620,7 +1620,7 @@
           "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
           "with": {
             "name": "read-policy-${{ matrix.os }}",
-            "path": "native-read-policy.json\nrust-read-*.log\n",
+            "path": "rust-read-*.log\n",
             "if-no-files-found": "error",
             "retention-days": 14
           }

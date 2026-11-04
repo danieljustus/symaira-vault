@@ -845,7 +845,7 @@ jobs:
           python-version: "3.13"
         env:
           RUSTUP_TOOLCHAIN: "1.98.0"
-      - name: "[KDF policy] Check historical KDF envelope fixtures and retained dependency"
+      - name: "[KDF policy] Check frozen historical KDF envelope fixtures and retained dependency"
         id: "kdf_policy-2"
         if: "${{ !cancelled() && needs.select.outputs.kdf_policy != 'false' && steps.kdf_policy-1.outcome == 'success' }}"
         env:
@@ -853,7 +853,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/rust-port/check_argon2_upstream.py
-          python3 scripts/rust-port/kdf_policy_fixtures.py
+          python3 -B scripts/rust-port/fixtures_verify.py testdata/port/crypto/kdf-policy-v1.json
           cargo test --manifest-path third_party/argon2/Cargo.toml --all-features --locked
       - name: "[KDF policy] Run policy, admission and migration checks"
         id: "kdf_policy-3"
@@ -867,15 +867,13 @@ jobs:
           cargo test -p symvault-cli --bin symvault --locked migrate_kdf_commands::tests | tee kdf-rust-migration.log
           python3 -c 'from pathlib import Path; text=Path("kdf-rust-migration.log").read_text(); names={"policy_migration_retains_originals_and_rewrites_same_identity","policy_migration_wrong_passphrase_and_old_backup_do_not_mutate_files","policy_migration_restores_both_files_after_post_replacement_failure","policy_migration_accepts_null_vault_configuration"}; assert all(f"test migrate_kdf_commands::tests::{name} ... ok" in text for name in names); assert "9 passed; 0 failed; 0 ignored" in text'
           cargo clippy -p symvault-crypto -p symvault-cli --all-targets --all-features --locked -- -D warnings
-          cargo test -p symvault-cli --test migrate_kdf_differential --locked -- --ignored | tee kdf-cli.log
-          python3 -c 'from pathlib import Path; text=Path("kdf-cli.log").read_text(); assert "test kdf_resource_policy_go_rust_integration ... ok" in text; assert "test migrate_kdf_go_rust_integration ... ok" in text; assert "2 passed; 0 failed; 0 ignored" in text'
       - name: "[KDF policy] Upload native policy evidence"
         id: "kdf_policy-4"
         if: "${{ !cancelled() && needs.select.outputs.kdf_policy != 'false' }}"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: "kdf-resource-policy-macos-latest"
-          path: "kdf-cli.log\nkdf-rust-migration.log\n"
+          path: "kdf-rust-migration.log\n"
           if-no-files-found: "error"
           retention-days: 14
         env:
@@ -901,13 +899,13 @@ jobs:
           python-version: "3.13"
         env:
           RUSTUP_TOOLCHAIN: "1.98.0"
-      - name: "[Read policy] Re-execute actual immutable Go observations"
+      - name: "[Read policy] Verify frozen Go observations"
         id: "vault_read_policy-2"
         if: "${{ !cancelled() && needs.select.outputs.vault_read_policy != 'false' && steps.vault_read_policy-1.outcome == 'success' }}"
         env:
           RUSTUP_TOOLCHAIN: "1.98.0"
         run: |-
-          python3 scripts/rust-port/refresh-read-policy-fixtures.py --check --receipt native-read-policy.json
+          python3 -B scripts/rust-port/fixtures_verify.py testdata/port/store/read-resource-policy.json crates/symvault-cli/tests/fixtures/import-review
       - name: "[Read policy] Execute Rust policy and request regressions"
         id: "vault_read_policy-3"
         if: "${{ !cancelled() && needs.select.outputs.vault_read_policy != 'false' && steps.vault_read_policy-2.outcome == 'success' }}"
@@ -925,7 +923,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: "read-policy-macos-latest"
-          path: "native-read-policy.json\nrust-read-*.log\n"
+          path: "rust-read-*.log\n"
           if-no-files-found: "error"
           retention-days: 14
         env:

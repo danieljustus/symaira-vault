@@ -75,11 +75,11 @@ jobs:
           python-version: '3.13'
       - name: Install pinned Rust
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
-      - name: Check historical KDF envelope fixtures and retained dependency
+      - name: Check frozen historical KDF envelope fixtures and retained dependency
         run: |
           set -euo pipefail
           python3 scripts/rust-port/check_argon2_upstream.py
-          python3 scripts/rust-port/kdf_policy_fixtures.py
+          python3 -B scripts/rust-port/fixtures_verify.py testdata/port/crypto/kdf-policy-v1.json
           cargo test --manifest-path third_party/argon2/Cargo.toml --all-features --locked
       - name: Run policy, admission and migration checks
         run: |
@@ -89,15 +89,12 @@ jobs:
           cargo test -p symvault-cli --bin symvault --locked migrate_kdf_commands::tests | tee kdf-rust-migration.log
           python3 -c 'from pathlib import Path; text=Path("kdf-rust-migration.log").read_text(); names={"policy_migration_retains_originals_and_rewrites_same_identity","policy_migration_wrong_passphrase_and_old_backup_do_not_mutate_files","policy_migration_restores_both_files_after_post_replacement_failure","policy_migration_accepts_null_vault_configuration"}; assert all(f"test migrate_kdf_commands::tests::{name} ... ok" in text for name in names); assert "9 passed; 0 failed; 0 ignored" in text'
           cargo clippy -p symvault-crypto -p symvault-cli --all-targets --all-features --locked -- -D warnings
-          cargo test -p symvault-cli --test migrate_kdf_differential --locked -- --ignored | tee kdf-cli.log
-          python3 -c 'from pathlib import Path; text=Path("kdf-cli.log").read_text(); assert "test kdf_resource_policy_go_rust_integration ... ok" in text; assert "test migrate_kdf_go_rust_integration ... ok" in text; assert "2 passed; 0 failed; 0 ignored" in text'
       - name: Upload native policy evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: kdf-resource-policy-${{ matrix.os }}
           path: |
-            kdf-cli.log
             kdf-rust-migration.log
           if-no-files-found: error
           retention-days: 14

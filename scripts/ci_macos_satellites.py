@@ -319,7 +319,7 @@ GROUP_SATELLITES = {
     ],
     "vault_read_policy": [  # vault-read-resource-policy.yml
         ".github/workflows/vault-read-resource-policy.yml",
-        "scripts/rust-port/refresh-read-policy-fixtures.py",
+        "scripts/rust-port/fixtures_verify.py",
         "testdata/port/store/read-resource-policy.json",
         "docs/adr/0008-vault-read-resource-policy.md",
         "crates/symvault-cli/tests/fixtures/import-review/**",
