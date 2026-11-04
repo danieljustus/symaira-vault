@@ -445,7 +445,6 @@ def main():
         parser.error('unoptimized Python is required')
     replay = not args.capture_go
     contract_args = dict(approval_generator=args.approval_generator, generator=args.generator)
-    recorded = load_go_observations(OBSERVATION, contract_args) if replay else None
     observed = {'lanes': {}, 'product_replay': None}
     if args.approval_generator != 'original' and args.generator:
         parser.error('corrected approval execution requires the full two-lane fixture gate')
@@ -457,6 +456,8 @@ def main():
         approval_generator_source(ROOT)  # reject changed/unreviewed bytes before any compiler
     candidate_fixture_payloads()
     sources = validate_product_source(ROOT)
+    # Source admission first (as in the live gate); a missing/mismatching observation is a failure before any output.
+    recorded = load_go_observations(OBSERVATION, contract_args) if replay else None
     if args.output_root:
         args.output_root.mkdir(parents=True,exist_ok=True)
         output=Path(tempfile.mkdtemp(prefix='run-',dir=args.output_root)).resolve()
