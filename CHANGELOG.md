@@ -16,6 +16,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Go implementation, Go CI/release jobs; Rust-only. CI, release, packaging and
+  developer tooling no longer need a Go toolchain: the `setup-go`, golangci-lint,
+  gosec, govulncheck, Go fuzz/coverage and Go test jobs, the `gomod` Dependabot
+  ecosystem, the `deferred-deps-check`, `mcp-http-shutdown`,
+  `rust-store-observations` and `rust-sync-observations` workflows, the
+  Windows/FreeBSD CI legs and scripts (`install.ps1`), `run_go_tests.py`,
+  `check-go-coverage.sh`, `go-fuzz-target.sh`, `test_go_toolchains.py` and the
+  gomobile Vaultcore mode of `scripts/build-vaultcore.sh` are gone.
+  Binaries are built with `cargo build --release --locked -p symvault-cli --bin symvault`;
+  osv-scanner scans `Cargo.lock`; `scripts/setup-dev.sh` installs rustup and the
+  pinned cargo tools.
+
 ## [v0.23.2] - 2026-10-21
 
 ### Security

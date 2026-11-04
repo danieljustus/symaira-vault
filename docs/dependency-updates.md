@@ -1,14 +1,35 @@
 # Dependency Update Runbook
 
 A procedural guide for evaluating, testing, and merging dependency updates for
-Symaira Vault. This runbook applies to all direct and transitive Go module
-dependencies. Its goal is to keep the dependency tree current and secure while
+Symaira Vault. This runbook was written for the Go module dependency tree and
+is kept as the evaluation framework; the commands below the "Current Practice"
+section are historical (Go era). Its goal is to keep the dependency tree current and secure while
 avoiding unplanned breakage in a password manager where stability is
 safety-critical.
 
-> **Scope**: Go module dependencies managed via `go.mod` / `go.sum`.  
+> **Scope**: Cargo dependencies (`Cargo.toml` / `Cargo.lock`); the evaluation criteria below also apply to the historical Go module tree.  
 > **Work item**: OPENPASS-469  
 > **Last reviewed**: 2026-04-27
+
+---
+
+## Current Practice (Rust)
+
+The product is Rust-only. Dependencies are Cargo crates pinned by the committed
+[`Cargo.lock`](../Cargo.lock) and built with `--locked`.
+
+| Concern | Mechanism |
+|---------|-----------|
+| Update PRs | Dependabot `cargo` ecosystem (weekly, minor and patch grouped) and `github-actions`; configured in [`.github/dependabot.yml`](../.github/dependabot.yml). Intentional version ceilings carry a comment explaining why. |
+| Vulnerability scan | OSV scanner on `Cargo.lock` (`dependency-scan` job in `ci.yml`, ignores in `osv-scanner.toml`), `cargo audit` and `cargo deny` via `make rust-security` |
+| Verification | `make rust-lint`, `make rust-test`, `make rust-security`; the differential tests replay committed observations and need no extra toolchain |
+| Inspecting the tree | `cargo tree --locked -i <crate>`, `cargo update -p <crate> --precise <version>` |
+| Deferrals | Record the decision in a comment next to the dependency in `Cargo.toml` or the Dependabot `ignore` entry, using the template below |
+
+The remainder of this runbook keeps the evaluation criteria, test protocol,
+deferral template and roles unchanged; Go-era examples (the deferral records for
+`ProtonMail/go-crypto` and `golang/protobuf`) are retained as historical (Go era)
+examples of the template.
 
 ---
 
@@ -129,49 +150,41 @@ trusted; for major updates, every step is mandatory.
 
 - [ ] **3. Update and tidy**  
   ```bash
-  go get <module>@<version>
-  go mod tidy
-  go mod verify
+  cargo update -p <crate> --precise <version>   # or edit Cargo.toml, then:
+  cargo metadata --locked --format-version 1 >/dev/null
   ```
-  Ensure `go.sum` changes are limited to the expected module graph.
+  Ensure `Cargo.lock` changes are limited to the expected crate graph.
 
 - [ ] **4. Static analysis**  
   ```bash
-  go vet ./...
-  golangci-lint run   # if installed locally
+  make rust-lint
   ```
 
 - [ ] **5. Unit and integration tests**  
   ```bash
-  go test ./...
+  make rust-test
   ```
-  All tests must pass. If the dependency is used in integration tests (e.g.,
-  `go-git` in repository tests), run those explicitly:
+  All tests must pass. If the dependency is used by one crate's integration
+  tests, run those explicitly:
   ```bash
-  go test -run TestRepository ./...
+  cargo test -p <crate> --all-targets --locked
   ```
 
 - [ ] **6. Build verification**  
   ```bash
-  go build ./...
+  make rust-cli
   ```
-  Confirm no compilation errors with the patched `toolchain` in
-  [`go.mod`](../go.mod) (currently `go1.26.10`), matching
-  `BUILD_GO_TOOLCHAIN` in [`Makefile`](../Makefile). The `go 1.26.6`
-  directive retains the minimum for frozen oracle checks.
+  Confirm no compilation errors with the toolchain pinned in
+  [`rust-toolchain.toml`](../rust-toolchain.toml).
 
 - [ ] **7. Cross-compilation smoke test**  
-  Because Symaira Vault ships for multiple platforms:
-  ```bash
-  GOOS=linux   GOARCH=amd64 go build -o /dev/null .
-  GOOS=darwin  GOARCH=arm64 go build -o /dev/null .
-  GOOS=windows GOARCH=amd64 go build -o /dev/null .
-  ```
+  Native macOS arm64 and Linux builds run in CI (`build` job in `ci.yml`);
+  locally, build for the host platform with `make rust-cli`.
 
 - [ ] **8. Runtime smoke test**  
   Perform a quick manual end-to-end test:
   ```bash
-  go build -o openpass-test .
+  make rust-cli && cp target/release/symvault openpass-test
   ./openpass-test version
   ./openpass-test init /tmp/op-test-vault
   ./openpass-test --vault /tmp/op-test-vault set test.password --value "smoke-test-42"
@@ -180,7 +193,7 @@ trusted; for major updates, every step is mandatory.
   ```
 
 - [ ] **9. Check for new indirect dependencies**  
-  If `go.mod` gained new indirect entries, evaluate each with the [Risk
+  If `Cargo.lock` gained new transitive crates, evaluate each with the [Risk
   Assessment Matrix](#risk-assessment-matrix).
 
 - [ ] **10. Document the decision**  
@@ -425,9 +438,8 @@ An **emergency update** is any dependency change required to address a
 If an emergency update introduces a regression:
 
 ```bash
-# Revert the module change
-go get <module>@<previous-version>
-go mod tidy
+# Revert the dependency change
+cargo update -p <crate> --precise <previous-version>
 # Open a revert PR immediately
 # Tag a hotfix release if the previous version was already published
 ```
@@ -467,28 +479,22 @@ See inline comments in [`go.mod`](../go.mod) for full deferral rationale.
 ### Useful Commands
 
 ```bash
-# List all modules with available updates
-go list -u -m all
+# Show why a crate is required
+cargo tree --locked -i <crate>
 
-# Show why a module is required
-go mod why -m <module>
-
-# Show the full module graph
-go mod graph
-
-# Verify module checksums
-go mod verify
+# Show the full dependency graph
+cargo tree --locked
 
 # Audit for known vulnerabilities
-go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+make rust-security
 ```
 
 ### External Resources
 
-- [Go Modules Reference](https://go.dev/ref/mod)
+- [Cargo Book: Specifying Dependencies](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html)
 - [Semantic Versioning](https://semver.org/)
 - [GitHub Security Advisories](https://github.com/advisories)
-- [Go Vulnerability Database](https://pkg.go.dev/vuln/)
+- [RustSec Advisory Database](https://rustsec.org/)
 
 ---
 

@@ -10,20 +10,12 @@
 # (rust-toolchain.toml) and full Xcode with the iOS SDK; the Apple targets are
 # added with rustup when rustup is on PATH.
 #
-# Fallback (SYMVAULT_VAULTCORE=gomobile): the previous gomobile bind of
-# pkg/mobilebind into Vaultcore.xcframework (needs golang.org/x/mobile from
-# go.mod and full Xcode). NOT usable by the client at this commit, which
-# imports SymvaultFFI, not Vaultcore; it only keeps the Go bridge buildable.
-# To ship the gomobile core, build from the parent of the commit "client: use
-# the Rust SymvaultFFI core" (see `git log -- client/Package.swift`).
-#
-# Both write below client/.build/mobilecore. The Rust framework is rebuilt on
-# every run (cargo is incremental, so an unchanged core costs seconds), so a
-# changed core can never be shipped stale; the gomobile one is reused if
-# present (delete it to force a rebuild).
+# The framework is written below client/.build/mobilecore and rebuilt on every
+# run (cargo is incremental, so an unchanged core costs seconds), so a changed
+# core can never be shipped stale.
 #
 # Environment:
-#   SYMVAULT_VAULTCORE   rust (default) | gomobile
+#   SYMVAULT_VAULTCORE   rust (default and only supported mode)
 #   CARGO_TARGET_DIR     Cargo output root for the Rust build (default <repo>/target)
 #   CARGO                cargo launcher for the Rust build (default `cargo`)
 #
@@ -65,24 +57,8 @@ case "$mode" in
     rm -rf "$FRAMEWORK.old"
     echo "Built $FRAMEWORK"
     ;;
-  gomobile)
-    echo "build-vaultcore: gomobile builds Vaultcore.xcframework, which this client does not link (it uses SymvaultFFI)" >&2
-    FRAMEWORK="$OUT_DIR/Vaultcore.xcframework"
-    if [[ -d "$FRAMEWORK" ]]; then
-      echo "Vaultcore.xcframework already present at $FRAMEWORK"
-      exit 0
-    fi
-
-    # We invoke gomobile via `go run` (not the installed binary) so it resolves
-    # the module version pinned in go.mod rather than performing a stricter
-    # standalone dependency check.
-    mkdir -p "$OUT_DIR"
-    GOFLAGS=-mod=mod go run golang.org/x/mobile/cmd/gomobile init
-    GOFLAGS=-mod=mod go run golang.org/x/mobile/cmd/gomobile bind -target=ios -o "$FRAMEWORK" ./pkg/mobilebind
-    echo "Built $FRAMEWORK"
-    ;;
   *)
-    echo "build-vaultcore: SYMVAULT_VAULTCORE must be rust or gomobile (got: $mode)" >&2
+    echo "build-vaultcore: SYMVAULT_VAULTCORE must be rust (got: $mode)" >&2
     exit 2
     ;;
 esac

@@ -4,9 +4,14 @@ Symaira Vault provides opt-in observability through Prometheus metrics and OpenT
 
 ## Metrics
 
+> **Historical (Go era):** the metrics endpoint, the metric names below and the
+> tracing hooks were a Go build option (`-tags metrics`). The Rust CLI
+> (`make rust-cli`) answers `/metrics` with HTTP 501 (`metrics not compiled in`)
+> until a Rust implementation lands; the documentation below describes the
+> design that implementation must match.
+
 Prometheus metrics are exposed by the HTTP MCP server on `/metrics` only
-when built with `-tags metrics` (for example, `go build -tags metrics -o symvault .`
-from the repository root). Default builds return HTTP 501 at this endpoint.
+when built with metrics support. Default builds return HTTP 501 at this endpoint.
 Loopback binds do not require metrics authentication; non-loopback binds require
 bearer authentication by default (`mcp.metrics_auth_required: true`).
 
@@ -50,8 +55,8 @@ values. The executable does not register a `diag metrics` command.
 
 ## Tracing
 
-OpenTelemetry tracing requires the same `metrics` build tag; without it,
-tracing initialization is a no-op.
+OpenTelemetry tracing requires the same metrics support (historical Go build
+tag `metrics`); without it, tracing initialization is a no-op.
 
 ### Configuration
 
@@ -62,7 +67,7 @@ export SYMVAULT_OTLP_ENDPOINT=http://localhost:4318
 symvault mcp --port 8080
 ```
 
-Or use a custom endpoint programmatically via `metrics.InitTracing(endpoint, serviceName)`.
+Historical (Go era): a custom endpoint could also be set programmatically via `metrics.InitTracing(endpoint, serviceName)`.
 
 ### Spans
 

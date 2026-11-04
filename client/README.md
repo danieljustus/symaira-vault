@@ -26,10 +26,10 @@ the x86_64 simulator are not supported). The Swift
 wrapper (`Sources/SymvaultFFI`) is a symlink to
 `crates/symvault-ffi/swift/Sources/SymvaultFFI`.
 
-The former gomobile core (`Vaultcore.xcframework`) is only built with
-`SYMVAULT_VAULTCORE=gomobile bash scripts/build-vaultcore.sh`; the Swift code
-at this revision uses `SymvaultFFI`, so shipping gomobile means building from
-the commit before the client switched.
+`scripts/build-vaultcore.sh` builds only the Rust `SymvaultFFI.xcframework`.
+The former gomobile core (`Vaultcore.xcframework`) is historical (Go era) and
+is no longer buildable from this repository; it remains available from the
+git history before the client switched to `SymvaultFFI`.
 
 For the reusable packages and unit tests (from `client/`, after that step):
 

@@ -19,10 +19,6 @@ OpenPass
 # Dependency directories
 vendor/
 
-# Go workspace
-go.work
-go.work.sum
-
 # IDE
 .idea/
 .vscode/
@@ -55,7 +51,6 @@ coverage/
 /target
 fuzz/artifacts/
 fuzz/target/
-.gobind/
 vault_coverage.html
 coverage.html
 *.html

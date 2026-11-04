@@ -124,10 +124,12 @@ To build a `.mcpb` bundle from a local build:
 
 ```bash
 # Build the binary
-make build
+make rust-cli
 
-# Create the .mcpb bundle
-scripts/build-mcpb.sh --version "$(git describe --tags --always)" --os "$(go env GOOS)" --arch "$(go env GOARCH)" --binary ./symvault
+# Create the .mcpb bundle (macOS arm64 or Linux)
+case "$(uname -s)" in Darwin) os=darwin ;; Linux) os=linux ;; esac
+case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; x86_64) arch=amd64 ;; esac
+scripts/build-mcpb.sh --version "$(git describe --tags --always)" --os "$os" --arch "$arch" --binary target/release/symvault
 ```
 
 The output file `dist/symvault_<version>_<os>_<arch>.mcpb` can be installed as described above.

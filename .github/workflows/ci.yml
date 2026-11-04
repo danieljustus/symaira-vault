@@ -26,7 +26,6 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  GOSEC_VERSION: v2.22.0
 
 jobs:
   decide:
@@ -81,30 +80,6 @@ jobs:
             | ./scripts/ci-changed-areas.sh | tee -a "$GITHUB_OUTPUT"
 
   # ── Always-run jobs (PR + main) ──────────────────────────────────────────
-
-  govulncheck:
-    name: govulncheck
-    needs: [changes]
-    if: needs.changes.outputs.code != 'false'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
-
-      - name: Run govulncheck
-        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1
-        with:
-          go-version-input: '1.26.10'
-          go-package: ./...
-
   dependency-scan:
     name: Dependency Scan
     needs: [changes]
@@ -116,21 +91,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
-
       - name: Run OSV Scanner
         id: osv_scan
         continue-on-error: true
         uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
         with:
           scan-args: >-
-            --lockfile=go.mod
+            --lockfile=Cargo.lock
             --config=osv-scanner.toml
-            --no-call-analysis=go
             --format=sarif
             --output=osv-results.sarif
 
@@ -172,60 +140,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
-
-      - name: Verify product and historical oracle toolchains
-        run: python3 scripts/test_go_toolchains.py
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt
 
       - name: Check formatting
-        run: make fmt-check
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
-        with:
-          version: v2.11.4
-          install-mode: binary
-          # Skip `config verify`: it downloads the JSON schema and times out (#1407).
-          verify: false
-          args: --timeout=5m --verbose
-
-      - name: Run gosec SAST scanner
-        run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@${{ env.GOSEC_VERSION }}
-          scanner_status=0
-          gosec -exclude-generated -exclude-dir=testdata -fmt sarif -out gosec.sarif ./... || scanner_status=$?
-          python3 - <<'PYCODE'
-          import json
-          from pathlib import Path
-          report = Path('gosec.sarif')
-          if report.exists():
-              for run in json.loads(report.read_text()).get('runs', []):
-                  for finding in run.get('results', []):
-                      for location in finding.get('locations', []):
-                          physical = location.get('physicalLocation', {})
-                          print(f"{finding.get('ruleId')}: {physical.get('artifactLocation', {}).get('uri')}:{physical.get('region', {}).get('startLine')}: {finding.get('message', {}).get('text')}")
-          PYCODE
-          exit "$scanner_status"
-
-      - name: Upload gosec SARIF report
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: gosec-sarif
-          path: gosec.sarif
-          retention-days: 7
-
-      - name: Upload gosec results to code scanning
-        if: always() && github.event_name == 'push'
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
-        with:
-          sarif_file: gosec.sarif
+        run: cargo fmt --all --check
 
   # Job id and display name are kept: they are a required status check. The flake
   # builds the Rust CLI from Cargo.lock (rustPlatform.buildRustPackage); there is
@@ -257,7 +177,6 @@ jobs:
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: '2'
-      GOMAXPROCS: '2'
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -265,13 +184,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Verify frozen Go oracle and differential harness
+      - name: Verify frozen Go observations and differential harness (replay)
         run: make port-contract
 
   rust:
@@ -282,7 +195,6 @@ jobs:
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: '2'
-      GOMAXPROCS: '2'
       RUST_TEST_THREADS: '1'
     steps:
       - name: Checkout code
@@ -290,12 +202,6 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
 
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
@@ -311,7 +217,7 @@ jobs:
 
       # The interpreter-heavy Miri pass runs in the parallel `rust-miri` job;
       # `rust-gates-core` is every remaining staged gate.
-      - name: Run Rust gates and Go differential contract
+      - name: Run Rust gates and replayed differential contract
         run: make rust-gates-core
 
       - name: Verify real Unix MCP approval terminal
@@ -359,7 +265,7 @@ jobs:
         run: make rust-fuzz
 
   # Keep native Rust in the PR run so migration batches need no duplicate
-  # workflow_dispatch of the entire Go/CI matrix.
+  # workflow_dispatch of the entire CI matrix.
   rust-native:
     name: Rust native (${{ matrix.os }})
     needs: [changes, decide]
@@ -368,7 +274,6 @@ jobs:
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: '2'
-      GOMAXPROCS: '2'
       RUST_TEST_THREADS: '1'
     strategy:
       fail-fast: false
@@ -393,12 +298,6 @@ jobs:
           # `git show`; a shallow checkout does not contain it.
           fetch-depth: 0
 
-      - name: Set up Go for embedded production-handler tests
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          cache: ${{ runner.environment != 'self-hosted' }}
-          go-version: '1.26.10'
-
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
 
@@ -409,19 +308,7 @@ jobs:
       - name: Check and lint
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
-      - name: Verify isolated MCP probe child environments
-        shell: bash
-        env:
-          SYMVAULT_RUN_WINDOWS_CROSSLANG: '1'
-          SYMVAULT_TEST_KEYRING: memory
-        run: |
-          set -euo pipefail
-          go test ./internal/mcp/server -run '^TestExecuteWithSecretFixtureGoEnvironment$' -count=1 -json | tee mcp-environment-probe.jsonl
-          python3 -c 'import json; rows=[json.loads(line) for line in open("mcp-environment-probe.jsonl")]; name="TestExecuteWithSecretFixtureGoEnvironment"; assert any(row.get("Test")==name and row.get("Action")=="pass" for row in rows), "environment probe did not execute"; assert not any(row.get("Test")==name and row.get("Action")=="skip" for row in rows), "environment probe was skipped"; print("Verified both isolated MCP probe children")'
-          CGO_ENABLED=0 go test ./scripts/rust-port/cmd/manifestkeygen -run '^TestManifestKeyProductionFixture$' -count=1 -json | tee manifest-race-replay.jsonl
-          python3 -c 'import json; rows=[json.loads(line) for line in open("manifest-race-replay.jsonl")]; name="TestManifestKeyProductionFixture"; assert any(row.get("Test")==name and row.get("Action")=="pass" for row in rows), "historical manifest replay did not execute"; assert not any(row.get("Test")==name and row.get("Action")=="skip" for row in rows), "historical manifest replay was skipped"; print("Verified historical manifest race replay with a CGO-disabled parent")'
-
-      - name: Verify native Go MCP handler fixtures
+      - name: Verify MCP handler fixtures (replay)
         shell: bash
         run: make mcp-call-fixtures-check
 
@@ -443,7 +330,7 @@ jobs:
           # shellcheck disable=SC2086 # intentionally empty or two words
           cargo test --workspace --all-features --locked -- $SKIP_KEYCHAIN
 
-      - name: Verify native Go/Rust CLI and authentication parity
+      - name: Verify CLI and authentication parity (replay)
         if: runner.os == 'macOS'
         shell: bash
         run: |
@@ -457,7 +344,6 @@ jobs:
           make config-cli-differential
 
       - name: Verify real Unix MCP approval terminal
-        if: runner.os != 'Windows'
         shell: bash
         run: make mcp-approval-pty-acceptance
 
@@ -481,62 +367,26 @@ jobs:
         run: cargo test --locked -p symvault-platform --test native_biometric_item -- --exact security_framework_items_match_go_layout_on_disposable_keychains
 
   # ── PR-fast jobs ─────────────────────────────────────────────────────────
-
-  test-pr:
-    name: Test (ubuntu) — PR
-    needs: [changes]
-    if: github.event_name == 'pull_request' && needs.changes.outputs.code != 'false'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
-
-      - name: Install dependencies
-        run: go mod download
-
-      - name: Run tests
-        env:
-          CGO_ENABLED: '1'
-          SYMVAULT_ALLOW_ENV_PASSPHRASE: '1'
-        run: |
-          go test -v -timeout=15m -coverprofile=coverage.out -skip 'TestFlow|TestBinaryE2E|Integration' ./...
-
-      - name: Check coverage threshold
-        run: ./scripts/check-go-coverage.sh
-
   build-pr:
     name: Build (linux-amd64) — PR
     if: github.event_name == 'pull_request' && needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
-    needs: [changes, lint, test-pr, govulncheck, dependency-scan]
+    needs: [changes, lint, dependency-scan]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
 
       - name: Build binary
         env:
-          GOOS: linux
-          GOARCH: amd64
-          CGO_ENABLED: 0
+          SYMVAULT_VERSION: dev
         run: |
-          go build -ldflags="-s -w -X main.version=dev -X main.commit=${{ github.sha }}" -o symvault-linux-amd64 .
+          cargo build --release --locked -p symvault-cli --bin symvault
+          cp target/release/symvault symvault-linux-amd64
 
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -572,12 +422,6 @@ jobs:
             exit 1
           fi
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          cache: ${{ runner.environment != 'self-hosted' }}
-          go-version: '1.26.10'
-
       - name: Set up Rust (pinned toolchain + Apple targets for SymvaultFFI)
         run: |
           set -euo pipefail
@@ -594,7 +438,8 @@ jobs:
       - name: Build native Vault apps and verify icons
         run: |
           set -euo pipefail
-          go build -o symvault .
+          cargo build --release --locked -p symvault-cli --bin symvault
+          cp target/release/symvault symvault
           xcodegen --spec client/project.yml --project client
           scripts/verify-vault-icon.sh --source-only
 
@@ -690,13 +535,7 @@ jobs:
                   "$path" == rust-toolchain.toml ||
                   "$path" == scripts/verify-vault-icon.sh ||
                   "$path" == .github/workflows/ci.yml ||
-                  "$path" == .github/workflows/release.yml ||
-                  "$path" == go.mod ||
-                  "$path" == go.sum ||
-                  "$path" == *.go ||
-                  "$path" == internal/agentskill/assets/* ||
-                  "$path" == internal/crypto/eff_large_wordlist.txt ||
-                  "$path" == internal/mcp/apitemplates/builtin/* ]]; then
+                  "$path" == .github/workflows/release.yml ]]; then
               client_changed=true
             fi
           done < "$changed_paths"
@@ -727,173 +566,40 @@ jobs:
         run: npm test
 
   # ── Main / schedule only jobs ────────────────────────────────────────────
-
-  test:
-    name: Test (${{ matrix.os }})
-    if: github.event_name != 'pull_request'
-    needs: [decide]
-    runs-on: ${{ fromJSON(matrix.os == 'macos-latest' && needs.decide.outputs.runs_on || toJSON(matrix.os)) }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        go-version: ['1.26.10']
-      fail-fast: false
-    steps:
-      - name: Assert actual native macOS arm64
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$RUNNER_OS" = macOS
-          test "$(uname -s)" = Darwin
-          test "$(uname -m)" = arm64
-          sw_vers
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          clean: ${{ runner.environment != 'self-hosted' }}
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          cache: ${{ runner.environment != 'self-hosted' }}
-          go-version: ${{ matrix.go-version }}
-
-      - name: Install dependencies
-        run: go mod download
-
-      - name: Export Go cache paths for the isolated oracle
-        # GOMODCACHE/GOCACHE
-        # are implicit defaults, not literal env vars, so store004gen's
-        # isolated oracle child (HOME/USERPROFILE repointed at an empty
-        # directory) cannot find the module/build caches "go mod download"
-        # just populated above. Harmless on ubuntu/macos, where it lets the
-        # isolated child reuse the real cache too instead of a cold one.
-        shell: bash
-        run: |
-          echo "GOMODCACHE=$(go env GOMODCACHE)" >> "$GITHUB_ENV"
-          echo "GOCACHE=$(go env GOCACHE)" >> "$GITHUB_ENV"
-
-      - name: Remove stale Go sources from the persistent self-hosted target
-        # Checkout keeps ignored files on self-hosted runners (clean: false) so
-        # Cargo reuses target/. Go generators also write evidence packages
-        # (target/migration-run, target/mcp-fixture-evidence) there; a leftover
-        # from an earlier run is enumerated by `go test ./...` and then removed
-        # by the test that regenerates it ("chdir ...: no such file").
-        if: runner.environment == 'self-hosted'
-        shell: bash
-        run: |
-          set -euo pipefail
-          [ -d target ] || exit 0
-          find target -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' dir; do
-            if find "$dir" -name '*.go' -print -quit | grep -q .; then
-              chmod -R u+w "$dir"
-              rm -rf "$dir"
-              echo "removed stale Go sources: $dir"
-            fi
-          done
-
-      - name: Run tests
-        shell: bash
-        env:
-          CGO_ENABLED: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}
-          SYMVAULT_ALLOW_ENV_PASSPHRASE: '1'
-        run: |
-          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
-            go test -v -race -timeout=30m -coverprofile=coverage.out -skip 'TestFlow|TestBinaryE2E|Integration' ./...
-          else
-            go test -v -timeout=30m -skip 'TestFlow|TestBinaryE2E|Integration' ./...
-          fi
-
-      - name: Check coverage threshold
-        if: matrix.os == 'ubuntu-latest'
-        run: ./scripts/check-go-coverage.sh
-
-      - name: Run smoke tests
-        shell: bash
-        run: go test -v -timeout=15m -tags smoke -run TestBetaSmoke .
-
-      - name: Generate coverage report
-        if: matrix.os == 'ubuntu-latest'
-        run: go tool cover -html=coverage.out -o coverage.html
-
-      - name: Upload coverage artifact
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: coverage-report
-          path: coverage.html
-          retention-days: 7
-
-  fuzz:
-    name: Fuzz Tests
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    needs: [lint]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
-
-      - name: Run fuzz tests
-        run: |
-          ./scripts/test-go-fuzz-target.sh
-          echo "Running fuzz tests with 55s per target..."
-          ./scripts/go-fuzz-target.sh -fuzz=FuzzCSVImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
-          ./scripts/go-fuzz-target.sh -fuzz=FuzzBitwardenImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
-          ./scripts/go-fuzz-target.sh -fuzz=FuzzOnePUXImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
-          ./scripts/go-fuzz-target.sh -fuzz=FuzzParsePassEntry -fuzztime=55s -timeout=180s ./internal/importer/
-          ./scripts/go-fuzz-target.sh -fuzz=FuzzNormalizePath -fuzztime=55s -timeout=180s ./internal/importer/
-          ./scripts/go-fuzz-target.sh -fuzz=FuzzParseMapping -fuzztime=55s -timeout=180s ./internal/importer/
-          echo "All fuzz tests passed without crashes"
-
   build:
     name: Build
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    needs: [lint, test, govulncheck, dependency-scan]
+    needs: [lint, dependency-scan]
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: linux
             goarch: amd64
+            runner: ubuntu-latest
           - goos: linux
             goarch: arm64
+            runner: ubuntu-24.04-arm
           - goos: darwin
             goarch: arm64
-          - goos: freebsd
-            goarch: amd64
-          - goos: freebsd
-            goarch: arm64
+            runner: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
 
       - name: Build binary
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
+          SYMVAULT_VERSION: dev
         run: |
           output_name="symvault-${{ matrix.goos }}-${{ matrix.goarch }}"
-          go build -ldflags="-s -w -X main.version=dev -X main.commit=${{ github.sha }}" -o "$output_name" .
+          cargo build --release --locked -p symvault-cli --bin symvault
+          cp target/release/symvault "$output_name"
           echo "Built: $output_name"
 
       - name: Upload artifact
@@ -902,46 +608,6 @@ jobs:
           name: symvault-${{ matrix.goos }}-${{ matrix.goarch }}
           path: symvault-${{ matrix.goos }}-${{ matrix.goarch }}
           retention-days: 7
-
-  integration-test:
-    name: Integration Tests
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    needs: [lint]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          # Repository tests digest pinned oracle commits, so they need real
-          # history; a shallow checkout fails them with git exit 128.
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
-          cache: true
-
-      - name: Install dependencies
-        run: go mod download
-
-      - name: Install GPG (for encryption tests)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gnupg2
-
-      - name: Run integration tests
-        run: |
-          # TestReencryptJournalGoRustIntegration/rust_production_journal_go_open
-          # requires the Rust CLI path in SYMVAULT_RUST_BINARY and fails when it
-          # is absent by design; that binary is supplied only by the explicit
-          # cross-language gate (`make reencrypt-journal-differential`, part of
-          # `make port-contract` in the "Rust port contract" job). This job has
-          # no Rust toolchain, so it must not select that subtest.
-          go test -v -timeout=10m ./... -run Integration -skip 'ReencryptJournalGoRustIntegration' 2>&1
-        env:
-          CI: true
 
   smoke-test:
     name: Binary Smoke Test
@@ -1020,7 +686,6 @@ jobs:
     needs:
       - changes
       - decide
-      - govulncheck
       - dependency-scan
       - lint
       - flake-vendorhash
@@ -1029,7 +694,6 @@ jobs:
       - rust-miri
       - rust-native
       - keychain-native
-      - test-pr
       - build-pr
       - macos-vaultcore
       - ubuntu-editors
@@ -1056,7 +720,6 @@ jobs:
         env:
           RES_CHANGES: ${{ needs.changes.result }}
           RES_CODE_CHANGED: ${{ needs.changes.outputs.code }}
-          RES_GOVULNCHECK: ${{ needs.govulncheck.result }}
           RES_DEPENDENCY_SCAN: ${{ needs.dependency-scan.result }}
           RES_LINT: ${{ needs.lint.result }}
           RES_FLAKE_VENDORHASH: ${{ needs.flake-vendorhash.result }}
@@ -1066,7 +729,6 @@ jobs:
           RES_RUST_NATIVE: ${{ needs.rust-native.result }}
           RES_KEYCHAIN_NATIVE: ${{ needs.keychain-native.result }}
           RES_KEYCHAIN_ROUTED: ${{ contains(needs.decide.outputs.runs_on, 'self-hosted') }}
-          RES_TEST_PR: ${{ needs.test-pr.result }}
           RES_BUILD_PR: ${{ needs.build-pr.result }}
           RES_MACOS_VAULTCORE: ${{ needs.macos-vaultcore.result }}
           RES_VAULTCORE_CLIENT_CHANGED: ${{ needs.ubuntu-editors.outputs.client_changed }}
@@ -1135,7 +797,6 @@ jobs:
           expect_code reject unknown success
           echo "Code gate regression passed (only confirmed code=false permits a skip)"
           check_required "$RES_CHANGES" changes
-          check_code "$RES_CODE_CHANGED" "$RES_GOVULNCHECK" govulncheck
           check_code "$RES_CODE_CHANGED" "$RES_DEPENDENCY_SCAN" dependency-scan
           check_code "$RES_CODE_CHANGED" "$RES_LINT" lint
           check_code "$RES_CODE_CHANGED" "$RES_FLAKE_VENDORHASH" flake-vendorhash
@@ -1149,7 +810,6 @@ jobs:
           else
             check_path_gated "$RES_KEYCHAIN_NATIVE" keychain-native
           fi
-          check_code "$RES_CODE_CHANGED" "$RES_TEST_PR" test-pr
           check_code "$RES_CODE_CHANGED" "$RES_BUILD_PR" build-pr
           expect_vaultcore() {
             local expected="$1" client_changed="$2" result="$3" actual

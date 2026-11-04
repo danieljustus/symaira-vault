@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-check biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages release-contract release-contract-selftest rust-cli manpages-differential port-fixtures-check core-fixtures-check quota-fixtures-check policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-differential audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
+.PHONY: keyring-key-fixtures-check biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages release-contract release-contract-selftest rust-cli manpages-differential port-fixtures-check core-fixtures-check quota-fixtures-check policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential port-contract store-differential audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
 
 # Variables
 BINARY_NAME := symvault
@@ -588,11 +588,6 @@ crypto-differential:
 	@mkdir -p target/crypto
 	$(CARGO) run -p symvault-crypto --example crypto_emit --locked > target/crypto/rust-output.txt
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cryptoverify target/crypto/rust-output.txt
-	$(MAKE) crypto-fuzz-smoke
-
-crypto-fuzz-smoke:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) GO=$(GO) ./scripts/go-fuzz-target.sh -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=3s -timeout=30s ./internal/crypto
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) GO=$(GO) ./scripts/go-fuzz-target.sh -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=3s -timeout=30s ./internal/crypto
 
 # Verify the independent fuzz workspace has a present, consistent lockfile.
 # cargo-fuzz 0.13.2 has no --locked flag; the locked Cargo check validates
@@ -1541,7 +1536,6 @@ help:
 	@echo "  pass-gpg-differential - Verify the pass importer against real gpg (Go oracle)"
 	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
 	@echo "  crypto-differential - Verify Go↔Rust age and KDF cross-decryption"
-	@echo "  crypto-fuzz-smoke - Run the bounded Argon2id parser fuzz smoke"
 	@echo "  store-differential - Verify Go↔Rust storage reopen and read-only fixtures"
 	@echo "  data-safety-differential - Verify the pre-Rust-mutation backup gate over Go-created vaults"
 	@echo "  audit-fixtures-check - Verify audit fixture provenance and drift"

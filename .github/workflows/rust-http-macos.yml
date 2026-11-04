@@ -7,7 +7,7 @@ name: Rust HTTP macOS satellites
 # A Linux select job decides per satellite; a satellite runs unless the
 # selector explicitly outputs 'false' (fail-closed: missing/failed selector runs all).
 # Each satellite's commands are copied verbatim from its original workflow
-# (baseline: scripts/ci_macos_satellites_baseline.json, source 895b1fe7).
+# (baseline: scripts/ci_macos_satellites_baseline.json, rebased onto the Go-free originals).
 
 on:
   pull_request:
@@ -75,8 +75,6 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 180
     env:
-      GOTOOLCHAIN: "go1.26.6"
-      GOWORK: "off"
       RUSTUP_TOOLCHAIN: "1.98.0"
       RUST_TEST_THREADS: "1"
       TZ: "UTC"
@@ -97,10 +95,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: "Set up pinned Go"
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.26.6"
       - name: "Set up pinned Python"
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -112,18 +106,9 @@ jobs:
         id: prologue
         run: |
           echo 'shared macOS prologue complete'
-      - name: "[HTTP HEAD] Build the owned oracle compiler runner"
+      - name: "[HTTP HEAD] Test owning runtime and CLI assembly"
         id: head-0
         if: "${{ !cancelled() && needs.select.outputs.head != 'false' && steps.prologue.outcome == 'success' }}"
-        run: |
-          set -euo pipefail
-          mkdir -p target
-          runner=target/oraclebuild
-          if [[ "$RUNNER_OS" == "Windows" ]]; then runner+=.exe; fi
-          go build -trimpath -o "$runner" ./scripts/rust-port/cmd/oraclebuild
-      - name: "[HTTP HEAD] Test owning runtime and CLI assembly"
-        id: head-1
-        if: "${{ !cancelled() && needs.select.outputs.head != 'false' && steps.head-0.outcome == 'success' }}"
         run: |
           set -euo pipefail
           cargo fmt --all --check
@@ -135,19 +120,18 @@ jobs:
           from pathlib import Path
           text=Path('target/native-head-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(244 if os.environ['RUNNER_OS']=='Windows' else 246)
+          assert results and sum(int(n) for n,_ in results)==246
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'browser_consent_requires_the_vault_passphrase_before_issuing_a_code ... ok' in text
           PY
           cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
           cargo build -p symvault-cli --bin symvault --locked
       - name: "[HTTP HEAD] Execute actual native HEAD and persistent response boundaries"
-        id: head-2
-        if: "${{ !cancelled() && needs.select.outputs.head != 'false' && steps.head-1.outcome == 'success' }}"
+        id: head-1
+        if: "${{ !cancelled() && needs.select.outputs.head != 'false' && steps.head-0.outcome == 'success' }}"
         run: |
           set -euo pipefail
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_head_contract.py --rust "$rust_cli" --receipt target/native-http-head.json
           python3 - <<'PY'
           import json,subprocess
@@ -155,7 +139,7 @@ jobs:
           r=json.loads(Path('target/native-http-head.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
           assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences']
+          assert r['native_os'] in {'Linux','Darwin'} and not r['differences']
           for implementation in ['go','rust']:
               observed=r[implementation]
               assert len(observed['rows'])==13 and len(observed['authorization_heads'])==512
@@ -165,12 +149,11 @@ jobs:
               assert observed['browser_control']['status_line']=='HTTP/1.1 200 OK'
           PY
       - name: "[HTTP HEAD] Preserve strict HTTP and actual OAuth corpora"
-        id: head-3
-        if: "${{ !cancelled() && needs.select.outputs.head != 'false' && steps.head-2.outcome == 'success' }}"
+        id: head-2
+        if: "${{ !cancelled() && needs.select.outputs.head != 'false' && steps.head-1.outcome == 'success' }}"
         run: |
           set -euo pipefail
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt target/native-head-http-process.json
           python3 scripts/rust-port/http_oauth_contract.py --rust "$rust_cli" --receipt target/native-head-http-oauth.json
           python3 - <<'PY'
@@ -185,7 +168,7 @@ jobs:
               assert len(oauth[implementation]['rows'])==35 and len(oauth[implementation]['ttl_rows'])==11
           PY
       - name: "[HTTP HEAD] Retain complete actual native observations"
-        id: head-4
+        id: head-3
         if: "${{ !cancelled() && needs.select.outputs.head != 'false' }}"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -220,7 +203,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-origin-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(244 if os.environ['RUNNER_OS']=='Windows' else 246)
+          assert results and sum(int(n) for n,_ in results)==246
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'loopback_listener_rejects_foreign_origin_before_authentication ... ok' in text
           PY
@@ -232,7 +215,6 @@ jobs:
         run: |
           set -euo pipefail
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_origin_contract.py --rust "$rust_cli" --receipt target/native-http-origin.json
           python3 - <<'CHECK'
           import json,subprocess
@@ -240,7 +222,7 @@ jobs:
           r=json.loads(Path('target/native-http-origin.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
           assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences']
+          assert r['native_os'] in {'Linux','Darwin'} and not r['differences']
           assert len(r['declared_differences'])==69
           assert {d['decision'] for d in r['declared_differences']}=={'serialized-http-origin-required','loopback-host-required','valid-loopback-authority-required'}
           for implementation in ['go','rust']:
@@ -273,21 +255,9 @@ jobs:
           git checkout --quiet -- .
           git clean -fd --quiet
           test -z "$(git status --porcelain=v1 --untracked-files=normal)"
-      - name: "[HTTP OAuth] Verify owned compiler process trees and build the oracle runner"
+      - name: "[HTTP OAuth] Test owning config runtime and CLI assembly"
         id: oauth-0
         if: "${{ !cancelled() && needs.select.outputs.oauth != 'false' && steps.prologue.outcome == 'success' }}"
-        run: |
-          set -euo pipefail
-          mkdir -p target
-          go test -count=1 -v ./scripts/rust-port/internal/diff > target/native-oracle-process-tests.txt 2>&1 || { cat target/native-oracle-process-tests.txt; exit 1; }
-          cat target/native-oracle-process-tests.txt
-          runner=target/oraclebuild
-          if [[ "$RUNNER_OS" == "Windows" ]]; then runner+=.exe; fi
-          go build -trimpath -o "$runner" ./scripts/rust-port/cmd/oraclebuild
-          python3 -B scripts/rust-port/test_oracle_build.py
-      - name: "[HTTP OAuth] Test owning config runtime and CLI assembly"
-        id: oauth-1
-        if: "${{ !cancelled() && needs.select.outputs.oauth != 'false' && steps.oauth-0.outcome == 'success' }}"
         run: |
           set -euo pipefail
           cargo fmt --all --check
@@ -303,19 +273,18 @@ jobs:
           assert 'mcp_tls_settings_survive_config_roundtrip ... ok' in config
           text=Path('target/native-oauth-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(244 if os.environ['RUNNER_OS']=='Windows' else 246)
+          assert results and sum(int(n) for n,_ in results)==246
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'consent_pkce_access_and_refresh_are_connected_and_single_use ... ok' in text
           PY
           cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
           cargo build -p symvault-cli --bin symvault --locked
       - name: "[HTTP OAuth] Execute actual native consent PKCE rotation expiry and restart"
-        id: oauth-2
-        if: "${{ !cancelled() && needs.select.outputs.oauth != 'false' && steps.oauth-1.outcome == 'success' }}"
+        id: oauth-1
+        if: "${{ !cancelled() && needs.select.outputs.oauth != 'false' && steps.oauth-0.outcome == 'success' }}"
         run: |
           set -euo pipefail
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_oauth_contract.py --rust "$rust_cli" --receipt target/native-http-oauth.json
           python3 - <<'PY'
           import json,subprocess
@@ -323,7 +292,7 @@ jobs:
           r=json.loads(Path('target/native-http-oauth.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
           assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences']
+          assert r['native_os'] in {'Linux','Darwin'} and not r['differences']
           decisions={'fresh-persisted-client','bound-browser-consent','fresh-single-use-code','fresh-scoped-token-pair','single-use-browser-confirmation','server-bound-consent-metadata','server-bound-consent-pkce','server-side-consent-denial','configured-positive-token-ttls','bounded-refresh-after-access-expiry','bounded-refreshed-runtime-control'}
           assert len(r['semantic_controls'])==26 and {x['decision'] for x in r['semantic_controls']}==decisions
           for implementation in ['go','rust']:
@@ -338,12 +307,11 @@ jobs:
               assert observed['ttl_rows'][-1]['case']=='ttl-old-access-still-denied'
           PY
       - name: "[HTTP OAuth] Preserve original strict HTTP corpus"
-        id: oauth-3
-        if: "${{ !cancelled() && needs.select.outputs.oauth != 'false' && steps.oauth-2.outcome == 'success' }}"
+        id: oauth-2
+        if: "${{ !cancelled() && needs.select.outputs.oauth != 'false' && steps.oauth-1.outcome == 'success' }}"
         run: |
           set -euo pipefail
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt target/native-http-process.json
           python3 - <<'PY'
           import json
@@ -353,7 +321,7 @@ jobs:
           assert len(r['go'])==len(r['rust'])==65 and len(r['declared_differences'])==4
           PY
       - name: "[HTTP OAuth] Retain complete actual native observations"
-        id: oauth-4
+        id: oauth-3
         if: "${{ !cancelled() && needs.select.outputs.oauth != 'false' }}"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -388,7 +356,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-deadline-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(244 if os.environ['RUNNER_OS']=='Windows' else 246)
+          assert results and sum(int(n) for n,_ in results)==246
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'keep_alive_idle_timeout_matches_go_source_and_closes_socket ... ok' in text
           PY
@@ -400,7 +368,6 @@ jobs:
         run: |
           set -euo pipefail
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_slow_peer_contract.py --rust "$rust_cli" --receipt target/native-http-read-deadlines.json
           python3 - <<'CHECK'
           import json,subprocess
@@ -408,7 +375,7 @@ jobs:
           r=json.loads(Path('target/native-http-read-deadlines.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
           assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences'] and not r['declared_differences']
+          assert r['native_os'] in {'Linux','Darwin'} and not r['differences'] and not r['declared_differences']
           for implementation in ['go','rust']:
               observed=r[implementation]
               assert len(observed['rows'])==3 and {x['case'] for x in observed['rows']}=={'initialize','ping-before','ping-after'}
@@ -416,7 +383,7 @@ jobs:
               assert observed['workers_joined'] and not observed['control_errors']
               for peer in observed['slow_peers']:
                   assert peer['peer_terminal_observed'] and not peer['forced_client_close'] and peer['sender_joined'] and peer['sent_progress_bytes']>=4
-                  assert peer['peer_terminal_kind'] in ({'eof','connection-reset','connection-aborted'} if r['native_os']=='Windows' else {'eof','connection-reset'})
+                  assert peer['peer_terminal_kind'] in {'eof','connection-reset'}
                   assert peer['termination'] in {'actual-empty-eof-or-reset','complete-go-json-error-before-write-deadline'}
               assert len(observed['idle_boundary']['responses'])==2 and observed['idle_boundary']['idle_wait_seconds']>=6
               assert len(observed['processes'])==1
@@ -460,7 +427,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-timeout-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(244 if os.environ['RUNNER_OS']=='Windows' else 246)
+          assert results and sum(int(n) for n,_ in results)==246
           assert all(int(ignored)==0 for _,ignored in results)
           core=Path('target/native-timeout-core-tests.txt').read_text()
           core_results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',core)
@@ -485,7 +452,6 @@ jobs:
         run: |
           set -euo pipefail
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_timeout_contract.py --rust "$rust_cli" --receipt target/native-http-timeouts.json
           python3 - <<'CHECK'
           import json,subprocess
@@ -493,7 +459,7 @@ jobs:
           r=json.loads(Path('target/native-http-timeouts.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
           assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences'] and not r['declared_differences']
+          assert r['native_os'] in {'Linux','Darwin'} and not r['differences'] and not r['declared_differences']
           assert set(r['profiles'])=={'positive','zero','negative'}
           for implementation in ['go','rust']:
               assert len(r['invalid_config'][implementation])==2
@@ -540,21 +506,9 @@ jobs:
           git checkout --quiet -- .
           git clean -fd --quiet
           test -z "$(git status --porcelain=v1 --untracked-files=normal)"
-      - name: "[HTTP absolute write deadlines] Verify owned compiler process trees and build the oracle runner"
+      - name: "[HTTP absolute write deadlines] Test owning runtime and CLI assembly"
         id: write-0
         if: "${{ !cancelled() && needs.select.outputs.write != 'false' && steps.prologue.outcome == 'success' }}"
-        run: |
-          set -euo pipefail
-          mkdir -p target
-          go test -count=1 -v ./scripts/rust-port/internal/diff > target/native-oracle-process-tests.txt 2>&1 || { cat target/native-oracle-process-tests.txt; exit 1; }
-          cat target/native-oracle-process-tests.txt
-          runner=target/oraclebuild
-          if [[ "$RUNNER_OS" == "Windows" ]]; then runner+=.exe; fi
-          go build -trimpath -o "$runner" ./scripts/rust-port/cmd/oraclebuild
-          python3 -B scripts/rust-port/test_oracle_build.py
-      - name: "[HTTP absolute write deadlines] Test owning runtime and CLI assembly"
-        id: write-1
-        if: "${{ !cancelled() && needs.select.outputs.write != 'false' && steps.write-0.outcome == 'success' }}"
         run: |
           set -euo pipefail
           python3 scripts/rust-port/test_http_write_contract.py
@@ -567,7 +521,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-write-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(244 if os.environ['RUNNER_OS']=='Windows' else 246)
+          assert results and sum(int(n) for n,_ in results)==246
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'keep_alive_idle_timeout_matches_go_source_and_closes_socket ... ok' in text
           PY
@@ -583,22 +537,20 @@ jobs:
           cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
           cargo build -p symvault-cli --bin symvault --locked
       - name: "[HTTP absolute write deadlines] Verify actual TLS backpressure and reject a disabled deadline"
+        id: write-1
+        if: "${{ !cancelled() && needs.select.outputs.write != 'false' && steps.write-0.outcome == 'success' }}"
+        run: |
+          set -euo pipefail
+          rust_cli=target/debug/symvault
+          python3 -B scripts/rust-port/http_write_contract.py --rust "$rust_cli" --receipt target/native-tls-output.json --tls-output-probe-only
+          python3 -B scripts/rust-port/http_write_mutation.py --rust "$rust_cli" --receipt target/native-tls-output-mutation.json
+          git diff --exit-code -- crates/symvault-mcp/src/http.rs
+      - name: "[HTTP absolute write deadlines] Execute actual native absolute writes and separate TLS admission"
         id: write-2
         if: "${{ !cancelled() && needs.select.outputs.write != 'false' && steps.write-1.outcome == 'success' }}"
         run: |
           set -euo pipefail
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
-          python3 -B scripts/rust-port/http_write_contract.py --rust "$rust_cli" --receipt target/native-tls-output.json --tls-output-probe-only
-          python3 -B scripts/rust-port/http_write_mutation.py --rust "$rust_cli" --receipt target/native-tls-output-mutation.json
-          git diff --exit-code -- crates/symvault-mcp/src/http.rs
-      - name: "[HTTP absolute write deadlines] Execute actual native absolute writes and separate TLS admission"
-        id: write-3
-        if: "${{ !cancelled() && needs.select.outputs.write != 'false' && steps.write-2.outcome == 'success' }}"
-        run: |
-          set -euo pipefail
-          rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_write_contract.py --rust "$rust_cli" --receipt target/native-http-write.json
           python3 - <<'CHECK'
           import json,subprocess
@@ -607,14 +559,9 @@ jobs:
           assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
           assert r['scope']=='full'
           assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences']
+          assert r['native_os'] in {'Linux','Darwin'} and not r['differences']
           declared=r['declared_differences']
-          if r['native_os']=='Windows':
-              # #1470: the only declared platform difference is the Go oracle's plain-TCP output cell; Rust is never exempt.
-              assert len(declared)==1 and declared[0]['implementation']=='go' and declared[0]['profile']=='tcp-output' and declared[0]['native_os']=='Windows', declared
-              assert declared[0]['decision']=='windows-go-plain-tcp-write-deadline-not-enforced' and '#1470' in declared[0]['reason'], declared
-          else:
-              assert not declared, declared
+          assert not declared, declared
           profiles={'tcp-five','tcp-short','tls12-short','tls13-short','tcp-output','tls-output'}
           assert set(r['profiles'])==profiles
           for implementation in ['go','rust']:
@@ -638,15 +585,12 @@ jobs:
                       assert output['slow_read_calls']>=4 and output['slow_received_bytes']>=4096
                       assert output['fast_drain_started_seconds']>=34
                       assert output['declared_chunk_length']>=10*1024*1024
-                      if r['native_os']=='Windows' and implementation=='go' and profile=='tcp-output':
-                          assert declared[0]['received_chunk_bytes']==output['received_chunk_bytes'] and declared[0]['declared_chunk_length']==output['declared_chunk_length']
-                      else:
-                          assert output['received_chunk_bytes']<output['declared_chunk_length']
+                      assert output['received_chunk_bytes']<output['declared_chunk_length']
                   assert observed['rows'][-1]['case']=='ping-after'
                   assert observed['rows'][-1]['response']['status_line']=='HTTP/1.1 200 OK'
           CHECK
       - name: "[HTTP absolute write deadlines] Retain complete actual native observations"
-        id: write-4
+        id: write-3
         if: "${{ !cancelled() && needs.select.outputs.write != 'false' }}"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -680,7 +624,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-framing-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(244 if os.environ['RUNNER_OS']=='Windows' else 246)
+          assert results and sum(int(n) for n,_ in results)==246
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'loopback_listener_rejects_foreign_origin_before_authentication ... ok' in text
           PY
@@ -692,7 +636,6 @@ jobs:
         run: |
           set -euo pipefail
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_framing_contract.py --rust "$rust_cli" --receipt target/native-http-framing.json
           python3 - <<'CHECK'
           import json,subprocess
@@ -700,7 +643,7 @@ jobs:
           r=json.loads(Path('target/native-http-framing.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
           assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences']
+          assert r['native_os'] in {'Linux','Darwin'} and not r['differences']
           assert len(r['declared_differences'])==18
           assert {d['decision'] for d in r['declared_differences']}=={'security-metadata-stays-in-headers','framing-validation-before-dispatch','complete-chunk-frame-required','one-request-length-required','chunked-requires-http11'}
           for implementation in ['go','rust']:
@@ -748,7 +691,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-tls-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(244 if os.environ['RUNNER_OS']=='Windows' else 246)
+          assert results and sum(int(n) for n,_ in results)==246
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'mtls_listener_requires_valid_client_certificate ... ok' in text
           PY
@@ -760,7 +703,6 @@ jobs:
         run: |
           set -euo pipefail
           rust_cli=target/debug/symvault
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_tls_contract.py --rust "$rust_cli" --receipt target/native-http-tls.json
           python3 - <<'CHECK'
           import json,subprocess
@@ -768,7 +710,7 @@ jobs:
           r=json.loads(Path('target/native-http-tls.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
           assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences']
+          assert r['native_os'] in {'Linux','Darwin'} and not r['differences']
           assert len(r['declared_differences'])==20
           assert {d['decision'] for d in r['declared_differences']}=={'https-discovery-on-tls','secure-origin-matches-http-authority'}
           for implementation in ['go','rust']:

@@ -8,12 +8,11 @@ submit changes.
 
 ## Prerequisites
 
-- **Go:** use the version declared in `go.mod`
-- **Python 3:** required by the Makefile test wrapper
-- **Rust/Cargo:** use `rust-toolchain.toml`; test targets build the Rust CLI unless `SYMVAULT_RUST_BINARY` supplies an existing binary
+- **Rust/Cargo:** use the toolchain pinned in `rust-toolchain.toml` (no Go toolchain is needed)
+- **Python 3:** required by the contract and CI helper scripts under `scripts/`
 - **Git:** for building and version stamping
 - **Make:** to use the provided targets
-- **On macOS:** Xcode Command Line Tools for CGO (keyring integration)
+- **On macOS:** Xcode Command Line Tools (linker and keyring integration)
 
 ### Optional (client/macOS GUI build)
 
@@ -23,42 +22,34 @@ submit changes.
 ## Building
 
 ```bash
-# Build the CLI binary
-make build
+# Build the CLI binary (target/release/symvault)
+make rust-cli
 
 # Build the macOS client (requires full Xcode with the iOS SDK)
 bash scripts/build-vaultcore.sh
+cp target/release/symvault symvault   # the app embeds ../symvault (client/project.yml)
 swift build --package-path client
 ```
 
 ## Testing
 
 ```bash
-# Run all tests with race detector (CI-like, ~2 min)
-make test
+# Whole workspace: nextest + doctests
+make rust-test
 
-# Quick iteration without race detector
-make test-fast
+# One crate
+cargo test -p symvault-store
 
-# Run tests for a specific package
-make test-vault   # internal/vault tests
-make test-config  # internal/config tests
-
-# Run tests with coverage
-make test-coverage
-make test-coverage-html  # generates coverage/coverage.html
-
-# Run the full CI-like suite (race + coverage + 30m timeout)
-make test-ci
+# Coverage
+make rust-coverage
 ```
 
 ## Linting and formatting
 
 ```bash
-make fmt        # format Go source
-make fmt-check  # check formatting without modifying files
-make lint       # run golangci-lint
-make vet        # run go vet (includes passlint analyzer)
+cargo fmt --all           # format Rust source
+make rust-lint            # rustfmt check + Clippy with -D warnings
+make rust-security        # cargo audit + cargo deny
 ```
 
 ## Submitting changes
@@ -69,7 +60,7 @@ make vet        # run go vet (includes passlint analyzer)
    ```
 2. Make your changes, then run the full test suite and lint:
    ```bash
-   make fmt-check test vet lint
+   make rust-lint rust-test
    ```
 3. Commit with a conventional message:
    ```bash
@@ -94,12 +85,12 @@ make vet        # run go vet (includes passlint analyzer)
 
 ## Coding standards
 
-- **Formatting:** All Go code must pass `gofmt` (`make fmt-check`).
-- **Linting:** All Go code must pass `golangci-lint` (`make lint`).
-- **Tests:** New code must be covered by meaningful tests. Run `make test-coverage`
+- **Formatting:** All Rust code must pass `cargo fmt --all --check` (`make rust-lint`).
+- **Linting:** All Rust code must pass Clippy with `-D warnings` (`make rust-lint`).
+- **Tests:** New code must be covered by meaningful tests. Run `make rust-coverage`
   to check. Coverage gates are enforced during release.
-- **Error handling:** Use `%w` for error wrapping when the wrapped error should
-  be inspectable via `errors.Is`/`errors.As`. Do not wrap for decoration only.
+- **Error handling:** Propagate errors with `?` and keep the underlying error as
+  `source()` so it stays inspectable. Do not stringify an error just to wrap it.
 
 ## Issue triage
 
@@ -111,7 +102,7 @@ automatically.
 
 ## Releases
 
-- Releases are managed via GitHub Releases with GoReleaser.
+- Releases are managed via GitHub Releases with GoReleaser (the Rust builder; no Go toolchain is involved).
 - Release milestones are milestone-scoped (not iteration/sprint-based).
 - The full release flow is documented in `docs/release-process.md` and
   automated via the `gh-coding-complete` pipeline (sync → audit → release).

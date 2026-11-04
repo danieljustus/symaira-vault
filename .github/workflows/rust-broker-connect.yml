@@ -33,8 +33,6 @@ jobs:
       run:
         shell: bash
     env:
-      GOTOOLCHAIN: go1.26.10
-      GOWORK: 'off'
       RUSTUP_TOOLCHAIN: '1.98.0'
       SYMVAULT_TEST_KEYRING: memory
       TZ: UTC
@@ -49,15 +47,11 @@ jobs:
           test "$(uname -s)" = Darwin
           test "$(uname -m)" = arm64
           sw_vers
-      - name: Checkout retained Go oracle and candidate
+      - name: Checkout candidate and frozen observations
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Set up pinned Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.26.10'
       - name: Set up pinned Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -83,7 +77,6 @@ jobs:
         run: |
           set -euo pipefail
           rust_binary=target/debug/examples/connect_contract_probe
-          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_binary=target/debug/examples/connect_contract_probe.exe; fi
           python3 scripts/rust-port/connect_contract.py --rust "$rust_binary" --receipt native-connect.json
           python3 - <<'PY'
           import json, subprocess
@@ -91,7 +84,7 @@ jobs:
           receipt = json.loads(Path('native-connect.json').read_bytes())
           assert receipt['passed'] and receipt['candidate_worktree_clean']
           assert receipt['candidate_commit'] == subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
-          assert receipt['native_os'] in {'Linux','Darwin','Windows'}
+          assert receipt['native_os'] in {'Linux','Darwin'}
           for implementation in ['go','rust']:
               assert {row['case'] for row in receipt[implementation]} == {'ordinary','delayed','fragmented-binary'}
           PY
