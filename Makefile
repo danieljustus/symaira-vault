@@ -2295,7 +2295,7 @@ go-observations-capture-other-tests:
 	$(CARGO) build -p symvault-cli --bin symvault --locked
 	$(CARGO) build -p symvault-sync --example data_safety_probe --locked
 	CGO_ENABLED=0 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=false -o "$(DATA_SAFETY_GO_BINARY)" .
-	python3 -I scripts/rust-port/data_safety_contract.py --capture-go --rust "$(RUST_BINARY)" --go "$(DATA_SAFETY_GO_BINARY)" --probe "$(CARGO_TARGET_DIR)/debug/examples/data_safety_probe"
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -I scripts/rust-port/data_safety_contract.py --capture-go --rust "$(RUST_BINARY)" --go "$(DATA_SAFETY_GO_BINARY)" --probe "$(CARGO_TARGET_DIR)/debug/examples/data_safety_probe"
 
 # Reverse checks (Go verifies or consumes what Rust wrote): run once with Go, commit the attestations
 # under docs/rust-port/evidence/go-removal-attestations/. Needs built Rust artifacts (rust-build).

@@ -4,7 +4,7 @@
     "--capture-go"
   ],
   "contract": "data-safety-contract",
-  "go_version": "go1.26.10",
+  "go_version": "go1.26.6",
   "goarch": "arm64",
   "goos": "linux",
   "observations": {
