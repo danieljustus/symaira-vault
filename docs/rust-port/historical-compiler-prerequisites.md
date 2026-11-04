@@ -1,5 +1,11 @@
 # Historical compiler prerequisites v1
 
+> **Retired (P40c-3).** The compiler adapter (`mcp_compiler_adapter.py`, `test_mcp_compiler_adapter.py`) and the
+> wrapper that built the original server tests are deleted from this tree; `mcp_fixture_contract.py` replays the
+> recorded lane captures and step verdicts instead (no Go, no oracle worktree). This page documents what the adapter
+> did when the lanes were recorded. The adapter's own evidence is no longer re-derived; the detached program text
+> stays at `scripts/rust-port/mcp_compiler_adapter.go.txt` and the tooling at tag `legacy/go-oracle`.
+
 `mcp-historical-compiler-prerequisites-v1` is separately recorded execution
 preparation for the immutable MCP fixture lanes. It is not a new oracle, product
 capture, accepted native matrix or change to `mcp-anomaly-ordered-v1`.

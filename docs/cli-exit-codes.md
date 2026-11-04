@@ -7,19 +7,19 @@ the end of the numeric range and existing values are never repurposed.
 
 ## Categories
 
-| Code | Variant                         | Meaning                                                                           |
-| ---- | ------------------------- | --------------------------------------------------------------------------------- |
-| 0    | `ExitCode::Success`             | Command completed successfully.                                                   |
-| 1    | `ExitCode::General`        | General error. Reserved for failures that do not match a more specific category.   |
-| 2    | `ExitCode::NotFound`            | The requested entry, field, or resource was not found.                            |
-| 3    | `ExitCode::NotInitialized`      | The vault has not been initialized.                                               |
-| 4    | `ExitCode::Locked`              | The vault is locked or the passphrase is missing.                                 |
-| 5    | `ExitCode::PermissionDenied`    | The agent or user is not permitted to perform the operation.                      |
-| 6    | `ExitCode::Config`         | The on-disk configuration is malformed or invalid.                                |
-| 7    | `ExitCode::DoctorWarn`          | `symvault doctor` found warnings.                                                 |
-| 8    | `ExitCode::DoctorFail`          | `symvault doctor` found failures.                                                 |
-| 9    | `ExitCode::InvalidInput`        | User input failed validation (empty argument, malformed value, parse failure).    |
-| 10   | `ExitCode::UpdateAvailable`     | A new version is available for download.                                          |
+| Code | Variant                      | Meaning                                                                          |
+| ---- | ---------------------------- | -------------------------------------------------------------------------------- |
+| 0    | `ExitCode::Success`          | Command completed successfully.                                                  |
+| 1    | `ExitCode::General`          | General error. Reserved for failures that do not match a more specific category. |
+| 2    | `ExitCode::NotFound`         | The requested entry, field, or resource was not found.                           |
+| 3    | `ExitCode::NotInitialized`   | The vault has not been initialized.                                              |
+| 4    | `ExitCode::Locked`           | The vault is locked or the passphrase is missing.                                |
+| 5    | `ExitCode::PermissionDenied` | The agent or user is not permitted to perform the operation.                     |
+| 6    | `ExitCode::Config`           | The on-disk configuration is malformed or invalid.                               |
+| 7    | `ExitCode::DoctorWarn`       | `symvault doctor` found warnings.                                                |
+| 8    | `ExitCode::DoctorFail`       | `symvault doctor` found failures.                                                |
+| 9    | `ExitCode::InvalidInput`     | User input failed validation (empty argument, malformed value, parse failure).   |
+| 10   | `ExitCode::UpdateAvailable`  | A new version is available for download.                                         |
 
 Codes 11+ are reserved for future use. New categories are added at the next
 free number and documented here.

@@ -45,7 +45,7 @@ tool; see [go-oracle-archive.md](../../go-oracle-archive.md)) and run the old co
 go-attest-other` on each OS (Linux through `scripts/rust-port/go-observations-capture-linux.sh NAME 'make
 go-attest-other'`), `data_safety_contract.py --capture-go` for `data-safety-contract` together with its seed
 observation, `go_observations_common.py attest-ci` for a CI-run attestation. This tree has none of those modes
-(P40c-2 removed them); it only runs `verify-attestation`. A CI-run attestation is accepted only with run URL, job id,
+(P40c-2 and P40c-3 removed them); it only runs `verify-attestation`. A CI-run attestation is accepted only with run URL, job id,
 commit and a digest of the exercised sources that matches the tree.
 
 Go observations that replay Rust live against recorded Go output are in
@@ -56,16 +56,13 @@ operator workstation paths (macOS volume, user-home, per-user temp and private-v
 `OPERATOR_PATH` in `go_observations_common.py`) and mkdtemp directories below the Linux temp root. The README
 therefore does not spell those prefixes out.
 
-## Oracle build harness checks (P40c-3, cap-proc)
+## Oracle build harness checks (P40c-3: retired)
 
-Still in this tree and still allowlisted (they build a Go oracle from the old tree; see
-[go-oracle-archive.md](../../go-oracle-archive.md), "Scripts that still drive Go"):
-
-- `mcp-oracle-controls` (`test_build_timeout.py`, `test_mcp_oracle.py`, `test_mcp_compiler_adapter.py`) - tests the
-  oracle build/timeout harness.
-- `test_oracle_build.py` (run by the area target at Makefile `AREA_ORACLE`) - oracle build harness selftest.
-- `scripts/rust-port/build_timeout.py`, `oracle_build.py`, `mcp_oracle.py`, `mcp_compiler_adapter.py` - the Go
-  oracle compile budget and builder, used by the HTTP and MCP process contracts.
+The Go oracle build harness is gone (see [go-oracle-archive.md](../../go-oracle-archive.md), "HTTP / MCP process
+contracts"). `build_timeout.py`, `oracle_build.py`, `mcp_compiler_adapter.py` and their tests were deleted;
+`mcp-oracle-controls` is now `test_mcp_oracle.py`, the tamper controls of the Go-free replay of the recorded MCP
+fixture lanes. Nothing builds a Go oracle in this tree; the allowlist of `no_go_oracle_refs.rs` is empty. To rebuild
+an oracle, check out tag `legacy/go-oracle`.
 
 Retired in P40c-2: the `GoOracle` live mode of `data_safety_contract.py` (the data-safety *reverse* checks exist only
 as the attestation above), `reencrypt_journal_fixture.py` and its one-time Go capture of the frozen crash states

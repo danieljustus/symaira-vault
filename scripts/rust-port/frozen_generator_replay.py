@@ -132,6 +132,8 @@ def update_replay(recorded):
         assert oracle["commit"] == commit, f"{name}: oracle pin differs from {UPDATE_COMMIT}"
         assert oracle["source_pin_digest"] == blob_digest(commit, pinned), f"{name}: pinned sources differ from git blobs"
         assert oracle["go_version"] == "go1.26.6"
+        # The refresh script itself is a blob of the pinned commit, so its digest is recomputed, not trusted.
+        assert blob_digest(commit, oracle["generator_files"]) == oracle["generator_digest"], f"{name}: generator digest differs from git blobs"
     return f"PASS recorded Go: {len(UPDATE_NAMES)} update fixture sets, oracle {commit}"
 
 
