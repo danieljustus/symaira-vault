@@ -2498,10 +2498,10 @@ fn normalization_rules_are_listed_once_and_consistently() {
 /// and the Rust answer for the same sandbox were recorded together on the
 /// recording host (`testdata/port/cli-observations/output_modes.json`, oracle
 /// bf7f687b) and the attestation is that they were equal. Replay checks the
-/// recorded attestation and that the current binary still reports the field as
-/// a JSON boolean in that sandbox; whether the value matches Go on a given host
-/// is therefore only established on the recording host (docs/rust-port/
-/// go-oracle-archive.md).
+/// recorded attestation (Go == Rust) and that the live Rust probe in the same
+/// sandbox equals the recorded Rust value; a darwin host whose sensor differs
+/// from the recording host's therefore fails loudly instead of passing on "is a
+/// boolean" (docs/rust-port/go-oracle-archive.md).
 #[test]
 fn touch_id_availability_matches_go_in_the_same_sandbox() {
     if recording_goos() != "darwin" {
@@ -2545,13 +2545,62 @@ fn touch_id_availability_matches_go_in_the_same_sandbox() {
             "recorded_on": std::env::consts::OS,
         })
     });
-    assert_eq!(
-        attestation["go"], attestation["rust"],
-        "recorded: Touch ID availability differs between Rust and the Go oracle"
-    );
-    assert!(attestation["go"].is_boolean() && attestation["recorded_on"] == "macos");
-    // The current binary still reports the probe as a boolean in the sandbox.
-    let _ = probe(&rust);
+    // The live Rust probe in the recorded sandbox must equal what the recording
+    // host's Rust reported, which in turn equalled Go's answer there.
+    let live = probe(&rust);
+    if let Err(problem) = check_touch_id_attestation(&attestation, live) {
+        panic!("{problem}");
+    }
+}
+
+/// The recorded `{go, rust, recorded_on}` attestation against the live Rust
+/// probe of this (darwin) host.
+fn check_touch_id_attestation(attestation: &serde_json::Value, live: bool) -> Result<(), String> {
+    let (Some(go), Some(rust)) = (attestation["go"].as_bool(), attestation["rust"].as_bool())
+    else {
+        return Err(format!(
+            "attestation go/rust are not booleans: {attestation}"
+        ));
+    };
+    if attestation["recorded_on"] != "macos" {
+        return Err(format!(
+            "attestation was not recorded on macos: {}",
+            attestation["recorded_on"]
+        ));
+    }
+    if go != rust {
+        return Err(format!(
+            "recorded: Touch ID availability differs between Rust ({rust}) and the Go oracle ({go})"
+        ));
+    }
+    if live != rust {
+        return Err(format!(
+            "live Rust touchIDAvailable={live} differs from the recorded Rust/Go value {rust}"
+        ));
+    }
+    Ok(())
+}
+
+/// Mutation control for the Touch ID attestation check.
+#[test]
+fn touch_id_attestation_check_rejects_every_mutation() {
+    use serde_json::json;
+    let good = json!({"go": true, "rust": true, "recorded_on": "macos"});
+    assert_eq!(check_touch_id_attestation(&good, true), Ok(()));
+    let unavailable = json!({"go": false, "rust": false, "recorded_on": "macos"});
+    assert_eq!(check_touch_id_attestation(&unavailable, false), Ok(()));
+    // The live probe drifts from the recording.
+    assert!(check_touch_id_attestation(&good, false).is_err());
+    assert!(check_touch_id_attestation(&unavailable, true).is_err());
+    // Go and Rust disagreed at recording time.
+    let split = json!({"go": true, "rust": false, "recorded_on": "macos"});
+    assert!(check_touch_id_attestation(&split, false).is_err());
+    assert!(check_touch_id_attestation(&split, true).is_err());
+    // Not a boolean / wrong host.
+    let stringly = json!({"go": "true", "rust": "true", "recorded_on": "macos"});
+    assert!(check_touch_id_attestation(&stringly, true).is_err());
+    let linux = json!({"go": true, "rust": true, "recorded_on": "linux"});
+    assert!(check_touch_id_attestation(&linux, true).is_err());
 }
 
 /// Negative control for the audit comparison: a presence-only audit log is

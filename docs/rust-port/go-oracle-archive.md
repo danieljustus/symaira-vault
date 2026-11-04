@@ -31,7 +31,7 @@ two consecutive captures of the same test produce byte-identical files.
 | `agent_audit`, `agent_token`, `agent_upgrade_biometric`, `edit`, `migrate_v4`, `doctor_keyring`, `template_custom`, `mcp_payment_perplexity`, `mcp_set_auth_method`, `config_rewrite_differential` | Go transcripts as above; `make config-rewrite-differential` is Go-free (`check_config_rewrite.sh --capture` is the capture side) |
 | `approval_pair_differential` | the Go handler responses (HMAC/mTLS pairing exchange) were recorded once into `cli-transcripts/approval_pair_differential.json` and replayed against the Rust server; the Go server `tests/approval_pair_server/main.go` is deleted |
 | `symvault-ffi` `interop.rs` | `mobilebindgen --drive` verdicts and Go-sealed ciphertexts recorded into `cli-observations/ffi_interop.json`; replay unlocks/reads Go-written vaults with current Rust and decrypts Go ciphertexts and the earlier Rust-sealed ones. Together with `fixture_replay.rs` (`testdata/port/ffi/mobilebind.json`) this covers every Go<->Rust direction except the one below |
-| `output_modes` Touch ID | the Go and Rust `touchIDAvailable` of the same sandbox are recorded (`cli-observations/output_modes.json`, oracle `bf7f687b`); replay asserts the attestation and that the current binary still reports a boolean |
+| `output_modes` Touch ID | the Go and Rust `touchIDAvailable` of the same sandbox are recorded (`cli-observations/output_modes.json`, oracle `bf7f687b`); replay asserts the attestation (Go == Rust) and, on a darwin host, that the live Rust probe equals the recorded value |
 | `symvault-store` `manifest_keys.rs`, `src/tests.rs` (STORE-004) | the `git show <commit>:<path>` provenance digests are frozen constants (`SOURCE_DIGEST`, `STORE004_SOURCE_DIGEST`, `STORE004_GENERATOR_DIGEST`; generator input from `testdata/port/go-snapshots`); no git history or Go tree is read |
 | `symvault-mcp` `apitemplate_assets_sync.rs` | frozen sha256 list of the 17 built-in templates (identical to the Go embed when frozen) |
 
@@ -50,6 +50,7 @@ Makefile: `differential-go-selftest` and `crypto-fuzz-smoke` deleted
 - FFI interop, direction "Go opens something the *current* Rust code just
   wrote": cannot be replayed (the bytes depend on the current build). It is a
   capture-only check; replay covers Go-written and previously Rust-sealed data.
-- Touch ID: the equality of the Go and Rust values on a host other than the
-  recording host is not re-established by replay (it is a property of the Mac's
-  sensor).
+- Touch ID: the Go answer on a host other than the recording host is not
+  re-established by replay (it is a property of the Mac's sensor); replay checks
+  that the live Rust probe still equals the value Go and Rust agreed on when
+  recorded, so a darwin host with a different sensor fails instead of passing.
