@@ -1352,6 +1352,7 @@ mcp-http-replay-contract:
 mcp-http-token-contract: timestamp-fixtures-check
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_replay_contract.py
+	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_token_contract.py
 	$(AREA_BUILD_CLI)
 	$(AREA_ENV) $(AREA_PYTHON) -B scripts/rust-port/http_token_contract.py \
 		--rust "$(AREA_CLI)" --receipt "$(AREA_EVIDENCE)/native-http-token.json" $(HTTP_CONTRACT_ARGS)

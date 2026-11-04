@@ -276,6 +276,64 @@ def _observation_files():
     return sorted(CONTRACT.GO_OBS_DIR.glob('*.json'))
 
 
+class InterpreterIndependenceTests(unittest.TestCase):
+    """The recorded real-child seeds allow RECORDED_EXECUTABLE; the working copy follows the running interpreter."""
+
+    def vault(self, root, profile_name):
+        text = ('agents:\n    fixture:\n        tier: admin\n'
+                + (f'        allowedExecutables:\n            - {CONTRACT.RECORDED_EXECUTABLE}\n'
+                   if profile_name.endswith('-real-child') else '')
+                + 'vault:\n    authMethod: passphrase\n')
+        (Path(root) / 'config.yaml').write_text(text, encoding='utf-8')
+        return text
+
+    def test_the_recorded_profile_names_the_recorded_constant_not_the_running_interpreter(self):
+        real = {name: profile for name, profile in CONTRACT.profiles() if name.endswith('-real-child')}
+        self.assertEqual(len(real), 3)
+        for profile in real.values():
+            self.assertEqual(profile['allowedExecutables'], [CONTRACT.RECORDED_EXECUTABLE])
+
+    def test_the_working_copy_is_rewritten_to_another_minor_and_the_rest_is_untouched(self):
+        for executable in ('python3.14', 'python3', 'python3.9'):
+            with tempfile.TemporaryDirectory() as raw:
+                before = self.vault(raw, 'tier-admin-real-child')
+                CONTRACT.use_running_interpreter(raw, 'tier-admin-real-child', executable)
+                after = (Path(raw) / 'config.yaml').read_text(encoding='utf-8')
+                self.assertEqual(after, before.replace(CONTRACT.RECORDED_EXECUTABLE, executable))
+                self.assertNotIn(CONTRACT.RECORDED_EXECUTABLE if executable != CONTRACT.RECORDED_EXECUTABLE else '\0', after)
+
+    def test_the_recorded_interpreter_leaves_the_bytes_alone(self):
+        with tempfile.TemporaryDirectory() as raw:
+            before = self.vault(raw, 'tier-admin-real-child')
+            CONTRACT.use_running_interpreter(raw, 'tier-admin-real-child', CONTRACT.RECORDED_EXECUTABLE)
+            self.assertEqual((Path(raw) / 'config.yaml').read_text(encoding='utf-8'), before)
+
+    def test_other_profiles_are_never_rewritten_and_an_unexpected_entry_is_an_error(self):
+        with tempfile.TemporaryDirectory() as raw:
+            before = self.vault(raw, 'tier-admin')
+            CONTRACT.use_running_interpreter(raw, 'tier-admin', 'python3.14')
+            self.assertEqual((Path(raw) / 'config.yaml').read_text(encoding='utf-8'), before)
+            self.vault(raw, 'tier-admin-real-child')
+            with self.assertRaises(AssertionError):      # a non-real-child profile must not carry the entry
+                CONTRACT.use_running_interpreter(raw, 'tier-admin', 'python3.14')
+            self.vault(raw, 'tier-admin')
+            with self.assertRaises(AssertionError):      # a real-child profile without the entry
+                CONTRACT.use_running_interpreter(raw, 'tier-admin-real-child', 'python3.14')
+
+    def test_an_interpreter_name_that_is_not_a_plain_basename_is_refused(self):
+        with tempfile.TemporaryDirectory() as raw:
+            self.vault(raw, 'tier-admin-real-child')
+            for bad in ('', '../python', 'py thon', 'python\n- evil', '-x'):
+                with self.assertRaises((ValueError, AssertionError)):
+                    CONTRACT.use_running_interpreter(raw, 'tier-admin-real-child', bad)
+
+    def test_the_running_interpreter_is_the_default(self):
+        with tempfile.TemporaryDirectory() as raw:
+            self.vault(raw, 'tier-admin-real-child')
+            CONTRACT.use_running_interpreter(raw, 'tier-admin-real-child')
+            self.assertIn(f'- {Path(sys.executable).name}\n', (Path(raw) / 'config.yaml').read_text(encoding='utf-8'))
+
+
 class ObservationHygieneTests(unittest.TestCase):
     """The committed Go observations carry no operator path and are keyed to fixed oracles."""
 

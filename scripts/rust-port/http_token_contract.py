@@ -178,6 +178,31 @@ class Process:
         return dict(disposal=disposal, exit=self.child.returncode, stdout=normalized(stdout), stderr=normalized(stderr))
 
 
+STRUCTURE_DEPTH_LIMIT = 64   # far below every interpreter's parser limit, far above any real registry (depth 4)
+
+
+def json_nesting_depth(raw):
+    """Maximum [ / { nesting of a JSON text, counted outside strings (linear scan, no recursion, no parser)."""
+    depth = deepest = 0
+    in_string = escaped = False
+    for byte in raw:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif byte == 0x5C:      # backslash
+                escaped = True
+            elif byte == 0x22:      # closing quote
+                in_string = False
+        elif byte == 0x22:
+            in_string = True
+        elif byte in (0x5B, 0x7B):  # [ {
+            depth += 1
+            deepest = max(deepest, depth)
+        elif byte in (0x5D, 0x7D):  # ] }
+            depth = max(depth - 1, 0)
+    return deepest
+
+
 def token_files(vault):
     """Structure of the token files, never a raw token or random id/hash."""
     result = {}
@@ -188,20 +213,23 @@ def token_files(vault):
         if path.name != 'mcp-tokens.json':
             result[path.name] = 'present'
             continue
+        raw = path.read_bytes()
+        if json_nesting_depth(raw) > STRUCTURE_DEPTH_LIMIT:
+            # Go accepts nesting up to 10000 (duplicate_documents 'depth-9997-unknown'); CPython's json refuses it
+            # as a RecursionError on 3.13 but parses it on 3.14.  The depth is therefore measured, not caught, so the
+            # recording does not depend on the interpreter: the exact bytes stand in for the structure, and a file
+            # either side rewrote still differs.
+            masked = re.sub(rb'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', b'<TIMESTAMP>', raw)  # the run time is embedded on both sides
+            result[path.name] = 'too-deep:' + hashlib.sha256(masked).hexdigest()
+            continue
         try:
-            document = json.loads(path.read_text(encoding='utf-8'))
+            document = json.loads(raw.decode('utf-8'))
             result[path.name] = dict(version=document.get('version'), entries=sorted(
                 (e.get('label', ''), e.get('agent_name', ''), json.dumps(e.get('allowed_tools')), bool(e.get('revoked')), 'expires_at' in e, 'last_used_at' in e,
                  'revoked_at' in e, e.get('tool_registry_hash', ''), len(str(e.get('hash', ''))), len(str(e.get('prefix', ''))))
                 for e in (document.get('tokens') or {}).values() if e))
         except (ValueError, AttributeError, TypeError):
             result[path.name] = 'unparseable'
-        except RecursionError:
-            # Go accepts nesting up to 10000 (duplicate_documents 'depth-9997-unknown'); CPython 3.13's json
-            # C scanner refuses that depth.  The exact bytes stand in for the structure, so a file either
-            # side rewrote still differs.
-            masked = re.sub(rb'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', b'<TIMESTAMP>', path.read_bytes())  # the run time is embedded on both sides
-            result[path.name] = 'too-deep:' + hashlib.sha256(masked).hexdigest()
     return result
 
 

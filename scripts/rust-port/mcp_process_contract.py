@@ -58,6 +58,30 @@ def isolated(home):
     return env
 
 
+# The executable name the recorded seed vaults allow for the real-child profiles. It is a recorded constant, not the
+# interpreter that happens to run the capture or the replay: the working copy a server is started on gets the running
+# interpreter's basename (use_running_interpreter), so the recording is independent of the Python minor.
+RECORDED_EXECUTABLE = 'python3.13'
+
+
+def use_running_interpreter(vault, name, executable=None):
+    """Point a real-child profile's allowedExecutables at the running interpreter, in this working copy only.
+
+    The recorded seed bytes (and their snapshot) stay as recorded; the copy a server runs on is rewritten after the
+    snapshot comparison. Exactly one occurrence must exist in a real-child profile and none in any other."""
+    executable = Path(sys.executable).name if executable is None else executable
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+-]*', executable):
+        raise ValueError(f'interpreter name {executable!r} cannot be written into allowedExecutables')
+    path = Path(vault) / 'config.yaml'
+    text = path.read_text(encoding='utf-8')
+    marker = f'- {RECORDED_EXECUTABLE}\n'
+    expected = 1 if name.endswith('-real-child') else 0
+    if text.count(marker) != expected:
+        raise AssertionError((name, 'recorded allowedExecutables entries', text.count(marker), expected))
+    if expected and executable != RECORDED_EXECUTABLE:
+        path.write_text(text.replace(marker, f'- {executable}\n'), encoding='utf-8')
+
+
 def profiles():
     result = [('legacy', {})]
     result += [('tier-'+tier, {'tier':tier}) for tier in ['read-only','standard','admin']]
@@ -77,7 +101,7 @@ def profiles():
                ['default','claude-code','codex','hermes','openclaw','opencode']]
     result += [('tier-'+tier+'-real-child', {'tier':tier, 'canRunCommands':True,
                 'canReadValues':True, 'approvalMode':'none', 'requireApproval':False,
-                'exposeValueTools':True, 'allowedExecutables':[Path(sys.executable).name]})
+                'exposeValueTools':True, 'allowedExecutables':[RECORDED_EXECUTABLE]})
                for tier in ['read-only','standard','admin']]
     # Go scope is a literal root/prefix, not a shell glob.
     return [(name, dict(profile, allowedPaths=['public'])) for name,profile in result]
@@ -498,6 +522,7 @@ def load_go_observations(contract, contract_args=None, oracle=None, required=Tru
 
     `oracle` defaults to the oracle pinned for this contract (pinned_oracle), so a generic caller loads
     every observation without knowing which reference it was recorded against.
+
     """
     oracle = oracle or pinned_oracle(contract)
     path = go_obs_path(contract, goos)
@@ -1302,6 +1327,7 @@ def capture_process(args):
             home.mkdir()
             shutil.copytree(seed_home / 'vault', home / 'vault')
             assert vault_snapshot(home / 'vault') == snapshots[name], 'actual Go encrypted input equality'
+            use_running_interpreter(home / 'vault', name)
             row = observe(go, home, name, agent, 'go', [])
             check_profile_row('go', name, row)
             rows.append(scrub_process_row(row, home))
@@ -1370,6 +1396,7 @@ def main():
                 home.mkdir()
                 shutil.copytree(seed_home/'vault',home/'vault')
                 assert vault_snapshot(home/'vault')==snapshot, 'actual Go/Rust encrypted input equality'
+                use_running_interpreter(home/'vault', name)
                 row = observe(rust,home,name,agent,'rust',receipt['rust'])
                 check_profile_row('go',name,go_row)
                 check_profile_row('rust',name,row)
