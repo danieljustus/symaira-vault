@@ -1556,13 +1556,13 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
                 };
                 if let Ok(parsed) = parse_flags(&tokens, flags, "help", true)
                     && !parsed.help
-                    && let Some(message) = crate::agent_gate::preflight(
+                    && let Some(refusal) = crate::agent_gate::preflight(
                         "help",
                         parsed.vault.as_deref(),
                         parsed.profile.as_deref(),
                     )
                 {
-                    return fail(&message, crate::agent_gate::EXIT_PERMISSION_DENIED);
+                    return fail(&refusal.message, refusal.code);
                 }
             }
             return Verdict::Proceed;
@@ -1619,13 +1619,13 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
     // required-flag validation.
     if required
         && !(path_text == "completion" && shell_path.is_none())
-        && let Some(message) = crate::agent_gate::preflight(
+        && let Some(refusal) = crate::agent_gate::preflight(
             &path_text,
             parsed.vault.as_deref(),
             parsed.profile.as_deref(),
         )
     {
-        return fail(&message, crate::agent_gate::EXIT_PERMISSION_DENIED);
+        return fail(&refusal.message, refusal.code);
     }
     if required && let Some(message) = missing_required_flags(&path_text, &parsed.set) {
         return fail(&message, 1);

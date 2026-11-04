@@ -103,6 +103,13 @@ impl Side {
         text.replace("{ROOT}", &self.root.path().to_string_lossy())
     }
 
+    /// The per-user `config.yaml` (profiles), `{ROOT}` replaced by the vault.
+    fn set_global_config(&self, text: &str) {
+        let directory = self.home.path().join("config").join("symaira-vault");
+        fs::create_dir_all(&directory).expect("global config directory");
+        fs::write(directory.join("config.yaml"), self.substitute(text)).expect("global config");
+    }
+
     /// An argument with `{ROOT}` replaced and every `{FF}` turned into the
     /// byte 0xFF (not UTF-8).
     fn argument(&self, text: &str) -> OsString {
@@ -226,6 +233,11 @@ impl Pair {
     fn set_config(&self, config: &Config<'_>) {
         self.go.set_config(config);
         self.rust.set_config(config);
+    }
+
+    fn set_global_config(&self, text: &str) {
+        self.go.set_global_config(text);
+        self.rust.set_global_config(text);
     }
 
     /// Runs one command on both sides and requires identical behaviour.
@@ -826,6 +838,136 @@ fn agent_gate_complete_ignores_root_flags() {
             Opts::default(),
         );
     }
+}
+
+/// With an agent set, a vault path that does not resolve is Go's `VaultPath`
+/// error (exit 1), reported before the agent check.
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_reports_unresolvable_vault_paths() {
+    let (_oracle, pair) = Pair::new("agent_gate_reports_unresolvable_vault_paths");
+    pair.set_config(&Config::Text(PROFILES));
+    let alpha = Some("alpha");
+    let no_env = Opts {
+        no_vault_env: true,
+        extra: &[],
+    };
+    let env_profile = Opts {
+        no_vault_env: true,
+        extra: &[("SYMVAULT_PROFILE", "nosuch")],
+    };
+
+    // No per-user config at all.
+    let (code, stderr) = pair.check(
+        "profile flag, no global config",
+        &["list", "--profile", "nosuch"],
+        alpha,
+        no_env,
+    );
+    assert_eq!(code, Some(1));
+    assert!(stderr.starts_with("Error: resolve profile: cannot load config: open <HOME>/config/"));
+    pair.check(
+        "profile env, no global config",
+        &["list"],
+        alpha,
+        env_profile,
+    );
+    // Flag values are consumed, not interpreted: `--help` here is a profile name.
+    let (code, stderr) = pair.check(
+        "profile flag value --help, no vault env",
+        &["--profile", "--help", "list"],
+        Some("ghost"),
+        no_env,
+    );
+    assert_eq!(code, Some(1));
+    assert!(stderr.starts_with("Error: resolve profile: "));
+    // The environment profile is a vault path error for `__complete` too, and
+    // `--vault` before it is not looked at.
+    let (code, stderr) = pair.check(
+        "complete, env profile",
+        &["--vault", "{ROOT}", "__complete", "list", ""],
+        alpha,
+        env_profile,
+    );
+    assert_eq!(code, Some(1));
+    assert!(stderr.contains("Error: resolve profile: cannot load config: open <HOME>/config/"));
+    pair.check(
+        "ghost, profile flag, no global config",
+        &["get", "x", "--profile", "nosuch"],
+        Some("ghost"),
+        no_env,
+    );
+
+    for (label, global) in [
+        ("unknown profile", "profiles:\n  p1:\n    vault: '{ROOT}'\n"),
+        (
+            "profile without vault path",
+            "profiles:\n  nosuch:\n    description: x\n",
+        ),
+        ("broken per-user config", "profiles: [\n"),
+        (
+            "default profile that does not resolve",
+            "defaultProfile: nosuch\n",
+        ),
+    ] {
+        pair.set_global_config(global);
+        for args in [
+            &["list", "--profile", "nosuch"][..],
+            &["list", "--profile", "p\u{e9}\"x"],
+            &["list"],
+        ] {
+            for (name, opts) in [("flag", no_env), ("env", env_profile)] {
+                if name == "env" && args.len() > 1 {
+                    continue;
+                }
+                pair.check(&format!("{label} {name} {args:?}"), args, alpha, opts);
+            }
+        }
+    }
+    // A profile that resolves reaches the agent check inside its vault.
+    pair.set_global_config("profiles:\n  p1:\n    vault: '{ROOT}'\n");
+    let (code, _) = pair.check(
+        "profile resolves",
+        &["list", "--profile", "p1"],
+        alpha,
+        no_env,
+    );
+    assert_ne!(code, Some(1));
+    pair.check(
+        "profile resolves, ghost",
+        &["list", "--profile", "p1"],
+        Some("ghost"),
+        no_env,
+    );
+    // Commands that need no vault never resolve it.
+    pair.check(
+        "exempt command",
+        &["--profile", "nosuch", "version"],
+        alpha,
+        no_env,
+    );
+    // An explicit vault or SYMVAULT_VAULT is only expanded, never missing.
+    pair.check(
+        "unknown ~user",
+        &["list"],
+        alpha,
+        Opts {
+            no_vault_env: false,
+            extra: &[("SYMVAULT_VAULT", "~nosuchuser/x")],
+        },
+    );
+    pair.check(
+        "blank SYMVAULT_VAULT",
+        &["list"],
+        alpha,
+        Opts {
+            no_vault_env: false,
+            extra: &[("SYMVAULT_VAULT", "  ")],
+        },
+    );
 }
 
 /// cobra's generated `completion <shell>` commands support no output format;
