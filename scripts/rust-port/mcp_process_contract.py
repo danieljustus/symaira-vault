@@ -310,8 +310,15 @@ def vault_snapshot(root):
         assert not path.is_symlink(), 'fixture must not follow a host symlink'
         if path.is_file():
             data = path.read_bytes()
-            result[path.relative_to(root).as_posix()] = {'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+            entry = {'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+            rebased = _REBASED.get(str(path.resolve()))
+            if rebased and rebased['now_sha256'] == entry['sha256']:
+                entry = dict(rebased['recorded'])   # still the working copy we rebased: report the recorded bytes
+            result[path.relative_to(root).as_posix()] = entry
     return result
+
+
+_REBASED = {}   # resolved path -> {'now_sha256', 'recorded': {'bytes', 'sha256'}} of token registries rebased by rebase_token_clock
 
 
 # ---------------------------------------------------------------------------
@@ -519,7 +526,8 @@ def rebase_token_clock(path, now=None):
     committed observation keeps the original bytes; only the on-disk working copy is rebased.
     """
     import datetime as dt
-    document = json.loads(Path(path).read_text())
+    original = Path(path).read_bytes()
+    document = json.loads(original)
     stamp = re.compile(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$')
 
     def parse(text):
@@ -534,7 +542,11 @@ def rebase_token_clock(path, now=None):
         for key, value in list(record.items()):
             if isinstance(value, str) and stamp.match(value):
                 record[key] = (parse(value) + offset).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-    Path(path).write_text(json.dumps(document, indent=2) + '\n')
+    rebased = (json.dumps(document, indent=2) + '\n').encode()
+    Path(path).write_bytes(rebased)
+    # vault_snapshot keeps reporting the recorded bytes for this untouched working copy (the seed-bytes assertion).
+    _REBASED[str(Path(path).resolve())] = dict(now_sha256=hashlib.sha256(rebased).hexdigest(),
+                                               recorded=dict(bytes=len(original), sha256=hashlib.sha256(original).hexdigest()))
 
 
 def bounded(value, lower, upper, what):
