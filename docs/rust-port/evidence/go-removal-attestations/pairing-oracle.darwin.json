@@ -9,7 +9,7 @@
       "BUILD_GO_TOOLCHAIN=go1.26.10",
       "AREA_CHECK=/opt/homebrew/bin/python3.13 -B scripts/rust-port/gate_area_check.py",
       "scripts/rust-port/area_pairing_oracle.sh",
-      "/Volumes/1TB_NVMe_SN850X/Dev/Symaira_Dev/Worktrees/symaira-vault/local-cap-other/target/area-evidence-attest"
+      "<repo>/target/area-evidence-attest"
     ],
     "exit_code": 0,
     "output_sha256": "f69349f29a741bea89e54efefbd930bfbb4b328b88a8c4366604230f342e02d4"
