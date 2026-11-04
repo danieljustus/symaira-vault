@@ -84,6 +84,8 @@ scripts/rust-port/test_http_write_contract.py text eol=lf
 
 # Independently anchored MCP evidence and its input manifest are exact bytes.
 scripts/rust-port/fixtures/mcp-anomaly/** text eol=lf
+# Vendored upstream bash-completion files are sha-pinned: never normalize their bytes.
+scripts/rust-port/fixtures/bash-completion/* -text
 scripts/rust-port/mcp_oracle.py text eol=lf
 scripts/rust-port/mcp_fixture_contract.py text eol=lf
 scripts/rust-port/mcp_process_contract.py text eol=lf

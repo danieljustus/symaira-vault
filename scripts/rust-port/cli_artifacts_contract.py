@@ -11,7 +11,6 @@ import shutil
 import shlex
 import subprocess
 import tempfile
-import urllib.request
 
 import go_observations_common as observations
 
@@ -358,6 +357,16 @@ def terminal_completion(shell, setup, base, env):
             os.close(master)
 
 
+BASH_COMPLETION_DIR = Path(__file__).resolve().parent / 'fixtures' / 'bash-completion'
+
+
+def vendored_bash_completion(name, sha256):
+    """A bash-completion file of the pinned upstream commit; any other bytes are a failure."""
+    data = (BASH_COMPLETION_DIR / name).read_bytes()
+    assert hashlib.sha256(data).hexdigest() == sha256, f'{name} is not the bash-completion {BASH_COMPLETION_COMMIT[:8]} file'
+    return data
+
+
 def shell_fixtures(artifact, base):
     """Completion scripts and the pinned bash-completion library every shell side sources."""
     scripts = base / 'shell-scripts'
@@ -365,21 +374,15 @@ def shell_fixtures(artifact, base):
     write_utf8(scripts / 'symvault.bash', artifact['completions']['bash/descriptions'])
     bash = os.environ.get('CLI_ARTIFACTS_BASH') or shutil.which('bash')
     assert bash, 'actual Bash completion execution is required on every runner'
-    # Cobra's compatibility fallback calls the real bash-completion library.
-    # Download only a test prerequisite; it is not embedded in the executable.
+    # Cobra's compatibility fallback calls the real bash-completion library: the sha-pinned copy under
+    # fixtures/bash-completion (README there), a test prerequisite that is not embedded in the executable.
+    # Nothing is downloaded: replay and capture are offline.
     library = scripts / 'bash_completion'
-    url = f'https://raw.githubusercontent.com/scop/bash-completion/{BASH_COMPLETION_COMMIT}/bash_completion'
-    with urllib.request.urlopen(url, timeout=30) as response:
-        data = response.read()
-    assert hashlib.sha256(data).hexdigest() == BASH_COMPLETION_SHA256
-    library.write_bytes(data)
+    library.write_bytes(vendored_bash_completion('bash_completion', BASH_COMPLETION_SHA256))
     compat = scripts / 'bash_completion.d'
     compat.mkdir()
-    url = f'https://raw.githubusercontent.com/scop/bash-completion/{BASH_COMPLETION_COMMIT}/bash_completion.d/000_bash_completion_compat.bash'
-    with urllib.request.urlopen(url, timeout=30) as response:
-        data = response.read()
-    assert hashlib.sha256(data).hexdigest() == BASH_COMPAT_SHA256
-    (compat / '000_bash_completion_compat.bash').write_bytes(data)
+    (compat / '000_bash_completion_compat.bash').write_bytes(
+        vendored_bash_completion('000_bash_completion_compat.bash', BASH_COMPAT_SHA256))
     for shell in ['zsh', 'fish']:
         write_utf8(scripts / f'symvault.{shell}', artifact['completions'][shell + '/descriptions'])
     return scripts, bash, library, compat
