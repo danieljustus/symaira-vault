@@ -22,8 +22,9 @@ Checks, each against disposable HOME/vault roots only:
      `tool_denied`, `tool_registry_drift`) are identical field for field, in
      field order, between Go and Rust once the random ids are masked: `sess_id`
      (32 hex, one per agent server) and `req_id` (16 hex, one per call) must be
-     present, well formed and, for `sess_id`, constant; `token_id` is the
-     registry's deterministic id and is compared exactly. `--drop-audit-ids`
+     present, well formed and, for `sess_id`, constant; `token_id` is
+     resolved through the pinned shared vault registry (the id is stable there) to the label of the token that owns it,
+     so a row attributed to the wrong token differs, and an id outside the registry is an error. `--drop-audit-ids`
      deletes those three fields from the Rust rows before comparing; the
      comparison must then fail (negative control).
 """
@@ -53,6 +54,7 @@ GO_SOURCE_COMMIT = 'c069d3f2b17d704525cedc1bd42840cc6a3e9896'
 PORT = 28112  # fixed so the served bytes are identical in capture and replay
 NORMALIZATION = ['fixed loopback port', 'seed vault, the Go-issued and the Rust-issued CLI tokens (and the shared vault holding them) pinned in the file',
                  'prompt-injection data fence nonce (DATA_<16 hex>) and the audit ids (sess_id/req_id) already masked by the driver',
+                 'audit token_id resolved through the pinned shared vault registry to <token:LABEL> (the id is stable in the pinned tree)',
                  'Rust-issued token minted by the Rust CLI at first capture (needs --rust once); re-captures reuse the pinned shared vault']
 FIXTURE = ROOT / 'testdata/port/mcp/tool-registry-hash.json'
 PASSPHRASE = 'correct horse battery staple'
@@ -171,8 +173,22 @@ def audit_rows(home):
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def mask_audit(rows, drop_ids=False):
-    """Rows as ordered key/value lists with the random ids masked."""
+def token_labels(vault):
+    """{token id: label} of a vault's registry. The labels are the token names of the scenario table (serve-go and
+    serve-rust for the two CLI-issued ones): the ids are pinned in the shared vault, so an audit row's `token_id` is
+    resolved to the token that owns it instead of being collapsed to one placeholder."""
+    tokens = json.loads((Path(vault) / 'mcp-tokens.json').read_text())['tokens']
+    labels = {identifier: record['label'] for identifier, record in tokens.items()}
+    assert len(set(labels.values())) == len(labels), ('token labels must be unique', labels)
+    return labels
+
+
+def mask_audit(rows, labels, drop_ids=False):
+    """Rows as ordered key/value lists with the random ids masked.
+
+    `labels` ({token id: label}, from token_labels of the vault the server ran against) makes `token_id` comparable:
+    it is replaced by `<token:LABEL>` of the registry entry that owns it. An id absent from the registry is an error, and
+    two rows attributed to different tokens never compare equal."""
     masked = []
     sessions = set()
     for row in rows:
@@ -202,7 +218,8 @@ def mask_audit(rows, drop_ids=False):
             elif key == 'token_id':
                 if drop_ids:
                     continue
-                value = re.sub(r'tok-\d{8}-[0-9a-f]{8}', 'tok-19700101-00000000', value)   # the recording stores the id normalised
+                assert value in labels, ('token_id is not in the registry the server ran against', value, row)
+                value = f'<token:{labels[value]}>'
             out.append([key, value])
         keys = [k for k, _ in out]
         if not drop_ids:
@@ -321,7 +338,7 @@ def capture(args):
                 tokens[f'{impl}_cli_issued'] = raw_token(out.stdout)
         results, rows = run_server(go_cli, base, 'go', shared / 'vault', tokens)
         check_outcomes(results, 'go')
-        audit = mask_audit(rows)
+        audit = mask_audit(rows, token_labels(shared / 'vault'))
         actions = {dict(row)['action'] for row in audit}
         assert {'tool_denied', 'tool_registry_drift'} <= actions, ('Go audit lacks denials', actions)
         assert any(dict(row).get('token_id') for row in audit), 'Go rows carry token ids'
@@ -393,7 +410,7 @@ def main():
             assert set(go_results) == set(rust_results), 'same outcome inventory'
 
             go_audit = [[list(pair) for pair in row] for row in go_recorded['audit']]
-            rust_audit = mask_audit(rust_rows, drop_ids=args.drop_audit_ids)
+            rust_audit = mask_audit(rust_rows, token_labels(shared / 'vault'), drop_ids=args.drop_audit_ids)
             receipt['audit'] = {'go': go_audit, 'rust': rust_audit}
             assert go_audit == rust_audit, (
                 'Go/Rust audit rows differ:\n' + json.dumps({'go': go_audit, 'rust': rust_audit}, indent=1))
