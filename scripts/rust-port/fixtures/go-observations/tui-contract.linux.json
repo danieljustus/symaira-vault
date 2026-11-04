@@ -1,0 +1,1305 @@
+{
+  "args": [],
+  "contract": "tui-contract",
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "linux",
+  "material": {
+    "seeds": {
+      "0": {
+        ".lock": "",
+        ".symvault-migrated": "",
+        "config.yaml": "YWdlbnRzOgogICAgY2xhdWRlLWNvZGU6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgYXV0b1Vuc2VhbDogZmFsc2UKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGNhbldyaXRlOiB0cnVlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIHNraWxsUGF0aDogfi8uY2xhdWRlL3NraWxscy9zeW12YXVsdC9TS0lMTC5tZAogICAgY29kZXg6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgYXV0b1Vuc2VhbDogZmFsc2UKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGNhbldyaXRlOiBmYWxzZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICBza2lsbFBhdGg6IH4vLmNvZGV4L3NraWxscy9zeW12YXVsdC9BR0VOVFMubWQKICAgIGRlZmF1bHQ6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgYXV0b1Vuc2VhbDogZmFsc2UKICAgICAgICBjYW5SdW5Db21tYW5kczogZmFsc2UKICAgICAgICBjYW5Xcml0ZTogZmFsc2UKICAgICAgICBleHBvc2VWYWx1ZVRvb2xzOiB0cnVlCiAgICBoZXJtZXM6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgYXV0b1Vuc2VhbDogZmFsc2UKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGNhbldyaXRlOiB0cnVlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIHNraWxsUGF0aDogfi8uaGVybWVzL3NraWxscy9zeW12YXVsdC9TS0lMTC5tZAogICAgb3BlbmNsYXc6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgYXV0b1Vuc2VhbDogZmFsc2UKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGNhbldyaXRlOiB0cnVlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIHNraWxsUGF0aDogfi8ub3BlbmNsYXcvc2tpbGxzL3N5bXZhdWx0L1NLSUxMLm1kCiAgICBvcGVuY29kZToKICAgICAgICBhcHByb3ZhbE1vZGU6IGRlbnkKICAgICAgICBhdXRvVW5zZWFsOiBmYWxzZQogICAgICAgIGNhblJ1bkNvbW1hbmRzOiB0cnVlCiAgICAgICAgY2FuV3JpdGU6IGZhbHNlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIHNraWxsUGF0aDogfi8ub3BlbmNvZGUvc2tpbGxzL3N5bXZhdWx0L1NLSUxMLm1kCmF1dGhNZXRob2Q6IHBhc3NwaHJhc2UKY2xpcGJvYXJkOgogICAgYXV0b19jbGVhcl9kdXJhdGlvbjogMApkZWZhdWx0QWdlbnQ6IGRlZmF1bHQKc2Vzc2lvbk1heExpZmV0aW1lOiA4aDBtMHMKc2Vzc2lvblRpbWVvdXQ6IDE1bTBzCnZhdWx0OgogICAgYXJnb24yaWRfbWVtb3J5OiAxOTQ1NgogICAgYXJnb24yaWRfdGhyZWFkczogMQogICAgYXJnb24yaWRfdGltZTogMgogICAgYXV0aE1ldGhvZDogcGFzc3BocmFzZQogICAgZm9ybWF0X3ZlcnNpb246IDIKICAgIGxlZ2FjeV9tb2RlOiBmYWxzZQp2YXVsdERpcjogL3RtcC9zeW12YXVsdC10dWktY2FwdHVyZS02bm9qbm45dC9zZWVkLTAK",
+        "entries": null,
+        "entries/alpha": null,
+        "entries/alpha/login.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBLV0VMWWd4ZEg1cmd1bGp5M1cxVmdoRHEwTEdhdlRaREdFYlpJdFcrTDBNCm1TVXplZ1ZsMUVDZXR1VVlacEhFd1F1VjB6d1VwTVJRUXN2ZU93Q0piNUUKLS0tIERRWWI2NDNPdVpXMjRpQ3pxaW02dUpKY1UxOFpyQjVOUEoySVFrcjh5emcKBTfso1xzH9ldsdzvHdvU7om86MUkGkgXeJ8zNbnfLXly6KkkIlKY9m8JSMMqqbxVsZbEVbfVUdJijutYMkoe7DCTs8307xJxBLQix5qInAW/gzf1dRDIVPUNdxSJcB3wPoH5c4nIhd2vxPf1p6HuWQMtGg6iGvbY01lHXWl+wlditHjVva1J0gCDT4Q4NC20m92boA4IvubOyrj9Y+MxjOiotlX+QBGt/5F0pBrbCn0EpbxxQ1fr18KGoZHHbDGyaaqFBf10F5np/WLURCcPFkGuevpHqtXWY5rAM1JHPxdZ0A7rD/ojYlE1dT0yHcXHBmgYz/haTGCkWXoCXElPS5F3BlUd9w2R+Z/nukeXMFtfZgbRUUiq+cU2zpzFbLI/LA==",
+        "entries/beta": null,
+        "entries/beta/api.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB1ck5zT21GUnRocnVLOFdVd21ZRnpwY0dhUWppY0RaNDl5cE1MTEdrTVVjCjlWc1BWYVRETEdqL1RKa0o3WUNTU3ZHVUZvd1hEanl3T1ZUckxrNU9aUncKLS0tIGdXdU9MRUdEekNIQk1SMG1oVXlrMnA5RHJ4VnpacVppeDdlS3JNWFhQZm8KUsFa+LEZO3KtD1mMKSmrrf/cPMy88kBdCMoGClRyaX/XoDQLCXwS70utBXxre5RoBTMMiSQZFLwjWan/l4SiwjNAg+/1DGf1i2RD0vW2bo0s4QiSBUdHGc0txlom8L4yJJhiBshUrCNCwUeuBpHOVdUmG1J3doYgbNFcqPW8rfr6QPYY7TU1BFMGgOvzEhH7yvilN+wOQhuwqLEfNewGeMfhzzRZYzsGrxmGHrJMYlliWzsut/2MHEkOxMU3LAN/T8TN0MZBvrdrDuaQw7xnDRFEcFgk22u8Mg3lDg3zmaqqcEOrUDvydA18278ebK76c2b2hO9hdi4WyC6iz9ySENRca1tnDB97wLh7UnxPkd7QTNjCxbaZFcAdjoo=",
+        "entries/gamma": null,
+        "entries/gamma/control.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB3d3BiSXl5WlhvS2tyOExRRUlOMEowYWZqcGo0eGJRZThSNkV5RmNuT3dvCkE1NEFlb2xrS0tIQU92eUREbTcwbURUWTdXY2ZFWHhZSGZMcm12eWNoNjQKLS0tIFl1T3hRVS9JQmlXUkp3VGt0V2t5VjVHWmlYOTFCUE9NVEpGdmlkUVpuejAKJVeV9JYC6G7tAin7+ZSHBPXXNpN/oXsawoJs5n6e73KRimo47I4iXZBZ94l2xUWosRUUp3nNi+XKGnGWoP921qfQatzBNNWGlOIDVrvZAAggX/YbZiKJUd5S2Fvuk+HHlGiqcYdsnzihyMtpQmxcdnsFhXkh8Y3Uck3leFH2GkGPu+MOwW8gWnYbmfdrNmL28Fv5vLG7SOeSLEpgrhG0tnMgHA3zY2evd9Oxf2EM3Ff1jowy++OKr9qEM6XPAdhaa5DVOt+CQtsYpEHyjR1Ihq4sjwglcoo/GvQei7ieT0hpUe0yxfyurWc7N3gnNSSsSFVpgj6jltnb+SQUt5yDGMRbJ8W84rkYoGR/u4/vxPCNdVdKlNx460vDDQxbpGBKjOjB",
+        "identity.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFlRY0RsUkhZOUU3SVhJTGFTcmJhdlEgdD0yLG09MTk0NTYscD0xCm9tMFVBMlFxL1lDZmNnT1UycmRvRXkwSVZuL2FnR0NDazlqeTY3S3I0OXdoc0xIZDVEVEIrc0V3cWk4Ci0tLSBqY0tXQkZxRHFqUlFXdDZVWEVNWVJqK2Z0Q0w5WVF3VkdOaTRTQXRYQkFBCsECzDhw4P9O9wtDCGVyGmjiytAH33Wpq18f1fK9mOoC1GfKoGEzgcSKT8VPBw9MofTMly8JRnzk3iTKsCI5LxLuhZwb/D9K2lFk/LjigMbqkn25wwaHZR2yvm/FVIAPTO5GQFrdHGYOtZ0=",
+        "manifest.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBVZjJNd3hTNXR5M0pnYVhqLzRuc3hHR1FsVWZ3bmFXMktUMTJqTHE3YjFzCklmOEYvTDY1UGFIbVlpRWF0bEMrSm9QWXJacStIWkhJRWMyYmswMGhEL28KLS0tIGR2UXVLbnhmbEFLZDRlSGpEWkp4bGRabnpkM1lzV25aTFQ3SWltckpoRTgK1m/W/P6NrKShgvhof8t0buLQ8ktzRh7sTJu7wih/0lT3WFbReAFbRZjCWnMOC5axLzuNwbHl+DuhirLYYze9NrC+bvieUX8hYURKZ9HstiwZ2lX5ZOAFkgNM6wTBruLoNWEHOz/h4RL9E1IrwgRATCYhZC4kxy8DyiXxJ6It5/lyWZVH0K8MFzRga6e8LPF/QD9xUcv8wZmWPQK4UMlrq/lJepfiZroZRKbF5YlwSrawN2uylwMgeR5386gdwKj7CsqQCQFhORLtUHIiSkvxt0PwDo12BvQRvtnI5qLCV2dxsMCuEhtYNVmHfPmJAuxoiCuef72RGT9a6x6jE2VWwHleF/Ro7buLZecGxsbrhRjx+Cf9LrJ/xLZsMg1d2LjmUmoayO1WPt0u5GCTP77ij4QnUXVkOH50STnB3FvlAP+keBtmVgib69jORDpHL84DIK9KGp6MaKrqgHbPobXbOleY+4TcH2dNWumhSpGfSAIm/ww7haMFF102WjPWvUgS4z/Yun44LWdoil4mPQRYpeu84p8gZl8HOIoH2tpmrb9P4IR8eN02xGessDYz27rkrItUg6D9N+LYgu8FxbZN3UMw3fVB3LO635eKn7KX+dKUWOdTHf5oPCgt1ZfttjtKKO7zX7D90jRKEjB9DRqvACydaZIjcTFys1UuBZSjCsJBVHQso2SykJVGHAn4L6jC7CsSeUaLpaiLg6niiuVzRGpE9ZPmK2DEn+xc4wNf8i1a2dyvn4XhDCZNg3fQDfksG+UvYDa7Ce1L+Uk="
+      },
+      "2": {
+        ".lock": "",
+        ".symvault-migrated": "",
+        "config.yaml": "YWdlbnRzOgogICAgY2xhdWRlLWNvZGU6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgY2FuV3JpdGU6IHRydWUKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICBhdXRvVW5zZWFsOiBmYWxzZQogICAgICAgIHNraWxsUGF0aDogfi8uY2xhdWRlL3NraWxscy9zeW12YXVsdC9TS0lMTC5tZAogICAgY29kZXg6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgY2FuV3JpdGU6IGZhbHNlCiAgICAgICAgY2FuUnVuQ29tbWFuZHM6IHRydWUKICAgICAgICBleHBvc2VWYWx1ZVRvb2xzOiB0cnVlCiAgICAgICAgYXV0b1Vuc2VhbDogZmFsc2UKICAgICAgICBza2lsbFBhdGg6IH4vLmNvZGV4L3NraWxscy9zeW12YXVsdC9BR0VOVFMubWQKICAgIGRlZmF1bHQ6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgY2FuV3JpdGU6IGZhbHNlCiAgICAgICAgY2FuUnVuQ29tbWFuZHM6IGZhbHNlCiAgICAgICAgZXhwb3NlVmFsdWVUb29sczogdHJ1ZQogICAgICAgIGF1dG9VbnNlYWw6IGZhbHNlCiAgICBoZXJtZXM6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgY2FuV3JpdGU6IHRydWUKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICBhdXRvVW5zZWFsOiBmYWxzZQogICAgICAgIHNraWxsUGF0aDogfi8uaGVybWVzL3NraWxscy9zeW12YXVsdC9TS0lMTC5tZAogICAgb3BlbmNsYXc6CiAgICAgICAgYXBwcm92YWxNb2RlOiBkZW55CiAgICAgICAgY2FuV3JpdGU6IHRydWUKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICBhdXRvVW5zZWFsOiBmYWxzZQogICAgICAgIHNraWxsUGF0aDogfi8ub3BlbmNsYXcvc2tpbGxzL3N5bXZhdWx0L1NLSUxMLm1kCiAgICBvcGVuY29kZToKICAgICAgICBhcHByb3ZhbE1vZGU6IGRlbnkKICAgICAgICBjYW5Xcml0ZTogZmFsc2UKICAgICAgICBjYW5SdW5Db21tYW5kczogdHJ1ZQogICAgICAgIGV4cG9zZVZhbHVlVG9vbHM6IHRydWUKICAgICAgICBhdXRvVW5zZWFsOiBmYWxzZQogICAgICAgIHNraWxsUGF0aDogfi8ub3BlbmNvZGUvc2tpbGxzL3N5bXZhdWx0L1NLSUxMLm1kCnZhdWx0OgogICAgYXV0aE1ldGhvZDogcGFzc3BocmFzZQogICAgbGVnYWN5X21vZGU6IGZhbHNlCiAgICBmb3JtYXRfdmVyc2lvbjogMgogICAgYXJnb24yaWRfdGltZTogMgogICAgYXJnb24yaWRfbWVtb3J5OiAxOTQ1NgogICAgYXJnb24yaWRfdGhyZWFkczogMQpjbGlwYm9hcmQ6CiAgICBhdXRvX2NsZWFyX2R1cmF0aW9uOiAyCnZhdWx0RGlyOiAvdG1wL3N5bXZhdWx0LXR1aS1jYXB0dXJlLTZub2pubjl0L3NlZWQtMgpkZWZhdWx0QWdlbnQ6IGRlZmF1bHQKc2Vzc2lvblRpbWVvdXQ6IDE1bTBzCnNlc3Npb25NYXhMaWZldGltZTogOGgwbTBzCmF1dGhNZXRob2Q6IHBhc3NwaHJhc2UK",
+        "entries": null,
+        "entries/alpha": null,
+        "entries/alpha/login.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB4a2RkSjJwZ3U3R3dSSU9BempuY0YxY2RPcDNDMDRrejR5Q3dwNFk0NzNBCjV2Qm1XRlArREdCYmhFc2xDOTM0SWJJK1B4SW84TXRxdmVtdUtNSzdMSmcKLS0tIE9SRnRiazJWSzBBK3FSWDgrOEtOOWpOUWFsdllGS3Q1NmZTTnJlZTJmZ1kKRDJnj3Ee5X9soYgReFDkbrVNAg4D+6Nf16tVXpmY0BTTqUuvwIjs6x4S7u7tHCgwx26acBvhPKEf+8494wV8eQHfuMfr2oM1rv14mmChPiL8tMftcFyMnR12htkrZGztqpSSLMnABoM+ymlKoC8w7ZVI+Zm+ibWvbasgA9AAq5H6GnmSnCGbF6dsLcALi3W5OJSRtWvT2Ls0kYH0QflGCmB2Hwz0PJ7mShzF783Yl+31sfL3+oId3PJVRw1SRR+V7vDmFa4nmr1UG9uNIrsJ3bIFFUeZ6ug85BAXGLHTou7HjdwqqJF7Us3KQ+94u5sH+AEY3UxQWH6m0Y0O6E3T2UcWg9uN7pld9UiyZ5jEiaqe94ntxC60inYLVcqslAAb/g==",
+        "entries/beta": null,
+        "entries/beta/api.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBNT2FaQTdiZEtjWUI5UExTVmlsNnNhTmU5TjZYcXpRaHp0ellKa25IUmdZCjM1MHdaaVJrdEVqZmpMNWVWRXpVZkNDMHA5UkdHdS9GRDlvdnUwWkNQVWMKLS0tIFJhSUFNdkdGbEVWejd1MGlYWFZJOEVJL3pIaDJKQU5GYmc0RDB4elNUMGMKu9QrtBsmnu3xUHhHcJsWPklWFXQST41Kr1ZcjBA46+wUo5C77jUGawbF3wX7P6oen9DUqSiY1O8ydF7BxH3IDJIVhRp/zaoBlW6Al5bFcKosAZo4/Hhv6u+m3H8oOzJZiKKJdIiLgaWJqMqZlBfm5Ab1KIo0mvUAGmo/FnnL46/0Jo6QmcFTaZ8LZ9IauH0Fqs0+34sWJbrdOBpMxjtORyAyVk5YaPU6ZMjYlrfUsV97Hz/YcMtV31NPCXr7a2lPGMwJLzf2vckfmcuKj5jU1Wznh4Bp+37xPLgsR50fnsw/i+vXDnl+WD0cTY43U/0RY8LPb22BzY05OI9yA+OohMT3RQ3ZOJK3EMWZdefgvEK+FQE/ZjSYixLBhT8=",
+        "entries/gamma": null,
+        "entries/gamma/control.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBRbTRQbSt5cERENUlBSUUwQlpoQm9vellldDZoc3ExQ1RsOEh1L3ZkNVh3CkRDM3JCVmxHNHR2MmNvenBETzhNaE1hejlzcmowcDlLY3pKbzdNTG5wQjgKLS0tIDM5djUzbHBkNUVzYng5Zi93QTNVSHVyYjM3ZnJzVmVWY2tkWjd5djRJYTAKDQAjnENmGqnjKOPtIdNQo6KPBmpk4G9w9CGKkr8FLdyYirm8MkcD1LJ+hw8x2P1M0u122OtpF9xIKqETWamWKtKrL/5BbPYQkNPn2Swvl0/LfHwAHxze/kDJPX/kzdUBLM3S1EL5RTsEsj2tDkuEw0qmlHMUY8QOz/Ps7NQ8uedEdPdTJ596+8IBsfntVAImdrmsO/8VETe6JgOyo/2CHIWp0WuB2MBgXwGm8JP3AAkmdn54EIo/G03eJS6U6f/n97IHzGs37MD4pH8rBw+bml/2nDSKXhgNwROdEWqL965Lz4XgxK0ROMFLyPSzV8P0qJ+YzSX0BA+EXFG2FA7tjDCQ7XT+mzS6PkhC8AJ+rXP+U9FlyYj8fbl4sv4rDBz64MIa",
+        "identity.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIHppV1dnSThER3lQTkx6MG9kR3dGTEEgdD0yLG09MTk0NTYscD0xCllzVDF6TytRajdIU3NGbEFiakl1ZzFpOXNXTlVGZmtyYmVUcm56QkNlS0xPaDZiZFpFR3g1RndteHpJCi0tLSBrTUF2NFBjaitIWUtTMHpjd2p5ays4OWVDcWZuOUhHZkFlcDZjY3k5cVRVCnHBGlfAy2FZLFfs+QgFSApBqo3Omye0BiCcl/rhopzC9LfzvJ8u0Jsgfa3bmrjZ/CDSPmVvJ1Y13hdFyLO5koqGwmzXJY3Qx06GTR29wAFQtcVv06aFqqSVP7a0wgwhkq73yG7rIqBKtGk=",
+        "manifest.age": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBFN3dGYWswMU5hZkdWM1ZwaGF0YkExOHV5UTE0VSs3NDFySUZCdFI2MnhBClFraEYxTjBrMFZZUkszaXFZK3E3Yzl5end0UkVRczNwb2xHSUxDM1MwR1EKLS0tIDRwYU1tNTFERjVqWWMzUnpBaFM2YmxGTUlZYzYvclBTNzRNMHEvVjFmOWcKmw++Pb0AKG2gkEYxNUdVDj6FNZQejqQS6QNWPyxYlU7hIcuoFzbIa/kstrY3+csA0gYruTz7AvqHVxee/bq6uV6xnnRZlnxnIoPWkK1O+1BbrO5oNmD9a2IvZA25oRP2SRJ5BjhMoDC8UCN458CC3Jk9Y78k83acPLx6SMT7ItFkmCiw8VYcZ/Hj61jqJXzbotIkxb/6ogml1kTcyS3PCpUVVMq6AVBDLV1v5F7YgJi/lDQYq0h2yR+5vIU5FWyCSFxvyBrsahqv3yhs0zwbKthD4DHDidKk00CiG+eCMrur3LVDIbt/2lfXIUY9K6HAOp8NpL3KJEOghaoCPcjvUDeTLMewcbSxnsNd2qzW3Sswnh6jdCN4rWTQ4J3YxosjuItfYfp5iyyJbCouLTkj/tHVdgoQMaq2GZ3WQrzKAni9jsAKph2NzSB+RNoJ3BBHR5mVJ0q6nj06TEyZfvxAr8B9vZpAwydbfJj5zjnw+FpMT27rymJTA2AnSyhlIXS3KRD70ZkmORYi8o/8Siz9e5H/4XeqQRElPDav0zB1H2XaSSbdK7yEZSqKjlac3bk4XZFi5fQ/3ZfJnkbhbrztP741e96I+Xcy4mMbiJYxZ5maa+VknPSu+CAwyD832cbWzeL/57hNK47St7013fZuPaEjYEh5InY7ZfSGjqK4vRQEzWO8Dq/hJQ9hhzgGTNUiHK9ZR+M9jH/NS31hDYyZKDX7bfcnJTrAmnPMEOOrArKpMEdcY2pS0X3vLPA0SryxqE5Hpw+JDPMYLsDrtA=="
+      }
+    }
+  },
+  "observations": {
+    "keybindings": [
+      {
+        "Action": "Move selection",
+        "Key": "↑/↓ or k/j"
+      },
+      {
+        "Action": "Copy selected field to clipboard",
+        "Key": "Enter"
+      },
+      {
+        "Action": "Toggle reveal/redact sensitive fields",
+        "Key": "r"
+      },
+      {
+        "Action": "Edit selected entry in $EDITOR",
+        "Key": "e"
+      },
+      {
+        "Action": "Delete selected entry (confirm)",
+        "Key": "d"
+      },
+      {
+        "Action": "Generate new password for entry",
+        "Key": "g"
+      },
+      {
+        "Action": "Cycle sort mode (name/updated, asc/desc)",
+        "Key": "s"
+      },
+      {
+        "Action": "Filter by tag",
+        "Key": "t"
+      },
+      {
+        "Action": "Filter by name",
+        "Key": "/"
+      },
+      {
+        "Action": "Clear filter / cancel input",
+        "Key": "Esc"
+      },
+      {
+        "Action": "Toggle full keybinding help",
+        "Key": "?"
+      },
+      {
+        "Action": "Quit the TUI",
+        "Key": "q or Ctrl+C"
+      }
+    ],
+    "rows": [
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "browser-navigation-filter-sort-help",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "exit_code": 0,
+        "explicit_reveal_observed": true,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "native-copy-expiry-quit",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "exit_code": 0,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "generated-password-not-persisted",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "exit_code": 0,
+        "generated_length": 8,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "5e74ae825194012463b9d2a748002ac02a70338cde9652ecbabec41a1c67897a",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 2
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "editor-valid-and-expiry",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "editor": {
+          "document_nonempty": true,
+          "environment_filtered": true,
+          "foreground_terminal_restored": false,
+          "input_is_terminal": true,
+          "mode": 384,
+          "output_is_terminal": true
+        },
+        "editor_terminal_restored": false,
+        "exit_code": 0,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "editor-invalid",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "editor": {
+          "document_nonempty": true,
+          "environment_filtered": true,
+          "foreground_terminal_restored": false,
+          "input_is_terminal": true,
+          "mode": 384,
+          "output_is_terminal": true
+        },
+        "editor_terminal_restored": false,
+        "exit_code": 0,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "editor-empty",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "editor": {
+          "document_nonempty": true,
+          "environment_filtered": true,
+          "foreground_terminal_restored": false,
+          "input_is_terminal": true,
+          "mode": 384,
+          "output_is_terminal": true
+        },
+        "editor_terminal_restored": false,
+        "exit_code": 0,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "editor-failure",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "editor": {
+          "document_nonempty": true,
+          "environment_filtered": true,
+          "foreground_terminal_restored": false,
+          "input_is_terminal": true,
+          "mode": 384,
+          "output_is_terminal": true
+        },
+        "editor_terminal_restored": false,
+        "exit_code": 0,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "5e74ae825194012463b9d2a748002ac02a70338cde9652ecbabec41a1c67897a",
+            "path": "delta/new",
+            "tags": null,
+            "version": 2
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "add-valid",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "editor": {
+          "document_nonempty": true,
+          "environment_filtered": true,
+          "foreground_terminal_restored": false,
+          "input_is_terminal": true,
+          "mode": 384,
+          "output_is_terminal": true
+        },
+        "editor_terminal_restored": false,
+        "exit_code": 0,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "add-invalid-no-initial-write",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "editor": {
+          "document_nonempty": true,
+          "environment_filtered": true,
+          "foreground_terminal_restored": false,
+          "input_is_terminal": true,
+          "mode": 384,
+          "output_is_terminal": true
+        },
+        "editor_terminal_restored": false,
+        "exit_code": 0,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "delete-confirmation",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "exit_code": 0,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 0,
+          "vault_clipboard_seconds": 0
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "zero-ttl-quit-cleanup",
+        "clipboard_survived_console_exit": false,
+        "clipboard_survived_quit": true,
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "exit_code": 0,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "c4eec6a8306d47c94e9cd07a121c16eec98c3daacbff6c57736a9b23a4fac018",
+          "entries/alpha/login.age": "741e0633abab1e497e47ad7a5a57dd00d1b2d22bfe47ec1998773a8dbd8eb05b",
+          "entries/beta/api.age": "3d107c6191008af213fcc6f08b413d4b18a5c6211dff9dc2917a70cea49a495d",
+          "entries/gamma/control.age": "56097cc7eaa850797ef8923766c61e6259c560f1dcd74c48e6ee9e669a2acc7b",
+          "identity.age": "3c931c9cafe5586fb1804fd7dd0766c84558971c07dc2ee4f637b9fbf68695a1",
+          "manifest.age": "9de995457d0a1d45ddc407d0685ff1824f88a4b9e4bdcb59cf2ea0371f4d1432"
+        },
+        "terminal_restored": true,
+        "zero_timer_exercised": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "ctrl-c-filter-cleanup",
+        "console": {
+          "exit_code": 0,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "exit_code": 0,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "locked-wrong-passphrase",
+        "console": {
+          "exit_code": 1,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "exit_code": 1,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "after": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before": [
+          {
+            "data_sha256": "964a895d3b60d87280eb8dcb37a34275d821b6919d4a495fda0ee4df055aa878",
+            "path": "alpha/login",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "7fa0aa3a24f13bf69a355684a50b7a3e662ba16e2df83f0656c6d2eb1872fbca",
+            "path": "beta/api",
+            "tags": [
+              "home"
+            ],
+            "version": 1
+          },
+          {
+            "data_sha256": "aa81caa251e052ccd69de709b066047735fc3835341188597709b7aacd5fbff5",
+            "path": "gamma/control",
+            "tags": [
+              "work"
+            ],
+            "version": 1
+          }
+        ],
+        "before_config": {
+          "persisted_clipboard_seconds": 2,
+          "vault_clipboard_seconds": 2
+        },
+        "canary_disclosure": false,
+        "capture_policy_checked_at_capture": true,
+        "case": "uninitialized",
+        "console": {
+          "exit_code": 3,
+          "input_restored": true,
+          "output_restored": true
+        },
+        "exit_code": 3,
+        "input_restored": true,
+        "output_restored": true,
+        "passed": true,
+        "seeded_files": {
+          ".lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          ".symvault-migrated": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "config.yaml": "78682788b316e5a059c1630c4bc1e599f3dc5a2ac92b334be836f743515c441b",
+          "entries/alpha/login.age": "51d7b7638f236bb8fce0cfae632a26017b26856c1a7757b5b8f69850c6394f46",
+          "entries/beta/api.age": "19c6fde0d3dc151b45a9886e02dc5b8dd6672e29975b067408bd535f2d91ab79",
+          "entries/gamma/control.age": "10405ca4a8e1bc402a3a81fb232d96c6766b34da2670168c25264b73b043e407",
+          "identity.age": "1864829fc1147d7892416a9cf454df988a53ca774de86278cbeb2ce3f29ea266",
+          "manifest.age": "4b81b3621c194d63f2757a26d5bb165b6b3856cd632af21ef213eb40dde0debf"
+        },
+        "terminal_restored": true
+      },
+      {
+        "capture_policy_checked_at_capture": true,
+        "case": "public-keybinding-table",
+        "exit_code": 0,
+        "passed": true,
+        "stdout_sha256": "d0d9ea49567dc54095726966eadb9cccf1441a9bcbcd51cd266ef2e5d0a65849"
+      }
+    ],
+    "seed_configs": {
+      "0": {
+        "effective_clipboard_seconds": 0,
+        "initial_roundtrip_clipboard_seconds": 30,
+        "requested_clipboard_seconds": 0
+      },
+      "2": {
+        "effective_clipboard_seconds": 2,
+        "initial_roundtrip_clipboard_seconds": 2,
+        "requested_clipboard_seconds": 2
+      }
+    }
+  },
+  "oracle_commit": "d1cd0f97ac550bc3020bc86b0514989f8d28d95c",
+  "schema": 1
+}

@@ -1688,22 +1688,46 @@ tui-harness-check: $(AREA_VENV)/.ready
 # below and compares bytes, so the binary under test is built the same way, in
 # its own target dir (it would otherwise rebuild every crate of the shared
 # target dir in a different profile).
+#
+# The contract is Go-free: the Rust browser runs live under tui_driver.py (a
+# stdlib pty/termios console driver) and the symvault-store `tui-snapshot`
+# example reads the encrypted store; the Go side is the committed observation
+# fixtures/go-observations/tui-contract.<goos>.json, and the driver equivalence
+# evidence proves the Python driver reproduces the Go helper's Rust-side rows.
+# `make go-observations-capture-tui` (Go, Xvfb) records both once.
 TUI_TARGET := $(AREA_EVIDENCE)/tui-candidate
 TUI_BUILD_ENV := CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
+TUI_CARGO_BUILD := CARGO_TARGET_DIR="$(TUI_TARGET)" $(TUI_BUILD_ENV) $(CARGO) build -p symvault-cli --bin symvault -p symvault-store --example tui-snapshot --locked
+TUI_SNAPSHOT := $(TUI_TARGET)/debug/examples/tui-snapshot
 
 tui-contract: $(AREA_VENV)/.ready
 	@rm -rf "$(AREA_EVIDENCE)/tui" && mkdir -p "$(AREA_EVIDENCE)/tui"
-	CARGO_TARGET_DIR="$(TUI_TARGET)" $(TUI_BUILD_ENV) $(CARGO) build -p symvault-cli --bin symvault --locked
+	$(TUI_CARGO_BUILD)
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_harness_test.py
-	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
-		--rust-cli "$(TUI_TARGET)/debug/symvault" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json"
-	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
-		--rust-cli "$(TUI_TARGET)/debug/symvault" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json" --validate-receipt \
+	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_driver_equivalence.py check
+	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
+		--rust-cli "$(TUI_TARGET)/debug/symvault" --snapshot-bin "$(TUI_SNAPSHOT)" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json"
+	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
+		--rust-cli "$(TUI_TARGET)/debug/symvault" --snapshot-bin "$(TUI_SNAPSHOT)" --receipt "$(AREA_EVIDENCE)/tui/native-tui.json" --validate-receipt \
 		--candidate "$$(git rev-parse HEAD)" \
 		--expected-receipt-sha256 "$$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$(AREA_EVIDENCE)/tui/native-tui.json")"
-	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_mutation_test.py \
-		--rust-cli "$(TUI_TARGET)/debug/symvault" --native-receipt "$(AREA_EVIDENCE)/tui/native-tui.json" \
+	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_mutation_test.py \
+		--rust-cli "$(TUI_TARGET)/debug/symvault" --snapshot-bin "$(TUI_SNAPSHOT)" --native-receipt "$(AREA_EVIDENCE)/tui/native-tui.json" \
 		--receipt "$(AREA_EVIDENCE)/tui/native-mutation.json"
+
+# One-time Go capture (needs Go, Xvfb/xclip and a built candidate): records the Go side of the contract and
+# the Rust binary driven by the former Go fixture helper, then proves the Python driver reproduces those
+# Rust rows. Run on each Linux lane after changing tui_driver.py, tui-snapshot.rs or the Rust browser.
+.PHONY: go-observations-capture-tui
+go-observations-capture-tui: $(AREA_VENV)/.ready
+	@rm -rf "$(AREA_EVIDENCE)/tui-capture" && mkdir -p "$(AREA_EVIDENCE)/tui-capture"
+	$(TUI_CARGO_BUILD)
+	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py --capture-go \
+		--rust-cli "$(TUI_TARGET)/debug/symvault" --reference-rust-out "$(AREA_EVIDENCE)/tui-capture/reference-rust.json"
+	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py --allow-dirty-for-development \
+		--rust-cli "$(TUI_TARGET)/debug/symvault" --snapshot-bin "$(TUI_SNAPSHOT)" --receipt "$(AREA_EVIDENCE)/tui-capture/native-tui.json"
+	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_driver_equivalence.py "$(AREA_EVIDENCE)/tui-capture/reference-rust.json" \
+		"$(AREA_EVIDENCE)/tui-capture/native-tui.json" --evidence docs/rust-port/evidence/tui-driver-equivalence.$$(uname -s | tr A-Z a-z).json
 
 rust-gates-core: store-differential audit-differential
 	$(MAKE) rust-lint
