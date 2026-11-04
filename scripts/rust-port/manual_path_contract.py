@@ -99,9 +99,9 @@ def verify_manual_paths(go_binary, rust_binary, root, inherited_env, artifact, l
             recorded = go_recorded[index]
             assert recorded['case'] == case and recorded['manual_count'] == len(rust), ('recorded Go case', case)
             assert recorded['normalized_manual_digest'] == manual_digest(normalized), ('recorded Go manual digest', case)
-            go_mcp_page = rust['symvault-mcp.1']  # byte-equal to the recorded Go digest, asserted above
+            mcp_page = rust['symvault-mcp.1']  # replay: the Rust page; its digest equals the recorded Go digest (asserted above)
         else:
-            go_mcp_page = go['symvault-mcp.1']
+            mcp_page = go['symvault-mcp.1']  # live: the Go page
         actual_help = {}
         for command in ['mcp', 'serve']:
             outputs = [execute([binary, command, '--help'], base, env) for binary in binaries]
@@ -113,7 +113,7 @@ def verify_manual_paths(go_binary, rust_binary, root, inherited_env, artifact, l
             assert text.replace(config_path, '__CONFIG_PATH__') == artifact['help']['symvault ' + command]
             actual_help[command] = text
         observations.append({'case': case, 'manual_count': len(rust), 'actual_help': actual_help,
-                             'actual_go_mcp_page': go_mcp_page.decode('utf-8'),
+                             'mcp_page_matching_go': mcp_page.decode('utf-8'),
                              'actual_rust_mcp_page': rust['symvault-mcp.1'].decode('utf-8'),
                              'normalized_manual_digest': manual_digest(normalized),
                              'go_source': 'live' if go_binary is not None else 'recorded', 'passed': True})
