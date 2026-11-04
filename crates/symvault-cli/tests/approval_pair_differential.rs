@@ -18,15 +18,15 @@ mod go_oracle;
 use std::{
     env, fs,
     io::{Read, Write},
-    net::TcpListener,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, TcpListener},
     path::{Path, PathBuf},
     process::{Command, Output},
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use hmac::{Hmac, KeyInit, Mac};
@@ -34,7 +34,7 @@ use rustls::{
     ServerConfig, ServerConnection, StreamOwned,
     pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 const ENROLL_SECRET: &str = "mcp-server.enroll-secret";
 const FIXTURE: &str = include_str!("../../../testdata/port/approval/device-enroll.json");
@@ -57,8 +57,14 @@ fn run(binary: &Path, root: &Path, home: &Path, args: &[&str]) -> Output {
     go_oracle::output(&mut command).expect("run CLI")
 }
 
-/// The Go-recorded response of step 0 of fixture case `case`: `(status, body)`.
-fn recorded_response(case: &str) -> (u16, String) {
+/// One Go-recorded response of step 0 of fixture case `case`.
+struct Recorded {
+    status: u16,
+    content_type: String,
+    body: String,
+}
+
+fn recorded_response(case: &str) -> Recorded {
     let fixture: serde_json::Value = serde_json::from_str(FIXTURE).expect("device-enroll fixture");
     let case = fixture["cases"]
         .as_array()
@@ -67,43 +73,181 @@ fn recorded_response(case: &str) -> (u16, String) {
         .find(|c| c["id"] == case)
         .unwrap_or_else(|| panic!("fixture case {case}"));
     let response = &case["steps"][0]["response"];
-    (
-        u16::try_from(response["status"].as_u64().expect("status")).expect("status"),
-        response["body"].as_str().expect("body").to_owned(),
-    )
+    Recorded {
+        status: u16::try_from(response["status"].as_u64().expect("status")).expect("status"),
+        content_type: response["headers"]["Content-Type"]
+            .as_str()
+            .expect("content type")
+            .to_owned(),
+        body: response["body"].as_str().expect("body").to_owned(),
+    }
 }
 
-/// One-shot-per-connection TLS server applying the recorded Go proof rule.
+/// The fingerprint every recorded 200 response carries (a fixture constant);
+/// the replay serves the SHA-256 of the certificate it really presents instead.
+fn canned_fingerprint() -> String {
+    let fixture: serde_json::Value = serde_json::from_str(FIXTURE).expect("device-enroll fixture");
+    fixture["constants"]["fingerprint"]
+        .as_str()
+        .expect("fixture fingerprint")
+        .to_owned()
+}
+
+/// What the real `approval.EnrollCodeHTTPHandler` (oracle bfa4e244,
+/// `internal/approval/enroll.go`) is constructed with.
+#[derive(Clone)]
+struct HandlerConfig {
+    secret: Vec<u8>,
+    /// Empty = "TLS is not configured" (503 after the proof check).
+    fingerprint: String,
+}
+
+/// The part of an HTTP request the Go handler looks at.
+struct Request {
+    method: String,
+    /// Request target including any query.
+    target: String,
+    timestamp: Option<String>,
+    proof: Option<String>,
+    peer: IpAddr,
+}
+
+struct Reply {
+    status: u16,
+    content_type: String,
+    body: String,
+}
+
+impl From<Recorded> for Reply {
+    fn from(recorded: Recorded) -> Self {
+        Self {
+            status: recorded.status,
+            content_type: recorded.content_type,
+            body: recorded.body,
+        }
+    }
+}
+
+/// `enrollProofWindow`.
+const PROOF_WINDOW: time::Duration = time::Duration::seconds(30);
+
+/// Go's `EnrollProof`: HMAC-SHA256 over `ts.UTC().Format(time.RFC3339)` (UTC,
+/// whole seconds, `Z`), hex in lower case.
+fn go_enroll_proof(secret: &[u8], ts: time::OffsetDateTime) -> String {
+    let formatted = ts
+        .to_offset(time::UtcOffset::UTC)
+        .replace_nanosecond(0)
+        .expect("zero nanoseconds")
+        .format(&time::format_description::well_known::Rfc3339)
+        .expect("format RFC3339");
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("key");
+    mac.update(formatted.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+/// Go's `verifyEnrollProof`.
+fn go_verify_enroll_proof(
+    secret: &[u8],
+    timestamp: Option<&str>,
+    proof: Option<&str>,
+    now: time::OffsetDateTime,
+) -> bool {
+    let (Some(timestamp), Some(proof)) = (timestamp, proof) else {
+        return false;
+    };
+    if secret.is_empty() || timestamp.is_empty() || proof.is_empty() {
+        return false;
+    }
+    let Ok(at) =
+        time::OffsetDateTime::parse(timestamp, &time::format_description::well_known::Rfc3339)
+    else {
+        return false;
+    };
+    let diff = now - at;
+    if diff > PROOF_WINDOW || diff < -PROOF_WINDOW {
+        return false;
+    }
+    go_enroll_proof(secret, at) == proof
+}
+
+/// `EnrollCodeHTTPHandler.ServeHTTP` behind the `ServeMux` pattern
+/// `/api/v1/devices/enroll-code`, answering with the recorded Go responses.
+fn serve_enroll_code(
+    config: &HandlerConfig,
+    request: &Request,
+    now: time::OffsetDateTime,
+) -> Reply {
+    let path = request.target.split('?').next().unwrap_or_default();
+    // Mux: any other path; handler: any other method.
+    if path != "/api/v1/devices/enroll-code" || request.method != "POST" {
+        return recorded_response("mint_wrong_method_is_mux_404_before_everything").into();
+    }
+    if !request.peer.is_loopback() {
+        return recorded_response("mint_non_loopback_peer_forbidden").into();
+    }
+    if !go_verify_enroll_proof(
+        &config.secret,
+        request.timestamp.as_deref(),
+        request.proof.as_deref(),
+        now,
+    ) {
+        return recorded_response("mint_proof_required").into();
+    }
+    if config.fingerprint.is_empty() {
+        return recorded_response("mint_tls_unavailable").into();
+    }
+    let mut ok: Reply = recorded_response("mint_ok").into();
+    let canned = canned_fingerprint();
+    assert!(
+        ok.body.contains(&canned),
+        "recorded mint_ok carries the fixture fingerprint"
+    );
+    ok.body = ok.body.replace(&canned, &config.fingerprint);
+    ok
+}
+
+/// SHA-256 (hex) of the leaf certificate a server presents: Go's
+/// `serverbootstrap.CertFingerprint`.
+fn certificate_fingerprint(certificate_pem: &Path) -> String {
+    let chain: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(certificate_pem)
+        .expect("open certificate")
+        .collect::<Result<_, _>>()
+        .expect("parse certificate");
+    hex::encode(Sha256::digest(chain[0].as_ref()))
+}
+
+/// One-shot-per-connection TLS server applying [`serve_enroll_code`].
 struct RecordedHandler {
     port: u16,
+    /// Requests that reached the handler (TLS handshake succeeded).
+    requests: Arc<AtomicUsize>,
     stop: Arc<AtomicBool>,
     handle: Option<thread::JoinHandle<()>>,
 }
 
 impl RecordedHandler {
-    fn start(secret: Vec<u8>) -> Self {
+    /// Serves `certificate`/`key` (file names below the test certificates).
+    fn start(config: HandlerConfig, certificate: &str, key: &str) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let certs = Path::new(env!("CARGO_MANIFEST_DIR")).join(CERTS);
         let chain: Vec<CertificateDer<'static>> =
-            CertificateDer::pem_file_iter(certs.join("server.pem"))
+            CertificateDer::pem_file_iter(certs.join(certificate))
                 .expect("open server certificate")
                 .collect::<Result<_, _>>()
                 .expect("parse server certificate");
-        let key = PrivateKeyDer::from_pem_file(certs.join("server.key")).expect("server key");
-        let config = Arc::new(
+        let key = PrivateKeyDer::from_pem_file(certs.join(key)).expect("server key");
+        let tls = Arc::new(
             ServerConfig::builder()
                 .with_no_client_auth()
                 .with_single_cert(chain, key)
                 .expect("server TLS config"),
         );
-        let (invalid_status, invalid_body) = recorded_response("mint_proof_required");
-        let (ok_status, ok_body) = recorded_response("mint_ok");
-        assert_eq!((invalid_status, ok_status), (401, 200));
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let port = listener.local_addr().expect("addr").port();
         let stop = Arc::new(AtomicBool::new(false));
+        let requests = Arc::new(AtomicUsize::new(0));
         let handle = {
-            let stop = Arc::clone(&stop);
+            let (stop, requests) = (Arc::clone(&stop), Arc::clone(&requests));
             thread::spawn(move || {
                 for stream in listener.incoming() {
                     if stop.load(Ordering::SeqCst) {
@@ -112,16 +256,23 @@ impl RecordedHandler {
                     let Ok(stream) = stream else { continue };
                     let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
                     let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
-                    let connection = ServerConnection::new(Arc::clone(&config)).expect("conn");
-                    let mut tls = StreamOwned::new(connection, stream);
+                    let Ok(peer) = stream.peer_addr() else {
+                        continue;
+                    };
+                    let connection = ServerConnection::new(Arc::clone(&tls)).expect("conn");
+                    let mut tls_stream = StreamOwned::new(connection, stream);
                     let mut head = Vec::new();
                     let mut byte = [0_u8; 1];
                     while !head.ends_with(b"\r\n\r\n") {
-                        match tls.read(&mut byte) {
+                        match tls_stream.read(&mut byte) {
                             Ok(1) => head.push(byte[0]),
                             _ => break,
                         }
                     }
+                    if head.is_empty() {
+                        continue; // the handshake or the request never completed
+                    }
+                    requests.fetch_add(1, Ordering::SeqCst);
                     let text = String::from_utf8_lossy(&head).into_owned();
                     let header = |name: &str| {
                         text.lines().find_map(|line| {
@@ -131,44 +282,33 @@ impl RecordedHandler {
                                 .then(|| value.trim().to_owned())
                         })
                     };
-                    let request_line = text.lines().next().unwrap_or_default();
-                    let proven = request_line.starts_with("POST /api/v1/devices/enroll-code ")
-                        && header("X-Enroll-Timestamp").is_some_and(|timestamp| {
-                            let mut mac = Hmac::<Sha256>::new_from_slice(&secret).expect("key");
-                            mac.update(timestamp.as_bytes());
-                            let expected = hex::encode(mac.finalize().into_bytes());
-                            let fresh = time::OffsetDateTime::parse(
-                                &timestamp,
-                                &time::format_description::well_known::Rfc3339,
-                            )
-                            .is_ok_and(|at| {
-                                let now = SystemTime::now()
-                                    .duration_since(UNIX_EPOCH)
-                                    .expect("clock")
-                                    .as_secs();
-                                u64::try_from(at.unix_timestamp())
-                                    .is_ok_and(|at| at.abs_diff(now) <= 30)
-                            });
-                            fresh && header("X-Enroll-Proof").as_deref() == Some(expected.as_str())
-                        });
-                    let (status, body) = if proven {
-                        (ok_status, &ok_body)
-                    } else {
-                        (invalid_status, &invalid_body)
+                    let mut request_line = text.lines().next().unwrap_or_default().split(' ');
+                    let request = Request {
+                        method: request_line.next().unwrap_or_default().to_owned(),
+                        target: request_line.next().unwrap_or_default().to_owned(),
+                        timestamp: header("X-Enroll-Timestamp"),
+                        proof: header("X-Enroll-Proof"),
+                        peer: peer.ip(),
                     };
+                    let reply =
+                        serve_enroll_code(&config, &request, time::OffsetDateTime::now_utc());
                     let response = format!(
-                        "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                        body.len()
+                        "HTTP/1.1 {} X\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        reply.status,
+                        reply.content_type,
+                        reply.body.len(),
+                        reply.body
                     );
-                    let _ = tls.write_all(response.as_bytes());
-                    let _ = tls.flush();
-                    tls.conn.send_close_notify();
-                    let _ = tls.flush();
+                    let _ = tls_stream.write_all(response.as_bytes());
+                    let _ = tls_stream.flush();
+                    tls_stream.conn.send_close_notify();
+                    let _ = tls_stream.flush();
                 }
             })
         };
         Self {
             port,
+            requests,
             stop,
             handle: Some(handle),
         }
@@ -183,6 +323,193 @@ impl Drop for RecordedHandler {
             let _ = handle.join();
         }
     }
+}
+
+fn request(method: &str, target: &str, timestamp: Option<&str>, proof: Option<&str>) -> Request {
+    Request {
+        method: method.to_owned(),
+        target: target.to_owned(),
+        timestamp: timestamp.map(str::to_owned),
+        proof: proof.map(str::to_owned),
+        peer: IpAddr::V4(Ipv4Addr::LOCALHOST),
+    }
+}
+
+/// The recorded Go rule, case by case: each branch of `ServeHTTP` answers with
+/// exactly the response the Go handler was recorded giving, and the proof is
+/// checked the way Go checks it (HMAC over the re-formatted UTC time, window,
+/// lower-case hex, empty secret).
+#[test]
+fn replay_handler_follows_the_go_enroll_code_rules() {
+    use time::{Duration as Span, OffsetDateTime};
+    let secret = vec![0x5A_u8; 32];
+    let config = HandlerConfig {
+        secret: secret.clone(),
+        fingerprint: "ab".repeat(32),
+    };
+    let now = OffsetDateTime::from_unix_timestamp(1_800_000_000).expect("now");
+    let stamp = |at: OffsetDateTime| {
+        at.replace_nanosecond(0)
+            .unwrap()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap()
+    };
+    let (ts, proof) = (stamp(now), go_enroll_proof(&secret, now));
+    let post = |ts: Option<&str>, proof: Option<&str>| {
+        serve_enroll_code(
+            &config,
+            &request("POST", "/api/v1/devices/enroll-code", ts, proof),
+            now,
+        )
+    };
+    let same = |reply: &Reply, case: &str| {
+        let recorded = recorded_response(case);
+        assert_eq!(
+            (
+                reply.status,
+                reply.content_type.as_str(),
+                reply.body.as_str()
+            ),
+            (
+                recorded.status,
+                recorded.content_type.as_str(),
+                recorded.body.as_str()
+            ),
+            "{case}"
+        );
+    };
+
+    // 200 with the served certificate's fingerprint in place of the fixture's.
+    let ok = post(Some(&ts), Some(&proof));
+    assert_eq!(ok.status, 200);
+    assert!(ok.body.contains(&config.fingerprint) && !ok.body.contains(&canned_fingerprint()));
+
+    // 404 for any other method or path (query ignored, trailing slash is another route).
+    for (method, target) in [
+        ("GET", "/api/v1/devices/enroll-code"),
+        ("HEAD", "/api/v1/devices/enroll-code"),
+        ("POST", "/api/v1/devices/enroll-code/"),
+        ("POST", "/api/v1/devices/enroll-codes"),
+        ("POST", "/"),
+    ] {
+        let reply = serve_enroll_code(
+            &config,
+            &request(method, target, Some(&ts), Some(&proof)),
+            now,
+        );
+        same(&reply, "mint_wrong_method_is_mux_404_before_everything");
+    }
+    let with_query = serve_enroll_code(
+        &config,
+        &request(
+            "POST",
+            "/api/v1/devices/enroll-code?x=1&y=2",
+            Some(&ts),
+            Some(&proof),
+        ),
+        now,
+    );
+    assert_eq!(with_query.status, 200);
+
+    // 403 for a non-loopback peer, before the proof is looked at.
+    let mut remote = request("POST", "/api/v1/devices/enroll-code", None, None);
+    remote.peer = IpAddr::V4(Ipv4Addr::new(192, 0, 2, 7));
+    same(
+        &serve_enroll_code(&config, &remote, now),
+        "mint_non_loopback_peer_forbidden",
+    );
+    remote.peer = IpAddr::V6(Ipv6Addr::LOCALHOST);
+    remote.timestamp = Some(ts.clone());
+    remote.proof = Some(proof.clone());
+    assert_eq!(
+        serve_enroll_code(&config, &remote, now).status,
+        200,
+        "::1 is loopback"
+    );
+
+    // 401: missing/empty headers, upper-case hex, wrong secret, unparsable time.
+    same(&post(None, None), "mint_proof_required");
+    same(&post(Some(&ts), None), "mint_proof_required");
+    same(&post(None, Some(&proof)), "mint_proof_required");
+    same(&post(Some(""), Some(&proof)), "mint_proof_required");
+    same(&post(Some(&ts), Some("")), "mint_proof_required");
+    same(
+        &post(Some(&ts), Some(&proof.to_uppercase())),
+        "mint_proof_required",
+    );
+    same(
+        &post(Some("yesterday"), Some(&proof)),
+        "mint_proof_required",
+    );
+    let wrong = go_enroll_proof(&[0xA5; 32], now);
+    same(&post(Some(&ts), Some(&wrong)), "mint_proof_required");
+
+    // The proof is over Go's re-formatted time: a sub-second or offset spelling
+    // of the same instant verifies with the proof of the whole-second UTC form,
+    // and the proof of the raw header text does not.
+    let fractional = format!("{}.250Z", ts.trim_end_matches('Z'));
+    assert_eq!(post(Some(&fractional), Some(&proof)).status, 200);
+    let offset = now
+        .to_offset(time::UtcOffset::from_hms(2, 0, 0).unwrap())
+        .replace_nanosecond(0)
+        .unwrap()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap();
+    assert!(offset.ends_with("+02:00"), "{offset}");
+    assert_eq!(post(Some(&offset), Some(&proof)).status, 200);
+    let mut mac = Hmac::<Sha256>::new_from_slice(&secret).expect("key");
+    mac.update(offset.as_bytes());
+    let raw_text_proof = hex::encode(mac.finalize().into_bytes());
+    same(
+        &post(Some(&offset), Some(&raw_text_proof)),
+        "mint_proof_required",
+    );
+
+    // Window: +-30 s accepted, beyond rejected (both directions).
+    for (skew, accepted) in [(-29, true), (29, true), (-31, false), (31, false)] {
+        let at = now + Span::seconds(skew);
+        let reply = post(Some(&stamp(at)), Some(&go_enroll_proof(&secret, at)));
+        assert_eq!(reply.status == 200, accepted, "skew {skew}s");
+    }
+
+    // An empty enroll secret never verifies (even for the HMAC of the empty key).
+    let empty = HandlerConfig {
+        secret: Vec::new(),
+        fingerprint: config.fingerprint.clone(),
+    };
+    let reply = serve_enroll_code(
+        &empty,
+        &request(
+            "POST",
+            "/api/v1/devices/enroll-code",
+            Some(&ts),
+            Some(&go_enroll_proof(&[], now)),
+        ),
+        now,
+    );
+    same(&reply, "mint_proof_required");
+
+    // 503 once the proof is good but no fingerprint (no TLS) is configured; a bad
+    // proof still wins over the 503.
+    let no_tls = HandlerConfig {
+        secret: secret.clone(),
+        fingerprint: String::new(),
+    };
+    let good = request(
+        "POST",
+        "/api/v1/devices/enroll-code",
+        Some(&ts),
+        Some(&proof),
+    );
+    same(
+        &serve_enroll_code(&no_tls, &good, now),
+        "mint_tls_unavailable",
+    );
+    let bad = request("POST", "/api/v1/devices/enroll-code", None, None);
+    same(
+        &serve_enroll_code(&no_tls, &bad, now),
+        "mint_proof_required",
+    );
 }
 
 #[test]
@@ -272,8 +599,19 @@ fn approval_pair_proves_vault_ownership_against_recorded_go_handler() {
     );
     assert!(init.status.success(), "Rust init: {init:?}");
     let secret = vec![0x5A_u8; 32];
-    let server = RecordedHandler::start(secret.clone());
     let certs = Path::new(env!("CARGO_MANIFEST_DIR")).join(CERTS);
+    // The recorded Go response carries the fingerprint of the certificate the
+    // handler was constructed with; the replay serves the SHA-256 of the
+    // certificate it really presents, so the client's output ties to it.
+    let fingerprint = certificate_fingerprint(&certs.join("server.pem"));
+    let server = RecordedHandler::start(
+        HandlerConfig {
+            secret: secret.clone(),
+            fingerprint: fingerprint.clone(),
+        },
+        "server.pem",
+        "server.key",
+    );
     fs::write(
         vault.join(".runtime-port"),
         format!(r#"{{"port":{},"bind":"0.0.0.0"}}"#, server.port),
@@ -319,6 +657,7 @@ fn approval_pair_proves_vault_ownership_against_recorded_go_handler() {
     );
     let output = String::from_utf8_lossy(&paired.stdout);
     for expected in [
+        fingerprint.as_str(),
         "=== Approval Device Pairing ===",
         "Scan this with the Symaira Vault iOS app",
         "Host:        192.168.1.42",
@@ -327,7 +666,6 @@ fn approval_pair_proves_vault_ownership_against_recorded_go_handler() {
         "Fingerprint:",
         "Expires:",
         "C0DE0000000000000000000000000001",
-        "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63206cbd67d3b8a0e",
     ] {
         assert!(
             output.contains(expected),
@@ -354,4 +692,75 @@ fn approval_pair_proves_vault_ownership_against_recorded_go_handler() {
     assert!(quiet.status.success(), "quiet pairing failed: {quiet:?}");
     assert!(quiet.stdout.is_empty(), "--quiet wrote stdout: {quiet:?}");
     assert!(quiet.stderr.is_empty(), "--quiet wrote stderr: {quiet:?}");
+}
+
+/// Mutation control for client-side certificate pinning: the same recorded
+/// handler, correct enroll secret, but it presents a certificate other than the
+/// one `.runtime-tls-cert` pins. The client must refuse before sending anything
+/// the handler could answer (no request reaches it, no code is printed); with a
+/// client that stops pinning, the 200 response would be accepted and this test
+/// fails.
+#[test]
+fn approval_pair_refuses_a_server_certificate_that_is_not_the_pinned_one() {
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let guard = tempfile::tempdir().expect("temporary directory");
+    let vault = guard.path().join("vault");
+    let home = guard.path().join("home");
+    fs::create_dir_all(&home).expect("home");
+    fs::create_dir_all(&vault).expect("vault root");
+    let init = run(
+        &rust_binary,
+        &vault,
+        &home,
+        &["init", "--auth", "passphrase"],
+    );
+    assert!(init.status.success(), "Rust init: {init:?}");
+
+    let secret = vec![0x5A_u8; 32];
+    let certs = Path::new(env!("CARGO_MANIFEST_DIR")).join(CERTS);
+    let server = RecordedHandler::start(
+        HandlerConfig {
+            secret: secret.clone(),
+            fingerprint: certificate_fingerprint(&certs.join("other-server.pem")),
+        },
+        "other-server.pem",
+        "other-server.key",
+    );
+    fs::write(
+        vault.join(".runtime-port"),
+        format!(r#"{{"port":{},"bind":"0.0.0.0"}}"#, server.port),
+    )
+    .expect("runtime port");
+    fs::write(
+        vault.join(".runtime-tls-cert"),
+        serde_json::to_vec(&serde_json::json!({ "certificate": certs.join("server.pem") }))
+            .expect("runtime tls"),
+    )
+    .expect("runtime tls record");
+    fs::write(vault.join(ENROLL_SECRET), &secret).expect("enroll secret");
+
+    let paired = run(
+        &rust_binary,
+        &vault,
+        &home,
+        &["device", "approval-pair", "--host", "192.168.1.42"],
+    );
+    assert!(
+        !paired.status.success(),
+        "a certificate other than the pinned one was accepted: {paired:?}"
+    );
+    let stderr = String::from_utf8_lossy(&paired.stderr);
+    assert!(
+        stderr.contains("/api/v1/devices/enroll-code"),
+        "expected a connection failure, got: {stderr}"
+    );
+    assert!(
+        !String::from_utf8_lossy(&paired.stdout).contains("Code:"),
+        "a pairing code was printed: {paired:?}"
+    );
+    assert_eq!(
+        server.requests.load(Ordering::SeqCst),
+        0,
+        "the request reached a server whose certificate is not pinned"
+    );
 }
