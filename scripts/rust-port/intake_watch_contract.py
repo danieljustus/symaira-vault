@@ -61,7 +61,9 @@ def isolated(home):
                XDG_CONFIG_HOME=str(home / "config"), XDG_DATA_HOME=str(home / "data"),
                XDG_CACHE_HOME=str(home / "cache"), SYMVAULT_TEST_KEYRING="memory",
                SYMVAULT_VAULT=str(home / "vault"), SYMVAULT_PASSPHRASE=PASSPHRASE,
-               SYMVAULT_ALLOW_ENV_PASSPHRASE="1", SYMVAULT_NO_ENV_WARNING="1")
+               SYMVAULT_ALLOW_ENV_PASSPHRASE="1", SYMVAULT_NO_ENV_WARNING="1",
+               # batch ids carry the local date: pin the zone so capture and replay agree on any host
+               TZ="UTC")
     return env
 
 
