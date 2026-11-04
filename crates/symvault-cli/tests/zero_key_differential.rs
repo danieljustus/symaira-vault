@@ -64,7 +64,6 @@ const ORACLE_COMMIT: &str = "c069d3f2b17d704525cedc1bd42840cc6a3e9896";
 /// One recorded Go session: the observations plus the frozen base vaults.
 struct Session {
     obs: Observations,
-    go: PathBuf,
     rust: PathBuf,
     init_tree: OnceLock<Value>,
     plain_tree: OnceLock<Value>,
@@ -74,10 +73,8 @@ impl Session {
     fn begin(test: &str) -> Self {
         let obs = Observations::begin("zero_key_differential", test, Some(ORACLE_COMMIT));
         obs.stable_under(stable_observation);
-        let go = obs.binary();
         Self {
             obs,
-            go,
             rust: PathBuf::from(RUST),
             init_tree: OnceLock::new(),
             plain_tree: OnceLock::new(),
@@ -713,16 +710,12 @@ fn go_observed(session: &Session, record: &Value, parent: &Path, case: &Case) ->
 }
 
 /// Rust on its own prepared vault; the Go follow-up answers come from the Go
-/// session (the live Go-on-Rust-vault direction is capture-only).
+/// session (the live Go-on-Rust-vault direction is not replayable).
 fn rust_observed(session: &Session, record: &Value, parent: &Path, case: &Case) -> Observed {
     let (root, home, mut observed) = observe_run(session, &session.rust, parent, case);
     for (index, (passphrase, args)) in case.follow.iter().enumerate() {
-        let go_answer = if session.obs.capturing() {
-            run(&session.go, &root, &home, Some(passphrase), args, None)
-        } else {
-            serde_json::from_value(record["follow_go"][index].clone())
-                .expect("recorded Go follow-up")
-        };
+        let go_answer: Out = serde_json::from_value(record["follow_go"][index].clone())
+            .expect("recorded Go follow-up");
         observed.follow.push(go_answer);
         observed.follow.push(run(
             &session.rust,

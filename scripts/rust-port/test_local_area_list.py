@@ -25,8 +25,7 @@ mcp-execute-api-policy-differential mcp-http-ratelimit-differential mcp-http-rep
 mcp-http-token-contract mcp-init-differential
 mcp-list-differential mcp-named-tests mcp-oauth-contract mcp-process-contract mcp-stdio-differential pairing-differential
 pairing-oracle-contract read-resource-policy-contract rust-007-differential serve-cli-contract
-signal-process-contract store-live-contract store-observations-contract store004-isolation-check
-sync-observations-contract toolhash-process-contract tui-named-tests update-fixtures-check
+signal-process-contract store-live-contract tui-named-tests update-fixtures-check
 worktree-prune-check
 """.split()
 LANE_ONLY = {"macos": "tui-harness-check", "linux": "tui-contract"}
@@ -42,7 +41,7 @@ def area_list(lane):
 
 class AreaLists(unittest.TestCase):
     def test_pinned_counts(self):
-        self.assertEqual({lane: len(names) for lane, names in PINNED.items()}, {"macos": 52, "linux": 52})
+        self.assertEqual({lane: len(names) for lane, names in PINNED.items()}, {"macos": 48, "linux": 48})
         for names in PINNED.values():
             self.assertEqual(len(names), len(set(names)))
 

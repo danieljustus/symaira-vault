@@ -45,13 +45,9 @@
 //!   normalized Go results of `testdata/port/cli/setup-wizard/go-results.json`;
 //!   Go-initialized vaults come from the recorded `vault_seed`. The recording
 //!   was made on darwin, so the test is `ignore`d (visibly) on other hosts.
-//! * `native_matches_live_go_oracle` (ignored; capture side, needs
-//!   `SYMVAULT_GO_BINARY`): runs every scenario against Go and Rust and
-//!   compares; it also compares the live Go result with the recording. A
-//!   missing binary, a short scenario count or an unreached screen fails.
-//!   Run by `make setup-wizard-capture`.
-//! * `record_go_results` (ignored): rewrites the recording from the live Go
-//!   oracle. Needs `SYMVAULT_GO_ORACLE_COMMIT` and `SYMVAULT_GO_ORACLE_BUILD`.
+//! * There is no live-oracle mode: the recording is re-made, if ever needed,
+//!   from the archived Go tree (tag `legacy/go-oracle`, see
+//!   `docs/rust-port/go-oracle-archive.md`).
 //! * driver and comparator self-tests (no Go): PTY capture, signals, timeouts,
 //!   alternate-screen extraction, normalizers and mutation negative controls.
 #![cfg(unix)]
@@ -74,7 +70,6 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 const RECORDING: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -1820,82 +1815,7 @@ fn decode_base64(text: &str) -> Vec<u8> {
     out
 }
 
-/// What `go init` leaves in the vault directory, with the sandbox root
-/// replaced by a placeholder.
-fn capture_seed(vault: &Path, roots: &Roots) -> Vec<SeedFile> {
-    let mut files = vec![SeedFile {
-        path: String::new(),
-        kind: "dir".into(),
-        mode: format!(
-            "{:o}",
-            fs::metadata(vault).expect("vault dir").permissions().mode() & 0o777
-        ),
-        text: None,
-        base64: None,
-    }];
-    let mut stack = vec![vault.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let mut entries: Vec<_> = fs::read_dir(&dir)
-            .expect("read seed dir")
-            .flatten()
-            .collect();
-        entries.sort_by_key(|entry| entry.path());
-        for entry in entries {
-            let path = entry.path();
-            let rel = path
-                .strip_prefix(vault)
-                .expect("under vault")
-                .to_string_lossy()
-                .into_owned();
-            let meta = fs::symlink_metadata(&path).expect("lstat");
-            let mode = format!("{:o}", meta.permissions().mode() & 0o777);
-            if meta.is_dir() {
-                files.push(SeedFile {
-                    path: rel,
-                    kind: "dir".into(),
-                    mode,
-                    text: None,
-                    base64: None,
-                });
-                stack.push(path);
-            } else {
-                let data = fs::read(&path).expect("read seed file");
-                let (text, base64) = match String::from_utf8(data.clone()) {
-                    Ok(text) if !data.starts_with(b"age-encryption.org") => {
-                        let mut text = text;
-                        for root in &roots.0 {
-                            text = text.replace(root.as_str(), "<ROOT>");
-                        }
-                        (Some(text), None)
-                    }
-                    _ => (None, Some(encode_base64(&data))),
-                };
-                files.push(SeedFile {
-                    path: rel,
-                    kind: "file".into(),
-                    mode,
-                    text,
-                    base64,
-                });
-            }
-        }
-    }
-    files.sort_by(|a, b| a.path.cmp(&b.path));
-    files
-}
-
 // -------------------------------------------------------------- driver ----
-
-/// The live oracle for the capture-side tests; they are `ignore`d by default,
-/// so asking for them without the binary is an error, never a silent pass.
-fn oracle_path() -> PathBuf {
-    let go = PathBuf::from(
-        env::var_os("SYMVAULT_GO_BINARY")
-            .expect("SYMVAULT_GO_BINARY is required by the capture-side wizard tests"),
-    );
-    assert!(go.is_file(), "{} is not a file", go.display());
-    go
-}
 
 fn rust_binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_symvault"))
@@ -2116,68 +2036,6 @@ fn report(label: &str, diffs: &[String], executed: usize) {
 // --------------------------------------------------------------- tests ----
 
 #[test]
-#[ignore = "capture side: needs the pinned Go oracle (make setup-wizard-capture)"]
-fn native_matches_live_go_oracle() {
-    let go = oracle_path();
-    let rust = rust_binary();
-    let go_results = run_all(&go, Some(&go), Some(&go), &[]);
-    let rust_results = run_all(&rust, Some(&go), Some(&go), &[]);
-
-    assert!(
-        go_results.len() >= MIN_SCENARIOS && go_results.len() == rust_results.len(),
-        "executed {} Go and {} Rust scenarios, need at least {MIN_SCENARIOS}",
-        go_results.len(),
-        rust_results.len()
-    );
-    let mut problems = unreached(&go_results, "go");
-    problems.extend(unreached(&rust_results, "rust"));
-    let mut rust_results = rust_results;
-    assert_known_divergences_observed(&apply_known_divergences(&go_results, &mut rust_results));
-    let mut diffs = Vec::new();
-    for (g, r) in go_results.iter().zip(&rust_results) {
-        diffs.extend(diff_results("go", g, "rust", r));
-    }
-    // The vault the wizard leaves must open with Go in at least one scenario.
-    let opened = go_results
-        .iter()
-        .flat_map(|result| result.go_opens_vault.values())
-        .filter(|outcome| outcome.starts_with("exit=Some(0)"))
-        .count();
-    assert!(
-        opened >= 8,
-        "only {opened} left-behind vaults opened with Go"
-    );
-
-    if cfg!(target_os = "macos") && Path::new(RECORDING).is_file() {
-        // The recording must not be stale against the live oracle.
-        let recording = load_recording();
-        assert_recording_shape(&recording);
-        for (live, recorded) in go_results.iter().zip(&recording.scenarios) {
-            let mut recorded = recorded.clone();
-            // The recording is made without the open check's live Go binary
-            // only when absent; compare the rest verbatim.
-            recorded.go_opens_vault = live.go_opens_vault.clone();
-            diffs.extend(diff_results("live-go", live, "recorded-go", &recorded));
-        }
-    }
-    report("live", &diffs, go_results.len());
-    for problem in &problems {
-        eprintln!("  UNREACHED {problem}");
-    }
-    assert!(
-        problems.is_empty(),
-        "scripted screens not reached:\n{}",
-        problems.join("\n")
-    );
-    assert!(
-        diffs.is_empty(),
-        "{} differences:\n{}",
-        diffs.len(),
-        diffs.join("\n")
-    );
-}
-
-#[test]
 #[cfg_attr(
     not(target_os = "macos"),
     ignore = "the recording was made on darwin; the replay is verified on macOS only"
@@ -2210,74 +2068,6 @@ fn native_matches_recorded_go_results() {
         diffs.len(),
         diffs.join("\n")
     );
-}
-
-/// Rewrites the recording from the live Go oracle:
-/// `SYMVAULT_GO_BINARY=... SYMVAULT_GO_ORACLE_COMMIT=<40 hex> \
-///  SYMVAULT_GO_ORACLE_BUILD='go1.26.10 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 -trimpath' \
-///  cargo test -p symvault-cli --test setup_wizard_differential -- --ignored record_go_results`
-#[test]
-#[ignore = "rewrites testdata/port/cli/setup-wizard/go-results.json"]
-fn record_go_results() {
-    let go = oracle_path();
-    let commit = env::var("SYMVAULT_GO_ORACLE_COMMIT").expect("SYMVAULT_GO_ORACLE_COMMIT");
-    assert!(
-        commit.len() == 40 && commit.bytes().all(is_hex),
-        "oracle commit must be 40 hex digits"
-    );
-    let build = env::var("SYMVAULT_GO_ORACLE_BUILD").expect("SYMVAULT_GO_ORACLE_BUILD");
-    assert!(
-        build.contains("CGO_ENABLED=0"),
-        "the oracle must be a no-cgo build"
-    );
-
-    // A Go-initialized vault, captured once.
-    let seed_dir = tempfile::tempdir().expect("seed dir");
-    let seed_ctx = Ctx {
-        binary: &go,
-        go: Some(&go),
-        seed: &[],
-        root: seed_dir.path().to_owned(),
-    };
-    seed_ctx.make_dirs();
-    seed_ctx.go_init();
-    let seed = capture_seed(&seed_ctx.vault_dir(), &Roots::of(&seed_ctx.root));
-
-    let mut scenarios = run_all(&go, Some(&go), Some(&go), &[]);
-    let problems = unreached(&scenarios, "go");
-    assert!(problems.is_empty(), "{}", problems.join("\n"));
-    for scenario in &mut scenarios {
-        scenario.go_opens_vault.clear();
-    }
-    let recording = Recording {
-        schema_version: 1,
-        provenance: Provenance {
-            oracle_commit: commit,
-            oracle_build: build,
-            oracle_binary_sha256: hex::encode(Sha256::digest(fs::read(&go).expect("read oracle"))),
-            generated_on: "darwin".to_owned(),
-            generator: "crates/symvault-cli/tests/setup_wizard_differential.rs record_go_results".to_owned(),
-            comparison: vec![
-                "exit code and signal of every run".into(),
-                "every scripted screen reached (ok) and the screens that were not".into(),
-                "text printed after the alternate-screen exit (stdout and stderr share the PTY), ANSI-stripped".into(),
-                "sandbox file manifest: path, kind, mode, normalized text or size".into(),
-            ],
-            excluded: vec![
-                "TUI frames and every byte written inside the alternate screen".into(),
-                "Go panic goroutine dump".into(),
-                "Touch ID (no-cgo oracle cannot see biometrics)".into(),
-                "git internals except HEAD and config; cwd and tmp".into(),
-                "normalized: timestamps, token ids, hashes, prefixes, tool_registry_hash, age public keys, resume file name hashes, sandbox root".into(),
-            ],
-        },
-        vault_seed: seed,
-        scenarios,
-    };
-    let mut text = serde_json::to_string_pretty(&recording).expect("serialize");
-    text.push('\n');
-    fs::create_dir_all(Path::new(RECORDING).parent().expect("dir")).expect("create dir");
-    fs::write(RECORDING, text).expect("write recording");
 }
 
 // ---------------------------------------------- self-tests (no Go needed) --

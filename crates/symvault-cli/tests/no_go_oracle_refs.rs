@@ -1,4 +1,4 @@
-//! Go-oracle reference lint (enabled at Go removal).
+//! Go-oracle reference lint (enabled by the Go removal).
 //!
 //! Once the Go tree is deleted, nothing under `crates/`, `scripts/`, the
 //! `Makefile` or `.github/` may reach for a Go oracle or a Go toolchain: no
@@ -17,37 +17,65 @@
 //! * `golangci`, `govulncheck`
 //! * `skipping Go`
 //!
+//! ## Scope and allowlist
+//!
+//! Scanned: `crates/`, `scripts/`, `.github/` and the `Makefile`. Not scanned
+//! (they may legitimately describe the archived Go tree): `docs/**`,
+//! `CHANGELOG.md`, `*.go.txt` frozen sources, `testdata/**`,
+//! `scripts/rust-port/fixtures/**` and the frozen test fixtures
+//! `crates/*/tests/fixtures/**` (bytes pinned by `testdata/port/FROZEN.sha256`;
+//! their oracle provenance blocks quote the historical build command). This
+//! file spells the patterns and excludes itself.
+//!
+//! `ALLOWLIST` names the files still owned by in-flight packets that build or
+//! drive a Go oracle (`P40c-2: owned by <packet>`); each entry dies when its
+//! packet retires or replays the script. `LINE_ALLOW` lists user-facing
+//! guidance strings of the Rust CLI that must say `go install` / `go build`
+//! because they tell the user how to update a binary that was installed that way.
+//!
 //! The matchers are hand-written (this crate has no `regex` dev-dependency and
 //! the manifests are owned by the integration branch);
 //! `matcher_semantics_fire_on_references_and_not_on_lookalikes` pins them
 //! against the regex forms above.
 //!
-//! ## Allowlist (kept minimal, each entry dies with the Go tree)
-//!
-//! Capture-side code that records Go output once and is never part of a replay
-//! gate: the two shared recorders, the two capture scripts, and this lint (which
-//! must spell the patterns). Everything else -- including every other test, the
-//! `Makefile` and `.github/` -- must be clean.
-//!
-//! Excluded from the scan: `scripts/rust-port/cmd/**` and
-//! `scripts/rust-port/internal/**` (the Go generators themselves), `*.go.txt`
-//! frozen sources, docs, and `target/`.
-//!
-//! The test is `#[ignore]`d until the other branches that still carry hits have
-//! landed; run it with `cargo test -p symvault-cli --test no_go_oracle_refs --
-//! --ignored --nocapture` to print the current hit list grouped by file.
+//! Print the hit list grouped by file with
+//! `cargo test -p symvault-cli --test no_go_oracle_refs -- --nocapture`.
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Capture-side files (see the module documentation).
-const ALLOWLIST: [&str; 5] = [
-    "crates/symvault-cli/tests/common/go_oracle.rs",
-    "crates/symvault-cli/tests/common/go_oracle_ext.rs",
-    "crates/symvault-cli/tests/no_go_oracle_refs.rs",
-    "scripts/rust-port/check_config_rewrite.sh",
-    "scripts/rust-port/check_output_modes_cli.sh",
+/// Files that still drive a Go oracle and belong to in-flight packets.
+const ALLOWLIST: [&str; 10] = [
+    // P40c-2: owned by cap-other
+    "scripts/rust-port/cli_artifacts_contract.py",
+    // P40c-2: owned by cap-other
+    "scripts/rust-port/device_list_differential.py",
+    // P40c-2: owned by cap-other
+    "scripts/rust-port/intake_watch_contract.py",
+    // P40c-2: owned by cap-other
+    "scripts/rust-port/native_closeout.py",
+    // P40c-2: owned by cap-proc
+    "scripts/rust-port/build_timeout.py",
+    // P40c-2: owned by cap-proc (imported by mcp_fixture_contract.py)
+    "scripts/rust-port/mcp_compiler_adapter.py",
+    // P40c-2: owned by cap-proc
+    "scripts/rust-port/mcp_fixture_contract.py",
+    // P40c-2: owned by cap-proc
+    "scripts/rust-port/mcp_oracle.py",
+    // P40c-2: owned by cap-proc (test_http* tests)
+    "scripts/rust-port/test_http001init_isolation.py",
+    // P40c-2: owned by cap-proc
+    "scripts/rust-port/test_mcp_oracle.py",
+];
+
+/// This file spells the patterns it looks for.
+const SELF: &str = "crates/symvault-cli/tests/no_go_oracle_refs.rs";
+
+/// Guidance strings of the Rust CLI for binaries installed with the Go toolchain.
+const LINE_ALLOW: [&str; 2] = [
+    "go install github.com/danieljustus/symaira-vault@latest",
+    "git pull && go build ./cmd/symvault",
 ];
 
 /// Scan roots: directories (recursive) and single files.
@@ -127,10 +155,11 @@ fn repo_root() -> PathBuf {
 }
 
 fn excluded(relative: &str) -> bool {
-    relative.starts_with("scripts/rust-port/cmd/")
-        || relative.starts_with("scripts/rust-port/internal/")
-        || relative.ends_with(".go.txt")
+    relative.ends_with(".go.txt")
         || relative.contains("/target/")
+        || relative.starts_with("scripts/rust-port/fixtures/")
+        || (relative.starts_with("crates/") && relative.contains("/tests/fixtures/"))
+        || relative == SELF
         || ALLOWLIST.contains(&relative)
 }
 
@@ -156,6 +185,9 @@ fn scan_file(path: &Path, root: &Path, hits: &mut Hits, scanned: &mut usize) {
     };
     *scanned += 1;
     for (number, line) in text.lines().enumerate() {
+        if LINE_ALLOW.iter().any(|allowed| line.contains(allowed)) {
+            continue;
+        }
         for pattern in matches(line) {
             hits.entry(relative.clone())
                 .or_default()
@@ -205,7 +237,6 @@ fn render(hits: &Hits) -> String {
 }
 
 #[test]
-#[ignore = "enabled at Go removal"]
 fn crates_scripts_makefile_and_workflows_have_no_go_oracle_references() {
     let (hits, scanned) = hits_under(&ROOTS);
     assert!(scanned > 100, "scanner saw only {scanned} files");
@@ -218,8 +249,8 @@ fn crates_scripts_makefile_and_workflows_have_no_go_oracle_references() {
     );
 }
 
-/// Always-on guard: the scanner must see the roots it claims to (Makefile and
-/// `.github` included), so the ignored test cannot pass by looking at nothing.
+/// Guard: the scanner must see the roots it claims to (Makefile and `.github`
+/// included), so the lint cannot pass by looking at nothing.
 #[test]
 fn scan_roots_cover_makefile_workflows_crates_and_scripts() {
     let root = repo_root();
@@ -235,15 +266,23 @@ fn scan_roots_cover_makefile_workflows_crates_and_scripts() {
     }
     let (hits, scanned) = hits_under(&ROOTS);
     assert!(scanned > 100, "scanner saw only {scanned} files");
-    // The allowlist names real files and is exactly the documented capture side.
+    // The allowlist names real files, none is scanned, and every entry still
+    // needs its exemption (an entry without a hit must be removed).
     for allowed in ALLOWLIST {
-        assert!(
-            root.join(allowed).is_file(),
-            "stale allowlist entry {allowed}"
-        );
+        let path = root.join(allowed);
+        assert!(path.is_file(), "stale allowlist entry {allowed}");
         assert!(!hits.contains_key(allowed), "{allowed} was scanned");
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(
+            text.lines().any(|line| !matches(line).is_empty()),
+            "{allowed} no longer has a Go reference: drop it from ALLOWLIST"
+        );
     }
-    assert_eq!(ALLOWLIST.len(), 5, "allowlist grew: document the new entry");
+    assert_eq!(
+        ALLOWLIST.len(),
+        10,
+        "allowlist grew: document the new entry"
+    );
 }
 
 /// Mutation controls: each pattern fires on a planted reference and stays quiet
@@ -313,7 +352,7 @@ fn scanner_detects_planted_references_in_every_scan_root_kind() {
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(dir.join("crates")).unwrap();
     fs::create_dir_all(dir.join(".github/workflows")).unwrap();
-    fs::create_dir_all(dir.join("scripts/rust-port/cmd/gen")).unwrap();
+    fs::create_dir_all(dir.join("scripts/rust-port/fixtures/gen")).unwrap();
     fs::write(
         dir.join("crates/x.rs"),
         "let _ = env::var(\"SYMVAULT_GO_BINARY\");\n",
@@ -326,14 +365,18 @@ fn scanner_detects_planted_references_in_every_scan_root_kind() {
         "steps:\n  - uses: actions/setup-go@v5\n  - run: golangci-lint run\n",
     )
     .unwrap();
-    fs::write(dir.join("scripts/rust-port/cmd/gen/main.sh"), "go build\n").unwrap();
+    fs::write(
+        dir.join("scripts/rust-port/fixtures/gen/main.sh"),
+        "go build\n",
+    )
+    .unwrap();
     let mut hits = Hits::new();
     let mut scanned = 0;
     for sub in ["crates", ".github", "scripts", "Makefile"] {
         scan(&dir.join(sub), &dir, &mut hits, &mut scanned);
     }
     fs::remove_dir_all(&dir).unwrap();
-    assert_eq!(scanned, 4, "excluded generator dir must not be scanned");
+    assert_eq!(scanned, 4, "excluded fixture dir must not be scanned");
     let flat: Vec<String> = hits
         .iter()
         .flat_map(|(file, lines)| lines.iter().map(move |l| format!("{file}:{l}")))

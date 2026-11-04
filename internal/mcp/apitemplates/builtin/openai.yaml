@@ -1,9 +1,0 @@
-base_url: https://api.openai.com
-auth_type: bearer
-entry_ref: op:///openai
-allowed_endpoints:
-  - /v1/*
-allowed_methods:
-  - GET
-  - POST
-default_headers: {}

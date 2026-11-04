@@ -19,9 +19,6 @@ shrunken, partial or malformed receipt cannot pass the local gate.
       [--exact-path P ...]           with a prefix or equals an exact path;
       [--no-missing-paths]           --no-missing-paths: none at all;
       [--min-paths ORACLE:RUST]      --min-paths: at least that many paths.
-  go-json PATH NAME...               `go test -json`: every NAME passed, none was
-                                     skipped, nothing failed.
-  go-text-pass PATH NAME...          `go test -v` text: `--- PASS: NAME`
   log-ok PATH NAME...                cargo test log: `test ...NAME ... ok`;
       [--exact-prefix P]             exactly `test P<NAME> ... ok`;
       [--contains TEXT ...]          the log contains each TEXT;
@@ -721,34 +718,6 @@ def read_text(path):
         fail(f"{path}: unreadable: {error}")
 
 
-def go_json(args):
-    rows = []
-    for line in read_text(args.path).splitlines():
-        if line.startswith("{"):
-            try:
-                rows.append(json.loads(line))
-            except ValueError:
-                fail(f"{args.path}: malformed go test -json line")
-    passed = {row.get("Test") for row in rows if row.get("Action") == "pass"}
-    skipped = {row.get("Test") for row in rows if row.get("Action") == "skip"}
-    required = set(args.names)
-    if not required <= passed:
-        fail(f"required Go tests did not pass: {sorted(required - passed)}")
-    if required & skipped:
-        fail(f"required Go tests skipped: {sorted(required & skipped)}")
-    if any(row.get("Action") == "fail" for row in rows):
-        fail("go test -json reports a failing test")
-    print(f"gate_area_check: ok {args.path} ({len(required)} required tests)")
-
-
-def go_text_pass(args):
-    text = read_text(args.path)
-    for name in args.names:
-        if f"--- PASS: {name} " not in text:
-            fail(f"{args.path}: no `--- PASS: {name}`")
-    print(f"gate_area_check: ok {args.path} ({len(args.names)} required tests)")
-
-
 def contains(text, needle):
     """`needle` occurs in `text` and is not the tail/head of a longer number.
 
@@ -806,10 +775,6 @@ def main():
     p.add_argument("--exact-path", action="append")
     p.add_argument("--no-missing-paths", action="store_true"); p.add_argument("--min-paths")
     p.set_defaults(run=gaps)
-    p = sub.add_parser("go-json"); p.add_argument("path"); p.add_argument("names", nargs="+")
-    p.set_defaults(run=go_json)
-    p = sub.add_parser("go-text-pass"); p.add_argument("path"); p.add_argument("names", nargs="+")
-    p.set_defaults(run=go_text_pass)
     p = sub.add_parser("log-ok"); p.add_argument("path"); p.add_argument("names", nargs="*")
     p.add_argument("--exact-prefix"); p.add_argument("--contains", action="append")
     p.add_argument("--sum-passed", type=int); p.add_argument("--results-ok", action="store_true")

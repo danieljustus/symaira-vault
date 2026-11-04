@@ -6,9 +6,10 @@
 //! and are reproduced here byte for byte. Re-capture with:
 //!
 //! ```sh
-//! GOTOOLCHAIN=go1.26.6 go build -ldflags \
-//!   "-s -w -X main.version=unreleased -X main.commit=none -X main.date=unknown" \
-//!   -o target/port/symvault-go .
+//! # in a worktree of tag legacy/go-oracle (the Go tree is not in this repository):
+//! # build the root package with the Go toolchain, ldflags
+//! #   -s -w -X main.version=unreleased -X main.commit=none -X main.date=unknown
+//! # into target/port/symvault-go
 //! HOME=$(mktemp -d) target/port/symvault-go agent setup claude-code
 //! HOME=$(mktemp -d) target/port/symvault-go serve token create
 //! ```

@@ -69,34 +69,6 @@ run_macos() {
   ${MAKE_PREFIX:-} make config-cli-differential TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
   ${MAKE_PREFIX:-} make mcp-approval-pty-acceptance
   LOCAL_AREA_FULL=1 run_macos_area
-  # Go is the frozen oracle: test it only when this branch changed Go code.
-  # Pin the toolchain CI uses (go.mod `toolchain`, = Makefile
-  # BUILD_GO_TOOLCHAIN): direct `go test` bypasses the Makefile export, and a
-  # newer host Go compresses differently, so restoregen's gzip fixture reads
-  # as stale (go1.27.3, receipt 4bf2978a macos).
-  GOTOOLCHAIN="$(sed -n 's/^toolchain //p' go.mod)"
-  [ -n "$GOTOOLCHAIN" ] || { echo "local-gate: go.mod has no toolchain line" >&2; return 2; }
-  export GOTOOLCHAIN
-  # The changed packages always run with -race.
-  go_changed="$(git diff --name-only origin/main -- '*.go' go.mod go.sum)"
-  [ -n "$go_changed" ] || return 0
-  # shellcheck disable=SC2046 # one ./dir argument per changed package
-  # Through the same wrapper as the full suite (and `make test-race`): the
-  # vault-containing cross-language tests need the Rust CLI binary it supplies.
-  ${MAKE_PREFIX:-} python3 scripts/run_go_tests.py cargo -- \
-    go test -race -count=1 $(xargs -n1 dirname <<<"$go_changed" | grep -v '^\.$' | sort -u | sed 's|^|./|')
-  # Changes outside scripts/ (leaf generator mains) also run the full suite
-  # the way ci.yml `test` runs it on macOS: no -race, CGO off, 30m budget.
-  # The full -race suite is CI's ubuntu job; under -race on this host
-  # cmd/crud's scrypt cases alone exceed go test's default 10m timeout.
-  grep -qv '^scripts/' <<<"$go_changed" || return 0
-  # Same cleanup as CI: stale generator evidence packages under target/ are
-  # enumerated by `./...` and deleted mid-run by the test that rewrites them.
-  find target -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while IFS= read -r dir; do
-    if find "$dir" -name '*.go' -print -quit | grep -q .; then chmod -R u+w "$dir"; rm -rf "$dir"; fi
-  done
-  CGO_ENABLED=0 SYMVAULT_ALLOW_ENV_PASSPHRASE=1 ${MAKE_PREFIX:-} python3 scripts/run_go_tests.py cargo -- \
-    go test -timeout=30m -skip 'TestFlow|TestBinaryE2E|Integration' ./...
 }
 
 # Docker command shared by the full linux lane and linux-area: the same absolute
@@ -112,10 +84,9 @@ linux_docker() { # shell command run inside the container
   target_volume="symvault-gate-target-$(printf '%s' "$mount" | shasum -a 256 | cut -c1-12)"
   docker run --rm -v "$root:$mount" -v "$common:$common" -w "$mount" \
     -v symvault-gate-registry:/home/dev/.cargo/registry \
-    -v symvault-gate-go:/home/dev/go \
     -v "$target_volume:/home/dev/target" \
     -e CARGO_TARGET_DIR=/home/dev/target \
-    -e CARGO_INCREMENTAL=0 -e GOCACHE=/home/dev/go/cache \
+    -e CARGO_INCREMENTAL=0 \
     -e GIT_CONFIG_COUNT=3 \
     -e GIT_CONFIG_KEY_0=gc.auto -e GIT_CONFIG_VALUE_0=0 \
     -e GIT_CONFIG_KEY_1=gc.worktreePruneExpire -e GIT_CONFIG_VALUE_1=never \
