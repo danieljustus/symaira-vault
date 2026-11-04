@@ -123,7 +123,8 @@ impl Session {
                     );
                     assert_eq!(set.code, Some(0), "set: {set:?}");
                 }
-                json!({"root": snapshot_tree(&root), "home": snapshot_tree(&home)})
+                let subs = masks(&root, &home);
+                json!({"root": snapshot_tree(&root, &subs), "home": snapshot_tree(&home, &subs)})
             })
         })
     }
@@ -159,10 +160,19 @@ fn tree_shape(value: &Value) -> Value {
     }
 }
 
+/// The per-run directories a recorded tree must not carry: the vault root and
+/// the home become `<ROOT>` / `<HOME>` (a `config.yaml` records its `vaultDir`),
+/// so the recording holds no path of the capturing machine and replay restores
+/// the current run's directories.
+fn masks<'a>(root: &'a Path, home: &'a Path) -> [(&'a Path, &'static str); 2] {
+    [(root, "<ROOT>"), (home, "<HOME>")]
+}
+
 /// Files, directories and symlinks below `dir` (relative paths, modes and
-/// base64 contents); `.git/hooks` samples are left out.
-fn snapshot_tree(dir: &Path) -> Value {
-    fn walk(base: &Path, dir: &Path, out: &mut Vec<Value>) {
+/// base64 contents, run directories masked per `subs`); `.git/hooks` samples
+/// are left out.
+fn snapshot_tree(dir: &Path, subs: &[(&Path, &str)]) -> Value {
+    fn walk(base: &Path, dir: &Path, subs: &[(&Path, &str)], out: &mut Vec<Value>) {
         let mut paths: Vec<PathBuf> = fs::read_dir(dir)
             .expect("read dir")
             .flatten()
@@ -178,24 +188,28 @@ fn snapshot_tree(dir: &Path) -> Value {
             let mode = meta.permissions().mode() & 0o7777;
             if meta.file_type().is_symlink() {
                 let target = fs::read_link(&path).unwrap().display().to_string();
+                let target =
+                    String::from_utf8_lossy(&go_oracle_ext::mask_paths(target.as_bytes(), subs))
+                        .into_owned();
                 out.push(json!({"p": relative, "k": "l", "m": mode, "b": target}));
             } else if meta.is_dir() {
                 out.push(json!({"p": relative, "k": "d", "m": mode}));
-                walk(base, &path, out);
+                walk(base, &path, subs, out);
             } else {
-                let bytes = fs::read(&path).expect("read file");
+                let bytes = go_oracle_ext::mask_paths(&fs::read(&path).expect("read file"), subs);
                 out.push(json!({"p": relative, "k": "f", "m": mode,
                     "b": base64::engine::general_purpose::STANDARD.encode(bytes)}));
             }
         }
     }
     let mut entries = Vec::new();
-    walk(dir, dir, &mut entries);
+    walk(dir, dir, subs, &mut entries);
     Value::Array(entries)
 }
 
-/// Recreates a tree written by [`snapshot_tree`] (replacing what is there).
-fn install_tree(dir: &Path, tree: &Value) {
+/// Recreates a tree written by [`snapshot_tree`] (replacing what is there),
+/// with the placeholders resolved to the current run's directories.
+fn install_tree(dir: &Path, tree: &Value, subs: &[(&Path, &str)]) {
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -216,13 +230,17 @@ fn install_tree(dir: &Path, tree: &Value) {
                 fs::set_permissions(&path, fs::Permissions::from_mode(mode)).expect("dir mode");
             }
             "l" => {
-                symlink(entry["b"].as_str().expect("target"), &path).expect("tree symlink");
+                let target = go_oracle_ext::unmask_paths(
+                    entry["b"].as_str().expect("target").as_bytes(),
+                    subs,
+                );
+                symlink(String::from_utf8_lossy(&target).as_ref(), &path).expect("tree symlink");
             }
             _ => {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(entry["b"].as_str().expect("content"))
                     .expect("base64");
-                fs::write(&path, bytes).expect("tree file");
+                fs::write(&path, go_oracle_ext::unmask_paths(&bytes, subs)).expect("tree file");
                 fs::set_permissions(&path, fs::Permissions::from_mode(mode)).expect("file mode");
             }
         }
@@ -543,8 +561,9 @@ fn prepare(session: &Session, parent: &Path, case: &Case) -> (PathBuf, PathBuf, 
     fs::create_dir_all(&home).expect("home");
     fs::create_dir_all(&root).expect("vault root");
     let base = session.base(matches!(case.prep, Prep::Plain(_)));
-    install_tree(&root, &base["root"]);
-    install_tree(&home, &base["home"]);
+    let subs = masks(&root, &home);
+    install_tree(&root, &base["root"], &subs);
+    install_tree(&home, &base["home"], &subs);
     let original = match &case.prep {
         Prep::ZeroKey {
             fixture: name,
@@ -645,7 +664,7 @@ fn record_go(session: &Session, go: &Path, parent: &Path, case: &Case) -> Value 
     let mut trees_after_follow = Vec::new();
     for (passphrase, args) in &case.follow {
         follow_go.push(run(go, &root, &home, Some(passphrase), args, None));
-        trees_after_follow.push(snapshot_tree(&root));
+        trees_after_follow.push(snapshot_tree(&root, &masks(&root, &home)));
     }
     json!({
         "out": observed.out,
@@ -675,7 +694,11 @@ fn go_observed(session: &Session, record: &Value, parent: &Path, case: &Case) ->
     for (index, (passphrase, args)) in case.follow.iter().enumerate() {
         let go_answer: Out = serde_json::from_value(record["follow_go"][index].clone())
             .expect("recorded Go follow-up");
-        install_tree(&root, &record["trees_after_follow"][index]);
+        install_tree(
+            &root,
+            &record["trees_after_follow"][index],
+            &masks(&root, &home),
+        );
         observed.follow.push(go_answer);
         observed.follow.push(run(
             &session.rust,

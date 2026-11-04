@@ -194,8 +194,23 @@ fn check_agreement(left: Side, right: Side, dir: &str, identity: &str, paths: &[
 /// Pinned Go oracle: the clean checkout the `mobilebindgen` driver is built from.
 const ORACLE_COMMIT: &str = "c069d3f2b17d704525cedc1bd42840cc6a3e9896";
 
+/// The run directories a recorded vault must not carry (`config.yaml` records
+/// its `vaultDir`, the backup marker the backup path): the vault itself and the
+/// scratch directory around it become `<VAULT>` / `<TMP>`, and replay resolves
+/// them to the current run's directories.
+fn masks(dir: &Path) -> Vec<(&Path, &'static str)> {
+    let mut subs = vec![(dir, "<VAULT>")];
+    subs.extend(dir.parent().map(|parent| (parent, "<TMP>")));
+    subs
+}
+
 fn snapshot(dir: &Path) -> Value {
-    fn walk(base: &Path, dir: &Path, out: &mut serde_json::Map<String, Value>) {
+    fn walk(
+        base: &Path,
+        dir: &Path,
+        subs: &[(&Path, &str)],
+        out: &mut serde_json::Map<String, Value>,
+    ) {
         let mut paths: Vec<_> = fs::read_dir(dir)
             .expect("read dir")
             .flatten()
@@ -204,30 +219,37 @@ fn snapshot(dir: &Path) -> Value {
         paths.sort();
         for path in paths {
             if path.is_dir() {
-                walk(base, &path, out);
+                walk(base, &path, subs, out);
             } else {
                 let relative = path.strip_prefix(base).expect("under base");
                 out.insert(
                     relative.display().to_string(),
-                    json!(STANDARD.encode(fs::read(&path).expect("read file"))),
+                    json!(STANDARD.encode(go_oracle_ext::mask_paths(
+                        &fs::read(&path).expect("read file"),
+                        subs
+                    ))),
                 );
             }
         }
     }
     let mut out = serde_json::Map::new();
-    walk(dir, dir, &mut out);
+    walk(dir, dir, &masks(dir), &mut out);
     Value::Object(out)
 }
 
 fn install(dir: &Path, tree: &Value) {
+    let subs = masks(dir);
     for (relative, content) in tree.as_object().expect("tree object") {
         let path = dir.join(relative);
         fs::create_dir_all(path.parent().expect("parent")).expect("tree dir");
         fs::write(
             &path,
-            STANDARD
-                .decode(content.as_str().expect("b64"))
-                .expect("base64"),
+            go_oracle_ext::unmask_paths(
+                &STANDARD
+                    .decode(content.as_str().expect("b64"))
+                    .expect("base64"),
+                &subs,
+            ),
         )
         .expect("tree file");
     }

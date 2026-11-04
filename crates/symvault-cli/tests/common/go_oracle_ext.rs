@@ -12,7 +12,10 @@
 //!   test's own normalization, so recapturing is byte-stable.
 //!
 //! The closure returns a JSON value that must already be free of per-run temp
-//! paths and clocks.
+//! paths and clocks. A capture refuses to write a recording that still carries
+//! the capturing machine's paths (`/Volumes`, `/Users`, `/var/folders`,
+//! `/private/var`, also inside base64 file contents); frozen vault trees mask
+//! their roots with [`mask_paths`] / [`unmask_paths`].
 #![allow(dead_code)]
 
 use std::{
@@ -26,6 +29,9 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+#[path = "operator_paths.rs"]
+mod operator_paths;
 
 const SENTINEL: &str = "/nonexistent/symvault-go-oracle-replay";
 static FILE_LOCK: Mutex<()> = Mutex::new(());
@@ -269,6 +275,73 @@ impl Observations {
     }
 }
 
+/// Every spelling of `path` (as given and canonicalized -- `/var` vs
+/// `/private/var`), longest first, paired with its placeholder.
+fn spellings(subs: &[(&Path, &str)]) -> Vec<(Vec<u8>, Vec<u8>)> {
+    let mut pairs = Vec::new();
+    for (path, placeholder) in subs {
+        let mut forms = vec![path.to_string_lossy().into_owned()];
+        if let Ok(real) = fs::canonicalize(path) {
+            forms.push(real.to_string_lossy().into_owned());
+        } else if let Some(parent) = path.parent().and_then(|p| fs::canonicalize(p).ok())
+            && let Some(name) = path.file_name()
+        {
+            forms.push(parent.join(name).to_string_lossy().into_owned());
+        }
+        forms.dedup();
+        for form in forms {
+            pairs.push((form.into_bytes(), placeholder.as_bytes().to_vec()));
+        }
+    }
+    pairs.sort_by_key(|(from, _)| std::cmp::Reverse(from.len()));
+    pairs
+}
+
+fn replace_all(haystack: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
+    if from.is_empty() {
+        return haystack.to_vec();
+    }
+    let mut out = Vec::with_capacity(haystack.len());
+    let mut i = 0;
+    while i < haystack.len() {
+        if haystack[i..].starts_with(from) {
+            out.extend_from_slice(to);
+            i += from.len();
+        } else {
+            out.push(haystack[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Replaces the per-run directories in `bytes` by stable placeholders, e.g.
+/// `[(vault_root, "<ROOT>"), (home, "<HOME>")]`. Longest path first.
+pub fn mask_paths(bytes: &[u8], subs: &[(&Path, &str)]) -> Vec<u8> {
+    spellings(subs)
+        .iter()
+        .fold(bytes.to_vec(), |text, (from, to)| {
+            replace_all(&text, from, to)
+        })
+}
+
+/// Inverse of [`mask_paths`] for the directories of the current run.
+pub fn unmask_paths(bytes: &[u8], subs: &[(&Path, &str)]) -> Vec<u8> {
+    let mut pairs: Vec<(Vec<u8>, Vec<u8>)> = subs
+        .iter()
+        .map(|(path, placeholder)| {
+            (
+                placeholder.as_bytes().to_vec(),
+                path.to_string_lossy().into_owned().into_bytes(),
+            )
+        })
+        .collect();
+    pairs.sort_by_key(|(from, _)| std::cmp::Reverse(from.len()));
+    pairs.iter().fold(bytes.to_vec(), |text, (from, to)| {
+        replace_all(&text, from, to)
+    })
+}
+
 impl Drop for Observations {
     fn drop(&mut self) {
         // Only the last handle finalizes.
@@ -298,6 +371,10 @@ impl Drop for Observations {
                 path.display()
             );
             recording.tests.insert(st.test.clone(), st.captured.clone());
+            operator_paths::assert_clean(
+                &format!("go_oracle_ext: recording {}::{}", st.file, st.test),
+                &serde_json::to_value(&recording).expect("recording value"),
+            );
             fs::create_dir_all(path.parent().expect("parent")).expect("recording dir");
             let mut text = serde_json::to_string_pretty(&recording).expect("serialize");
             text.push('\n');

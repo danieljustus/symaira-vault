@@ -8,6 +8,9 @@
     "vcs_modified": "false"
   },
   "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
   "tests": {
     "edit_matches_go_editor_json_roundtrip_and_cleans_private_temp_file": {
       "seeds": [
@@ -128,7 +131,7 @@
               "op": "file",
               "mode": 384,
               "content": {
-                "text": "{\n  \"schema\": 1,\n  \"kind\": \"rust-created\",\n  \"created_at\": \"2026-11-03T23:42:38.119547Z\",\n  \"vault_id\": \"0e1a5137587524dfc27d0f41919be9d15535a10b4d4ae19963d747241d287c32\"\n}\n"
+                "text": "{\n  \"schema\": 1,\n  \"kind\": \"rust-created\",\n  \"created_at\": \"2026-11-04T01:17:03.672838Z\",\n  \"vault_id\": \"fcc82b2ae4a98cfade6bd2151228fcca593e02be5e1e0da406ef6b9f6c90be63\"\n}\n"
               }
             },
             {
@@ -153,10 +156,20 @@
               "op": "file",
               "mode": 384,
               "content": {
-                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIHpJUWIwdnpvQzI4VVVvdmFKdXBDbmcgdD0zLG09NjU1MzYscD00CnZtdGFmZUd0VDQ2cWpJSXU1R3JRcllWTUlHSzZKOUhxcFFIV2E4S1Fack1LQmV6NjZOUC82QjFLanBBCi0+IDFXbEpVaTBpLWdyZWFzZQpRelp0aktkQUtTOXRiQnpIQkhUby9ZNDQwOU5WNEVsQW14SVE5SFlMQW9ZdEVGaW0KLS0tIFM0QWR4QkRhaHErdjVSdG41Q3FpOENWaHhXUmVkbWFBaFU2aXpOSkYrdm8K3PHLkDV0cL4LnFwmSikjzaX29hmfArj3IOhgnHZ8EgSnSCoFv3Bj6O0iHITB0P4fk1PLWouzST+Yn6dzoQG93GIPAFcXzucq0E53HR9dkcHynYhcG3iG9s03L3CWshdRwFl6GTfiJj/+Gw=="
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFZrWm5MWWhiNzk4NGIrZk9uNzgwWFEgdD0zLG09NjU1MzYscD00CnJadGJOb1lMTzhibHpmRTZZWE44Vm1iM25WNkpnVmJicW1TQnByd1k4N05tZ1NHUW5rY3RQOUlrUU5zCi0+IEluYkl9Ri1ncmVhc2UgY1JpQDk2ZXggW18gTDBTS1FidQpOY2d2VUQyaVhpS2NHUVZiODkwWE1mZllVZkpBb0VUQlBqUXBwNUtMLzdoR0VCSERnZmhEODZlQVdDZGY0VHZqCjFYT1JNd2t5RVBtUUpCbwotLS0gemNMM05Nd3psRVVrcGxVQjBpd3l2U3JVWk9DZDQzUnlJZExSM2NtTFhkQQqLjgjPLeNNfA/tIQOxzQhxXwg32A8zwYLm2HhPdNmeUUjbmSIJrIxGYLHlWp3Cuq9obF9fXIThPCilRp6jmHm5Bdpd/yhre2JVlmTcezrqv3aK0zsrv6jJFTnE3PtIcE6I2UogRrUflWZu"
               }
             }
-          ]
+          ],
+          "output": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root\nPublic key: age120dxnxrw2m65zazh0ywg6fzflkv9kn9mv285nxc8q8gmt62s0urqnt9qet\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          }
         }
       ],
       "calls": [
@@ -236,7 +249,7 @@
               "op": "file",
               "mode": 384,
               "content": {
-                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBFdk9hNzhnWFJQQitIWUZ6bjdvbVZPSEdWTkRydkkzRDlmZDFMR29jWUV3ClozMkpIaTR5TmtpUFBQYWVSOFhQaUhQZW1WR08xZTdSUm0xNlpWR09QOVkKLS0tIDAwRDdKeW5wMWt6c25lOHowVkVITi8vY0JoVzRoS0FVNEZGRnFRcnVHSWcKUlk42Il3mE4mxlLlHgl+crV9/03uc3WgpnmwnaNdaIx0NNbtamTqkrBThNc0QO4cGDWHtf2FD2AKsVqWM1vCggAsGqQUys1xn0+T3ECaaF+j3BtfhGLK2WRrbmCrdnhBI9gwn6g4AkFy5vZJqxO1D6nhjpmvqePxUFKtpSD8fy26ydh1vkvGylpVWXAebfSPAdzJpx2ed9BgIdT++U+fzJWTpy4sZ+cARr2j2lMPh+wvykxvZzRa/nvTErBULiqLGjPT3iHBnghXZtuHFm/bqrMXtPAj7cCxVsgGpbUuGFaLykCJrzDr0vTazRx4+p26rQb0A00DbIGKLiXC4pe94nQimm+bbelfxIj2vAa7Bc/2sTwci3337dN1QSrBF6NXxhVAq82kXfr04llSHLv1"
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBMejB6RTAyUi9HUkxkN1lCZzJEZXNDWmlOU3RuWDlJTkpxVnVuQUtrQmw4Cm9jLzAyanp4czluWFlPTW1WaTk0TmZ6U2pWS2pYaWRhYkNFRDROZnhlYXcKLS0tIEY4OTMyYUFlMDJZYUpvL3hKN0swamRLMkxaVnZDdzN0RC9QYjlVQUNjNmMKn98lRhAIFXlSQJfgp+V+kR2R7awFi7jJO6Vgv5oCdF2G7SXJs5oyZhXmSzQC25hE0mWkEEPdY2m/oCdizmZip+9L1+6TwYKzr2uoHkgumBZ2M6Yq/1GzxjT3O1NvncdAB8dZSwUM9o8dL0PC9epPL13Wxn66IyZydZuK9ZZK3CUOaCcOiQdWpmmLF8n9SPZHYvp2Uj1zS+YtsWmEyKNFVjVGUhuJ0E0spqyab8pqW5MJXJ6lP/m7B+Al93v1RFlIbnBjO0CTSerysoC+6GWfJKXQszmp794w7GblCP2E4uvO4thGyaKuexGPoAksy1kaNwyF0gZ9EMKL3JZNAI5R50s8DtNf4f+sKKAOrEq8ZtxwWjJ/9MqeaarbqY6iNm3uClHbMjI0oKtwAJ2vFYVR"
               }
             },
             {
@@ -245,7 +258,7 @@
               "op": "file",
               "mode": 384,
               "content": {
-                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBNT2JLY1JjWC9UdDhnZkpINUpHbFdFeHpmbllvMUJZVGYrVHp5QVJNb3lnCnMzTUQzdFlXbGYwdFU0R0RyM1lXRUhjbms1a2lTUndRSW5zc3V3aUZWVUkKLS0tIHU4MnJqdW1mcGE2Tlg0cUVWM0xUUGxrdlNrMnFRMmpZV0VtaGFXLzhqdE0KqCDIMHQv4pw8lhw0IS0RZFM2LlGcYnPBHyPVOOqzs8IlVb3UJnHTYYyj2z350MVbE58qlg4NKf6nbEwKWFVrv0YKZfbmPETJYQ6udxSuNzTWk6jlVcLh6Wf/7HRdydFVmV0F3wSVFhzCyCySiy0BZO+P59VEumcio1loASnUCQsR4WQAr7jTz7/WA3XNCTMBWh7n0bAjY3OmFW8FBckKgRowiYWseyKuT9+TEzrr7mRkdLIFork5pOxqsOAMOsfsFNtYIpJ97a7KZ+SlHqniXT8asGohK5hvmFOk6ieesK0qZ8e+/nrUBJloAb3kZ0iHrsQ2sSOS3DKPEEPiusKihYhUluj5VXXLW1qlRF+vsEX4Mo02q5Pw5p2lpOY30SAfc123"
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBFNFl6QTdVWEVxMGNaUUttYWp4TlN4dm8rSnAwVEt3L0krVFlDVERoNTFVCmNWVnhQUURMMENlbFRoVkJMMjV0c205OWVWQTZoWGwvUTFnUGZzMGxhZ00KLS0tIGFzQ2FCcW5NR1FJRW1zQjRQNkNsOHd2TXpQdC9JcGpDM0xSSnY1VEttc0kKOfYjdrACsEXtKxhLH1QBpvcThelodXVWpVwNI0B4afDeNoDRrYhk49wM/BrGoIGTAgHbOjLynKHWNy+05Udu9cMaiHjjxgzWrtULBhIQtM52K0GaNk8anY+ZzYQzJPWCzjYn3WEEAD4hozPWM0dCOZU6WrpTHakTZXkpLmQ+HqcpgYLMc9XRZRjYD7GhLpOoD1Iq7hEvp3ronxTJlrIexN2cnXesQ50nSIGVA8rSUTY3V+I8tzIHb/xl2xC+aQja1Us+8QEwMdKfe40X1QTvryHfN+q5QcRnFrLGAJF8p94l5a9xx2Fwc5GVC/X707Q/IR/2n2W9NZ6gTigOsDfvwZ3EQE2ijYUEOgypl1DclffzgKkSZKKGusk9hVIag0J4diaV"
               }
             }
           ]
@@ -291,7 +304,7 @@
               "op": "file",
               "mode": 384,
               "content": {
-                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBtWWtIZUsxeU95S0s5dmN2YUJkMFlCb1JyeXN5N2kwU0RRZ0RsTzBJZUVrClhreTVVZ3FaZEN4ajB0dEtFQmpEVzlFaU9YSW1LbURpRkoyQUFBUnF4UkEKLS0tIHM0Z1daelZHTDFSU0J1MTBoU1pjYnQrd2QvNW5xQjRHQ1FxMHFYaytJaU0KEXdxnlOptYayVuLGg+A2DLYova3QBalRodt/gGaxg2QWRPo7bVrzDODjdco7QGvqSl9RM6VmhSf00g33FLEKqyx8upE3DYQtgaOl2EWsvLfj1GJ/fp800yfcunaSj/iP1z2Qodzci0S6PZbz5As4mCW2TEjX1X9f4RYNmMHGcTpphLmXWrqDLlJ72P4jFn0cwnOdzrDw0r4JWNyq3VK0eK2Rj5lw7SSC6HIu6Fr/SiVyd5ZozcqEzbsZfB7GUh+rtYRSipGehMZJOBl74Q=="
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBWMkM2OWprellrV2RDc1VvZUkxME15Y28rakdGVDVnTGZvUmRvN21NaUVjCjhxUWdpdXlTQ1hSUDgwUDc4cGRkQkFGR051ZUlyZS91VnljTzV1MUMzS00KLS0tIGlLRmxuSzlBUG1KOHFoVWF2ZXNVK2hmcEg0UTBHaWpsQVhtdzVjS1gxZXcKXEeaFn1kwIXf8Z9aeSKxHdAWom+0e/7JOhSaWeU6/CQu8PCSh6hnYsGn2HeZAk0DKo008MAbJOXl3ovrkaSek5CtXUjSydZ3iwS0GuNwRk926l+WvNhX8l0petc5jHhWAqmk74BLivr6MK56Uu/yOK/G4taw9a0oP1f/QfwoDjt07DMOsOX8PqjR68Y/Ar8SK4l3k+VSpslVU0LxN6+Ts5gy5U9fwfDuatBj+xc3IaDYvPOSyi2FKgaLrekyRtOA/6Q3fyLHYOvLw5runA=="
               }
             },
             {
@@ -300,7 +313,7 @@
               "op": "file",
               "mode": 384,
               "content": {
-                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBtREw3cG52MnRLZGdZaklSdk9CN0xQNkw3Ykt3amZYU291VUpHbDlveWhBCm1RVlo0TUFMOE9TWklwd0p2djFEVzllRFd1YjVhSW5PcGppRHJjVUIrMjQKLS0tIGFEcDdGb0RWNDlUbi9MaFdON0dsRXBDUE53ejZDUnZJUmpCNkFEUDQ1TWsKMdRPI4RdP0AOBRLEOvV9qYDxY8rw1Qk+We3QhsLoGGrUlwYMxKwCH0e1wtY+sveaPt/ZU6O6wjqezx0HsMLzK+N5hZ13Fm1WL6VJwtUbsyg55Kf5rnrAVFDzKIIQgjJpXTEUaspEHeAUhzrOeiJzJa/LHlxz2wsKalSRRvtQBd02n1WBA3+EBKeLmC7DvlXR1j80GX/JOzykiFP8p8vzvOlSHNiI4vKrIUmt0dF80srP7I9jXicKfqKU3pbI3alYSKYdBsomFU3sUlixxNkYEz0/UmM7mPL7CZC5/07s1RFro3FCCLaDC6poUGyWy9cMKxjyJi29j2dsQUFYokm4V5adImfYf8Zp1uUO/upGOv0dgfCchfrFecCscK13THxhfIN/"
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBPcyttdDdEc2dKWFEvTE04YzhWT01EdUsxakRUVkRKc1VnQnRNS1BVbWdvCmNMSEVZSkFHNy9UTVBYTDJIVDJseW9GRXA3OXBxaXB6VHdCY3diMndGcmMKLS0tIFVUREJBNStKSmJzakNHbjIwTVoyWjRCRE1lMmFhbUhsdnl2L3hmTnBKUzAK8YRjSKN2Dd+Jo1dkzxfSHmhaXBeAq1UdjJYOLOKY5xYQ8YxAmBiLyBrJshvHOeOB9QMeVHyWOwtdQrOM5VIPoNkLX9GJHDjB0BH/MZWtUenNS9bNyroCCudzmTxTVX/5Kc3SZiUjkuccLc2ZNw9mfyyBaVoU9rCkZnpVFhX9E9xmCf0BBiZj1khB6kOXzrV+7eQUfwsTRrKS4qVdecXwr/RxLdRIyvDM9Emie+jgbbo22dRegwy2qNV9i586ybBMB/HLFYX1++ovotcPx262aKbkHvOYm+kap3yVkX3sniYHhxtXoXYa5jmSHCygYIGqL2bEFe06TJFz8MJBHb9C5MwGLkLA479V1i0XNen0nCll1dyBhRAzGXoib6KD0P9byWHr"
               }
             },
             {
@@ -318,7 +331,7 @@
               "op": "file",
               "mode": 420,
               "content": {
-                "text": "/Volumes/1TB_NVMe_SN850X/Dev/Symaira_Dev/builds/symaira-vault/.worktrees/local-cap-cli-b/tmp/symvault-edit-4016969367.json"
+                "text": "<TMPFILE>.json"
               }
             }
           ]
@@ -363,7 +376,7 @@
               "op": "file",
               "mode": 384,
               "content": {
-                "text": "{\"ts\":\"2026-11-03T23:42:39Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/edit\",\"field\":\"password\",\"kid\":\"587dccd4\",\"hmac\":\"c6d4e86378b45bb53cd49792ea003be603e0e8ac7de3d1b6e60ea4fed57ee3fd\",\"argv_hash\":\"f8a1d2e24492b97e\",\"ok\":true}\n"
+                "text": "{\"ts\":\"2026-11-04T01:17:05Z\",\"agent\":\"\",\"action\":\"expose_plaintext\",\"path\":\"work/edit\",\"field\":\"password\",\"kid\":\"e898b6b4\",\"hmac\":\"27cd10aec8751f2f646ffff92c822f35371c56cd3a9dec955455d32d212cef39\",\"argv_hash\":\"47695d3a81651c0c\",\"ok\":true}\n"
               }
             }
           ]

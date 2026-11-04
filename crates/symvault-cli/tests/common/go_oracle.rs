@@ -33,6 +33,9 @@ use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+#[path = "operator_paths.rs"]
+mod operator_paths;
+
 /// Oracle pinned by `scripts/rust-port/check_config_cli.sh` and the Makefile.
 pub const CONFIG_CLI_ORACLE: &str = "fca3f89401833b5e14ec4ec74ef736b0f63bca74";
 
@@ -913,6 +916,10 @@ fn write_capture(file: &str, test: &str, oracle: &Oracle, record: TestRecord) {
         path.display()
     );
     transcript.tests.insert(test.to_owned(), record);
+    operator_paths::assert_clean(
+        &format!("go_oracle: transcript {file}::{test}"),
+        &serde_json::to_value(&transcript).expect("transcript value"),
+    );
     fs::create_dir_all(path.parent().expect("parent")).expect("transcript dir");
     let mut text = serde_json::to_string_pretty(&transcript).expect("serialize");
     text.push('\n');
@@ -1302,17 +1309,21 @@ impl State {
     }
 }
 
-/// Placeholder for the per-process scratch directories the CLI itself creates
-/// below the temp dir (`<temp>/symvault-file-<pid>-<seq>`): their names embed
-/// a pid and are neither requested nor printed by any call, so they cannot be
-/// tracked as roots. Recorded paths keep only `<TMPFILE>`; replay leaves the
+/// Placeholder for the per-process scratch files and directories the CLI itself
+/// creates below the temp dir (`<temp>/symvault-file-<pid>-<seq>`, the editor
+/// buffer `<temp>/symvault-edit-<random>.json`): their names embed a pid or a
+/// random number and are neither requested nor printed by any call, so they
+/// cannot be tracked as roots. Recorded paths keep only `<TMPFILE>`; replay leaves the
 /// placeholder as is.
 pub const TMPFILE: &str = "<TMPFILE>";
 
 fn scrub_tmpfile(bytes: &[u8]) -> Vec<u8> {
     let mut out = bytes.to_vec();
-    for base in temp_bases() {
-        let needle = format!("{base}/symvault-file-");
+    for (base, stem) in temp_bases()
+        .into_iter()
+        .flat_map(|base| [(base.clone(), "symvault-file-"), (base, "symvault-edit-")])
+    {
+        let needle = format!("{base}/{stem}");
         let needle = needle.as_bytes();
         let mut scrubbed = Vec::with_capacity(out.len());
         let mut i = 0;
