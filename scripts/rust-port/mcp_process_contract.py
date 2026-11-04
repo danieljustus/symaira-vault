@@ -505,7 +505,36 @@ def unpack_tree(packed, root):
             target.write_bytes(data)
         else:
             target.write_bytes(base64.b64decode(entry))
+        if target.name == 'mcp-tokens.json':
+            rebase_token_clock(target)
     return Path(root)
+
+
+def rebase_token_clock(path, now=None):
+    """Shift a recorded token registry's timestamps so its newest `created_at` is `now`.
+
+    Tokens are issued with a relative lifetime (1 h by default), so a registry recorded at capture time would be expired
+    by the time it is replayed.  Every timestamp moves by the same offset: lifetimes and ordering are exactly the recorded
+    ones, only the absolute clock follows the replay (the live contracts also issued fresh tokens on every run).  The
+    committed observation keeps the original bytes; only the on-disk working copy is rebased.
+    """
+    import datetime as dt
+    document = json.loads(Path(path).read_text())
+    stamp = re.compile(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$')
+
+    def parse(text):
+        head, _, fraction = text[:-1].partition('.')
+        return dt.datetime.strptime(head, '%Y-%m-%dT%H:%M:%S').replace(tzinfo=dt.timezone.utc) + dt.timedelta(microseconds=int((fraction + '000000')[:6]))
+    records = [record for record in (document.get('tokens') or {}).values() if isinstance(record, dict)]
+    created = [parse(record['created_at']) for record in records if isinstance(record.get('created_at'), str) and stamp.match(record['created_at'])]
+    if not created:
+        return
+    offset = (now or dt.datetime.now(dt.timezone.utc)) - max(created)
+    for record in records:
+        for key, value in list(record.items()):
+            if isinstance(value, str) and stamp.match(value):
+                record[key] = (parse(value) + offset).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    Path(path).write_text(json.dumps(document, indent=2) + '\n')
 
 
 def bounded(value, lower, upper, what):
