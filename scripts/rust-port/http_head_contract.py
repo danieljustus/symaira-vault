@@ -246,7 +246,11 @@ def main():
                     receipt['differences'].append(dict(case=a['case'],go=a['response'],rust=b['response']))
             assert len(receipt['go']['rows'])==len(receipt['rust']['rows'])==13
             assert all(len(receipt[k]['authorization_heads'])==512 for k in ['go','rust'])
-            assert receipt['go']['client_id'] != receipt['rust']['client_id'], 'independent actual issuer entropy'
+            # The recorded Go client_id is a stable_entropy() placeholder (the recording must be byte-stable), so comparing the
+            # two ids would be vacuous.  What is asserted is Rust's own: a fresh 32-hex id (observe() checks the shape) that
+            # is the only client its registry holds, i.e. not drawn from the seed vault or from an earlier registration.
+            rust_client = receipt['rust']['client_id']
+            assert HEX32.fullmatch(rust_client) and set(receipt['rust']['client_snapshot']['clients']) == {rust_client}, 'Rust issuer entropy'
             assert receipt['go']['pipeline']['request_sha256']==receipt['rust']['pipeline']['request_sha256']
             for a,b in zip(receipt['go']['pipeline']['responses'],receipt['rust']['pipeline']['responses'],strict=True):
                 assert all(a[k]==b[k] for k in ['status_line','headers_without_date','body_base64'])
