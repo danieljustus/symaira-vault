@@ -24,11 +24,11 @@ body:
     validations:
       required: true
   - type: input
-    id: go
+    id: rust
     attributes:
-      label: Go version
-      description: Required when building from source.
-      placeholder: "go1.26.3"
+      label: Rust version
+      description: Required when building from source (output of `rustc --version`).
+      placeholder: "rustc 1.98.0"
   - type: textarea
     id: steps
     attributes:

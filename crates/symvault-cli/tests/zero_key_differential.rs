@@ -516,6 +516,11 @@ fn walk(dir: &Path, base: &Path, out: &mut BTreeMap<String, u32>) {
         let relative = path.strip_prefix(base).unwrap().display().to_string();
         if meta.is_dir() {
             walk(&path, base, out);
+        } else if meta.file_type().is_symlink() {
+            // A symlink's own mode is host-defined (0755 under umask 022 on
+            // darwin, where the oracle was recorded; always 0777 on Linux) and
+            // only the test creates symlinks, so it carries no behaviour.
+            out.insert(relative, 0o755);
         } else {
             out.insert(relative, meta.permissions().mode() & 0o7777);
         }
@@ -729,6 +734,15 @@ fn rust_observed(session: &Session, record: &Value, parent: &Path, case: &Case) 
     observed
 }
 
+const TOUCH_ID_WARNING: &str = "Touch ID skipped (no GUI session); use 'symvault unlock' in a graphical session or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE";
+
+fn without_touch_id_warning(stderr: &str) -> String {
+    stderr
+        .split_inclusive('\n')
+        .filter(|line| line.trim_end_matches('\n') != TOUCH_ID_WARNING)
+        .collect()
+}
+
 fn compare(session: &Session, cases: &[Case], budget_seconds: u64) {
     let mut failures = Vec::new();
     for batch in cases.chunks(4) {
@@ -756,7 +770,16 @@ fn compare(session: &Session, cases: &[Case], budget_seconds: u64) {
                 .map(|handle| handle.join().expect("case thread"))
                 .collect()
         });
-        for (case, go_run, rust_run, seconds) in results {
+        for (case, mut go_run, mut rust_run, seconds) in results {
+            if matches!(case.prep, Prep::TouchId) {
+                // The Touch ID warning follows the GUI session of the host
+                // (recorded on a darwin GUI session, replayed headless too);
+                // touch_id_skipped_warning_matches_the_go_oracle checks that
+                // rule on its own, the rest of the output is compared here.
+                for run in [&mut go_run, &mut rust_run] {
+                    run.out.stderr = without_touch_id_warning(&run.out.stderr);
+                }
+            }
             if go_run != rust_run {
                 failures.push(format!(
                     "{}\n  go:   {go_run:?}\n  rust: {rust_run:?}",
@@ -1136,7 +1159,7 @@ fn touch_id_skipped_warning_matches_the_go_oracle() {
     // The Go oracle's answer is recorded together with the GUI state of the
     // recording host (the rule is "warning iff no GUI session"); Rust is checked
     // live against the GUI state of the host that runs the test.
-    let warning = "Touch ID skipped (no GUI session); use 'symvault unlock' in a graphical session or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE";
+    let warning = TOUCH_ID_WARNING;
     let gui_session = || {
         Command::new("launchctl")
             .arg("managername")
