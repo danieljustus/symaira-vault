@@ -5,7 +5,8 @@
 //! (`scripts/rust-port/reencrypt_journal_fixture.py capture`): a vault frozen after a crash with the
 //! replacement only staged, and one frozen after the replacement was committed but before the journal was
 //! removed. Each scenario also holds the tree Go's own recovery leaves behind. `Store::open` must recover
-//! the frozen pre-crash tree to exactly that tree: every stable file byte for byte, no journal, backup or
+//! the frozen pre-crash tree to exactly that tree (the staged state is rolled back to the original, the
+//! committed state keeps the replacement): every stable file byte for byte, no journal, backup or
 //! temporary file, and a manifest the identity can decrypt that lists the entry.
 
 use std::{
@@ -162,30 +163,6 @@ fn go_written_crash_states_recover_to_the_tree_go_recovery_leaves() {
             symvault_store::data_safety::test_support_pre_marked(&root),
             &identity,
         );
-        if scenario.name == "staged" {
-            // DECLARED DIVERGENCE (reported, not hidden): the crash window between staging the replacement
-            // and journaling the backup. Go recovery sees a target that is not the staged digest and no
-            // backup, treats the target as the untouched original, removes the staged temp file and
-            // finishes. Rust refuses to open and leaves everything in place (journal, temp file and
-            // original), which loses nothing but needs manual repair. The test pins the refusal so that
-            // changing it to Go's roll-back is a deliberate act.
-            let error = match opened {
-                Err(error) => error.to_string(),
-                Ok(_) => panic!("Rust refuses the staged-before-backup state"),
-            };
-            assert!(
-                error.contains("re-encryption target changed without an original backup"),
-                "{error}"
-            );
-            let refused = tree(&root);
-            assert_eq!(
-                differences(&before, &refused),
-                Vec::<String>::new(),
-                "a refused recovery must not change the vault"
-            );
-            assert!(refused.contains_key(".reencrypt.journal"));
-            continue;
-        }
         let store =
             opened.unwrap_or_else(|error| panic!("{}: recovery failed: {error}", scenario.name));
 
@@ -209,6 +186,13 @@ fn go_written_crash_states_recover_to_the_tree_go_recovery_leaves() {
             "{}: temporary or backup file left behind: {after:?}",
             scenario.name
         );
+        if scenario.name == "staged" {
+            // Rolled back: the original ciphertext is untouched and the staged replacement is gone.
+            assert_eq!(
+                before["entries/cross-language.age"], after["entries/cross-language.age"],
+                "staged: the original entry must survive the roll-back"
+            );
+        }
         // The frozen state really was a crash state, and recovery really changed it.
         assert_ne!(before, after, "{}", scenario.name);
         // The manifest Rust re-built decrypts with the identity and lists the recovered entry.
@@ -229,8 +213,8 @@ fn go_written_crash_states_recover_to_the_tree_go_recovery_leaves() {
         recovered_scenarios += 1;
     }
     assert_eq!(
-        recovered_scenarios, 1,
-        "the committed state is recovered; the staged state is the declared refusal"
+        recovered_scenarios, 2,
+        "both the staged (rolled back) and the committed (kept) state recover"
     );
 }
 

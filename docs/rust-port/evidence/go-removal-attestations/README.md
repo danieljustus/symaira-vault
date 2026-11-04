@@ -81,13 +81,18 @@ therefore does not spell those prefixes out.
 | `TestPrompt_TTYBackend_SignalCancel` (`internal/secureui`) | `mcp-secure-input-differential` | Rust `approval::tests::stdio_prompt_signal_cancel_maps_to_go_context_canceled`, now run by exact name in that target |
 | `TestReencryptJournalGoRustIntegration` | `reencrypt-journal-differential` | direction Rust-writes/Go-recovers: the attestation. Direction Go-writes/Rust-recovers: `crates/symvault-store/tests/reencrypt_journal_go_fixture.rs` over frozen Go-written crash states |
 
-## Known divergence found while freezing the crash states
+## Divergence found while freezing the crash states (closed: Go parity)
 
-Go recovers the state "replacement staged, backup not yet journaled" (journal digest = staged ciphertext, no
-backup, target = original) by keeping the original and deleting the temp file. Rust refuses to open the vault
-(`re-encryption target changed without an original backup`) and leaves journal, temp file and original in place.
-No data is lost, but the vault needs manual repair. `reencrypt_journal_go_fixture.rs` pins the refusal for the
-`staged` scenario so changing it to Go's roll-back is deliberate.
+Go recovers the state "replacement staged, backup not yet journaled" (journal digest = staged ciphertext and
+temp path, no backup, target = original) by keeping the original and deleting the temp file. Rust used to
+refuse to open the vault (`re-encryption target changed without an original backup`), leaving journal, temp
+file and original in place, so the vault could not be opened after such a crash. Rust now rolls back exactly
+as Go does; `reencrypt_journal_go_fixture.rs` asserts Go's post-recovery tree for the `staged` scenario (the
+only remaining difference is the already-pinned `config.yaml` rewrite on Go's `Open`). Both implementations
+journal the backup path before the original is moved, so a target that is not the staged digest and has no
+journaled backup is still the untouched original. A journal entry with a digest but neither a staged temp nor
+a backup has no provenance: a changed target there is still refused and nothing is changed
+(`tests::recovery_without_backup_rolls_back_only_with_staged_provenance`).
 
 ## Windows scope lost with the Go-free replay (recorded, not covered)
 

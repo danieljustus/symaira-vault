@@ -2290,10 +2290,10 @@ export-cli-fixtures-check:
 #      filter matched one trivial test);
 #   3. every one of those tests must be listed as `ok` in the log (their names are printed);
 #   4. Rust-written journals recovered by Go (the reverse direction) stay an attestation (go-attest-other).
-# Known divergence, pinned by the fixture test: the state "replacement staged, backup not yet journaled" is
-# rolled back by Go and refused (nothing is changed) by Rust.
+# The state "replacement staged, backup not yet journaled" is rolled back by Go and, with the fixture test
+# asserting Go's tree, by Rust too; a changed target without staged-replacement provenance stays refused.
 REENCRYPT_FIXTURE_TESTS := go_written_crash_states_recover_to_the_tree_go_recovery_leaves the_comparison_notices_a_wrong_tree
-REENCRYPT_UNIT_TESTS := reencrypt_journal::tests::lexical_root_alias_is_normalized_but_symlinked_ancestor_is_rejected tests::recovery_resource_failures_preserve_journal_and_originals
+REENCRYPT_UNIT_TESTS := reencrypt_journal::tests::lexical_root_alias_is_normalized_but_symlinked_ancestor_is_rejected tests::recovery_resource_failures_preserve_journal_and_originals tests::recovery_without_backup_rolls_back_only_with_staged_provenance
 .PHONY: reencrypt-journal-differential
 reencrypt-journal-differential:
 	@set -eu; mkdir -p target/reencrypt-journal; log=target/reencrypt-journal/fixture.txt; units=target/reencrypt-journal/units.txt; \
