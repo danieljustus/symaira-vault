@@ -3,6 +3,7 @@
 mod add_commands;
 mod agent_audit_commands;
 mod agent_doctor_commands;
+mod agent_gate;
 mod agent_install_commands;
 mod agent_list_commands;
 mod agent_profile_commands;
@@ -1386,6 +1387,11 @@ fn run_cli() -> ExitCode {
     symvault_sync::data_safety::install();
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(index) = completion_protocol::request_index(&args) {
+        // Go's hidden `__complete` command runs the root PersistentPreRunE too.
+        if let Some(message) = agent_gate::complete_preflight(&args, index) {
+            eprintln!("Error: {message}\nError: {message}");
+            return ExitCode::from(agent_gate::EXIT_PERMISSION_DENIED);
+        }
         return completion_protocol::run(&args, index);
     }
     if let Some(code) = completion_commands::go_argument_shapes(&args) {

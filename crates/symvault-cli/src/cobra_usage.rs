@@ -1203,6 +1203,9 @@ struct Parsed {
     validator: ValidatorFlags,
     json_flag: bool,
     output: Option<String>,
+    /// The last `--vault` / `--profile` value (the agent-mode gate resolves the vault).
+    vault: Option<String>,
+    profile: Option<String>,
 }
 
 /// pflag's parse of the remaining tokens against the command's flag set.
@@ -1218,10 +1221,14 @@ fn parse_flags(
         validator: ValidatorFlags::default(),
         json_flag: false,
         output: None,
+        vault: None,
+        profile: None,
     };
     let mut index = 0;
     let note = |arg: &Arg, value: Option<&str>, parsed: &mut Parsed| match (arg.get_long(), value) {
         (Some("output"), Some(value)) => parsed.output = Some(value.to_owned()),
+        (Some("vault"), Some(value)) => parsed.vault = Some(value.to_owned()),
+        (Some("profile"), Some(value)) => parsed.profile = Some(value.to_owned()),
         (Some("url"), Some(value)) if path == "find" => {
             parsed.validator.url_filter = !value.is_empty();
         }
@@ -1512,7 +1519,26 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
     } = resolve(args, &root);
     match stop {
         Stop::Resolved => {}
-        Stop::Help => return Verdict::Proceed,
+        Stop::Help => {
+            // cobra's `help` command is runnable and requires a vault, so the
+            // agent-mode gate runs before it prints anything.
+            if required {
+                let flags = Flags {
+                    command: &root,
+                    root: &root,
+                };
+                if let Ok(parsed) = parse_flags(&tokens, flags, "help", true)
+                    && let Some(message) = crate::agent_gate::preflight(
+                        "help",
+                        parsed.vault.as_deref(),
+                        parsed.profile.as_deref(),
+                    )
+                {
+                    return fail(&message, crate::agent_gate::EXIT_PERMISSION_DENIED);
+                }
+            }
+            return Verdict::Proceed;
+        }
         Stop::Unknown(word) => return unknown_command(&word),
     }
     let path_text = current.path.join(" ");
@@ -1549,6 +1575,18 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
     }
     if let Some(format) = refused_format(&path_text, parsed.json_flag, parsed.output.as_deref()) {
         return fail(&gate_message(&format, &path_text), 9);
+    }
+    // Root PersistentPreRunE's last step: the agent-mode gate, before cobra's
+    // required-flag validation. `completion` without a shell prints group help.
+    if required
+        && !(path_text == "completion" && parsed.positionals.is_empty())
+        && let Some(message) = crate::agent_gate::preflight(
+            &path_text,
+            parsed.vault.as_deref(),
+            parsed.profile.as_deref(),
+        )
+    {
+        return fail(&message, crate::agent_gate::EXIT_PERMISSION_DENIED);
     }
     if required && let Some(message) = missing_required_flags(&path_text, &parsed.set) {
         return fail(&message, 1);
