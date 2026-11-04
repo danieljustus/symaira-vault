@@ -523,8 +523,16 @@ def load_go_observations(contract, contract_args=None, oracle=None, required=Tru
     `oracle` defaults to the oracle pinned for this contract (pinned_oracle), so a generic caller loads
     every observation without knowing which reference it was recorded against.
 
+    Integrity: this loader does not hash the file. The bytes are pinned by the repository's frozen-fixture manifest:
+    on the integration branch scripts/rust-port/fixtures/** is covered by testdata/port/FROZEN.sha256, verified by
+    scripts/rust-port/fixtures_verify.py (a sha256 manifest in which an unlisted file fails), which the port gate runs.
+    What the loader itself enforces is identity (schema, contract, goos, pinned oracle, arguments, canonical form) and
+    that no stray `<contract>.*.json` sits next to the recording (a leftover or misnamed capture is an error, not ignored).
     """
     oracle = oracle or pinned_oracle(contract)
+    known = {f'{contract}.{name}.json' for name in ('darwin', 'linux', 'windows')}
+    stray = sorted(p.name for p in GO_OBS_DIR.glob(f'{contract}.*.json') if p.name not in known)
+    assert not stray, (contract, 'unexpected observation files', stray)
     path = go_obs_path(contract, goos)
     if not path.is_file():
         if not required:

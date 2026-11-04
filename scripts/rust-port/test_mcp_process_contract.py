@@ -405,6 +405,25 @@ class ObservationHygieneTests(unittest.TestCase):
                 seen.add(contract)
         self.assertTrue({'mcp-process', 'timestamp-fixtures', 'toolhash-process'} <= seen, seen)
 
+    def test_a_stray_observation_file_for_a_known_contract_is_rejected(self):
+        with tempfile.TemporaryDirectory() as raw:
+            for source in CONTRACT.GO_OBS_DIR.glob('http-token.*.json'):
+                Path(raw, source.name).write_bytes(source.read_bytes())
+            saved = CONTRACT.GO_OBS_DIR
+            CONTRACT.GO_OBS_DIR = Path(raw)
+            try:
+                self.assertEqual(CONTRACT.load_go_observations('http-token', required=True)['contract'], 'http-token')
+                Path(raw, 'http-token.darwin.json.bak').write_text('{}')      # not *.json: ignored
+                Path(raw, 'http-token.old.json').write_text('{}')
+                with self.assertRaises(AssertionError):
+                    CONTRACT.load_go_observations('http-token', required=True)
+                # a different contract's files are not strays of this one
+                Path(raw, 'http-token.old.json').unlink()
+                Path(raw, 'http-tokens.darwin.json').write_text('{}')
+                self.assertEqual(CONTRACT.load_go_observations('http-token', required=True)['contract'], 'http-token')
+            finally:
+                CONTRACT.GO_OBS_DIR = saved
+
     def test_a_wrong_oracle_is_rejected(self):
         with self.assertRaises(AssertionError):
             CONTRACT.load_go_observations('mcp-process', goos='darwin', oracle=CONTRACT.HISTORICAL)
