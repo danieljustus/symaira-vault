@@ -1,13 +1,14 @@
 #![deny(unsafe_code)]
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
 use std::{
     env, fs,
-    io::Write,
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Command, Output},
 };
 
 use symvault_crypto::{
@@ -22,16 +23,22 @@ fn unique_root(label: &str) -> test_temp_root::TempRoot {
     test_temp_root::TempRoot::missing(&format!("symvault-migrate-kdf-{label}-"))
 }
 
+/// Two identical scrypt vaults. The identity is random, so the pair is frozen
+/// as a seed: the recorded Go migration was captured against exactly these bytes.
 fn make_scrypt_vaults(
+    oracle: &go_oracle::GoOracle,
     label: &str,
 ) -> (test_temp_root::TempRoot, test_temp_root::TempRoot, Vec<u8>) {
-    let identity = generate_identity();
-    let old = encrypt_identity_scrypt(&identity, &SecretBytes::new(PASSPHRASE), 10)
-        .expect("scrypt fixture");
     let go = unique_root(&format!("{label}-go"));
     let rust = unique_root(&format!("{label}-rust"));
-    write_vault(&go, &old, CUSTOM_CONFIG);
-    write_vault(&rust, &old, CUSTOM_CONFIG);
+    oracle.seed(&format!("scrypt-vaults-{label}"), &[&go, &rust], || {
+        let identity = generate_identity();
+        let old = encrypt_identity_scrypt(&identity, &SecretBytes::new(PASSPHRASE), 10)
+            .expect("scrypt fixture");
+        write_vault(&go, &old, CUSTOM_CONFIG);
+        write_vault(&rust, &old, CUSTOM_CONFIG);
+    });
+    let old = fs::read(go.join("identity.age")).expect("seeded identity");
     (go, rust, old)
 }
 
@@ -47,29 +54,21 @@ fn run_with_input(binary: &Path, args: &[&str], root: &Path, input: &[u8]) -> Ou
     // The Rust CLI backs a Go-created vault up before its first mutation (D1);
     // HOME is inside the vault, so the archive directory is moved outside it.
     let state = tempfile::tempdir().expect("state dir");
-    let mut child = Command::new(binary)
-        .args(args)
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("XDG_STATE_HOME", state.path())
-        .env("CI", "1")
-        .env("SYMVAULT_TEST_KEYRING", "memory")
-        .env_remove("SYMVAULT_PASSPHRASE")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn CLI");
-    child
-        .stdin
-        .take()
-        .expect("stdin")
-        .write_all(input)
-        .expect("write stdin");
-    child.wait_with_output().expect("wait CLI")
+    go_oracle::output_with_input(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", &home)
+            .env("USERPROFILE", &home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("XDG_STATE_HOME", state.path())
+            .env("CI", "1")
+            .env("SYMVAULT_TEST_KEYRING", "memory")
+            .env_remove("SYMVAULT_PASSPHRASE"),
+        Some(input),
+    )
+    .expect("run CLI")
 }
 
 fn migrate_args(root: &Path, yes: bool) -> Vec<String> {
@@ -122,16 +121,20 @@ fn assert_unchanged(root: &Path, original: &[u8]) {
 }
 
 #[test]
-#[ignore = "requires the pinned Go CLI binary and the wired Rust migrate command"]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn migrate_kdf_go_rust_integration() {
-    let go_binary = PathBuf::from(
-        env::var_os("SYMVAULT_GO_BINARY")
-            .expect("SYMVAULT_GO_BINARY is required for this explicit integration gate"),
+    let oracle = go_oracle::GoOracle::begin(
+        "migrate_kdf_differential",
+        "migrate_kdf_go_rust_integration",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
     );
-    assert!(go_binary.is_file(), "SYMVAULT_GO_BINARY is not a file");
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
-    let (go_root, rust_root, original) = make_scrypt_vaults("migrate");
+    let (go_root, rust_root, original) = make_scrypt_vaults(&oracle, "migrate");
     let go_args = migrate_args(&go_root, true);
     let rust_args = migrate_args(&rust_root, true);
     let go = run_with_input(
@@ -169,7 +172,7 @@ fn migrate_kdf_go_rust_integration() {
     assert_success(&rust_list, "Rust list after Go migration");
     assert_success(&go_list, "Go list after Rust migration");
 
-    let (go_root, rust_root, original) = make_scrypt_vaults("cancel");
+    let (go_root, rust_root, original) = make_scrypt_vaults(&oracle, "cancel");
     let go_args = migrate_args(&go_root, false);
     let rust_args = migrate_args(&rust_root, false);
     let input = b"fixture migrate passphrase\nn\n";
@@ -181,21 +184,24 @@ fn migrate_kdf_go_rust_integration() {
     assert_unchanged(&go_root, &original);
     assert_unchanged(&rust_root, &original);
 
-    let identity = generate_identity();
-    let modern = encrypt_identity_argon2id(
-        &identity,
-        &SecretBytes::new(PASSPHRASE),
-        symvault_crypto::Argon2idParams {
-            time: 2,
-            memory_kib: 19_456,
-            threads: 1,
-        },
-    )
-    .expect("argon2id fixture");
     let go_root = unique_root("already-go");
     let rust_root = unique_root("already-rust");
-    write_vault(&go_root, &modern, CUSTOM_CONFIG);
-    write_vault(&rust_root, &modern, CUSTOM_CONFIG);
+    oracle.seed("argon2id-vaults", &[&go_root, &rust_root], || {
+        let identity = generate_identity();
+        let modern = encrypt_identity_argon2id(
+            &identity,
+            &SecretBytes::new(PASSPHRASE),
+            symvault_crypto::Argon2idParams {
+                time: 2,
+                memory_kib: 19_456,
+                threads: 1,
+            },
+        )
+        .expect("argon2id fixture");
+        write_vault(&go_root, &modern, CUSTOM_CONFIG);
+        write_vault(&rust_root, &modern, CUSTOM_CONFIG);
+    });
+    let modern = fs::read(go_root.join("identity.age")).expect("seeded identity");
     let go_args = migrate_args(&go_root, true);
     let rust_args = migrate_args(&rust_root, true);
     let go = run_with_input(&go_binary, &as_refs(&go_args), &go_root, b"");
@@ -216,10 +222,21 @@ fn migrate_kdf_go_rust_integration() {
 }
 
 #[test]
-#[ignore = "requires the current Go CLI binary for the new resource policy"]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn kdf_resource_policy_go_rust_integration() {
     use base64::Engine as _;
-    let go_binary = PathBuf::from(env::var_os("SYMVAULT_GO_BINARY").expect("current Go binary"));
+    // The resource policy (`--allow-legacy-kdf`) postdates the config-cli
+    // oracle: this test is recorded against the last commit that still carried
+    // the Go sources (the revision kdf-resource-policy.yml built).
+    let oracle = go_oracle::GoOracle::begin(
+        "migrate_kdf_differential.kdf-policy",
+        "kdf_resource_policy_go_rust_integration",
+        Some("c069d3f2b17d704525cedc1bd42840cc6a3e9896"),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let fixture: serde_json::Value = serde_json::from_slice(include_bytes!(
         "../../../testdata/port/crypto/kdf-policy-v1.json"
@@ -234,16 +251,21 @@ fn kdf_resource_policy_go_rust_integration() {
         for scenario in ["no-flag", "decline", "wrong", "migrate", "scrypt-config"] {
             let root = unique_root(&format!("policy-{label}-{scenario}"));
             let original = if scenario == "scrypt-config" {
-                encrypt_identity_scrypt(
-                    &generate_identity(),
-                    &SecretBytes::new(passphrase.as_bytes()),
-                    10,
-                )
-                .unwrap()
+                // Random identity: frozen as a seed for the recorded Go run.
+                oracle.seed(&format!("policy-{label}-{scenario}"), &[&root], || {
+                    let original = encrypt_identity_scrypt(
+                        &generate_identity(),
+                        &SecretBytes::new(passphrase.as_bytes()),
+                        10,
+                    )
+                    .unwrap();
+                    write_vault(&root, &original, config);
+                });
+                fs::read(root.join("identity.age")).unwrap()
             } else {
+                write_vault(&root, &old, config);
                 old.clone()
             };
-            write_vault(&root, &original, config);
             let mut args = migrate_args(&root, scenario != "decline");
             if scenario != "no-flag" {
                 args.push("--allow-legacy-kdf".to_owned());

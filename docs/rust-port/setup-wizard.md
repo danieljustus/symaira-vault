@@ -21,13 +21,15 @@ apply order and the Go quirks that decide what ends up on disk are Go's (see the
 
 `cargo test -p symvault-cli --test setup_wizard_differential` (macOS, `local/setup`):
 
-* `native_matches_recorded_go_results` (no Go needed): 27 scenarios replayed against
-  `testdata/port/cli/setup-wizard/go-results.json`, 0 differences. The recording holds the
-  normalized Go results plus the `go init` vault seed, so Go-initialized vaults need no Go.
-* `native_matches_live_go_oracle` (`SYMVAULT_GO_BINARY`, `make setup-wizard-differential`):
-  27 scenarios against Go and Rust, 0 differences, and the live Go result equals the recording
-  (the recording cannot go stale). With the variable set nothing is skipped: a missing binary, fewer
-  than 27 scenarios or an unreached scripted screen fails.
+* `native_matches_recorded_go_results` (no Go needed; this is `make setup-wizard-differential`):
+  27 scenarios replayed against `testdata/port/cli/setup-wizard/go-results.json`, 0 differences.
+  The recording holds the normalized Go results plus the `go init` vault seed, so Go-initialized
+  vaults need no Go. The test prints `setup wizard differential (replay): 27 scenarios executed`.
+  It is `ignore`d (visibly, never silently passed) on non-macOS hosts because the recording is darwin's.
+* `native_matches_live_go_oracle` (ignored; capture side, `SYMVAULT_GO_BINARY`,
+  `make setup-wizard-capture`): 27 scenarios against Go and Rust, 0 differences, and the live Go
+  result equals the recording (the recording cannot go stale). A missing binary, fewer than 27
+  scenarios or an unreached scripted screen fails.
 * Driver/comparator self-tests: PTY capture, exit code, signal, missed screen + kill, `Either`,
   alternate-screen extraction, normalizers, token-order normalization and a mutation control that
   changes each compared field (exit code, signal, ok, reached screens, post-TUI text, run label and

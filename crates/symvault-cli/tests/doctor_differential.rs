@@ -1,5 +1,7 @@
 #![deny(unsafe_code)]
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
@@ -41,21 +43,33 @@ impl Drop for TempFixture {
     }
 }
 
+/// Search path of the Rust side: the doctor tooling checks probe `osascript`,
+/// `pbcopy`, ... on PATH, so the Rust run must not depend on the host PATH.
+const HERMETIC_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", root)
-        .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
-        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run CLI")
+    let mut command = Command::new(binary);
+    // Applied to the Rust side only: the Go request (and its recorded key)
+    // stays as captured. `tooling.precommit` reads the working directory, so
+    // Rust runs in the scratch home instead of the repository checkout.
+    if !go_oracle::is_oracle_binary(binary) {
+        command.env("PATH", HERMETIC_PATH).current_dir(home);
+    }
+    go_oracle::output(
+        command
+            .args(args)
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", root)
+            .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+            .env("CI", "1")
+            .env("NO_COLOR", "1"),
+    )
+    .expect("run CLI")
 }
 
 fn first_json(stdout: &[u8], command: &str) -> serde_json::Value {
@@ -76,30 +90,38 @@ fn first_json(stdout: &[u8], command: &str) -> serde_json::Value {
         })
 }
 
-/// Returns the pinned Go oracle and the freshly built Rust binary.
+/// Returns the oracle session (replay or capture), the Go binary path the
+/// session answers for, and the freshly built Rust binary.
 ///
-/// `SYMVAULT_GO_BINARY` is exported by the port-contract gate
-/// (`scripts/rust-port/check_config_cli.sh`), which is where this comparison is
-/// mandatory. The workspace-wide test runs have no oracle, so — like every other
-/// CLI differential in this crate — they skip instead of failing; the gate is the
-/// acceptance, not a silent skip.
-fn oracle_binaries() -> Option<(PathBuf, PathBuf)> {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return None;
-    };
-    let go = PathBuf::from(go_binary);
-    assert!(go.is_file(), "Go binary does not exist at {go:?}");
+/// Go answers come from `testdata/port/cli-transcripts/doctor_differential.json`
+/// (see `common/go_oracle.rs`); a missing recording is a failure.
+fn oracle_binaries(test: &str) -> (go_oracle::GoOracle, PathBuf, PathBuf) {
+    let oracle = go_oracle::GoOracle::begin(
+        "doctor_differential",
+        test,
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    // The scrypt benchmark's verdict depends on machine load.
+    oracle.stable_under(|bytes| {
+        if String::from_utf8_lossy(bytes).contains("crypto.scrypt.benchmark") {
+            b"<benchmark>".to_vec()
+        } else {
+            bytes.to_vec()
+        }
+    });
+    let go = oracle.binary();
     let rust = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     assert!(rust.is_file(), "Rust binary does not exist at {rust:?}");
-    Some((go, rust))
+    (oracle, go, rust)
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_missing_vault_text_and_strict() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_missing_vault_text_and_strict");
     let home = temporary_root("home");
     let vault = home.join("nonexistent_vault");
     let _fix = TempFixture::new(vec![home.clone()]);
@@ -145,10 +167,12 @@ fn differential_doctor_missing_vault_text_and_strict() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_missing_vault_json() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_missing_vault_json");
     let home = temporary_root("home");
     let vault = home.join("nonexistent_vault");
     let _fix = TempFixture::new(vec![home.clone()]);
@@ -187,10 +211,12 @@ fn differential_doctor_missing_vault_json() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_filter_config_matches_nothing() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_filter_config_matches_nothing");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -240,10 +266,12 @@ fn differential_doctor_filter_config_matches_nothing() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_output_json_rejected() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_output_json_rejected");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -269,10 +297,12 @@ fn differential_doctor_output_json_rejected() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_initialized_vault_parity() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_initialized_vault_parity");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -339,10 +369,12 @@ fn differential_doctor_initialized_vault_parity() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_corrupted_identity_age() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_corrupted_identity_age");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -384,10 +416,12 @@ fn differential_doctor_corrupted_identity_age() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_exclude_filter() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_exclude_filter");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -448,10 +482,12 @@ fn differential_doctor_exclude_filter() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_fix_dry_run_and_apply() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_fix_dry_run_and_apply");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -496,10 +532,13 @@ fn differential_doctor_fix_dry_run_and_apply() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_initialized_vault_parity() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_new_checks_initialized_vault_parity");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -567,10 +606,12 @@ fn differential_doctor_new_checks_initialized_vault_parity() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_missing_vault() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_missing_vault");
     let home = temporary_root("home");
     let vault = home.join("nonexistent_vault");
     let _fix = TempFixture::new(vec![home.clone()]);
@@ -618,10 +659,12 @@ fn differential_doctor_new_checks_missing_vault() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_corrupt_config() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_corrupt_config");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -671,10 +714,13 @@ fn differential_doctor_new_checks_corrupt_config() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_multi_document_config_errors_match_go() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_multi_document_config_errors_match_go");
     let home = temporary_root("multi-document-config-home");
     let vault = temporary_root("multi-document-config-vault");
     let _fixture = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -725,10 +771,12 @@ fn differential_doctor_multi_document_config_errors_match_go() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_quick_filter() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_quick_filter");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -767,10 +815,12 @@ fn differential_doctor_new_checks_quick_filter() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_scrypt_benchmark_shape() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_scrypt_benchmark_shape");
     let home_go = temporary_root("scrypt-go-home");
     let home_rust = temporary_root("scrypt-rust-home");
     let vault_go = temporary_root("scrypt-go-vault");
@@ -835,10 +885,12 @@ fn differential_doctor_scrypt_benchmark_shape() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_no_network_filter() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_no_network_filter");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -926,35 +978,41 @@ fn start_mcp_health_server(
 }
 
 fn run_mcp_server_doctor(binary: &Path, vault: &Path, home: &Path) -> Output {
-    Command::new(binary)
-        .args([
-            "--vault",
-            vault.to_str().unwrap(),
-            "doctor",
-            "--only",
-            "mcp.server.reachable",
-            "--json",
-        ])
-        .env_clear()
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", vault)
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .env("NO_PROXY", "127.0.0.1,localhost")
-        .env("no_proxy", "127.0.0.1,localhost")
-        .output()
-        .expect("run local MCP server doctor check")
+    go_oracle::output(
+        Command::new(binary)
+            .args([
+                "--vault",
+                vault.to_str().unwrap(),
+                "doctor",
+                "--only",
+                "mcp.server.reachable",
+                "--json",
+            ])
+            .env_clear()
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", vault)
+            .env("CI", "1")
+            .env("NO_COLOR", "1")
+            .env("NO_PROXY", "127.0.0.1,localhost")
+            .env("no_proxy", "127.0.0.1,localhost"),
+    )
+    .expect("run local MCP server doctor check")
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_server_reachability_local_http_cases() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_server_reachability_local_http_cases");
+    // Replayed Go answers never reach the fixture server.
+    let expected_requests = if oracle.replaying() { 1 } else { 2 };
     for (name, status, token_file) in [
         ("reachable-no-token", Some(200), false),
         ("reachable-with-token", Some(200), true),
@@ -966,7 +1024,7 @@ fn differential_doctor_mcp_server_reachability_local_http_cases() {
         let _fixture = TempFixture::new(vec![home.clone(), vault.clone()]);
         let (port, server) = match status {
             Some(status) => {
-                let (port, server) = start_mcp_health_server(status, 2);
+                let (port, server) = start_mcp_health_server(status, expected_requests);
                 (port, Some(server))
             }
             None => {
@@ -976,6 +1034,7 @@ fn differential_doctor_mcp_server_reachability_local_http_cases() {
                 (port, None)
             }
         };
+        oracle.track_port(u16::try_from(port).expect("local port"));
         fs::write(vault.join("config.yaml"), format!("mcp:\n  port: {port}\n"))
             .expect("configure local MCP server port");
         if token_file {
@@ -1010,16 +1069,18 @@ fn differential_doctor_mcp_server_reachability_local_http_cases() {
         assert_eq!(go_result["id"], "mcp.server.reachable");
         if let Some(server) = server {
             let requests = server.join().expect("join local health fixture");
-            assert_eq!(requests, ["GET /health HTTP/1.1", "GET /health HTTP/1.1"]);
+            assert_eq!(requests, vec!["GET /health HTTP/1.1"; expected_requests]);
         }
     }
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_new_checks_exclude_filter() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_new_checks_exclude_filter");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -1067,10 +1128,12 @@ fn differential_doctor_new_checks_exclude_filter() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_recipients_recovery_invalid() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_recipients_recovery_invalid");
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -1113,10 +1176,12 @@ fn differential_doctor_recipients_recovery_invalid() {
 /// quotes a YAML parser error, so the documented go-yaml-vs-Rust dialect
 /// divergence does not apply here — any deviation is a real port defect.
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_session_tooling_checks() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_session_tooling_checks");
     let home = temporary_root("wave2a_home");
     let _fix = TempFixture::new(vec![home.clone()]);
 
@@ -1209,35 +1274,34 @@ fn run_mcp_tokens_doctor(
     if let Some(token) = env_token {
         command.env("SYMVAULT_MCP_TOKEN", token);
     }
-    command
-        .output()
-        .expect("run MCP token doctor check in isolated environment")
+    go_oracle::output(&mut command).expect("run MCP token doctor check in isolated environment")
 }
 
 fn run_mcp_approval_tls_doctor(binary: &Path, vault: &Path, home: &Path) -> Output {
-    Command::new(binary)
-        .args([
-            "--vault",
-            vault.to_str().unwrap(),
-            "doctor",
-            "--only",
-            "mcp.approval.tls",
-            "--json",
-            "--no-network",
-        ])
-        .env_clear()
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", vault)
-        .env("SYMVAULT_PASSPHRASE", "synthetic-doctor-fixture")
-        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run approval TLS doctor check in isolated environment")
+    go_oracle::output(
+        Command::new(binary)
+            .args([
+                "--vault",
+                vault.to_str().unwrap(),
+                "doctor",
+                "--only",
+                "mcp.approval.tls",
+                "--json",
+                "--no-network",
+            ])
+            .env_clear()
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", vault)
+            .env("SYMVAULT_PASSPHRASE", "synthetic-doctor-fixture")
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+            .env("CI", "1")
+            .env("NO_COLOR", "1"),
+    )
+    .expect("run approval TLS doctor check in isolated environment")
 }
 
 fn assert_migration_warning(output: &Output, id: &str) {
@@ -1312,10 +1376,13 @@ fn normalized_registry_bytes(bytes: &[u8], generated_hash: bool) -> Vec<u8> {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_tokens_existing_registry_is_read_only() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_tokens_existing_registry_is_read_only");
     let home = temporary_root("mcp-tokens-readonly-home");
     let go_vault = temporary_root("mcp-tokens-readonly-go-vault");
     let rust_vault = temporary_root("mcp-tokens-readonly-rust-vault");
@@ -1356,10 +1423,13 @@ fn differential_doctor_mcp_tokens_existing_registry_is_read_only() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_approval_tls_initializes_private_device_sessions() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_approval_tls_initializes_private_device_sessions");
     let home = temporary_root("mcp-approval-tls-home");
     let go_vault = temporary_root("mcp-approval-tls-go-vault");
     let rust_vault = temporary_root("mcp-approval-tls-rust-vault");
@@ -1390,12 +1460,16 @@ fn differential_doctor_mcp_approval_tls_initializes_private_device_sessions() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_write_access() {
     use std::os::unix::fs::PermissionsExt;
 
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries(
+        "differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_write_access",
+    );
     let home = temporary_root("mcp-approval-tls-readonly-home");
     let go_vault = temporary_root("mcp-approval-tls-readonly-go-vault");
     let rust_vault = temporary_root("mcp-approval-tls-readonly-rust-vault");
@@ -1426,10 +1500,14 @@ fn differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_writ
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_expiry() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries(
+        "differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_expiry",
+    );
     let home = temporary_root("mcp-approval-tls-legacy-home");
     let go_vault = temporary_root("mcp-approval-tls-legacy-go-vault");
     let rust_vault = temporary_root("mcp-approval-tls-legacy-rust-vault");
@@ -1503,12 +1581,15 @@ fn differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_exp
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn doctor_mcp_approval_tls_refuses_symlinked_store_parent() {
     use std::os::unix::fs::symlink;
 
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("doctor_mcp_approval_tls_refuses_symlinked_store_parent");
     let home = temporary_root("mcp-approval-tls-symlink-home");
     let go_vault = temporary_root("mcp-approval-tls-symlink-go-vault");
     let rust_vault = temporary_root("mcp-approval-tls-symlink-rust-vault");
@@ -1564,10 +1645,13 @@ fn doctor_mcp_approval_tls_refuses_symlinked_store_parent() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go");
     let home = temporary_root("mcp-approval-tls-malformed-expiry-home");
     let go_vault = temporary_root("mcp-approval-tls-malformed-expiry-go-vault");
     let rust_vault = temporary_root("mcp-approval-tls-malformed-expiry-rust-vault");
@@ -1615,10 +1699,14 @@ fn differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries(
+        "differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy",
+    );
     let home = temporary_root("mcp-tokens-corrupt-home");
     let go_vault = temporary_root("mcp-tokens-corrupt-go-vault");
     let rust_vault = temporary_root("mcp-tokens-corrupt-rust-vault");
@@ -1664,10 +1752,13 @@ fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_leg
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_tokens_empty_environment_value_creates_registry() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_tokens_empty_environment_value_creates_registry");
     for (case, env_token, migrated) in [
         ("empty", "", true),
         ("nonempty", "synthetic-environment-token", false),
@@ -1715,12 +1806,15 @@ fn differential_doctor_mcp_tokens_empty_environment_value_creates_registry() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure() {
     use std::os::unix::fs::symlink;
 
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure");
     let home = temporary_root("mcp-tokens-symlink-home");
     let go_vault = temporary_root("mcp-tokens-symlink-go-vault");
     let rust_vault = temporary_root("mcp-tokens-symlink-rust-vault");
@@ -1771,10 +1865,13 @@ fn differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases");
     for (case, legacy, env_token) in [
         (
             "existing-legacy",
@@ -1888,10 +1985,13 @@ fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_auth_method_touchid_availability() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_doctor_auth_method_touchid_availability");
     let home = temporary_root("touchid-home");
     let vault = temporary_root("touchid-vault");
     let _fixture = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -1906,10 +2006,12 @@ fn differential_doctor_auth_method_touchid_availability() {
 /// case is excluded here by design: both IDs quote the config-loader error, which
 /// is the documented go-yaml-vs-Rust dialect divergence.
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_mcp_config_checks() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_doctor_mcp_config_checks");
     const IDS: &str = "mcp.dynamic.engines,mcp.agents";
 
     let home = temporary_root("wave2b_home");

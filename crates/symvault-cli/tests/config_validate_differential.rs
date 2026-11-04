@@ -1,5 +1,7 @@
 #![deny(unsafe_code)]
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
@@ -20,14 +22,15 @@ impl TempDir {
 }
 
 fn run(binary: &Path, home: &Path, args: &[&str]) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run command")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("CI", "1")
+            .env("NO_COLOR", "1"),
+    )
+    .expect("run command")
 }
 
 fn assert_same(go: &Output, rust: &Output, case: &str) {
@@ -55,12 +58,17 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn config_validate_matches_go_contract() {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "config_validate_differential",
+        "config_validate_matches_go_contract",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("home");
 
@@ -157,12 +165,17 @@ fn config_validate_matches_go_contract() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn config_inspect_cleans_read_paths_but_preserves_set_target() {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "config_validate_differential",
+        "config_inspect_cleans_read_paths_but_preserves_set_target",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("inspect-path");
     let valid = home.0.join("valid.yaml");

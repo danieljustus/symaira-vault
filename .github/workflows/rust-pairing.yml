@@ -151,98 +151,46 @@ jobs:
           test "$(go env GOVERSION)" = "go1.26.10"
           test "$(rustc --version | awk '{print $2}')" = "1.98.0"
 
-      - name: Run stateful CLI differential against Go v0.22.1
+      # The four differentials below replay the committed Go transcripts
+      # (testdata/port/cli-transcripts, recorded from the pinned Go oracles by
+      # `make config-cli-capture`); no Go oracle is built or reachable here.
+      # Tests whose recording is darwin-only are visibly ignored on Linux.
+      - name: Replay stateful CLI differential (recorded Go transcript)
         shell: bash
-        env:
-          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
-          test "$(go env GOVERSION)" = "go1.26.6"
-          oracle_tag_commit="$(git rev-parse 'refs/tags/v0.22.1^{commit}')"
-          test "$oracle_tag_commit" = "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
-
-          temp_root="$RUNNER_TEMP"
-          executable_suffix=
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            temp_root="$(cygpath -u "$RUNNER_TEMP")"
-            executable_suffix=.exe
-          fi
-          oracle_source="$temp_root/symvault-go-v0.22.1-source"
-          oracle_binary="$temp_root/symvault-go-v0.22.1$executable_suffix"
-
-          git worktree add --detach "$oracle_source" refs/tags/v0.22.1
-          test "$(git -C "$oracle_source" rev-parse HEAD)" = "$oracle_tag_commit"
-          GOWORK=off go -C "$oracle_source" build -o "$oracle_binary" .
-          test -f "$oracle_binary"
-          export SYMVAULT_GO_BINARY="$oracle_binary"
-          test -f "$SYMVAULT_GO_BINARY"
-          cargo test -p symvault-cli --test cli_differential --locked \
+          env -u SYMVAULT_GO_BINARY -u SYMVAULT_ORACLE \
+            cargo test -p symvault-cli --test cli_differential --locked \
             init_list_get_match_go_cli_on_a_disposable_vault -- --exact
 
-      - name: Run import quarantine differential against pinned Go CLI
+      - name: Replay import quarantine differential (recorded Go transcript)
         shell: bash
-        env:
-          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
-          test "$(go env GOVERSION)" = "go1.26.6"
-          cli_oracle_commit="$(git rev-parse '3232e31f^{commit}')"
-          test "$cli_oracle_commit" = "3232e31fb91362b6e6202774f7e95f6d477305d2"
-
-          temp_root="$RUNNER_TEMP"
-          executable_suffix=
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            temp_root="$(cygpath -u "$RUNNER_TEMP")"
-            executable_suffix=.exe
-          fi
-          oracle_source="$temp_root/symvault-go-cli-3232e31f-source"
-          oracle_binary="$temp_root/symvault-go-cli-3232e31f$executable_suffix"
-
-          git worktree add --detach "$oracle_source" "$cli_oracle_commit"
-          test "$(git -C "$oracle_source" rev-parse HEAD)" = "$cli_oracle_commit"
-          GOWORK=off go -C "$oracle_source" build -o "$oracle_binary" .
-          export SYMVAULT_GO_BINARY="$oracle_binary"
-          cargo test -p symvault-cli --test cli_differential --locked \
+          env -u SYMVAULT_GO_BINARY -u SYMVAULT_ORACLE \
+            cargo test -p symvault-cli --test cli_differential --locked \
             import_quarantine_matches_pinned_go_cli_batch_contract -- --exact
 
-      - name: Run auth root-trust differential against the current Go oracle
+      - name: Replay auth root-trust differential (recorded Go transcript)
         shell: bash
         run: |
           set -euo pipefail
-          temp_root="$RUNNER_TEMP"
-          executable_suffix=
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            temp_root="$(cygpath -u "$RUNNER_TEMP")"
-            executable_suffix=.exe
-          fi
-          oracle_binary="$temp_root/symvault-go-auth$executable_suffix"
-          GOWORK=off go build -o "$oracle_binary" .
-          test -f "$oracle_binary"
-          export SYMVAULT_GO_BINARY="$oracle_binary"
-          cargo test -p symvault-cli --test auth_differential auth_rotate --locked
+          env -u SYMVAULT_GO_BINARY -u SYMVAULT_ORACLE \
+            cargo test -p symvault-cli --test auth_differential auth_rotate --locked
 
-      - name: Run startup-profile differential against pinned Go source
+      - name: Replay startup-profile differential (recorded Go transcript)
         shell: bash
         run: |
           set -euo pipefail
           oracle_commit=ecaf4d0c64bcd21138468080f93f7ea097d7803a
           git merge-base --is-ancestor "$oracle_commit" HEAD
-          git diff --quiet "$oracle_commit" HEAD -- cmd/admin/startup_profile.go
-          temp_root="$RUNNER_TEMP"
-          executable_suffix=
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            temp_root="$(cygpath -u "$RUNNER_TEMP")"
-            executable_suffix=.exe
-          fi
-          oracle_binary="$temp_root/symvault-go-auth$executable_suffix"
-          test -f "$oracle_binary"
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            native_binary="$(cygpath -w "$oracle_binary")"
-            export SYMVAULT_GO_BINARY="$native_binary"
+          if git cat-file -e HEAD:cmd/admin/startup_profile.go 2>/dev/null; then
+            git diff --quiet "$oracle_commit" HEAD -- cmd/admin/startup_profile.go
           else
-            export SYMVAULT_GO_BINARY="$oracle_binary"
+            echo "NOTE: cmd/admin/startup_profile.go is gone; the committed transcript is the frozen record"
           fi
-          cargo test -p symvault-cli --test startup_profile_differential --locked
+          env -u SYMVAULT_GO_BINARY -u SYMVAULT_ORACLE \
+            cargo test -p symvault-cli --test startup_profile_differential --locked
 
       - name: Run config profile differential against the pinned Go oracle
         shell: bash

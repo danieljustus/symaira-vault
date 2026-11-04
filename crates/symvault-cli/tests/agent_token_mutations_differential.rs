@@ -1,11 +1,14 @@
 //! Go-vs-Rust differential for `agent token new|revoke|rotate`.
 //!
-//! Patterned on `agent_token_differential.rs`: skips cleanly when
-//! `SYMVAULT_GO_BINARY` is unset (it is not set in this worktree). Raw
+//! Patterned on `agent_token_differential.rs`: the Go side replays from the
+//! committed transcript (`go_oracle`). Raw
 //! token bytes are nondeterministic by design, so each case normalizes them
 //! out before comparing; the registry file's shape (everything except the
 //! hash/prefix/id/timestamps a fresh run cannot reproduce) is checked
 //! structurally instead of byte-for-byte.
+
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 
 use std::{
     env, fs,
@@ -14,17 +17,18 @@ use std::{
 };
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", root)
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .unwrap_or_else(|error| panic!("run {binary:?} {args:?}: {error}"))
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", root)
+            .env("CI", "1")
+            .env("NO_COLOR", "1"),
+    )
+    .unwrap_or_else(|error| panic!("run {binary:?} {args:?}: {error}"))
 }
 
 /// Strips the fields that legitimately differ between two independent runs
@@ -77,12 +81,18 @@ fn home_dir() -> tempfile::TempDir {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_token_new_matches_go_summary_shape_and_exit_code() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_token_mutations_differential",
+        "agent_token_new_matches_go_summary_shape_and_exit_code",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    oracle.stable_under(|bytes| normalized_summary(bytes).into_bytes());
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
     for args in [
@@ -109,12 +119,18 @@ fn agent_token_new_matches_go_summary_shape_and_exit_code() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_token_revoke_matches_go_not_found_and_success_text() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_token_mutations_differential",
+        "agent_token_revoke_matches_go_not_found_and_success_text",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    oracle.stable_under(|bytes| normalized_summary(bytes).into_bytes());
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
     let go_root = tempfile::tempdir().expect("go vault root");
@@ -174,12 +190,18 @@ fn agent_token_revoke_matches_go_not_found_and_success_text() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_token_rotate_matches_go_summary_shape_for_unknown_and_existing_agent() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_token_mutations_differential",
+        "agent_token_rotate_matches_go_summary_shape_for_unknown_and_existing_agent",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    oracle.stable_under(|bytes| normalized_summary(bytes).into_bytes());
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
     let go_root = tempfile::tempdir().expect("go vault root");

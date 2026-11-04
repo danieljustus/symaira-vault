@@ -33,6 +33,22 @@ impl TempRoot {
         }
     }
 
+    /// Like [`existing`], but allocated below `base` instead of `TMPDIR`.
+    pub fn existing_in(base: &Path, prefix: &str) -> Self {
+        let guard = Arc::new(
+            tempfile::Builder::new()
+                .prefix(prefix)
+                .tempdir_in(base)
+                .expect("allocate unique temporary parent"),
+        );
+        let path = guard.path().join("root");
+        fs::create_dir_all(&path).expect("create temporary root");
+        Self {
+            _guard: guard,
+            path,
+        }
+    }
+
     pub fn existing(prefix: &str) -> Self {
         let root = Self::missing(prefix);
         fs::create_dir_all(&root.path).expect("create temporary root");

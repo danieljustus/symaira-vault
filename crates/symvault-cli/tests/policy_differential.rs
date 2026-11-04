@@ -1,10 +1,12 @@
 #![deny(unsafe_code)]
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -20,18 +22,19 @@ impl TempDir {
 }
 
 fn run(binary: &Path, home: &Path, args: &[&str]) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("CI", "1")
-        .env("SYMVAULT_TEST_KEYRING", "memory")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run policy CLI")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("CI", "1")
+            .env("SYMVAULT_TEST_KEYRING", "memory")
+            .env("NO_COLOR", "1"),
+    )
+    .expect("run policy CLI")
 }
 
 fn assert_same(go: &Output, rust: &Output, case: &str) {
@@ -41,12 +44,17 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn policy_validate_and_list_match_go() {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "policy_differential",
+        "policy_validate_and_list_match_go",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("home");
     let fixture = TempDir::new("fixture");

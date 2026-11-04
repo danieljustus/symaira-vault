@@ -1,3 +1,5 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
@@ -12,15 +14,16 @@ fn temporary_root(name: &str) -> test_temp_root::TempRoot {
 }
 
 fn run(binary: &Path, args: &[&str], home: &Path) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("CI", "1")
-        .output()
-        .expect("run CLI")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("CI", "1"),
+    )
+    .expect("run CLI")
 }
 
 fn assert_success(output: &Output, command: &str) {
@@ -41,12 +44,17 @@ fn assert_same(go: &Output, rust: &Output, command: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "profile_differential",
+        "profile_list_matches_go_for_empty_and_go_generated_profile_config",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
 
     let empty_home = temporary_root("empty");
@@ -201,10 +209,7 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
 #[cfg(unix)]
 #[test]
 fn profile_add_keeps_symlink_destination_and_target_unchanged() {
-    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
-        eprintln!("skipping Rust profile safety test: Rust binary is not set");
-        return;
-    };
+    let rust_binary = std::ffi::OsString::from(env!("CARGO_BIN_EXE_symvault"));
     use std::os::unix::fs::symlink;
 
     let home = temporary_root("symlink");
@@ -236,10 +241,7 @@ fn profile_add_keeps_symlink_destination_and_target_unchanged() {
 #[cfg(unix)]
 #[test]
 fn profile_add_keeps_invalid_existing_config_unchanged() {
-    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
-        eprintln!("skipping Rust profile safety test: Rust binary is not set");
-        return;
-    };
+    let rust_binary = std::ffi::OsString::from(env!("CARGO_BIN_EXE_symvault"));
     let home = temporary_root("invalid");
     let config = home.join(".symvault/config.yaml");
     fs::create_dir_all(config.parent().expect("legacy parent")).expect("legacy directory");

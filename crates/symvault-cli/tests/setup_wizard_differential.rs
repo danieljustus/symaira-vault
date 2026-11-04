@@ -40,14 +40,16 @@
 //!
 //! Modes
 //!
-//! * `native_matches_live_go_oracle` (needs `SYMVAULT_GO_BINARY`): runs every
-//!   scenario against Go and Rust and compares; it also compares the live Go
-//!   result with `testdata/port/cli/setup-wizard/go-results.json`. When the
-//!   variable is set nothing is skipped: a missing binary, a short scenario
-//!   count or an unreached screen fails.
-//! * `native_matches_recorded_go_results` (no Go needed, macOS): replays Rust
-//!   against the recorded normalized Go results; Go-initialized vaults come
-//!   from the recorded `vault_seed`.
+//! * `native_matches_recorded_go_results` (no Go needed; the default and the
+//!   `make setup-wizard-differential` gate): replays Rust against the recorded
+//!   normalized Go results of `testdata/port/cli/setup-wizard/go-results.json`;
+//!   Go-initialized vaults come from the recorded `vault_seed`. The recording
+//!   was made on darwin, so the test is `ignore`d (visibly) on other hosts.
+//! * `native_matches_live_go_oracle` (ignored; capture side, needs
+//!   `SYMVAULT_GO_BINARY`): runs every scenario against Go and Rust and
+//!   compares; it also compares the live Go result with the recording. A
+//!   missing binary, a short scenario count or an unreached screen fails.
+//!   Run by `make setup-wizard-capture`.
 //! * `record_go_results` (ignored): rewrites the recording from the live Go
 //!   oracle. Needs `SYMVAULT_GO_ORACLE_COMMIT` and `SYMVAULT_GO_ORACLE_BUILD`.
 //! * driver and comparator self-tests (no Go): PTY capture, signals, timeouts,
@@ -1884,14 +1886,15 @@ fn capture_seed(vault: &Path, roots: &Roots) -> Vec<SeedFile> {
 
 // -------------------------------------------------------------- driver ----
 
-fn oracle_path() -> Option<PathBuf> {
-    let go = PathBuf::from(env::var_os("SYMVAULT_GO_BINARY")?);
-    assert!(
-        go.is_file(),
-        "SYMVAULT_GO_BINARY is set but {} is not a file",
-        go.display()
+/// The live oracle for the capture-side tests; they are `ignore`d by default,
+/// so asking for them without the binary is an error, never a silent pass.
+fn oracle_path() -> PathBuf {
+    let go = PathBuf::from(
+        env::var_os("SYMVAULT_GO_BINARY")
+            .expect("SYMVAULT_GO_BINARY is required by the capture-side wizard tests"),
     );
-    Some(go)
+    assert!(go.is_file(), "{} is not a file", go.display());
+    go
 }
 
 fn rust_binary() -> PathBuf {
@@ -2098,23 +2101,24 @@ fn assert_recording_shape(recording: &Recording) {
 }
 
 fn report(label: &str, diffs: &[String], executed: usize) {
-    eprintln!(
+    use io::Write as _;
+    // Written to the real stderr so a passing run still shows the case count.
+    let _ = writeln!(
+        io::stderr(),
         "setup wizard differential ({label}): {executed} scenarios executed, {} differences",
         diffs.len()
     );
     for diff in diffs {
-        eprintln!("  DIFF {diff}");
+        let _ = writeln!(io::stderr(), "  DIFF {diff}");
     }
 }
 
 // --------------------------------------------------------------- tests ----
 
 #[test]
+#[ignore = "capture side: needs the pinned Go oracle (make setup-wizard-capture)"]
 fn native_matches_live_go_oracle() {
-    let Some(go) = oracle_path() else {
-        eprintln!("skipping live Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
+    let go = oracle_path();
     let rust = rust_binary();
     let go_results = run_all(&go, Some(&go), Some(&go), &[]);
     let rust_results = run_all(&rust, Some(&go), Some(&go), &[]);
@@ -2174,11 +2178,11 @@ fn native_matches_live_go_oracle() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "the recording was made on darwin; the replay is verified on macOS only"
+)]
 fn native_matches_recorded_go_results() {
-    if !cfg!(target_os = "macos") {
-        eprintln!("skipping recorded replay: the recording was made on darwin");
-        return;
-    }
     let recording = load_recording();
     assert_recording_shape(&recording);
     let rust = rust_binary();
@@ -2215,7 +2219,7 @@ fn native_matches_recorded_go_results() {
 #[test]
 #[ignore = "rewrites testdata/port/cli/setup-wizard/go-results.json"]
 fn record_go_results() {
-    let go = oracle_path().expect("SYMVAULT_GO_BINARY");
+    let go = oracle_path();
     let commit = env::var("SYMVAULT_GO_ORACLE_COMMIT").expect("SYMVAULT_GO_ORACLE_COMMIT");
     assert!(
         commit.len() == 40 && commit.bytes().all(is_hex),

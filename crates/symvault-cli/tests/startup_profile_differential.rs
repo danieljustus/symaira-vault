@@ -3,9 +3,9 @@
 //! Go↔Rust differential for `symvault startup-profile`.
 //!
 //! `startup_profile.rs` pins the Rust-side behaviour and does not invoke Go;
-//! this file is the oracle-bound half. The oracle comes from
-//! `SYMVAULT_GO_BINARY` (exported by the port-contract gate) and the whole
-//! suite skips when it is unset, mirroring `doctor_differential.rs`.
+//! this file is the oracle-bound half. Go answers are replayed from
+//! `testdata/port/cli-transcripts/startup_profile_differential.json` (see
+//! `common/go_oracle.rs`); a missing recording fails the test.
 //!
 //! Documented divergences that are intentional and therefore asserted per
 //! side instead of compared for equality:
@@ -22,6 +22,9 @@
 //!   CLI-wide normalization present in every ported command (verified equal in
 //!   shape against `doctor --badflag`); only the exit code is compared.
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -31,19 +34,27 @@ use std::{
 
 const BINARY: &str = env!("CARGO_BIN_EXE_symvault");
 
-/// Returns `(go_binary, rust_binary)` or skips the suite when the gate did
-/// not export the oracle.
-fn oracle_binaries() -> Option<(PathBuf, PathBuf)> {
-    let raw = env::var_os("SYMVAULT_GO_BINARY")?;
-    let candidate = PathBuf::from(&raw);
-    if candidate.is_file() {
-        return Some((candidate, PathBuf::from(BINARY)));
+/// Oracle revision: the Go sources at the commit that still carried them
+/// (`startup_profile.go` is source-pinned to ecaf4d0c by the pairing gate).
+const ORACLE_COMMIT: &str = "c069d3f2b17d704525cedc1bd42840cc6a3e9896";
+
+/// Per-invocation values that a recapture may legitimately change: benchmark
+/// durations and the child-marker nanosecond count.
+fn stable_report(bytes: &[u8]) -> Vec<u8> {
+    let text = String::from_utf8_lossy(bytes);
+    if !text.trim().is_empty() && text.trim().bytes().all(|b| b.is_ascii_digit()) {
+        return b"<nanos>".to_vec();
     }
-    println!(
-        "skipping startup-profile differential: SYMVAULT_GO_BINARY is not a file: {:?}",
-        candidate
-    );
-    None
+    normalize_report(&text).into_bytes()
+}
+
+/// Returns `(oracle session, go_binary, rust_binary)`.
+fn oracle_binaries(test: &str) -> (go_oracle::GoOracle, PathBuf, PathBuf) {
+    let oracle =
+        go_oracle::GoOracle::begin("startup_profile_differential", test, Some(ORACLE_COMMIT));
+    oracle.stable_under(stable_report);
+    let go = oracle.binary();
+    (oracle, go, PathBuf::from(BINARY))
 }
 
 /// Fresh HOME/XDG tree per case; removed on drop.
@@ -95,7 +106,7 @@ fn run(binary: &Path, args: &[&str], home: &Path, child_marker: bool) -> Output 
     if child_marker {
         command.env("SYMVAULT_STARTUP_PROFILE_CHILD", "1");
     }
-    command.output().expect("run binary")
+    go_oracle::output(&mut command).expect("run binary")
 }
 
 /// Maps the two honest runtime-specific adaptations onto shared tokens so the
@@ -158,9 +169,8 @@ fn stderr_text(output: &Output) -> String {
 
 #[test]
 fn differential_report_matches_after_normalizing_runtime_specific_lines() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_report_matches_after_normalizing_runtime_specific_lines");
     let fixture = TempFixture::new("report");
     let args = ["startup-profile", "--count", "1"];
 
@@ -207,9 +217,8 @@ fn differential_report_matches_after_normalizing_runtime_specific_lines() {
 
 #[test]
 fn differential_unsupported_json_error_is_byte_identical() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_unsupported_json_error_is_byte_identical");
     let fixture = TempFixture::new("json");
     let cases: &[&[&str]] = &[
         &["startup-profile", "--json"],
@@ -245,9 +254,7 @@ fn differential_unsupported_json_error_is_byte_identical() {
 
 #[test]
 fn differential_count_clamping_matches() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_count_clamping_matches");
     let fixture = TempFixture::new("count");
     let cases: &[&[&str]] = &[
         &["startup-profile", "--count", "0"],
@@ -276,9 +283,8 @@ fn differential_count_clamping_matches() {
 
 #[test]
 fn differential_positional_and_empty_trace_are_accepted_on_both() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_positional_and_empty_trace_are_accepted_on_both");
     let fixture = TempFixture::new("accepted");
     let cases: &[&[&str]] = &[
         &["startup-profile", "extra-positional", "-n", "1"],
@@ -303,9 +309,8 @@ fn differential_positional_and_empty_trace_are_accepted_on_both() {
 
 #[test]
 fn differential_missing_and_broken_config_still_benchmark() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_missing_and_broken_config_still_benchmark");
     // Missing config: fresh HOME with no ~/.symvault at all.
     let missing = TempFixture::new("missing-config");
     let args = ["startup-profile", "--count", "1"];
@@ -333,9 +338,8 @@ fn differential_missing_and_broken_config_still_benchmark() {
 
 #[test]
 fn differential_trace_with_unusable_path_exits_one_on_both() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) =
+        oracle_binaries("differential_trace_with_unusable_path_exits_one_on_both");
     let fixture = TempFixture::new("trace");
     // A directory: Go cannot create the trace file, Rust refuses outright.
     // Message text differs by design (capability gap); exit code and doubled
@@ -370,9 +374,7 @@ fn differential_trace_with_unusable_path_exits_one_on_both() {
 
 #[test]
 fn differential_unknown_flag_exits_one_on_both() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_unknown_flag_exits_one_on_both");
     let fixture = TempFixture::new("badflag");
     let args = ["startup-profile", "--definitely-not-a-flag"];
     let go_out = run(&go, &args, &fixture.home, false);
@@ -389,9 +391,7 @@ fn differential_unknown_flag_exits_one_on_both() {
 
 #[test]
 fn differential_child_marker_reports_integer_on_both() {
-    let Some((go, rust)) = oracle_binaries() else {
-        return;
-    };
+    let (_oracle, go, rust) = oracle_binaries("differential_child_marker_reports_integer_on_both");
     let fixture = TempFixture::new("marker");
     let args = ["startup-profile"];
     let go_out = run(&go, &args, &fixture.home, true);

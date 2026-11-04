@@ -1,0 +1,420 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "config_inspect_cleans_read_paths_but_preserves_set_target": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "43a71a5ffb453ef8f23bd1f1c9b91de4f00500fe0678dd7f48c4dba7c0a5e336",
+          "request": {
+            "args": [
+              "config",
+              "get",
+              "vaultDir",
+              "--file",
+              "<ROOT:0>/root/missing/../valid.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "/fixture/vault\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a6c9230db086c95db29c540a38b9c4f1bf3d57f32b244703e4175c6e527588dc",
+          "request": {
+            "args": [
+              "config",
+              "list",
+              "--file",
+              "<ROOT:0>/root/missing/../valid.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "vaultDir: /fixture/vault\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "85160a93e35646616a930ca90bbe91e051ef41233a853c1e95947539d2a8d23f",
+          "request": {
+            "args": [
+              "config",
+              "set",
+              "vaultDir",
+              "/updated",
+              "--file",
+              "<ROOT:0>/root/missing/../valid.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: cannot write config: rename <ROOT:0>/root/valid.yaml.tmp-2857305034 <ROOT:0>/root/missing/../valid.yaml: no such file or directory: rename <ROOT:0>/root/valid.yaml.tmp-2857305034 <ROOT:0>/root/missing/../valid.yaml: no such file or directory\nError: cannot write config: rename <ROOT:0>/root/valid.yaml.tmp-2857305034 <ROOT:0>/root/missing/../valid.yaml: no such file or directory: rename <ROOT:0>/root/valid.yaml.tmp-2857305034 <ROOT:0>/root/missing/../valid.yaml: no such file or directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+            },
+            "exit_code": 6,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "config_validate_matches_go_contract": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "d8fd4e3121428ddc8a950cb14dc0f5ccbc1181a739ea08078260045e2c760068",
+          "request": {
+            "args": [
+              "config",
+              "validate",
+              "<ROOT:0>/root/missing.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: cannot load config from <ROOT:0>/root/missing.yaml: open <ROOT:0>/root/missing.yaml: no such file or directory: open <ROOT:0>/root/missing.yaml: no such file or directory\nError: cannot load config from <ROOT:0>/root/missing.yaml: open <ROOT:0>/root/missing.yaml: no such file or directory: open <ROOT:0>/root/missing.yaml: no such file or directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+            },
+            "exit_code": 6,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a255e42ca2c10510508faedc8f2ec351a1d4644e01e95ac559b0b968458b9a9a",
+          "request": {
+            "args": [
+              "config",
+              "validate",
+              "<ROOT:0>/root/missing.yaml",
+              "--fix"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: cannot load config from <ROOT:0>/root/missing.yaml: open <ROOT:0>/root/missing.yaml: no such file or directory: open <ROOT:0>/root/missing.yaml: no such file or directory\nError: cannot load config from <ROOT:0>/root/missing.yaml: open <ROOT:0>/root/missing.yaml: no such file or directory: open <ROOT:0>/root/missing.yaml: no such file or directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+            },
+            "exit_code": 6,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f2aa33558487138a2a47eb54973b342cf6b0442c20ab5e2fa02eec444567a56f",
+          "request": {
+            "args": [
+              "config",
+              "validate",
+              "<ROOT:0>/root/missing.yaml",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"error\":\"open <ROOT:0>/root/missing.yaml: no such file or directory\",\"valid\":false}\n"
+            },
+            "stderr": {
+              "text": "Error: config load failed: open <ROOT:0>/root/missing.yaml: no such file or directory\nError: config load failed: open <ROOT:0>/root/missing.yaml: no such file or directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+            },
+            "exit_code": 6,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e373d10d5c9075d85f8bbd08c8de6186d5e4e7482296a248275e4b783659d0d1",
+          "request": {
+            "args": [
+              "config",
+              "validate",
+              "<ROOT:0>/root/valid.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Configuration is valid (<ROOT:0>/root/valid.yaml)\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e19072bfdf06045f2062e5a620a31d1a359e457046b9ce6c0ac4f10819004fda",
+          "request": {
+            "args": [
+              "config",
+              "validate",
+              "<ROOT:0>/root/valid.yaml",
+              "--fix"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Configuration is valid (<ROOT:0>/root/valid.yaml)\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0c05861bf9127c6444ddc59e5725a5a7613517b8cd84594c2ae0f3545b77e9b2",
+          "request": {
+            "args": [
+              "config",
+              "validate",
+              "<ROOT:0>/root/missing/../valid.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: cannot load config from <ROOT:0>/root/missing/../valid.yaml: config file path escapes expected directory: config file path escapes expected directory\nError: cannot load config from <ROOT:0>/root/missing/../valid.yaml: config file path escapes expected directory: config file path escapes expected directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+            },
+            "exit_code": 6,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "893e3417fba9bcfbf09d7e47e5f856c896c5f3a13bedfad8faf06befd9f0e616",
+          "request": {
+            "args": [
+              "config",
+              "validate",
+              "<ROOT:0>/root/missing/../valid.yaml",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"error\":\"config file path escapes expected directory\",\"valid\":false}\n"
+            },
+            "stderr": {
+              "text": "Error: config load failed: config file path escapes expected directory\nError: config load failed: config file path escapes expected directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+            },
+            "exit_code": 6,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9057103b17f529e06bd55c1e76e8126c3403aae25a0f9dd4bac4c419435bfe81",
+          "request": {
+            "args": [
+              "config",
+              "validate",
+              ".",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"error\":\"read .: is a directory\",\"valid\":false}\n"
+            },
+            "stderr": {
+              "text": "Error: config load failed: read .: is a directory\nError: config load failed: read .: is a directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+            },
+            "exit_code": 6,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f793ed69f4b215844660675e48c100aec2ce6e311a327f0d5ee773ff137993a5",
+          "request": {
+            "args": [
+              "config",
+              "validate",
+              "<ROOT:0>/root/valid.yaml",
+              "--output",
+              "json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"path\":\"<ROOT:0>/root/valid.yaml\",\"valid\":true}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "685076d153cab5307711e6048ef59fa47b749e4ecd094a0bd48c452a641a30ce",
+          "request": {
+            "args": [
+              "--quiet",
+              "config",
+              "validate",
+              "<ROOT:0>/root/valid.yaml"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

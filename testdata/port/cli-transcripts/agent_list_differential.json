@@ -1,0 +1,684 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "agent_list_matches_go_text_json_and_yaml": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "7bb6120fb12eab470ab43323b2f7dc687a2c677a9d32a8273e00330de88ca2c6",
+          "request": {
+            "args": [
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "AGENT          TIER       TOKEN      SKILL        LAST SEEN\n----------------------------------------------------------------------\nalpha          standard   valid      managed      2025-02-03 04:05\nclaude-code               none       missing      -\ncodex                     none       missing      -\ndefault                   none       missing      -\nhermes                    none       missing      -\nopenclaw                  none       missing      -\nopencode                  none       missing      -\nzeta           custom     none       installed    -\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "91503dcff50d900555aa899946aaf3b59e4f4def8d62ac01dce1735278e704ed",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_id\":\"tok-alpha\",\"token_valid\":true,\"skill_installed\":true,\"skill_managed\":true,\"last_seen\":\"2025-02-03 04:05\"},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"zeta\",\"tier\":\"custom\",\"token_valid\":false,\"skill_installed\":true,\"skill_managed\":false}],\"count\":8}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "fc916fa17fd2d98973040253e137607f06b1a37004da59a6173b6e3709baa063",
+          "request": {
+            "args": [
+              "--output",
+              "yaml",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "agents:\n    - name: alpha\n      tier: standard\n      tokenid: tok-alpha\n      tokenvalid: true\n      skillinstalled: true\n      skillmanaged: true\n      lastseen: 2025-02-03 04:05\n    - name: claude-code\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: codex\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: default\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: hermes\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: openclaw\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: opencode\n      tier: \"\"\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: false\n      skillmanaged: false\n      lastseen: \"\"\n    - name: zeta\n      tier: custom\n      tokenid: \"\"\n      tokenvalid: false\n      skillinstalled: true\n      skillmanaged: false\n      lastseen: \"\"\ncount: 8\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c27113a3b775b8b38dd42606059adaf8eb784165c01f854b2a8bdd25ad1dae50",
+          "request": {
+            "args": [
+              "--output",
+              "future",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "AGENT          TIER       TOKEN      SKILL        LAST SEEN\n----------------------------------------------------------------------\nalpha          standard   valid      managed      2025-02-03 04:05\nclaude-code               none       missing      -\ncodex                     none       missing      -\ndefault                   none       missing      -\nhermes                    none       missing      -\nopenclaw                  none       missing      -\nopencode                  none       missing      -\nzeta           custom     none       installed    -\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
+    "agent_list_registry_decoding_follows_go_encoding_json": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "91503dcff50d900555aa899946aaf3b59e4f4def8d62ac01dce1735278e704ed",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:0>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/config",
+              "XDG_DATA_HOME": "<ROOT:0>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_id\":\"tok-a\",\"token_valid\":true,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "648e1596bfd3ad6df08beb943a396dd372cd5b0ccb520f3bb98ef50517a37ef5",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:2>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:3>",
+              "XDG_CACHE_HOME": "<ROOT:2>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:2>/config",
+              "XDG_DATA_HOME": "<ROOT:2>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8dbaae5c46cebbc5926d1c8abbd8926b2bc3346e43ce2a4b7ac4e362a9cb6512",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:4>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:5>",
+              "XDG_CACHE_HOME": "<ROOT:4>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:4>/config",
+              "XDG_DATA_HOME": "<ROOT:4>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "84102a234cafa52328c3a4230f59beb467e972350ad407b7b99d90d8b33f43f2",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:6>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:7>",
+              "XDG_CACHE_HOME": "<ROOT:6>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:6>/config",
+              "XDG_DATA_HOME": "<ROOT:6>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c32a30999fe78a4de966c1bf1019aef39ca7ff1981ab2f6e20bfe84a47728aa1",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:8>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:9>",
+              "XDG_CACHE_HOME": "<ROOT:8>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:8>/config",
+              "XDG_DATA_HOME": "<ROOT:8>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_id\":\"tok-a\",\"token_valid\":true,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3c10df89bb5df51f345fa28217fbfa0ca7357642cf4a6180f9927d21b3966c81",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:10>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:11>",
+              "XDG_CACHE_HOME": "<ROOT:10>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:10>/config",
+              "XDG_DATA_HOME": "<ROOT:10>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: load token registry: parse token registry: json: cannot unmarshal string into Go struct field TokenRegistryEntry.tokens.TokenData.revoked of type bool\nError: load token registry: parse token registry: json: cannot unmarshal string into Go struct field TokenRegistryEntry.tokens.TokenData.revoked of type bool\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9fcba216d0c7738a0a7b145d17653003d42620611e78b52b3414d7658681af6d",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:12>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:13>",
+              "XDG_CACHE_HOME": "<ROOT:12>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:12>/config",
+              "XDG_DATA_HOME": "<ROOT:12>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0d6bb0bd99cb25c8f6dadb7e6d06bcf875a7fc6f1dc91dc1525aa5ed8b768fff",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:14>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:15>",
+              "XDG_CACHE_HOME": "<ROOT:14>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:14>/config",
+              "XDG_DATA_HOME": "<ROOT:14>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_id\":\"tok-a\",\"token_valid\":true,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0b90b95dc3790988adbf5cefa11be473eb090b67f333ff68d7673d1634267066",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:16>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:17>",
+              "XDG_CACHE_HOME": "<ROOT:16>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:16>/config",
+              "XDG_DATA_HOME": "<ROOT:16>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "40812d970c11e1fd52d235fe9d6e2f266d0ec9bb43bc0144e1a52fe7bd5f1dd9",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:18>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:19>",
+              "XDG_CACHE_HOME": "<ROOT:18>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:18>/config",
+              "XDG_DATA_HOME": "<ROOT:18>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: load token registry: parse token registry: parsing time \"2099-01-01t00:00:00Z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"t00:00:00Z\" as \"T\"\nError: load token registry: parse token registry: parsing time \"2099-01-01t00:00:00Z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"t00:00:00Z\" as \"T\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f6dcb5e761ee292cfb01dce62a6af02432997a19306a18b0bbb605f3f2eaf9b9",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:20>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:21>",
+              "XDG_CACHE_HOME": "<ROOT:20>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:20>/config",
+              "XDG_DATA_HOME": "<ROOT:20>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: load token registry: parse token registry: parsing time \"2099-01-01T00:00:00z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"z\" as \"Z07:00\"\nError: load token registry: parse token registry: parsing time \"2099-01-01T00:00:00z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"z\" as \"Z07:00\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a4db69459ad5ed2d48bef6d3d80c4269e266b4e5e78f6f3ea8402f174b33dbf8",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:22>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:23>",
+              "XDG_CACHE_HOME": "<ROOT:22>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:22>/config",
+              "XDG_DATA_HOME": "<ROOT:22>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: load token registry: parse token registry: parsing time \"2099-01-01 00:00:00Z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \" 00:00:00Z\" as \"T\"\nError: load token registry: parse token registry: parsing time \"2099-01-01 00:00:00Z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \" 00:00:00Z\" as \"T\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "2c0c3a733963e49dbfd58309acb6f9ea913c7a5f4f17ca8cca5904868c4a188f",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:24>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:25>",
+              "XDG_CACHE_HOME": "<ROOT:24>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:24>/config",
+              "XDG_DATA_HOME": "<ROOT:24>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: load token registry: parse token registry: parsing time \"2099-01-01T00:00:00\\\\u005a\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\\\\u005a\" as \"Z07:00\"\nError: load token registry: parse token registry: parsing time \"2099-01-01T00:00:00\\\\u005a\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\\\\u005a\" as \"Z07:00\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f943cbc6d0e318aa3c221eda52055248788922410f57603103f1737370e27b8c",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:26>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:27>",
+              "XDG_CACHE_HOME": "<ROOT:26>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:26>/config",
+              "XDG_DATA_HOME": "<ROOT:26>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_id\":\"tok-a\",\"token_valid\":true,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "cf0144fa42ea1981e96dbae3c176de82c497fb29f00bc193e610661fea67989c",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:28>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:29>",
+              "XDG_CACHE_HOME": "<ROOT:28>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:28>/config",
+              "XDG_DATA_HOME": "<ROOT:28>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3e76154d3922e3287e3c7d0f1ea2e9bec9d310d9e1f6b661e47b831cb6216415",
+          "request": {
+            "args": [
+              "--output",
+              "json",
+              "agent",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:30>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:31>",
+              "XDG_CACHE_HOME": "<ROOT:30>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:30>/config",
+              "XDG_DATA_HOME": "<ROOT:30>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "{\"agents\":[{\"name\":\"alpha\",\"tier\":\"standard\",\"token_id\":\"tok-a\",\"token_valid\":true,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"claude-code\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"codex\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"default\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"hermes\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"openclaw\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false},{\"name\":\"opencode\",\"tier\":\"\",\"token_valid\":false,\"skill_installed\":false,\"skill_managed\":false}],\"count\":7}\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

@@ -1,3 +1,5 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
@@ -12,18 +14,19 @@ fn temporary_root(label: &str) -> test_temp_root::TempRoot {
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("USERPROFILE", home)
-        .env("XDG_CONFIG_HOME", home.join("config"))
-        .env("XDG_DATA_HOME", home.join("data"))
-        .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_VAULT", root)
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run share list")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", root)
+            .env("CI", "1")
+            .env("NO_COLOR", "1"),
+    )
+    .expect("run share list")
 }
 
 fn assert_status(go: &Output, rust: &Output, case: &str) {
@@ -119,12 +122,18 @@ fn normalized_revoke_listing(bytes: &[u8]) -> serde_json::Value {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn share_list_matches_go_for_formats_and_filters() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "share_differential",
+        "share_list_matches_go_for_formats_and_filters",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    oracle.stable_under(stable_revoke_output);
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let root = temporary_root("vault");
     let home = temporary_root("home");
@@ -185,13 +194,31 @@ fn share_list_matches_go_for_formats_and_filters() {
     let _ = fs::remove_dir_all(home);
 }
 
+/// Recapture stability: revocation timestamps are wall-clock and Go's grant
+/// order is a randomized map order.
+fn stable_revoke_output(bytes: &[u8]) -> Vec<u8> {
+    if bytes.first() == Some(&b'[') {
+        normalized_revoke_listing(bytes).to_string().into_bytes()
+    } else {
+        let mut lines: Vec<&[u8]> = bytes.split(|b| *b == b'\n').collect();
+        lines.sort();
+        lines.join(&b'\n')
+    }
+}
+
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn share_revoke_matches_go_and_persists_metadata() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "share_differential",
+        "share_revoke_matches_go_and_persists_metadata",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    oracle.stable_under(stable_revoke_output);
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let fixture = br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/github","secret_field":"password","nonce":"n1","status":"approved","created_at":"2025-02-03T04:05:06Z","expires_at":"2099-01-01T00:00:00Z","approved_at":"2025-02-03T04:06:00Z","approved_by":"source","ttl":3600000000000},{"id":"grant-b","from_agent":"other","to_agent":"target","secret_path":"prod/api","status":"approved","created_at":"2024-01-02T03:04:05Z"}]}"#;
     let go_root = temporary_root("revoke-go");

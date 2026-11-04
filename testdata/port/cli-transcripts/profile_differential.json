@@ -1,0 +1,364 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "profile_list_matches_go_for_empty_and_go_generated_profile_config": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "941538e4c769cd81c865b85b02b9200856fbab315dcf321daaeaa25fed1dd18f",
+          "request": {
+            "args": [
+              "profile",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "No profiles configured.\nUse 'symvault profile add <name> --vault <path>' to create a profile.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "5f90c35e0cb6d1786d09ca733eac0f6d7386f0ba1ee8e7c33a93cc4080b1ad20",
+          "request": {
+            "args": [
+              "--quiet",
+              "profile",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "XDG_CACHE_HOME": "<ROOT:0>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/root/config",
+              "XDG_DATA_HOME": "<ROOT:0>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7cf3eb91fbac6c3bafb496fd508f8cb48d957b2cb6229de8ad3f72849be10048",
+          "request": {
+            "args": [
+              "profile",
+              "add",
+              "über.work[dev]",
+              "--vault",
+              "/fixture-vault/東京"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Profile \"über.work[dev]\" added with vault /fixture-vault/東京\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "root/config",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/config/symaira-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "root/config/symaira-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT:1>/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nprofiles:\n    über.work[dev]:\n        vault: /fixture-vault/東京\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "6960f542d63a4a0ac15efe14377926447ead68483d5c846535c7966d2f85c010",
+          "request": {
+            "args": [
+              "profile",
+              "use",
+              "über.work[dev]"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Default profile set to \"über.work[dev]\"\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "root/.symvault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT:1>/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nprofiles:\n    über.work[dev]:\n        vault: /fixture-vault/東京\ndefaultProfile: über.work[dev]\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "3a8930a3cf8613db3d92b3c8b749ec681352b28d5d5405310a1a28effc5e08ca",
+          "request": {
+            "args": [
+              "profile",
+              "list"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>/root",
+              "XDG_CACHE_HOME": "<ROOT:1>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/root/config",
+              "XDG_DATA_HOME": "<ROOT:1>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "NAME            VAULT PATH         DEFAULT\nüber.work[dev]  /fixture-vault/東京  *\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "423ff114252097854fce5d29a8919705c071d73d783d568b528a30d5e635a912",
+          "request": {
+            "args": [
+              "profile",
+              "add",
+              "über.work[dev]",
+              "--vault",
+              "/fixture-vault/東京"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:2>/root",
+              "XDG_CACHE_HOME": "<ROOT:2>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:2>/root/config",
+              "XDG_DATA_HOME": "<ROOT:2>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Profile \"über.work[dev]\" added with vault /fixture-vault/東京\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 2,
+              "path": "root/config",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 2,
+              "path": "root/config/symaira-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 2,
+              "path": "root/config/symaira-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT:2>/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nprofiles:\n    über.work[dev]:\n        vault: /fixture-vault/東京\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "731c092e0b860e3bcd015be9637bb1614840ff8df084b20bcce75fe0c3972b09",
+          "request": {
+            "args": [
+              "--quiet",
+              "profile",
+              "add",
+              "über.work[dev]",
+              "--vault",
+              "/fixture-vault/東京"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:2>/root",
+              "XDG_CACHE_HOME": "<ROOT:2>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:2>/root/config",
+              "XDG_DATA_HOME": "<ROOT:2>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "3687da8fda3018e3609c0fbd4717ba3285467eba320d3ac74ffd767cc77957b5",
+          "request": {
+            "args": [
+              "profile",
+              "use",
+              "über.work[dev]"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:2>/root",
+              "XDG_CACHE_HOME": "<ROOT:2>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:2>/root/config",
+              "XDG_DATA_HOME": "<ROOT:2>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Default profile set to \"über.work[dev]\"\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 2,
+              "path": "root/.symvault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT:2>/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nprofiles:\n    über.work[dev]:\n        vault: /fixture-vault/東京\ndefaultProfile: über.work[dev]\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "6fa463520d3480fad1662abc644ee4e0f6075dbd43fc0b4931996667e6c3cb40",
+          "request": {
+            "args": [
+              "profile",
+              "use",
+              "missing"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:2>/root",
+              "XDG_CACHE_HOME": "<ROOT:2>/root/cache",
+              "XDG_CONFIG_HOME": "<ROOT:2>/root/config",
+              "XDG_DATA_HOME": "<ROOT:2>/root/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: profile \"missing\" not found\nError: profile \"missing\" not found\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

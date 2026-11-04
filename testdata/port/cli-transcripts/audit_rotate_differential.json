@@ -1,0 +1,252 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "audit_rotate_key_matches_go_contract": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "fa74ca8d98f01bcba8f5b71dcc7a5de38d56b5094244907410d77edfaea42742",
+          "request": {
+            "args": [
+              "audit",
+              "rotate-key"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "New key: 228b1393 (first 4 bytes)\nHMAC key bootstrapped — no previous key existed, so no archive file was written.\nA new audit log will be started on the next audit write.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ffef8d8cb537f710728b64819a90c11b68b300fbcdebd50a6642e185bf770544",
+          "request": {
+            "args": [
+              "init"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_PASSPHRASE": "audit-rotate-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": {
+              "text": "audit-rotate-passphrase\naudit-rotate-passphrase\n"
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": "Vault initialized at <ROOT:0>/root/uninit\nPublic key: age1hz6f9ppu5gqr2qq97ue3z4gxumv90ccpjk0rpzchql8el7f7x39s9ltruw\n\nNext steps:\n  1. Add your first entry:    symvault add my-first-entry\n  2. Create a backup:         symvault backup\n  3. Verify the setup:        symvault doctor\n  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents\n\nTip: See config.yaml.example for agent profiles, clipboard timeout, and other\n     settings — copy it to one of these locations as a starting point:\n     - Vault config:  <ROOT:0>/root/uninit/config.yaml\n     - Global config: ~/.symvault/config.yaml\n     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example\n\nTip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "root/uninit",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/HEAD",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "ref: refs/heads/master\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/config",
+              "op": "file",
+              "mode": 420,
+              "content": {
+                "text": "[core]\n\tbare = false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/objects",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/objects/info",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/objects/pack",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/refs",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/refs/heads",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.git/refs/tags",
+              "op": "dir",
+              "mode": 493,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/.gitignore",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        requireApproval: false\nvault:\n    authMethod: passphrase\n    search_index: true\n    auto_heal_zero_key: true\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\nvaultDir: <ROOT:0>/root/uninit\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/entries",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 0,
+              "path": "root/uninit/identity.age",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "b64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEtNVGFLWU1IYXZDMWlNWUlCSXZVeWcgdD0zLG09NjU1MzYscD00ClQrVy82aTFBcS9JVUUzbVhQblBZZWg0ODRRTS8rcFUxbnQzV0tja0JJOC9BQlZYTXdOTFlHdVM1WkNVCi0tLSBSKy81Mm9FWFlFNFphNy9ybDNQWjQrS3h2bzFhOUZKdUd1SXVJbEVuOThrCroqlDuswZTHhPHaHgiiaid07AXqNLWe1JzXAWdbUx40HdREejX9etwr9x/d9aRRp2hLZMMCWonVCvhGLkoRrZbC/zzZvxlmBrsW4O1FbJHfZ310shbu/LPICZMG2wMRoD4BAN64vII7T7I="
+              }
+            }
+          ]
+        },
+        {
+          "key": "fa74ca8d98f01bcba8f5b71dcc7a5de38d56b5094244907410d77edfaea42742",
+          "request": {
+            "args": [
+              "audit",
+              "rotate-key"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "New key: 11a61744 (first 4 bytes)\nHMAC key bootstrapped — no previous key existed, so no archive file was written.\nA new audit log will be started on the next audit write.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "fa74ca8d98f01bcba8f5b71dcc7a5de38d56b5094244907410d77edfaea42742",
+          "request": {
+            "args": [
+              "audit",
+              "rotate-key"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/root",
+              "NO_COLOR": "1",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMVAULT_VAULT": "<ROOT:0>/root/uninit",
+              "USERPROFILE": "<ROOT:0>/root"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "New key: be023bd2 (first 4 bytes)\nHMAC key bootstrapped — no previous key existed, so no archive file was written.\nA new audit log will be started on the next audit write.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

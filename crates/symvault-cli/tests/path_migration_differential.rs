@@ -1,3 +1,6 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -7,16 +10,17 @@ use std::{
 use tempfile::TempDir;
 
 fn run(binary: &Path, args: &[&str], home: &Path, xdg: (&Path, &Path, &Path)) -> Output {
-    Command::new(binary)
-        .args(args)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", xdg.0)
-        .env("XDG_DATA_HOME", xdg.1)
-        .env("XDG_CACHE_HOME", xdg.2)
-        .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run Go migration preview")
+    go_oracle::output(
+        Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("XDG_CONFIG_HOME", xdg.0)
+            .env("XDG_DATA_HOME", xdg.1)
+            .env("XDG_CACHE_HOME", xdg.2)
+            .env("CI", "1")
+            .env("NO_COLOR", "1"),
+    )
+    .expect("run Go migration preview")
 }
 
 fn fixture(name: &str) -> (TempDir, PathBuf, (PathBuf, PathBuf, PathBuf)) {
@@ -36,12 +40,17 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn migration_preview_matches_go_for_empty_marker_and_complete_tree() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "path_migration_differential",
+        "migration_preview_matches_go_for_empty_marker_and_complete_tree",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
     let (_empty_root, empty_home, empty_xdg) = fixture("empty");
@@ -139,12 +148,17 @@ fn migration_preview_matches_go_for_empty_marker_and_complete_tree() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn migration_preview_matches_go_for_legacy_symlink_errors() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "path_migration_differential",
+        "migration_preview_matches_go_for_legacy_symlink_errors",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let (_root, home, xdg) = fixture("symlink");
     let target = home.join("real-legacy");

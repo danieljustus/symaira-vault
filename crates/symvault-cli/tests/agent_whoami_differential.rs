@@ -1,3 +1,6 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -20,7 +23,7 @@ fn run(binary: &Path, args: &[&str], root: &Path, home: &Path, agent: Option<&st
         Some(agent) => command.env("SYMVAULT_AGENT", agent),
         None => command.env_remove("SYMVAULT_AGENT"),
     };
-    command.output().expect("run agent whoami")
+    go_oracle::output(&mut command).expect("run agent whoami")
 }
 
 fn assert_same(go: &Output, rust: &Output, case: &str) {
@@ -48,17 +51,18 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_whoami_matches_go_output_and_context_errors() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
-        eprintln!("skipping Rust differential: CARGO_BIN_EXE_symvault is not set");
-        return;
-    };
-    let go_binary = PathBuf::from(go_binary);
-    let rust_binary = PathBuf::from(rust_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_whoami_differential",
+        "agent_whoami_matches_go_output_and_context_errors",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
+    let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let root = tempfile::tempdir().expect("vault root");
     let home = tempfile::tempdir().expect("home");
     for directory in ["config", "data", "cache"] {

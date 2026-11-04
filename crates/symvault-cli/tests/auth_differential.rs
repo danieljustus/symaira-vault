@@ -1,13 +1,14 @@
 #![deny(unsafe_code)]
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
 use std::{
     env, fs,
-    io::Write,
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Command, Output},
 };
 
 struct TempDir(test_temp_root::TempRoot);
@@ -39,18 +40,7 @@ fn run(binary: &Path, vault: &Path, home: &Path, args: &[&str], input: Option<&[
             .to_owned();
         cmd.env("SYMVAULT_PASSPHRASE", pass);
     }
-    if let Some(data) = input {
-        cmd.stdin(Stdio::piped());
-        cmd.stdout(Stdio::piped());
-        cmd.stderr(Stdio::piped());
-        let mut child = cmd.spawn().expect("spawn command");
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(data).expect("write to stdin");
-        }
-        child.wait_with_output().expect("wait for output")
-    } else {
-        cmd.output().expect("run command")
-    }
+    go_oracle::output_with_input(&mut cmd, input).expect("run command")
 }
 
 fn assert_same(go: &Output, rust: &Output, case: &str) {
@@ -78,12 +68,17 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn auth_set_matches_go_contract() {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "auth_differential",
+        "auth_set_matches_go_contract",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("home");
     let uninit_vault = home.0.join("uninit");
@@ -168,11 +163,12 @@ fn auth_set_matches_go_contract() {
 
 #[test]
 fn auth_rotate_passphrase_matches_go_contract() {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "auth_differential",
+        "auth_rotate_passphrase_matches_go_contract",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("home");
     let uninit_vault = home.0.join("uninit");
@@ -317,11 +313,12 @@ fn auth_rotate_passphrase_matches_go_contract() {
 
 #[test]
 fn auth_rotate_legacy_migration_matches_go_on_normal_root() {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "auth_differential",
+        "auth_rotate_legacy_migration_matches_go_on_normal_root",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("legacy-normal");
     let (go_vault, rust_vault) = legacy_vault_pair(&go, &home.0);
@@ -364,15 +361,20 @@ fn auth_rotate_legacy_migration_matches_go_on_normal_root() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 #[cfg(unix)]
 fn find_legacy_migration_matches_go_root_trust_boundary() {
     use std::os::unix::fs::symlink;
 
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "auth_differential",
+        "find_legacy_migration_matches_go_root_trust_boundary",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let input = b"original-passphrase-123\n";
 
@@ -468,14 +470,19 @@ fn find_legacy_migration_matches_go_root_trust_boundary() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn device_accept_matches_go_open_error_order_for_symlinked_entries_root() {
     use std::os::unix::fs::symlink;
 
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "auth_differential",
+        "device_accept_matches_go_open_error_order_for_symlinked_entries_root",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("device-accept-symlink-entries");
     let (go_vault, rust_vault) = legacy_vault_pair(&go, &home.0);
@@ -532,12 +539,17 @@ fn device_accept_matches_go_open_error_order_for_symlinked_entries_root() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn device_accept_matches_go_open_error_order_for_non_directory_entries_root() {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "auth_differential",
+        "device_accept_matches_go_open_error_order_for_non_directory_entries_root",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("device-accept-file-entries");
     let (go_vault, rust_vault) = legacy_vault_pair(&go, &home.0);
@@ -585,11 +597,12 @@ fn device_accept_matches_go_open_error_order_for_non_directory_entries_root() {
 fn auth_rotate_rejects_user_owned_ancestor_symlink_before_new_passphrase_validation() {
     use std::os::unix::fs::symlink;
 
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "auth_differential",
+        "auth_rotate_rejects_user_owned_ancestor_symlink_before_new_passphrase_validation",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("legacy-user-symlink");
     let (go_vault, rust_vault) = legacy_vault_pair(&go, &home.0);
@@ -647,18 +660,30 @@ fn auth_rotate_rejects_user_owned_ancestor_symlink_before_new_passphrase_validat
 
 #[cfg(target_os = "macos")]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn auth_rotate_accepts_root_owned_macos_alias_and_migrates_legacy_entry() {
     use std::os::unix::fs::MetadataExt;
 
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go = PathBuf::from(go);
+    let oracle = go_oracle::GoOracle::begin(
+        "auth_differential",
+        "auth_rotate_accepts_root_owned_macos_alias_and_migrates_legacy_entry",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
-    let home = TempDir::new("legacy-trusted-alias");
+    // The fixture needs the root-owned /var -> /private/var alias, so it is
+    // allocated in the per-user macOS temp dir whatever TMPDIR points at.
+    let user_temp = go_oracle::darwin_user_temp_dir()
+        .expect("native trusted-alias fixture requires `getconf DARWIN_USER_TEMP_DIR` on macOS");
+    let home = TempDir(test_temp_root::TempRoot::existing_in(
+        &user_temp,
+        "symvault-auth-diff-legacy-trusted-alias-",
+    ));
     let home_alias = macos_var_alias(&home.0).expect(
-        "native trusted-alias fixture requires the configured temporary root (TMPDIR) to canonicalize below /private/var; unsupported temporary layout is not migration acceptance",
+        "native trusted-alias fixture requires the per-user temp dir to canonicalize below /private/var; unsupported temporary layout is not migration acceptance",
     );
     assert!(
         home_alias

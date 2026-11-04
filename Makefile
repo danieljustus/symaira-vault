@@ -514,8 +514,16 @@ config-profile-differential: config-profile-fixtures-check
 
 config-session-differential: rust-007-differential config-profile-differential cfg-sections-fixtures-check
 
+# Replays the committed Go transcripts (testdata/port/cli-transcripts); needs no
+# Go toolchain and no oracle binary.
 config-cli-differential:
 	./scripts/rust-port/check_config_cli.sh
+
+# Re-records those transcripts from the pinned Go oracles (Go required; run at a
+# commit that still carries the Go sources).
+.PHONY: config-cli-capture
+config-cli-capture:
+	./scripts/rust-port/check_config_cli.sh --capture
 
 # CONFIG-WRITER: Go-recorded SaveTo bytes (pinned oracle 690647c5) replayed
 # against the Rust writer, plus the rewriting commands on the live Go binary.
@@ -663,12 +671,22 @@ cli-help-differential: manpages-differential
 # from this checked-out source (a no-cgo build cannot see Touch ID; see
 # docs/rust-port/setup-wizard.md). Not part of port-contract: it needs a PTY and
 # the recording is darwin's. The replay without Go is part of `cargo test`.
-SETUP_GO_BINARY := target/port/symvault-setup-go
 .PHONY: setup-wizard-differential
 setup-wizard-differential:
+	$(CARGO) test -p symvault-cli --test setup_wizard_differential --locked
+
+# Re-records the wizard results from a no-cgo Go oracle built from this
+# checked-out source (Go required), then checks the recording against the live
+# oracle.
+SETUP_GO_BINARY := target/port/symvault-setup-go
+.PHONY: setup-wizard-capture
+setup-wizard-capture:
 	@mkdir -p "$(dir $(SETUP_GO_BINARY))"
-	CGO_ENABLED=0 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=true -trimpath -o "$(SETUP_GO_BINARY)" .
-	SYMVAULT_GO_BINARY="$(abspath $(SETUP_GO_BINARY))" $(CARGO) test -p symvault-cli --test setup_wizard_differential --locked
+	CGO_ENABLED=0 GOTOOLCHAIN=$(BUILD_GO_TOOLCHAIN) $(GO) build -buildvcs=true -trimpath -o "$(SETUP_GO_BINARY)" .
+	SYMVAULT_GO_BINARY="$(abspath $(SETUP_GO_BINARY))" \
+	SYMVAULT_GO_ORACLE_COMMIT="$$(git rev-parse HEAD)" \
+	SYMVAULT_GO_ORACLE_BUILD="$(BUILD_GO_TOOLCHAIN) CGO_ENABLED=0 GOOS=$$($(GO) env GOOS) GOARCH=$$($(GO) env GOARCH) -trimpath -buildvcs=true" \
+	$(CARGO) test -p symvault-cli --test setup_wizard_differential --locked -- --ignored --test-threads=1 record_go_results native_matches_live_go_oracle
 
 .PHONY: store004-isolation-check
 store004-isolation-check:
@@ -1327,8 +1345,9 @@ sync-observations-contract:
 
 # rust-pairing.yml: oracle-bound steps not covered by pairing-differential,
 # config-profile-differential and device-list-differential.
-# The macOS trusted-alias auth case needs TMPDIR below the root-owned /var ->
-# /private/var alias (the same rule as config-cli-differential in local-gate.sh).
+# The macOS trusted-alias auth case allocates its fixture in the per-user temp
+# dir itself; the TMPDIR export below only keeps the other fixtures on the same
+# volume as the alias (the replay no longer depends on it).
 AREA_PAIRING_TMP := $(if $(filter Darwin,$(shell uname -s)),TMPDIR="$(shell getconf DARWIN_USER_TEMP_DIR)")
 pairing-oracle-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
