@@ -28,10 +28,32 @@ Go observations that replay Rust live against recorded Go output are in
 - `mcp-oracle-controls` (`test_build_timeout.py`, `test_mcp_oracle.py`) – tests the oracle build/timeout harness.
 - `test_oracle_build.py` (run by the area target at Makefile `AREA_ORACLE`) – oracle build harness selftest.
 
+## Converted in CAP-PROC-OTHER-RESID
+
+- `mcp-secure-input-fixtures-check`: `secure-input-unicode` observation (`go run secure_input_unicode` accepted
+  `go_unicode_print_15.rs`; the file keeps those bytes). Its prerequisite `mcp-ordered-fixtures-check` is the MCP
+  fixture regeneration owned by the MCP packet (still Go there until that lands).
+- `native_closeout.py` (Go-free by default; `--live-go` keeps the hosted-CI runs):
+  - `portable`: `native-closeout-policy.<goos>.json` records that native Go `policygen` regeneration
+    (+ `--check`) reproduced `testdata/port/core/policy-contract.json` byte for byte; darwin and linux captured.
+  - `keyring`: `native-keyring-interop` attestation = a live three-stage run (Go `NewOSKeyring` write, Rust update,
+    Go read/delete) in a disposable keyring; the Rust half (`native_keyring_rust_half_set_update_read_delete`)
+    runs live. **linux** is attested (gate image + gnome-keyring in a throwaway container). **darwin is not**: the
+    stages create a private keychain and change the user keychain search list, which is only authorized on a
+    disposable runner (`make go-attest-native-keyring` there); until it exists `native_closeout.py keyring` fails on
+    macOS with a missing attestation, never skips.
+- `tui_contract.py` / `tui_mutation_test.py` (`make tui-contract`, linux; `make tui-harness-check`, macOS):
+  the Go `tuifixture` helper is gone from the Rust runs. `tui_driver.py` (stdlib pty/termios) is the console
+  wrapper and fixture editor, the `tui-snapshot` example of `symvault-store` reads the encrypted store, the Go
+  side is `tui-contract.<goos>.json` (normalized rows + the Go-made seed vaults), and
+  `tui-driver-equivalence.<goos>.json` records that the Python driver produced identical Rust-side rows
+  (15 cases, 84 store snapshots, config readbacks, exit/console/editor facts) to the Go helper on the same Rust
+  binary and seeds. `make go-observations-capture-tui` (Go, Xvfb) re-records both; editing `tui_driver.py`,
+  `tui-snapshot.rs` or the observation without re-proving makes `tui_driver_equivalence.py check` fail.
+  Only **linux** is captured: the darwin/windows contract drives the real native clipboard and is only allowed on a
+  disposable host, so those observations (and `rust-tui.yml`) still need a capture there.
+
 ## Not converted (still need Go, or a Go-built helper)
 
-- `tui_contract.py` / `tui_mutation_test.py`: the Go `tuifixture` helper is the PTY console driver and the
-  store snapshotter for the Rust runs too, so it needs a Rust/Python replacement before Go can go.
-- `native_closeout.py`: native keyring interop (Go writes, Rust updates, Go reads) and `policygen`.
-- `mcp-secure-input-differential` still depends on `mcp-secure-input-fixtures-check` (`go run secure_input_unicode`).
 - `crypto-fuzz-smoke` fuzzes the Go implementation only and was dropped from `crypto-differential`.
+- darwin `native-keyring-interop` attestation and darwin/windows `tui-contract` observation (disposable hosts only).

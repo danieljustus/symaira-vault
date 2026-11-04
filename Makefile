@@ -2295,9 +2295,19 @@ go-observations-capture-other:
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/signal_process_contract.py --capture-go
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) scripts/rust-port/device_list_differential.py --capture-go
 	$(GO_OBS_CAPTURE) scripts/rust-port/egress_contract.py --capture-go
+	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/native_closeout.py portable --capture-go
 
 go-observations-selftest:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_go_observations_common.py
+	$(AREA_ENV) $(AREA_PYTHON) -B scripts/rust-port/test_native_closeout.py
+
+# native_closeout.py keyring: the Go write/verify halves of the native keyring interop, attested once per OS.
+# It stores items in the OS keyring, so it only runs where that is disposable (a hosted runner, or the Linux
+# gate image with GITHUB_ACTIONS=true SYMVAULT_DISPOSABLE_NATIVE_RUNNER=1 and gnome-keyring + dbus-run-session);
+# never on a workstation. The Go-free `native_closeout.py keyring` then runs the Rust half against it.
+.PHONY: go-attest-native-keyring
+go-attest-native-keyring:
+	GOWORK=off $(AREA_PYTHON) -B scripts/rust-port/native_closeout.py keyring --attest-go
 
 # Go-only capture of the helper-driven observations (go test / go run), then the reverse-check
 # attestations. Needs the Go oracle; run once per OS before Go is removed.

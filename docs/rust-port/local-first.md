@@ -138,7 +138,7 @@ parallel (`.NOTPARALLEL`).
 | `read-resource-policy-contract` | vault-read-resource-policy | Go `-race` `TestResourcePolicy*` (required names), `refresh-read-policy-fixtures.py --check`, Rust store/template/mcp policy tests |
 | `mcp-http-shutdown-contract` | mcp-http-shutdown | Go `-race` shutdown, approval and authorization tests (required names); Rust leg: `test_http_drain_contract.py`, the `HttpShutdown` drain unit tests, `http_drain_contract.py` (Go oracle vs Rust CLI drain of a real `mcp` HTTP server, 15 signal runs per implementation) |
 | `tui-named-tests` | rust-tui | the five named `tui::tests::` browser cases of the CLI binary (the whole `-p symvault-cli -p symvault-platform` run is `rust-test`) |
-| `tui-contract` (linux only) | rust-tui | `tui_harness_test.py`, `tui_contract.py` (fifteen Go/Rust cases under a private Xvfb/xclip), receipt replay, `tui_mutation_test.py` |
+| `tui-contract` (linux only) | rust-tui | `tui_harness_test.py`, `tui_driver_equivalence.py check`, `tui_contract.py` (fifteen Rust cases against the recorded Go observation under a private Xvfb/xclip, Go-free), receipt replay, `tui_mutation_test.py` |
 | `tui-harness-check` (macos only) | rust-tui | `tui_harness_test.py` only |
 
 Where the gate differs from the hosted workflows:
@@ -243,7 +243,7 @@ Running them:
 | `rust-store` `SYMVAULT_RUN_WINDOWS_CROSSLANG=1` | Windows only |
 | `rust-pairing` "Verify complete port contract on native macOS" (`make port-contract` with the backend selectors unset) | **not run on macOS locally** (15 to 18 minutes hosted); the Linux lane runs `port-contract`; the macOS result stays a closing-CI result |
 | `rust-pairing` `native_closeout.py portable` | **not run**: it forces `CARGO_TARGET_DIR` to `<repo>/target` and builds there. Its content is covered by `policy-fixtures-check` (`policygen --check`, in `port-contract`), `device_pairing_cli` and the `symvault-core`/`symvault-platform` all-targets run (`rust-test`) |
-| `native_closeout.py keyring`, `daemon`, `clipboard` | **void locally**: they need a disposable runner (real keychain/Secret Service, launchd, pasteboard) and assert `GITHUB_ACTIONS=true`; closing CI |
+| `native_closeout.py keyring`, `daemon`, `clipboard` | **void locally on a workstation**: they need a disposable runner (real keychain/Secret Service, launchd, pasteboard) and assert `GITHUB_ACTIONS=true`; closing CI. `keyring` is Go-free (Rust half live against the recorded `native-keyring-interop` attestation) and was run in the throwaway Linux gate container |
 | `rust-tui` macOS half of `tui_contract.py` | closing CI (real pasteboard), see "TUI on macOS" |
 | `rust-tui` whole `cargo test -p symvault-cli -p symvault-platform --all-targets` | `rust-test`; the named browser cases run in `tui-named-tests` |
 | `clipboard-linux-differential`, `tool-registry-hash-differential` (new on `local/rust-port`) | not steps of any workflow; both are `port-contract` members (Linux lane). `mcp-http-replay-contract`, `mcp-http-token-contract` and `toolhash-process-contract` are not workflow steps either, but are area targets (rows above): they need a real clock, several seconds of waiting and a Go oracle, which the area targets provide |
