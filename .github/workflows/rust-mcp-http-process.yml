@@ -10,7 +10,6 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.gitattributes'
-      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/http_process*'
       - 'scripts/rust-port/test_http_process_contract.py'
       - 'testdata/**'

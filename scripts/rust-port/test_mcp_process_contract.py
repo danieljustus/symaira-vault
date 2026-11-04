@@ -69,22 +69,6 @@ class ProtocolBytesTests(unittest.TestCase):
             self.parse(self.frame(8, 'ordinary'), b'public-mcp-secret-6af2\n')
 
 
-def _row(**overrides):
-    row = {'mode': 'stdio', 'state': 'idle', 'signal': 'SIGTERM', 'exit_code': 0, 'stdout': '',
-           'stderr': '', 'delta': {'removed': [], 'added': [], 'changed': []}, 'orphans': [],
-           'final_raw': {'vault/.lock': {'kind': 'file', 'bytes': 0, 'sha256': 'x'},
-                         'vault/config.yaml': {'kind': 'file', 'bytes': 1, 'sha256': 'go'}}}
-    row.update(overrides)
-    return row
-
-
-def _rust_twin(go, **overrides):
-    twin = json.loads(json.dumps(go))
-    twin['final_raw']['vault/config.yaml']['sha256'] = 'rust'   # pinned startup-only difference
-    twin.update(overrides)
-    return twin
-
-
 class SignalNormalisationTests(unittest.TestCase):
     def test_only_pids_ports_timestamps_and_temp_paths_are_normalised(self):
         home = Path('/tmp/h')
@@ -111,37 +95,6 @@ class SignalNormalisationTests(unittest.TestCase):
         after = {'k': {'kind': 'file', 'sha256': '2'}, 'new': {'kind': 'dir'}}
         self.assertEqual(CONTRACT.snapshot_delta(before, after),
                          {'removed': ['gone'], 'added': ['new'], 'changed': ['k']})
-
-
-class SignalComparisonNegativeControls(unittest.TestCase):
-    def setUp(self):
-        self.go = _row()
-
-    def test_identical_rows_with_only_the_pinned_startup_difference_pass(self):
-        CONTRACT.compare_signal_rows(self.go, _rust_twin(self.go))
-
-    def test_exit_code_mapping_mutation_is_rejected(self):
-        for mutated in (1, -15, -2, 143):
-            with self.subTest(exit_code=mutated), self.assertRaisesRegex(AssertionError, 'exit_code'):
-                CONTRACT.compare_signal_rows(self.go, _rust_twin(self.go, exit_code=mutated))
-
-    def test_stdout_stderr_and_side_effect_mutations_are_rejected(self):
-        mutations = {'stdout': {'stdout': '{}\n'}, 'stderr': {'stderr': 'x'},
-                     'delta': {'delta': {'removed': ['vault/.runtime-port'], 'added': [], 'changed': []}},
-                     'orphans': {'orphans': [123]}}
-        for field, mutation in mutations.items():
-            with self.subTest(field=field), self.assertRaisesRegex(AssertionError, field):
-                CONTRACT.compare_signal_rows(self.go, _rust_twin(self.go, **mutation))
-
-    def test_unpinned_startup_differences_are_rejected(self):
-        extra = _rust_twin(self.go)
-        extra['final_raw']['vault/stray.tmp'] = {'kind': 'file', 'bytes': 0, 'sha256': 'x'}
-        with self.assertRaisesRegex(AssertionError, 'unpinned startup difference'):
-            CONTRACT.compare_signal_rows(self.go, extra)
-        missing = _rust_twin(self.go)
-        missing['final_raw']['vault/config.yaml']['sha256'] = 'go'   # difference vanished -> stale pin
-        with self.assertRaisesRegex(AssertionError, 'unpinned startup difference'):
-            CONTRACT.compare_signal_rows(self.go, missing)
 
 
 @unittest.skipIf(os.name == 'nt', 'the signal engine uses Unix process groups')
@@ -272,8 +225,13 @@ class ReceiptFinalizationControls(unittest.TestCase):
                 self.assertNotEqual(rejected, expected_clean)
 
 
-def _observation_files():
-    return sorted(CONTRACT.GO_OBS_DIR.glob('*.json'))
+def _observation_files(owned=None):
+    """Committed observations. Two layouts coexist: this driver's (`contract_args` + `data`, canonical_json) and
+    go_observations_common's (`args` + `observations`); `owned` selects this driver's."""
+    files = sorted(CONTRACT.GO_OBS_DIR.glob('*.json'))
+    if owned is None:
+        return files
+    return [file for file in files if ('contract_args' in json.loads(file.read_bytes())) == owned]
 
 
 class InterpreterIndependenceTests(unittest.TestCase):
@@ -359,43 +317,10 @@ class ObservationHygieneTests(unittest.TestCase):
             with self.subTest(file=file.name):
                 self.assertEqual(CONTRACT.operator_paths(file.read_bytes()), [])
 
-    def test_pack_tree_rewrites_the_capture_home_in_place(self):
-        with tempfile.TemporaryDirectory(prefix='symvault-hygiene-') as raw:
-            home = Path(raw) / 'seed'
-            vault = home / 'vault'
-            vault.mkdir(parents=True)
-            (vault / 'config.yaml').write_text(f'a: 1\nvaultDir: {vault}\nb: 2\n')
-            packed = CONTRACT.pack_tree(vault)
-            import base64
-            expected = b'a: 1\nvaultDir: /observation/vault\nb: 2\n'
-            self.assertEqual(base64.b64decode(packed['config.yaml']), expected)
-            self.assertEqual((vault / 'config.yaml').read_bytes(), expected, 'the working copy is what is recorded')
-
-    def test_pack_tree_refuses_an_operator_path_it_cannot_scrub(self):
-        with tempfile.TemporaryDirectory(prefix='symvault-hygiene-') as raw:
-            vault = Path(raw) / 'seed' / 'vault'
-            vault.mkdir(parents=True)
-            (vault / 'note').write_text('log: /Users/someone/project\n')
-            with self.assertRaisesRegex(ValueError, 'operator paths'):
-                CONTRACT.pack_tree(vault)
-
-    def test_save_refuses_an_operator_path_hidden_in_a_packed_value(self):
-        import base64
-        with tempfile.TemporaryDirectory(prefix='symvault-hygiene-') as raw:
-            saved = CONTRACT.GO_OBS_DIR
-            CONTRACT.GO_OBS_DIR = Path(raw)
-            try:
-                hidden = base64.b64encode(b'x: /var/folders/7v/abc/T/y').decode()
-                with self.assertRaisesRegex(ValueError, 'operator paths'):
-                    CONTRACT.save_go_observations('hygiene', {'tree': {'f': hidden}}, {}, [], 'go1.26.6')
-                self.assertEqual(list(Path(raw).iterdir()), [], 'nothing is written on refusal')
-            finally:
-                CONTRACT.GO_OBS_DIR = saved
-
     def test_every_committed_observation_loads_with_its_pinned_oracle(self):
         import re
         seen = set()
-        for file in _observation_files():
+        for file in _observation_files(owned=True):
             contract, goos = file.name[:-len('.json')].rsplit('.', 1)
             with self.subTest(file=file.name):
                 document = CONTRACT.load_go_observations(contract, goos=goos)   # no oracle argument: the generic loader
@@ -403,7 +328,7 @@ class ObservationHygieneTests(unittest.TestCase):
                 self.assertEqual(oracle, CONTRACT.pinned_oracle(contract))
                 self.assertTrue(re.fullmatch(r'[0-9a-f]{40}|go_timestamp_oracle\.go\.txt:[0-9a-f]{64}', oracle), oracle)
                 seen.add(contract)
-        self.assertTrue({'mcp-process', 'timestamp-fixtures', 'toolhash-process'} <= seen, seen)
+        self.assertTrue({'mcp-process', 'timestamp-fixtures', 'toolhash-process', 'http-token', 'http-write'} <= seen, seen)
 
     def test_a_stray_observation_file_for_a_known_contract_is_rejected(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -428,13 +353,9 @@ class ObservationHygieneTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             CONTRACT.load_go_observations('mcp-process', goos='darwin', oracle=CONTRACT.HISTORICAL)
 
-    def test_the_toolhash_capture_pin_is_the_registered_oracle(self):
-        source = Path(__file__).with_name('toolhash_process_contract.py').read_text()
-        self.assertIn(f"GO_SOURCE_COMMIT = '{CONTRACT.TOOLHASH_ORACLE}'", source)
-
     def test_no_oracle_identity_is_derived_from_git_history_of_go_sources(self):
         import re
-        for script in sorted(Path(__file__).parent.glob('*contract*.py')) + [Path(__file__).with_name('go_timestamp_fixtures.py')]:
+        for script in sorted(Path(__file__).parent.glob('*contract*.py')):
             if script.name.startswith('test_'):
                 continue
             text = script.read_text()

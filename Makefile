@@ -343,8 +343,8 @@ mcp-init-fixtures-check:
 mcp-init-differential: mcp-init-fixtures-check
 	$(CARGO) test -p symvault-mcp --test initialize_contract --locked
 
-# Generation is permitted only inside the immutable historical source context.
-# The producer also verifies every declared production source against its pin.
+# Replays the committed Go probe observation (keyring isolation of the HTTP fixture generator, macOS only) and
+# authenticates the HTTP initialize fixture bytes; there is no generate mode in this tree.
 .PHONY: mcp-http-init-fixtures-check mcp-http-init-fixtures-run mcp-http-init-differential
 mcp-http-init-fixtures-check: mcp-ordered-fixtures-check
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_http001init_isolation.py
@@ -550,7 +550,7 @@ preflight: fmt-check lint
 
 # The Go man pages and the Go help pages are replayed from the committed
 # transcripts in testdata/port/cli-transcripts/ (recorded once from the pinned
-# Go oracle, see scripts/rust-port/capture_cli_b.sh); a missing recording fails.
+# Go oracle; re-recording needs tag legacy/go-oracle); a missing recording fails.
 manpages-differential:
 	$(CARGO) test -p symvault-cli --test cli_generate_manpages --locked
 
@@ -855,33 +855,9 @@ worktree-prune-check:
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/check_worktree_prune.py
 
 # Committed Go observations (scripts/rust-port/fixtures/go-observations/<contract>.<goos>.json).
-# The http-*/mcp-* process contracts below replay them and run Rust only, with no Go on the PATH.
-# This is the ONE target that needs Go: it builds the pinned Go oracle and re-records the Go half
-# (GOTOOLCHAIN=go1.26.6; run once per OS, on Linux inside the gate image). Two consecutive runs are
-# byte-identical; commit the changed files. CAPTURE_ARGS=--reseed regenerates the pinned seed vaults/identities.
-# A first capture on a new OS reuses the seeds of an existing OS (encrypted vaults are OS independent). Only the very first
-# toolhash capture (no observation on any OS yet) needs --rust once, to mint the Rust-issued token.
-GO_OBSERVATION_CAPTURES := \
-	http_framing_contract.py http_head_contract.py http_origin_contract.py http_slow_peer_contract.py \
-	http_timeout_contract.py http_tls_contract.py http_write_contract.py http_oauth_contract.py \
-	http_process_contract.py http_drain_contract.py http_replay_contract.py http_token_contract.py
-.PHONY: go-observations-capture-http
-go-observations-capture-http: area-oracle-runner
-	@mkdir -p "$(AREA_EVIDENCE)"
-	@for script in $(GO_OBSERVATION_CAPTURES); do \
-		echo "capture-go: $$script"; \
-		$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/$$script --capture-go $(CAPTURE_ARGS) || exit 1; \
-	done
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/mcp_process_contract.py --reference mcp-anomaly-ordered-v1 --capture-go $(CAPTURE_ARGS)
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)" --capture-go
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/test_http001init_isolation.py --capture-go
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/go_timestamp_fixtures.py --record-go
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/mcp_http_shutdown_go_tests.py --capture-go
-	$(AREA_HTTP_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-cli" .
-	$(AREA_HTTP_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-seed" ./scripts/rust-port/cmd/toolhashseed
-	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/toolhash_process_contract.py --capture-go \
-		--go-cli "$(AREA_BIN)/toolhash-go-cli" --go-seed "$(AREA_BIN)/toolhash-go-seed" $(CAPTURE_ARGS)
-
+# The http-*/mcp-* process contracts below replay them and run Rust only, with no Go on the PATH. There is no capture
+# target in this tree: recording the Go half again means checking out tag legacy/go-oracle
+# (docs/rust-port/go-oracle-archive.md).
 http-framing-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_BUILD_CLI)
@@ -964,8 +940,8 @@ http-process-contract:
 	$(AREA_CHECK) receipt "$(AREA_EVIDENCE)/native-http-process.json" --profile http-process
 
 # HTTP-001 (no workflow step): SSE negotiation, replay, JSON-RPC envelope, route
-# and request-framing corpus against the Go oracle (276 cases, ADR 0032 declared
-# differences). The oracle is built from the pinned commit by the driver.
+# and request-framing corpus against the recorded Go oracle (276 cases, ADR 0032 declared
+# differences); the Go half is the committed http-replay observation.
 mcp-http-replay-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"
 	$(AREA_ENV) $(AREA_PYTHON) scripts/rust-port/test_http_replay_contract.py
@@ -1763,15 +1739,14 @@ mcp-write-tty-approval-differential: mcp-write-tty-approval-fixtures-check
 
 mcp-call-fixtures-check: mcp-copy-clipboard-fixtures-check mcp-secure-input-fixtures-check mcp-execute-api-https-fixtures-check mcp-execute-with-secret-fixtures-check mcp-write-tty-approval-fixtures-check mcp-execute-api-request-fixtures-check api-templates-fixtures-check mcp-sharing-fixtures-check
 
-# Historical fixtures stay immutable. Execute the reviewed approval lifetime
-# generator on both source references; compare every behavior and identity field.
-# The producer's default original mode remains available for historical diagnosis.
+# Historical fixtures stay immutable. Replay the recorded executions of the reviewed approval lifetime
+# generator on both source references (mcp_fixture_contract.py, no Go, no git worktree): the recorded Go step
+# verdicts, the historical bytes against the independent anchor, and every behavior field of the corrected and
+# product-source captures against the historical fixtures.
 .PHONY: mcp-ordered-fixtures-check mcp-oracle-controls
 MCP_FIXTURE_EVIDENCE ?= target/mcp-fixture-evidence
 mcp-oracle-controls:
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_build_timeout.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_oracle.py
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_compiler_adapter.py
 
 mcp-ordered-fixtures-check: mcp-oracle-controls
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)"
@@ -1781,8 +1756,6 @@ mcp-call-differential: mcp-call-fixtures-check mcp-authz-differential policy-con
 
 # MCP-002/MCP-003: Go-recorded tools/call outcome of every tool under 22 agent
 # profiles and three token scopes, replayed through the production CLI assembly.
-# The check rebuilds the corrected Go oracle out of tree (non-CGO,
-# -buildvcs=false) and requires byte equality with the committed fixture.
 # Go-recorded policy.BuildContext field mapping and the policy outcomes it yields
 # (allowed_tools matches every tool, ~/ expansion, working_dir, HOME/GIT_BRANCH
 # env). Rust must build every evaluation context the same way, so no

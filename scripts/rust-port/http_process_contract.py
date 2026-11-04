@@ -18,9 +18,7 @@ import time
 from urllib.parse import urlencode
 
 sys.dont_write_bytecode = True
-from mcp_process_contract import (ORACLE, add_capture_arguments, bounded, capture_arguments_ok, checked, go_capture_session, inventory,
-                                  isolated, load_go_observations, pinned_seed, provenance, replay_seed, save_go_observations,
-                                  signal_suite, vault_snapshot)
+from mcp_process_contract import add_replay_arguments, ORACLE, checked, inventory, isolated, load_go_observations, provenance, replay_seed, vault_snapshot
 
 CONTRACT = 'http-process'
 PORT = 28109  # fixed so request bytes (Host header) are identical in capture and replay
@@ -408,68 +406,11 @@ def observe(binary,home,port,tokens,rows,process_record,transport_rows,implement
 
 def candidate_paths():
     return sorted(p for p in checked(['git','ls-files','--cached','--others','--exclude-standard']).decode().splitlines()
-        if p.startswith(('crates/','third_party/','testdata/','internal/mcp/apitemplates/builtin/'))
+        if p.startswith(('crates/','third_party/','testdata/'))
         or p in {'Cargo.toml','Cargo.lock','.gitattributes','.github/workflows/rust-mcp-http-process.yml',
             'scripts/rust-port/http_process_contract.py','scripts/rust-port/http_process_seed.go.txt',
             'scripts/rust-port/mcp_process_contract.py','scripts/rust-port/mcp_oracle.py',
-            'scripts/rust-port/build_timeout.py',
             'scripts/rust-port/test_http_process_contract.py'})
-
-
-def signals_main(args):
-    """SIGINT/SIGTERM contract for the HTTP serve mode against prebuilt binaries."""
-    assert platform.system() in {'Darwin','Linux'}, 'signal contract is Unix-only; Windows Ctrl-C/Ctrl-Break is not covered'
-    go,rust=args.go_cli.resolve(),args.rust.resolve()
-    receipt={'passed':False,'native_os':platform.system(),'architecture':platform.machine(),
-        'candidate_commit':checked(['git','rev-parse','HEAD']).decode().strip(),
-        'go_binary_sha256':hashlib.sha256(go.read_bytes()).hexdigest(),
-        'rust_binary_sha256':hashlib.sha256(rust.read_bytes()).hexdigest(),
-        'driver_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'rows':[],'executed':{}}
-    try:
-        with tempfile.TemporaryDirectory(prefix='symvault-http-signals-') as raw:
-            base=Path(raw);seed_home=base/'seed';seed_home.mkdir()
-            tokens=json.loads(checked([args.go_http_seed,'--root',seed_home/'vault'],cwd=seed_home,env=isolated(seed_home)))
-            rows=signal_suite(go,rust,base,seed_home/'vault','http',tokens=tokens)
-            receipt['rows']+=[{k:v for k,v in r.items() if k not in {'final','final_raw'}} for r in rows]
-            receipt['executed']['http']=len(rows)
-            receipt['passed']=True
-    finally:
-        args.receipt.write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-    print(f"PASS: {receipt['executed']['http']} http signal runs on {platform.system()}")
-
-
-def normalize_process(go_rows, startup, stalled, process):
-    for row in go_rows:
-        row['response']['elapsed_seconds'] = 0.0
-    for row in stalled:
-        minimum, maximum = {'idle-before-request': (4, 8), 'incomplete-request-body': (9, 15)}[row['case']]
-        row['elapsed_seconds'] = bounded(row['elapsed_seconds'], minimum, maximum, ('stalled', row['case']))
-        row['received_base64'] = ''
-        row['response_class'] = 'silent-eof'
-        assert row['peer_eof'] and row['passed']
-    return go_rows
-
-
-def capture(args):
-    """Go half only: build the oracle, observe it, write the committed observations."""
-    with go_capture_session(CONTRACT, args, {'seed': ('httpprocessseed', PROBE.read_bytes())}) as session:
-        base = session['base']
-        tokens = pinned_seed(session, 'main', base / 'seed',
-                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], cwd=home, env=isolated(home))))
-        snapshot = vault_snapshot(base / 'seed/vault')
-        home = base / 'go'
-        home.mkdir()
-        shutil.copytree(base / 'seed/vault', home / 'vault')
-        assert vault_snapshot(home / 'vault') == snapshot
-        record = dict(go=[], go_process={}, go_startup_denials=[], go_stalled_clients=[])
-        startup_denials(session['go'], home, PORT, tokens, record['go_startup_denials'])
-        observe(session['go'], home, PORT, tokens, record['go'], record['go_process'], record['go_stalled_clients'], 'go')
-        check_oracle_rows(record['go'], 'go')
-        normalize_process(record['go'], record['go_startup_denials'], record['go_stalled_clients'], record['go_process'])
-        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()),
-                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'], **record)
-        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
-    print(f'CAPTURED: {len(record["go"])} Go HTTP CLI transcripts -> {path}')
 
 
 EXPECTED_STATUS = {'mcp-initialize':200,'mcp-ping':200,'mcp-body-exact-limit':200,'mcp-body-over-limit':413,
@@ -496,18 +437,9 @@ def check_oracle_rows(rows, implementation):
 
 def main():
     parser=argparse.ArgumentParser()
-    add_capture_arguments(parser, rust_required=False)
+    add_replay_arguments(parser)
     parser.add_argument('--allow-dirty-for-development',action='store_true')
-    parser.add_argument('--signals',action='store_true',
-        help='run only the SIGINT/SIGTERM HTTP contract against prebuilt binaries')
-    parser.add_argument('--go-cli',type=Path,help='prebuilt Go oracle CLI (with --signals)')
-    parser.add_argument('--go-http-seed',type=Path,help='prebuilt Go HTTP fixture seed helper (with --signals)')
     args=parser.parse_args()
-    if args.signals:
-        assert args.go_cli and args.go_http_seed, '--signals needs --go-cli and --go-http-seed'
-        return signals_main(args)
-    if capture_arguments_ok(args):
-        return capture(args)
     document=load_go_observations(CONTRACT,{});recorded=document['data']
     clean=not checked(['git','status','--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development

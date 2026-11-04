@@ -12,7 +12,6 @@ import argparse
 import base64
 import hashlib
 import json
-import os
 from pathlib import Path
 import platform
 import re
@@ -23,11 +22,9 @@ import tempfile
 import time
 
 sys.dont_write_bytecode = True
-from http_oauth_contract import PASSPHRASE, PROBE, Server
+from http_oauth_contract import PASSPHRASE, Server
 from http_process_contract import SECRET, request
-from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, capture_arguments_ok, checked, go_capture_session, inventory,
-                                  isolated, load_go_observations, pinned_seed, provenance, replay_seed, save_go_observations,
-                                  vault_snapshot)
+from mcp_process_contract import add_replay_arguments, ORACLE, ROOT, checked, inventory, load_go_observations, provenance, replay_seed, vault_snapshot
 
 CONTRACT = 'http-replay'
 PORT = 28110  # fixed so request bytes (Host header) are identical in capture and replay
@@ -479,38 +476,15 @@ def compare(go_rows, rust_rows, port=None, recorded_go_clock=False):
 
 def candidate_paths():
     return sorted(p for p in checked(['git', 'ls-files', '--cached', '--others', '--exclude-standard']).decode().splitlines()
-                  if p.startswith(('crates/', 'third_party/', 'testdata/', 'scripts/rust-port/', 'internal/mcp/apitemplates/builtin/'))
+                  if p.startswith(('crates/', 'third_party/', 'testdata/', 'scripts/rust-port/'))
                   or p in {'Cargo.toml', 'Cargo.lock', '.gitattributes'})
-
-
-def capture(args):
-    """Go half only: build the oracle, observe it, write the committed observations."""
-    with go_capture_session(CONTRACT, args, {'seed': ('httpreplayseed', PROBE.read_bytes())}) as session:
-        base = session['base']
-        tokens = pinned_seed(session, 'main', base / 'seed',
-                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
-        snapshot = vault_snapshot(base / 'seed/vault')
-        result = dict(rows=[], processes=[])
-        home = base / 'go'
-        home.mkdir()
-        shutil.copytree(base / 'seed/vault', home / 'vault')
-        assert vault_snapshot(home / 'vault') == snapshot
-        observe(session['go'], home, PORT, tokens, result)
-        for row in result['rows']:
-            row['elapsed_seconds'] = 0.0
-        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()),
-                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'], go=result)
-        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
-    print(f'CAPTURED: {len(result["rows"])} Go replay/SSE/envelope/route/framing cases -> {path}')
 
 
 def main():
     parser = argparse.ArgumentParser()
-    add_capture_arguments(parser, rust_required=False)
+    add_replay_arguments(parser)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
-    if capture_arguments_ok(args):
-        return capture(args)
     document = load_go_observations(CONTRACT, {})
     recorded = document['data']
     clean = not checked(['git', 'status', '--porcelain=v1']).strip()

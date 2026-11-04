@@ -11,7 +11,6 @@ from datetime import datetime
 import hashlib
 from html.parser import HTMLParser
 import json
-import os
 from pathlib import Path
 import platform
 import re
@@ -25,9 +24,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 sys.dont_write_bytecode = True
 from http_process_contract import ProcessCapture, SECRET, exchange, request
-from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, capture_arguments_ok, checked, go_capture_session,
-                                  inventory, isolated, load_go_observations, pinned_seed, provenance, replay_seed,
-                                  save_go_observations, scrub_parts, vault_snapshot)
+from mcp_process_contract import add_replay_arguments, ORACLE, ROOT, checked, inventory, isolated, load_go_observations, provenance, replay_seed, vault_snapshot
 
 CONTRACT = 'http-oauth'
 PORT = 28108  # fixed so request bytes (Host header) are identical in capture and replay
@@ -443,59 +440,18 @@ def observe_ttl(implementation, binary, home, port, seeded_tokens, result):
         server.close()
 
 
-def capture(args):
-    """Go half only: build the oracle, observe it, write the committed observations."""
-    with go_capture_session(CONTRACT, args, {'seed': ('httpoauthseed', PROBE.read_bytes())}) as session:
-        base = session['base']
-        tokens = pinned_seed(session, 'main', base / 'seed',
-                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
-        ttl_tokens = pinned_seed(session, 'ttl', base / 'ttl-seed', lambda home: json.loads(checked(
-            [session['helpers']['seed'], '--root', home / 'vault', '--access-ttl', '2s', '--refresh-ttl', '1m'], home, isolated(home))))
-        result = dict(rows=[], ttl_rows=[], processes=[], client_snapshots=[], token_snapshots=[], ttl_token_snapshots=[])
-        snapshot, ttl_snapshot = vault_snapshot(base / 'seed/vault'), vault_snapshot(base / 'ttl-seed/vault')
-        home = base / 'go'
-        home.mkdir()
-        shutil.copytree(base / 'seed/vault', home / 'vault')
-        assert vault_snapshot(home / 'vault') == snapshot
-        observe('go', session['go'], home, PORT, tokens, result)
-        home = base / 'go-ttl'
-        home.mkdir()
-        shutil.copytree(base / 'ttl-seed/vault', home / 'vault')
-        assert vault_snapshot(home / 'vault') == ttl_snapshot
-        observe_ttl('go', session['go'], home, PORT, ttl_tokens, result)
-        assert len(result['rows']) == 35 and len(result['ttl_rows']) == 11
-        assert len(result['processes']) == 3 and all(p['output_capture_complete'] for p in result['processes'])
-        for key in ('state_before_restart', 'final_snapshot', 'ttl_final_snapshot'):
-            result[key] = {}
-        # Registries are keyed by random ids: record their shape (counts, member names, revocations), not the ids.
-        for key in ('token_snapshots', 'ttl_token_snapshots'):
-            result[key] = [dict(version=r['version'], tokens=len(r['tokens']), revoked=sum(1 for v in r['tokens'].values() if v.get('revoked')),
-                                fields=sorted({f for v in r['tokens'].values() for f in v})) for r in result[key]]
-        result['client_snapshots'] = [dict(version=r['version'], clients=len(r['clients']),
-                                           redirect_uris=sorted(u for c in r['clients'].values() for u in c['redirect_uris']),
-                                           fields=sorted({f for c in r['clients'].values() for f in c})) for r in result['client_snapshots']]
-        scrub_parts(result, ('rows', 'ttl_rows', 'codes', 'token_sha256', 'client_snapshots', 'token_snapshots', 'ttl_token_snapshots'))
-        result['codes'] = sorted(result['codes'])  # the sort order of random values is itself random
-        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()), port=PORT,
-                    fixture_snapshot=snapshot, ttl_fixture_snapshot=ttl_snapshot, seeds=session['seeds'], go=result)
-        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
-    print(f'CAPTURED: {len(result["rows"]) + len(result["ttl_rows"])} Go OAuth cases -> {path}')
-
-
 def main():
     parser = argparse.ArgumentParser()
-    add_capture_arguments(parser, rust_required=False)
+    add_replay_arguments(parser)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
-    if capture_arguments_ok(args):
-        return capture(args)
     document = load_go_observations(CONTRACT, {})
     recorded = document['data']
     clean = not checked(['git', 'status', '--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust = args.rust.resolve()
     paths = sorted(p for p in checked(['git', 'ls-files', '--cached', '--others', '--exclude-standard']).decode().splitlines()
-                   if p.startswith(('crates/', 'third_party/', 'testdata/', 'internal/mcp/apitemplates/builtin/', 'scripts/rust-port/'))
+                   if p.startswith(('crates/', 'third_party/', 'testdata/', 'scripts/rust-port/'))
                    or p in {'Cargo.toml', 'Cargo.lock', '.gitattributes', '.github/workflows/rust-http-oauth.yml'})
     result: dict = dict(passed=False, candidate_commit=checked(['git', 'rev-parse', 'HEAD']).decode().strip(), candidate_worktree_clean=clean,
                   candidate_source_files=paths, candidate_source_digest=inventory(paths, ROOT), oracle_commit=ORACLE,

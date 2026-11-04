@@ -31,12 +31,11 @@ import tempfile
 import time
 
 sys.dont_write_bytecode = True
-from http_oauth_contract import PASSPHRASE, PROBE
+from http_oauth_contract import PASSPHRASE
 from http_process_contract import SECRET, ProcessCapture, request
 from http_replay_contract import HEALTH, INIT, PING, TOOLS, exchange, transcript
-from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, bounded, capture_arguments_ok, checked, go_capture_session,
-                                  inventory, isolated, load_go_observations, pinned_seed, provenance, replay_seed,
-                                  save_go_observations, vault_snapshot, _normalize_bytes)
+from mcp_process_contract import (add_replay_arguments, ORACLE, ROOT, checked, inventory, isolated, load_go_observations, provenance,
+                                  replay_seed, vault_snapshot, _normalize_bytes)
 
 CONTRACT = 'http-token'
 PORT = 28111  # fixed so request bytes (Host header) are identical in capture and replay
@@ -231,10 +230,6 @@ def token_files(vault):
         except (ValueError, AttributeError, TypeError):
             result[path.name] = 'unparseable'
     return result
-
-
-def raw_files(vault):
-    return {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(vault.glob('mcp-token*')) if path.is_file()}
 
 
 def prepare(base, name, seed_vault, mutate):
@@ -614,7 +609,7 @@ def check_dynamic(go, rust):
 
 def candidate_paths():
     return sorted(p for p in checked(['git', 'ls-files', '--cached', '--others', '--exclude-standard']).decode().splitlines()
-                  if p.startswith(('crates/', 'third_party/', 'testdata/', 'scripts/rust-port/', 'internal/mcp/apitemplates/builtin/'))
+                  if p.startswith(('crates/', 'third_party/', 'testdata/', 'scripts/rust-port/'))
                   or p in {'Cargo.toml', 'Cargo.lock', '.gitattributes'})
 
 
@@ -627,59 +622,11 @@ def zero_elapsed(value):
     return value
 
 
-def normalize_dynamic(observed):
-    assert 0.0 <= observed['live_detected_epoch'] - observed['live_expiry_epoch'] < 3.0
-    observed['live_expiry_epoch'] = 0.0
-    observed['live_detected_epoch'] = 1.5
-    for key in ('added_latency', 'revoke_latency', 'recovered_latency'):
-        observed[key] = bounded(observed[key], 0.0, 4.5, key)
-    return observed
-
-
-def capture(args):
-    """Go half only: build the oracle, observe it, write the committed observations."""
-    with go_capture_session(CONTRACT, args, {'seed': ('httptokenseed', PROBE.read_bytes())}) as session:
-        base = session['base']
-        pinned_seed(session, 'main', base / 'seed',
-                    lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
-        seed_vault = base / 'seed/vault'
-        snapshot = vault_snapshot(seed_vault)
-        raws, body = token_registry()
-        go = session['go']
-        home = prepare(base, 'go', seed_vault, lambda vault: (vault / 'mcp-tokens.json').write_text(body, encoding='utf-8'))
-        matrix = dict(rows=[])
-        observe_cases(go, home, PORT, raws, matrix)
-        startup = [dict(case=scenario[0], go=observe_startup(go, base, seed_vault, PORT, scenario, raws)) for scenario in startup_scenarios(raws, body)]
-        dynamic = normalize_dynamic(observe_dynamic(go, base, seed_vault, PORT, raws, body))
-        reload_codes = observe_duplicate_reload(go, base, seed_vault, PORT, raws, body)
-        stale = [observe_stale_revocation(go, base, seed_vault, PORT, raws, body, mode) for mode in ('corrupt', 'delete')]
-        # the Go-only legs of the original comparisons, so a drifted oracle fails at capture
-        for scenario, row in zip(startup_scenarios(raws, body), startup):
-            check_startup(scenario, row['go'], row['go'])
-        check_dynamic_go(dynamic)
-        check_duplicate_reload(reload_codes, reload_codes)
-        check_stale_revocation(stale, stale)
-        check_token_rows(matrix['rows'], matrix['rows'])
-        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()),
-                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'],
-                    matrix=zero_elapsed(matrix), startup=zero_elapsed(startup), dynamic=dynamic,
-                    duplicate_reload=reload_codes, stale_revocation=stale)
-        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
-    print(f'CAPTURED: {len(matrix["rows"])} Go token-state cases, {len(startup)} startup scenarios -> {path}')
-
-
-def check_dynamic_go(observed):
-    assert observed['live_before_expiry'] == 200 and observed['after_corruption'] == 200
-    assert observed['added_latency'] <= 4.5 and observed['revoke_latency'] <= 4.5 and observed['recovered_latency'] <= 4.5
-
-
 def main():
     parser = argparse.ArgumentParser()
-    add_capture_arguments(parser, rust_required=False)
+    add_replay_arguments(parser)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
-    if capture_arguments_ok(args):
-        return capture(args)
     document = load_go_observations(CONTRACT, {})
     recorded = document['data']
     clean = not checked(['git', 'status', '--porcelain=v1']).strip()

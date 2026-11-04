@@ -614,7 +614,9 @@ class WindowsGoTcpOutputDeclaredDifference(unittest.TestCase):
         assert entry is not None
         self.assertEqual(self.run_validator('Linux', []), 0)
         self.assertEqual(self.run_validator('Darwin', []), 0)
-        self.assertEqual(self.run_validator('Windows', [entry]), 0)
+        # The Windows legs are dropped (ADR 0036): the hosted validator accepts Linux and Darwin only, so a Windows
+        # receipt fails with or without the recorded declared difference.
+        self.assertNotEqual(self.run_validator('Windows', [entry]), 0)
         self.assertNotEqual(self.run_validator('Windows', []), 0)
         self.assertNotEqual(self.run_validator('Linux', [entry]), 0)
         self.assertNotEqual(self.run_validator('Windows', [entry, entry]), 0)

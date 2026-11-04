@@ -256,12 +256,6 @@ while True:
     def test_a_wrong_exit_status_is_observed_not_normalised(self):
         self.assertEqual(self.run_server('idle', 3)['exit_code'], 3)
 
-    def test_cli_exposes_the_signal_mode(self):
-        source = Path(contract.__file__).read_text(encoding='utf-8')
-        for option in ('--signals', '--go-cli', '--go-http-seed'):
-            self.assertIn(option, source)
-        self.assertTrue(callable(contract.signals_main))
-
 
 if __name__ == '__main__':
     unittest.main()

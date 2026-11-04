@@ -11,7 +11,6 @@ on:
       - 'crates/symvault-store/**'
       - 'crates/symvault-platform/**'
       - 'Cargo.lock'
-      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/http_head_contract.py'
       - 'scripts/rust-port/http_framing_contract.py'
       - 'scripts/rust-port/http_slow_peer_contract.py'
@@ -26,8 +25,6 @@ on:
       - 'scripts/rust-port/http_oauth*'
       - 'scripts/rust-port/http_process*'
       - 'scripts/rust-port/mcp_process_contract.py'
-      - 'scripts/rust-port/oracle_build.py'
-      - 'scripts/rust-port/test_oracle_build.py'
       - 'docs/adr/0027-absolute-http-write-deadlines.md'
   workflow_dispatch:
 

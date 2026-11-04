@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""TOOLHASH-001 process-level contract: actual Go and Rust binaries.
+"""TOOLHASH-001 process-level contract: the recorded Go half against the live Rust binary.
 
-Prebuilt binaries are passed in (the caller owns compilation):
+The Go half (CLI issuance hash, 14 HTTP outcomes, audit rows) is the committed `toolhash-process` observation
+(scripts/rust-port/fixtures/go-observations/, recorded from the archived Go tree, tag `legacy/go-oracle`); this driver
+starts no Go toolchain and has no capture mode. The Rust binary is passed in (the caller owns compilation):
 
-  --go-cli    Go symvault built from this checkout
-  --go-seed   Go `scripts/rust-port/cmd/toolhashseed` built from this checkout
   --rust      Rust symvault
 
 Checks, each against disposable HOME/vault roots only:
@@ -43,15 +43,13 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from mcp_process_contract import (load_go_observations, native_goos, pack_tree, provenance, save_go_observations,  # noqa: E402
-                                  unpack_tree)
+from mcp_process_contract import load_go_observations, provenance, unpack_tree  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = 'toolhash-process'
-# The Go side is built from the checkout (no pinned oracle worktree): this is the integrated base whose Go sources were
-# captured. Capture refuses to run when any Go source differs from it.
+# The integrated base whose Go sources the committed observation was recorded from (archived at tag legacy/go-oracle).
 GO_SOURCE_COMMIT = 'c069d3f2b17d704525cedc1bd42840cc6a3e9896'
-PORT = 28112  # fixed so the served bytes are identical in capture and replay
+PORT = 28112  # fixed so the served bytes are identical to the recorded ones
 NORMALIZATION = ['fixed loopback port', 'seed vault, the Go-issued and the Rust-issued CLI tokens (and the shared vault holding them) pinned in the file',
                  'prompt-injection data fence nonce (DATA_<16 hex>) and the audit ids (sess_id/req_id) already masked by the driver',
                  'audit token_id resolved through the pinned shared vault registry to <token:LABEL> (the id is stable in the pinned tree)',
@@ -302,74 +300,16 @@ def check_outcomes(results, impl):
     assert body('health', 'go_stale')['content'][0]['text'] == DRIFT_TEXT
 
 
-def capture(args):
-    """Go half only (the prebuilt Go CLI and seed): write the committed Go observations."""
-    assert args.go_cli and args.go_seed, '--capture-go needs --go-cli and --go-seed'
-    changed = git('diff', '--name-only', GO_SOURCE_COMMIT, '--', '*.go', 'go.mod', 'go.sum').split()
-    assert not changed, ('Go sources differ from the pinned capture base', changed[:5])
-    go_cli, go_seed = args.go_cli.resolve(), args.go_seed.resolve()
-    recorded = json.loads(FIXTURE.read_text())['registry']['hash']
-    prior = None if args.reseed else load_go_observations(CONTRACT, oracle=GO_SOURCE_COMMIT, required=False)
-    if prior is None and not args.reseed:
-        # Encrypted seed vaults and the minted tokens are OS independent: a first capture on another OS reuses them.
-        for other in ('darwin', 'linux'):
-            if other != native_goos():
-                prior = load_go_observations(CONTRACT, oracle=GO_SOURCE_COMMIT, required=False, goos=other)
-                if prior is not None:
-                    break
-    prior = prior['data'] if prior else None
-    with tempfile.TemporaryDirectory(prefix='symvault-toolhash-') as raw:
-        base = Path(raw)
-        seed_home = fresh_home(base, 'seed')
-        if prior:
-            unpack_tree(prior['seed_tree'], seed_home / 'vault')
-            tokens = dict(prior['tokens'])
-        else:
-            tokens = json.loads(run([go_seed, '--root', seed_home / 'vault'], seed_home).stdout)
-        _, issue = check_issuance(go_cli, 'go', base, seed_home / 'vault', recorded)
-        if prior:
-            shared = fresh_home(base, 'shared')
-            unpack_tree(prior['shared_tree'], shared / 'vault')
-        else:
-            assert args.rust, 'the first capture needs --rust once, to mint the Rust-issued token the Go server must accept'
-            shared = fresh_home(base, 'shared', seed_home / 'vault')
-            for impl, binary in (('go', go_cli), ('rust', args.rust.resolve())):
-                out = run([binary, 'agent', 'token', 'new', 'fixture', '--tools', '*', '--label', f'serve-{impl}'], shared)
-                tokens[f'{impl}_cli_issued'] = raw_token(out.stdout)
-        results, rows = run_server(go_cli, base, 'go', shared / 'vault', tokens)
-        check_outcomes(results, 'go')
-        audit = mask_audit(rows, token_labels(shared / 'vault'))
-        actions = {dict(row)['action'] for row in audit}
-        assert {'tool_denied', 'tool_registry_drift'} <= actions, ('Go audit lacks denials', actions)
-        assert any(dict(row).get('token_id') for row in audit), 'Go rows carry token ids'
-        assert len(audit) == EXPECTED_AUDIT_ROWS, len(audit)
-        data = dict(info=dict(go_binary_sha256=sha256(go_cli), seed_binary_sha256=sha256(go_seed)), recorded_go_hash=recorded,
-                    tokens=tokens,
-                    # a re-capture keeps the pinned bytes (the working copies were rebased to the current clock on unpack)
-                    seed_tree=prior['seed_tree'] if prior else pack_tree(seed_home / 'vault'),
-                    shared_tree=prior['shared_tree'] if prior else pack_tree(shared / 'vault'),
-                    issue=issue, http=[[name, token_name, list(outcome)] for (name, token_name), outcome in sorted(results.items())],
-                    audit=audit)
-        toolchain = subprocess.run(['go', 'version', str(go_cli)], capture_output=True, text=True, check=True).stdout.split(':')[-1].strip()
-        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, toolchain, oracle=GO_SOURCE_COMMIT)
-    print(f'CAPTURED: {len(results)} Go HTTP outcomes and {len(audit)} audit rows -> {path}')
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--go-cli', type=Path, help='with --capture-go: Go symvault built from this checkout')
-    parser.add_argument('--go-seed', type=Path, help='with --capture-go: Go toolhashseed built from this checkout')
-    parser.add_argument('--rust', type=Path)
+    parser.add_argument('--rust', type=Path, required=True)
     parser.add_argument('--receipt', type=Path)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     parser.add_argument('--drop-audit-ids', action='store_true',
                         help='negative control: strip the ids from the Rust audit rows')
-    parser.add_argument('--capture-go', action='store_true', help='record the Go half (Go required) instead of replaying it')
-    parser.add_argument('--reseed', action='store_true', help='with --capture-go: regenerate the pinned seed vault and tokens')
     args = parser.parse_args()
-    if args.capture_go:
-        return capture(args)
-    assert args.rust, '--rust is required in replay mode'
     # The binaries run with cwd set to a scratch HOME: a relative path (the
     # Makefile passes target/... when CARGO_TARGET_DIR is relative) must not
     # be resolved against that cwd.

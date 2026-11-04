@@ -4,7 +4,6 @@ import argparse
 import base64
 import hashlib
 import json
-import os
 from pathlib import Path
 import platform
 import shutil
@@ -15,11 +14,9 @@ import time
 from urllib.parse import urlencode
 
 sys.dont_write_bytecode = True
-from http_oauth_contract import CHALLENGE, HEX32, PASSPHRASE, PROBE, REDIRECT, STATE, Server, consent, headers
+from http_oauth_contract import CHALLENGE, HEX32, PASSPHRASE, REDIRECT, STATE, Server, consent, headers
 from http_process_contract import SECRET, request
-from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, capture_arguments_ok, checked, go_capture_session,
-                                  inventory, isolated, load_go_observations, pinned_seed, provenance, replay_seed,
-                                  save_go_observations, scrub_parts, vault_snapshot)
+from mcp_process_contract import add_replay_arguments, ORACLE, ROOT, checked, inventory, load_go_observations, provenance, replay_seed, vault_snapshot
 
 CONTRACT='http-head'
 PORT=28102  # fixed so request bytes (Host header) are identical in capture and replay
@@ -185,42 +182,18 @@ def observe(binary, home, port, tokens, result):
         server.close()
 
 
-def capture(args):
-    """Go half only: build the oracle, observe it, write the committed observations."""
-    with go_capture_session(CONTRACT, args, {'seed': ('httpheadseed', PROBE.read_bytes())}) as session:
-        base = session['base']
-        tokens = pinned_seed(session, 'main', base / 'seed',
-                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
-        snapshot = vault_snapshot(base / 'seed/vault')
-        result = dict(implementation='go', rows=[], processes=[], pipeline={}, authorization_heads=[])
-        home = base / 'go'
-        home.mkdir()
-        shutil.copytree(base / 'seed/vault', home / 'vault')
-        assert vault_snapshot(home / 'vault') == snapshot
-        observe(session['go'], home, PORT, tokens, result)
-        for row in result['authorization_heads']:
-            row['request_base64'] = ''  # 512 near-identical requests; only the status/header multiset is compared
-        scrub_parts(result, ENTROPY_PARTS)
-        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()),
-                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'], go=result)
-        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
-    print(f'CAPTURED: {len(result["rows"])} Go HEAD responses -> {path}')
-
-
 def main():
     parser = argparse.ArgumentParser()
-    add_capture_arguments(parser, rust_required=False)
+    add_replay_arguments(parser)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
-    if capture_arguments_ok(args):
-        return capture(args)
     document = load_go_observations(CONTRACT, {})
     recorded = document['data']
     clean = not checked(['git','status','--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust = args.rust.resolve()
     paths = sorted(p for p in checked(['git','ls-files','--cached','--others','--exclude-standard']).decode().splitlines()
-                   if p.startswith(('crates/','third_party/','testdata/','scripts/rust-port/','internal/mcp/apitemplates/builtin/'))
+                   if p.startswith(('crates/','third_party/','testdata/','scripts/rust-port/'))
                    or p in {'Cargo.toml','Cargo.lock','.gitattributes','.github/workflows/rust-http-head.yml'})
     receipt = dict(passed=False, candidate_commit=checked(['git','rev-parse','HEAD']).decode().strip(),
                    candidate_worktree_clean=clean, candidate_sources=inventory(paths,ROOT), native_os=platform.system(),

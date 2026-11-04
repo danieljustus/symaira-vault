@@ -4,12 +4,10 @@ import argparse
 import base64
 import hashlib
 import json
-import os
 from pathlib import Path
 import platform
 import re
 import shutil
-import socket
 import subprocess
 import sys
 import tempfile
@@ -18,12 +16,10 @@ import time
 sys.dont_write_bytecode = True
 from http_framing_contract import JSON_ERROR, assert_response
 from http_head_contract import parse_response
-from http_oauth_contract import PASSPHRASE, PROBE
+from http_oauth_contract import PASSPHRASE
 from http_process_contract import ProcessCapture, SECRET
-from http_slow_peer_contract import MIN_PROGRESS_BYTES, PROGRESS_INTERVAL, assert_progress, observe
-from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, bounded, capture_arguments_ok, checked, go_capture_session,
-                                  inventory, isolated, load_go_observations, pinned_seed, provenance, replay_seed,
-                                  save_go_observations, vault_snapshot, canonical_close, redact_path)
+from http_slow_peer_contract import assert_progress, observe
+from mcp_process_contract import add_replay_arguments, ORACLE, ROOT, checked, inventory, isolated, load_go_observations, provenance, replay_seed, vault_snapshot
 
 CONTRACT='http-timeout'
 PORT=28105  # fixed so request bytes (Host header) are identical in capture and replay
@@ -35,17 +31,6 @@ NORMALIZATION=['fixed loopback port','seed vaults and tokens pinned in the file 
 PROFILES=[('positive','1s','3s',(.6,2),(2,4)),
           ('zero','0s','0s',(3.5,7.5),(8,12.5)),
           ('negative','-1s','-2s',(3.5,7.5),(8,12.5))]
-
-
-def timeout_seed_source():
-    seed_source=PROBE.read_bytes()
-    first=b'flag.Parse()'
-    replacement=b'header := flag.Duration("read-header", 0, "fixture header timeout")\n read := flag.Duration("read", 0, "fixture overall read timeout")\n flag.Parse()'
-    assert seed_source.count(first)==1
-    seed_source=seed_source.replace(first,replacement,1)
-    first=b'AllowInsecureBind: true, RateLimit: 1000'
-    assert seed_source.count(first)==1
-    return seed_source.replace(first,b'AllowInsecureBind: true, RateLimit: 1000, ReadHeaderTimeout: *header, ReadTimeout: *read',1)
 
 
 def check_profile(observed,implementation,header_bounds,body_bounds):
@@ -63,18 +48,6 @@ def check_profile(observed,implementation,header_bounds,body_bounds):
         minimum,maximum=body_bounds if row['case']=='progressing-body' else header_bounds
         assert minimum<=row['elapsed_seconds']<=maximum,'configured input deadline was not applied'
     assert len(observed['idle_boundary']['responses'])==2 and observed['idle_boundary']['idle_wait_seconds']>=6
-
-
-def normalize_profile(observed,header_bounds,body_bounds):
-    for row in observed['slow_peers']:
-        row['elapsed_seconds']=bounded(row['elapsed_seconds'],*(body_bounds if row['case']=='progressing-body' else header_bounds),('elapsed',row['case']))
-        assert row['first_progress_seconds'] is not None and row['first_progress_seconds']<1
-        row['first_progress_seconds']=PROGRESS_INTERVAL
-        assert row['sent_progress_bytes']>=MIN_PROGRESS_BYTES
-        row['sent_progress_bytes']=MIN_PROGRESS_BYTES
-        canonical_close(row)
-    assert observed['idle_boundary']['idle_wait_seconds']>=6
-    observed['idle_boundary']['idle_wait_seconds']=6
 
 
 def invalid_config(implementation,binary,home,port,value,tokens,row):
@@ -106,57 +79,18 @@ def invalid_config(implementation,binary,home,port,value,tokens,row):
     assert not row['forced_cleanup'] and row['exit']==row['expected_exit'] and diagnostic,'malformed network timeout was not rejected by actual CLI config loading'
 
 
-def capture(args):
-    """Go half only: build the oracle, observe it, write the committed observations."""
-    with go_capture_session(CONTRACT, args, {'seed': ('httptimeoutseed', timeout_seed_source())}) as session:
-        base = session['base']
-        result = dict(profiles={}, invalid_config=[], go={})
-        for profile, header, body, header_bounds, body_bounds in PROFILES:
-            seed_home = base / ('seed-' + profile)
-            tokens = pinned_seed(session, profile, seed_home,
-                                 lambda home, header=header, body=body: json.loads(checked(
-                                     [session['helpers']['seed'], '--root', home / 'vault', '--read-header', header, '--read', body], home, isolated(home))))
-            snapshot = vault_snapshot(seed_home / 'vault')
-            result['profiles'][profile] = dict(header_config=header, read_config=body, header_bounds=header_bounds, body_bounds=body_bounds, fixture_snapshot=snapshot)
-            home = base / ('go-' + profile)
-            home.mkdir()
-            shutil.copytree(seed_home / 'vault', home / 'vault')
-            assert vault_snapshot(home / 'vault') == snapshot
-            observed = dict(rows=[], processes=[], slow_peers=[], idle_boundary={})
-            observe(session['go'], home, PORT, tokens, observed)
-            check_profile(observed, 'go', header_bounds, body_bounds)
-            normalize_profile(observed, header_bounds, body_bounds)
-            result['go'][profile] = observed
-        for index, value in enumerate(['not-a-duration','9223372036854775808ns']):
-            home = base / ('go-invalid-' + str(index))
-            home.mkdir()
-            shutil.copytree(base / 'seed-negative/vault', home / 'vault')
-            row = {}
-            invalid_config('go', session['go'], home, PORT, value, tokens, row)
-            row['elapsed_seconds'] = bounded(row['elapsed_seconds'], 0, 10, 'invalid-config elapsed')
-            redact_path(row, ('stdout_base64', 'stderr_base64'), home)
-            result['invalid_config'].append(row)
-        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest(),
-                              actual_timeout_seed_source_sha256=hashlib.sha256(timeout_seed_source()).hexdigest()),
-                    port=PORT, seeds=session['seeds'], **result)
-        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
-    print(f'CAPTURED: {sum(len(p["rows"]) for p in result["go"].values())} Go timeout responses -> {path}')
-
-
 def main():
     parser = argparse.ArgumentParser()
-    add_capture_arguments(parser, rust_required=False)
+    add_replay_arguments(parser)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
-    if capture_arguments_ok(args):
-        return capture(args)
     document = load_go_observations(CONTRACT, {})
     recorded = document['data']
     clean = not checked(['git','status','--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust = args.rust.resolve()
     paths = sorted(p for p in checked(['git','ls-files','--cached','--others','--exclude-standard']).decode().splitlines()
-                   if p.startswith(('crates/','third_party/','testdata/','scripts/rust-port/','internal/mcp/apitemplates/builtin/'))
+                   if p.startswith(('crates/','third_party/','testdata/','scripts/rust-port/'))
                    or p in {'Cargo.toml','Cargo.lock','.gitattributes','.github/workflows/rust-http-timeouts.yml'})
     receipt = dict(passed=False, candidate_commit=checked(['git','rev-parse','HEAD']).decode().strip(),
                    candidate_worktree_clean=clean, candidate_sources=inventory(paths,ROOT), native_os=platform.system(),

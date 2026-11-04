@@ -20,11 +20,10 @@ sys.dont_write_bytecode = True
 from http_framing_contract import INITIALIZE, JSON_ERROR, PING, PING_BODY, assert_response
 from http_head_contract import parse_response
 from http_origin_contract import assert_validation_response
-from http_oauth_contract import PASSPHRASE, PROBE
+from http_oauth_contract import PASSPHRASE
 from http_process_contract import ProcessCapture, SECRET, request
-from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, bounded, canonical_close, capture_arguments_ok, checked,
-                                  go_capture_session, inventory, isolated, load_go_observations, pack_tree, pinned_seed, provenance,
-                                  replay_seed, save_go_observations, unpack_tree, vault_snapshot)
+from mcp_process_contract import (add_replay_arguments, ORACLE, ROOT, checked, inventory, isolated, load_go_observations, provenance,
+                                  replay_seed, unpack_tree, vault_snapshot)
 
 CONTRACT='http-tls'
 PORT=28106  # fixed so request bytes (Host header) are identical in capture and replay
@@ -358,12 +357,6 @@ def observe(implementation,binary,home,port,tokens,identities,profile,result):
     finally:server.close()
 
 
-def tls_seed_source():
-    seed_source=PROBE.read_bytes()
-    assert seed_source.count(b'AllowInsecureBind: true')==1
-    return seed_source.replace(b'AllowInsecureBind: true',b'AllowInsecureBind: false',1)
-
-
 PROFILES=['tls12','tls13','mtls12','mtls13']
 
 
@@ -389,30 +382,6 @@ def check_profile(observed,implementation,profile,certificate_sha):
         assert minimum<=row['elapsed_seconds']<=maximum
 
 
-def normalize_profile(observed):
-    for row in observed['encrypted_peers']:
-        minimum,maximum=(8,12.5) if row['case']=='encrypted-body-record' else (3.5,7.5)
-        row['elapsed_seconds']=bounded(row['elapsed_seconds'],minimum,maximum,('elapsed',row['case']))
-        assert row['sent_record_bytes']>=4
-        row['sent_record_bytes']=4
-        for key in ('encrypted_received_base64','encrypted_sent_base64'):row[key]=''
-        row['record_sha256']='0'*64
-        row['tls_read_errors']=[]
-        canonical_close(row)
-
-
-def pinned_identities(session, base):
-    prior = (session['prior'] or {}).get('identities')
-    identities = base / 'identities'
-    if prior:
-        unpack_tree(prior['tree'], identities)
-        parameters = prior['parameters']
-    else:
-        parameters = json.loads(checked([session['helpers']['identity'], '--root', identities], base))
-    session['identities'] = dict(parameters=parameters, tree=pack_tree(identities))
-    return identities, parameters
-
-
 def secure_identities(identities):
     """Replay: restore the owner-only modes the Go identity helper creates."""
     if os.name!='nt':
@@ -420,51 +389,18 @@ def secure_identities(identities):
         for p in identities.iterdir():p.chmod(0o600)
 
 
-def capture(args):
-    """Go half only: build the oracle, observe it, write the committed observations."""
-    with go_capture_session(CONTRACT, args, {'seed': ('httptlsseed', tls_seed_source()), 'identity': ('httptlsidentity', IDENTITY.read_bytes())}) as session:
-        base = session['base']
-        identities, parameters = pinned_identities(session, base)
-        identity_paths = sorted(p.name for p in identities.iterdir())
-        certificate_sha = hashlib.sha256(ssl.PEM_cert_to_DER_cert((identities/'server.pem').read_text())).hexdigest()
-        tokens = pinned_seed(session, 'main', base / 'seed',
-                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
-        snapshot = vault_snapshot(base / 'seed/vault')
-        result = {}
-        for profile in PROFILES:
-            home = base / ('go-' + profile)
-            home.mkdir()
-            shutil.copytree(base / 'seed/vault', home / 'vault')
-            assert vault_snapshot(home / 'vault') == snapshot
-            observed = dict(rows=[], processes=[], identity_controls=[], encrypted_peers=[], alpn_offers=[])
-            observe('go', session['go'], home, PORT, tokens, identities, profile, observed)
-            check_profile(observed, 'go', profile, certificate_sha)
-            normalize_profile(observed)
-            result[profile] = observed
-        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest(),
-                              identity_probe_sha256=hashlib.sha256(IDENTITY.read_bytes()).hexdigest(),
-                              actual_tls_seed_source_sha256=hashlib.sha256(tls_seed_source()).hexdigest()),
-                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'], identities=session['identities'],
-                    identity_parameters=parameters, identity_inventory=inventory(identity_paths, identities),
-                    server_certificate_sha256=certificate_sha, go=result)
-        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
-    print(f'CAPTURED: {sum(len(p["rows"]) for p in result.values())} Go TLS/mTLS responses -> {path}')
-
-
 def main():
     parser = argparse.ArgumentParser()
-    add_capture_arguments(parser, rust_required=False)
+    add_replay_arguments(parser)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
-    if capture_arguments_ok(args):
-        return capture(args)
     document = load_go_observations(CONTRACT, {})
     recorded = document['data']
     clean=not checked(['git','status','--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust=args.rust.resolve()
     paths=sorted(p for p in checked(['git','ls-files','--cached','--others','--exclude-standard']).decode().splitlines()
-                 if p.startswith(('crates/','third_party/','testdata/','scripts/rust-port/','internal/mcp/apitemplates/builtin/'))
+                 if p.startswith(('crates/','third_party/','testdata/','scripts/rust-port/'))
                  or p in {'Cargo.toml','Cargo.lock','.gitattributes','.github/workflows/rust-http-tls.yml'})
     profiles=PROFILES
     receipt=dict(passed=False,candidate_commit=checked(['git','rev-parse','HEAD']).decode().strip(),candidate_worktree_clean=clean,

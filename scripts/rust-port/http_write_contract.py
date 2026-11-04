@@ -22,15 +22,13 @@ import time
 sys.dont_write_bytecode=True
 from http_framing_contract import INITIALIZE, PING, PING_BODY, assert_response
 from http_head_contract import parse_response
-from http_oauth_contract import PASSPHRASE, PROBE, Server
+from http_oauth_contract import PASSPHRASE, Server
 from http_process_contract import SECRET, request
-from http_tls_contract import IDENTITY, EmptyTLSResponse, NativeServer, context, exchange as tls_exchange
+from http_tls_contract import EmptyTLSResponse, NativeServer, context, exchange as tls_exchange
 from http_head_contract import exchange as tcp_exchange
 from http_tls_contract import secure_identities
-from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, bounded, canonical_close, capture_arguments_ok, checked,
-                                  go_capture_session, inventory, isolated, load_go_observations, pack_tree, pinned_seed,
-                                  provenance, replay_seed, save_go_observations, scrub_home, unpack_tree, vault_snapshot)
-from oracle_build import remove_oracle_worktree
+from mcp_process_contract import (add_replay_arguments, ORACLE, ROOT, checked, inventory, load_go_observations, provenance, replay_seed,
+                                  unpack_tree, vault_snapshot)
 
 CONTRACT='http-write'
 PORT=28107  # fixed so request bytes (Host header) are identical in capture and replay
@@ -333,17 +331,6 @@ def observe(binary,home,port,tokens,identities,profile,version,result,budget=30)
 SEED_BULK=b'bulk := &vault.Entry{Data: map[string]any{"notes": "public"}}\n for i := 0; i < 128; i++ { bulk.Metadata.Tags = append(bulk.Metadata.Tags, strings.Repeat("\\\"", 50000)) }\n if err = vault.WriteEntry(*root, "public/bulk", bulk, identity); err != nil { panic(err) }\n '
 
 
-def write_seed_source():
-    seed_source=PROBE.read_bytes();old=b'flag.Parse()';assert seed_source.count(old)==1
-    seed_source=seed_source.replace(b'"time"',b'"time"\n "strings"',1)
-    seed_source=seed_source.replace(old,b'write := flag.Duration("write-timeout", 0, "fixture write budget")\n secure := flag.Bool("secure", false, "fixture TLS selection")\n flag.Parse()',1)
-    old=b'AllowInsecureBind: true, RateLimit: 1000';assert seed_source.count(old)==1
-    seed_source=seed_source.replace(old,b'AllowInsecureBind: !*secure, RateLimit: 1000, WriteTimeout: *write',1)
-    old=b'registry := auth.NewTokenRegistry';assert seed_source.count(old)==1
-    extra=SEED_BULK
-    return seed_source.replace(old,extra+old,1)
-
-
 def check_write(receipt,implementation,profile,version,certificate_sha):
     """The per-implementation verdict of one profile (unchanged assertions); idempotent apart from declared differences."""
     budget=receipt['profiles'][profile]['write_budget']
@@ -386,136 +373,18 @@ PARTIAL_RESPONSE_KEEP=4096
 VOLATILE_STDERR=re.compile(rb'\d{4}/\d\d/\d\d \d\d:\d\d:\d\d (?:http: TLS handshake error|WARN MCP request received without Origin header)')
 
 
-def normalize_write(result,profile,budget,version):
-    """Capture-time normalisation of one Go profile record (the verdict ran on the real values before)."""
-    late=result['late_body']
-    late['body_completed_seconds']=2.4
-    late['elapsed_seconds']=0.0
-    late.pop('post_tls_error_wire_base64',None)
-    late['tls_read_errors']=[{**e,'message':''} for e in late['tls_read_errors']]
-    if late.get('peer_terminal_kind') in ('connection-reset','connection-aborted'):late['peer_terminal_kind']='eof'
-    if result['handshake_peer']:
-        peer=result['handshake_peer']
-        peer['elapsed_seconds']=bounded(peer['elapsed_seconds'],.6,2,'handshake elapsed')
-        peer['sent_hello_bytes']=9
-        peer['client_hello_sha256']='0'*64
-        peer['peer_terminal_kind']='eof'
-        peer['received_base64']=''
-    if result['slow_output']:
-        out=result['slow_output']
-        out['slow_read_calls']=4;out['slow_received_bytes']=4096
-        out['fast_drain_started_seconds']=budget_seconds(budget)+4
-        out['elapsed_seconds']=0.0;out['first_byte_seconds']=0.0
-        for key in ('socket_observations','socket_observation_errors'):out[key]=[]
-        out['load_average_before']=None
-        for key in ('request_start_wall_ns_before','request_start_wall_ns_after','receive_end_wall_ns_before','receive_end_wall_ns_after'):out[key]=0
-        out['peer_terminal_kind']='eof'
-        if out['received_base64']:
-            kept=base64.b64decode(out['received_base64'])[:PARTIAL_RESPONSE_KEEP]
-            out['received_base64']=base64.b64encode(kept).decode()
-            out['partial_response']=parse_response(kept)
-            out['received_chunk_bytes']=out['declared_chunk_length']-1
-    for process in result['processes']:
-        if process.get('stderr_base64'):
-            raw=base64.b64decode(process['stderr_base64'])
-            process['stderr_base64']=base64.b64encode(b''.join(l for l in raw.splitlines(True) if not VOLATILE_STDERR.match(l))).decode()
-    result['server_process_id']=0
-    return result
-
-
-def capture(args):
-    """Go half only: build the oracle, observe it, write the committed observations."""
-    with go_capture_session(CONTRACT, args, {'seed': ('httpwriteseed', write_seed_source()), 'identity': ('httpwriteidentity', IDENTITY.read_bytes())}) as session:
-        base = session['base']
-        prior = session['prior']
-        identities = base / 'identities'
-        if prior and prior.get('identities'):
-            unpack_tree(prior['identities']['tree'], identities)
-        else:
-            checked([session['helpers']['identity'], '--root', identities], base)
-        session['identities'] = dict(tree=pack_tree(identities))
-        identity_paths = sorted(p.name for p in identities.iterdir())
-        certificate_sha = hashlib.sha256(ssl.PEM_cert_to_DER_cert((identities/'server.pem').read_text())).hexdigest()
-        recorded = {}
-        # One bulk-bearing seed vault serves every profile (the 12.8 MB encrypted entry is incompressible); only
-        # config.yaml (write_timeout, allow_insecure_bind) differs per profile/budget and is recorded separately.
-        tokens = pinned_seed(session, 'base', base / 'seed-base', lambda home: json.loads(checked(
-            [session['helpers']['seed'], '--root', home / 'vault', '--write-timeout', '30s', '--secure=false'], home, isolated(home))))
-        session['configs'] = {}
-        for profile, budget, version in PROFILES:
-            output_profile = profile in {'tcp-output', 'tls-output'}
-            recorded[profile] = {}
-            for tried in (OUTPUT_BUDGETS if output_profile else (budget,)):
-                key = profile + '-' + tried
-                prior_config = ((session['prior'] or {}).get('configs') or {}).get(key)
-                if prior_config is None:
-                    scratch = base / ('config-' + key)
-                    scratch.mkdir()
-                    checked([session['helpers']['seed'], '--root', scratch / 'vault', '--write-timeout', tried, '--secure=' + ('true' if version else 'false')], scratch, isolated(scratch))
-                    prior_config = base64.b64encode(scrub_home((scratch / 'vault/config.yaml').read_bytes(), scratch)).decode()
-                session['configs'][key] = prior_config
-                seed_home = base / ('seed-' + key)
-                shutil.copytree(base / 'seed-base/vault', seed_home / 'vault')
-                (seed_home / 'vault/config.yaml').write_bytes(base64.b64decode(prior_config))
-                snapshot = vault_snapshot(seed_home / 'vault')
-                print(f'capture-go: {profile} write budget {tried}', file=sys.stderr, flush=True)
-                try:
-                    for attempt in range(EXCHANGE_ATTEMPTS):
-                        # A host stall longer than the profile's 1s budget between accept and the first response byte makes the
-                        # Go server close the exchange: no verdict exists for that attempt, so it is repeated on fresh state and
-                        # never recorded (only a completed observation is).
-                        home = base / ('go-' + profile + '-' + tried + '-' + str(attempt))
-                        home.mkdir()
-                        shutil.copytree(seed_home / 'vault', home / 'vault')
-                        assert vault_snapshot(home / 'vault') == snapshot
-                        result = dict(rows=[], processes=[], late_body={}, handshake_peer={}, slow_output={})
-                        try:
-                            observe(session['go'], home, PORT, tokens, identities, profile, version, result, budget_seconds(tried))
-                            break
-                        except ExchangeStarved as starved:
-                            print(f'capture-go: {profile} attempt {attempt} starved: {starved.details}', file=sys.stderr, flush=True)
-                            if attempt == EXCHANGE_ATTEMPTS - 1:
-                                raise
-                except OutputPreconditionUnmet:
-                    recorded[profile][tried] = dict(unmet=True, fixture_snapshot=snapshot)
-                    continue
-                except Exception as error:
-                    # The Rust retry ladder only reaches a budget when the shorter ones were unmet; Go never ran there
-                    # before. Keep the budgets Go cannot serve cleanly out of the ladder (never the first one).
-                    if not any(not e['unmet'] for e in recorded[profile].values()):
-                        raise
-                    print(f'capture-go: {profile} budget {tried} not recordable: {type(error).__name__}', file=sys.stderr)
-                    recorded[profile][tried] = dict(unmet=True, fixture_snapshot=snapshot, unavailable=type(error).__name__)
-                    continue
-                receipt = dict(native_os=platform.system(), profiles={profile: dict(write_budget=tried)}, go={profile: result}, declared_differences=[])
-                check_write(receipt, 'go', profile, version, certificate_sha)
-                recorded[profile][tried] = dict(unmet=False, fixture_snapshot=snapshot,
-                                                go=normalize_write(result, profile, tried, version), declared=receipt['declared_differences'])
-            assert any(not e['unmet'] for e in recorded[profile].values()), ('no usable Go observation', profile)
-        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest(),
-                              identity_probe_sha256=hashlib.sha256(IDENTITY.read_bytes()).hexdigest(),
-                              actual_write_seed_source_sha256=hashlib.sha256(write_seed_source()).hexdigest()),
-                    port=PORT, seeds=session['seeds'], configs=session['configs'], identities=session['identities'],
-                    identity_inventory=inventory(identity_paths, identities), server_certificate_sha256=certificate_sha,
-                    profiles=recorded)
-        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
-    print(f'CAPTURED: Go write observations for {len(recorded)} profiles -> {path}')
-
-
 def main():
     parser=argparse.ArgumentParser()
-    add_capture_arguments(parser, rust_required=False)
+    add_replay_arguments(parser)
     parser.add_argument('--allow-dirty-for-development',action='store_true')
     parser.add_argument('--tls-output-probe-only',action='store_true',help='Run only the additional TLS backpressure probe, not full HTTP acceptance')
     args=parser.parse_args()
-    if capture_arguments_ok(args):
-        return capture(args)
     document=load_go_observations(CONTRACT,{});recorded=document['data']
     profiles=[TLS_OUTPUT] if args.tls_output_probe_only else PROFILES
     clean=not checked(['git','status','--porcelain=v1']).strip();assert clean or args.allow_dirty_for_development
     rust=args.rust.resolve()
     paths=sorted(p for p in checked(['git','ls-files','--cached','--others','--exclude-standard']).decode().splitlines()
-                 if p.startswith(('crates/','third_party/','testdata/','scripts/rust-port/','internal/mcp/apitemplates/builtin/'))
+                 if p.startswith(('crates/','third_party/','testdata/','scripts/rust-port/'))
                  or p in {'Cargo.toml','Cargo.lock','.gitattributes','.github/workflows/rust-http-write.yml'})
     receipt: dict=dict(passed=False,candidate_commit=checked(['git','rev-parse','HEAD']).decode().strip(),candidate_worktree_clean=clean,
                  candidate_sources=inventory(paths,ROOT),native_os=platform.system(),architecture=platform.machine(),
