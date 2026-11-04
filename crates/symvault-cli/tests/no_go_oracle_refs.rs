@@ -16,6 +16,17 @@
 //! * `\bgo (build|test|run|vet|install)\b`
 //! * `golangci`, `govulncheck`
 //! * `skipping Go`
+//! * list/argv forms: `['go', 'build'|'test'|'run'|'vet'|'env'|'version'|'mod'|'list'|…`
+//!   (also with double quotes, or a `go` variable such as `[go, 'env'`)
+//! * `go_compiler`, `pinned_go(`, the `oracle_build` module (`import`/`from`/`oracle_build_timeout`/
+//!   `oracle_build.`) and the `oraclebuild` runner
+//! * `go.mod` / `go.sum` named as files
+//! * Go source trees: `scripts/rust-port/cmd/`, `./internal/`, `./cmd/`, or a string
+//!   literal starting with `internal/`
+//!
+//! The last five (`PATH_PATTERNS`) are about reading or building Go at runtime. They are not
+//! applied to comment lines, nor under `crates/`, where frozen-fixture provenance assertions
+//! legitimately spell the archived Go paths and `go.mod` hashes.
 //!
 //! ## Scope and allowlist
 //!
@@ -45,37 +56,56 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Files that still drive a Go oracle and belong to in-flight packets.
-const ALLOWLIST: [&str; 10] = [
-    // P40c-2: owned by cap-other
-    "scripts/rust-port/cli_artifacts_contract.py",
-    // P40c-2: owned by cap-other
-    "scripts/rust-port/device_list_differential.py",
-    // P40c-2: owned by cap-other
-    "scripts/rust-port/intake_watch_contract.py",
-    // P40c-2: owned by cap-other
-    "scripts/rust-port/native_closeout.py",
-    // P40c-2: owned by cap-proc
+/// Patterns about reading or building Go at runtime (see the module docs).
+const PATH_PATTERNS: [&str; 5] = [
+    "go_compiler",
+    "pinned_go(",
+    "oracle_build",
+    "go.mod|go.sum",
+    "Go source tree",
+];
+
+/// Files that still drive a Go oracle and belong to the in-flight cap-proc packet (P40c-3). Every entry
+/// dies when cap-proc is merged and its scripts are converted to replay or deleted.
+const ALLOWLIST: [&str; 24] = [
     "scripts/rust-port/build_timeout.py",
-    // P40c-2: owned by cap-proc (imported by mcp_fixture_contract.py)
     "scripts/rust-port/mcp_compiler_adapter.py",
-    // P40c-2: owned by cap-proc
+    "scripts/rust-port/test_mcp_compiler_adapter.py",
     "scripts/rust-port/mcp_fixture_contract.py",
-    // P40c-2: owned by cap-proc
     "scripts/rust-port/mcp_oracle.py",
-    // P40c-2: owned by cap-proc (test_http* tests)
-    "scripts/rust-port/test_http001init_isolation.py",
-    // P40c-2: owned by cap-proc
     "scripts/rust-port/test_mcp_oracle.py",
+    "scripts/rust-port/test_http001init_isolation.py",
+    "scripts/rust-port/http_drain_contract.py",
+    "scripts/rust-port/http_framing_contract.py",
+    "scripts/rust-port/http_head_contract.py",
+    "scripts/rust-port/http_oauth_contract.py",
+    "scripts/rust-port/http_origin_contract.py",
+    "scripts/rust-port/http_process_contract.py",
+    "scripts/rust-port/http_replay_contract.py",
+    "scripts/rust-port/http_slow_peer_contract.py",
+    "scripts/rust-port/http_timeout_contract.py",
+    "scripts/rust-port/http_tls_contract.py",
+    "scripts/rust-port/http_token_contract.py",
+    "scripts/rust-port/http_write_contract.py",
+    "scripts/rust-port/mcp_process_contract.py",
+    "scripts/rust-port/oracle_build.py",
+    "scripts/rust-port/test_oracle_build.py",
+    "scripts/rust-port/test_build_timeout.py",
+    "scripts/rust-port/toolhash_process_contract.py",
 ];
 
 /// This file spells the patterns it looks for.
 const SELF: &str = "crates/symvault-cli/tests/no_go_oracle_refs.rs";
 
 /// Guidance strings of the Rust CLI for binaries installed with the Go toolchain.
-const LINE_ALLOW: [&str; 2] = [
+const LINE_ALLOW: [&str; 4] = [
     "go install github.com/danieljustus/symaira-vault@latest",
     "git pull && go build ./cmd/symvault",
+    // A recorded argv the Rust test asserts verbatim (frozen fixture data, never executed).
+    "assert_eq!(command, [\"go\", \"run\", \"<fixture-child-go-source>\"]);",
+    // fixtures_verify.py: names of the blobs excluded from the frozen source digest; read from
+    // git objects, never from the working tree.
+    "MODULE_FILES = (\"go.mod\", \"go.sum\")",
 ];
 
 /// Scan roots: directories (recursive) and single files.
@@ -119,6 +149,95 @@ fn go_subcommand(line: &str) -> bool {
     })
 }
 
+const GO_VERBS: [&str; 14] = [
+    "build", "test", "run", "vet", "env", "version", "mod", "list", "install", "generate", "tool",
+    "get", "work", "fmt",
+];
+
+/// Argv/list form: `['go', 'build'`, `["go","test"`, `[go, 'env'`, `(go, "run"`.
+fn go_argv(line: &str) -> bool {
+    let bytes = line.as_bytes();
+    let skip = |mut at: usize| {
+        while at < bytes.len() && bytes[at] == b' ' {
+            at += 1;
+        }
+        at
+    };
+    line.match_indices("go").any(|(at, _)| {
+        // The token must be exactly `go`, optionally quoted, opening a list.
+        let (quoted, start) = match at.checked_sub(1).map(|i| bytes[i]) {
+            Some(q @ (b'\'' | b'"')) => (Some(q), at - 1),
+            Some(b) if is_word(b) || b == b'.' || b == b'/' || b == b'-' => return false,
+            _ => (None, at),
+        };
+        let mut end = at + 2;
+        if let Some(q) = quoted {
+            if bytes.get(end) != Some(&q) {
+                return false;
+            }
+            end += 1;
+        } else if bytes.get(end).is_some_and(|b| is_word(*b) || *b == b'-' || *b == b'.') {
+            return false;
+        }
+        // Preceded by `[` or `(` (after blanks), followed by `,`.
+        let mut before = start;
+        while before > 0 && bytes[before - 1] == b' ' {
+            before -= 1;
+        }
+        if !matches!(before.checked_sub(1).map(|i| bytes[i]), Some(b'[' | b'(')) {
+            return false;
+        }
+        let next = skip(end);
+        if bytes.get(next) != Some(&b',') {
+            return false;
+        }
+        let rest = &line[skip(next + 1)..];
+        let Some(q) = rest.bytes().next().filter(|b| *b == b'\'' || *b == b'"') else {
+            return false;
+        };
+        let word = &rest[1..];
+        GO_VERBS.iter().any(|verb| {
+            word.starts_with(verb) && word.as_bytes().get(verb.len()) == Some(&q)
+        })
+    })
+}
+
+/// The oracle build harness: `import oracle_build`, `from oracle_build`,
+/// `oracle_build_timeout`, `oracle_build.attr` and the `oraclebuild` runner. A bare
+/// file name (`scripts/rust-port/oracle_build.py` in a path filter) is not a use.
+fn oracle_build(line: &str) -> bool {
+    line.contains("oraclebuild")
+        || line.contains("import oracle_build")
+        || line.contains("from oracle_build")
+        || line.contains("oracle_build_timeout")
+        || (line.contains("oracle_build.")
+            && !line.contains("oracle_build.py")
+            && !line.contains("oracle_build.go"))
+}
+
+/// `go.mod` / `go.sum` as a file name (not `go.module`, `ago.mod`).
+fn go_module_file(line: &str) -> bool {
+    let bytes = line.as_bytes();
+    ["go.mod", "go.sum"].iter().any(|name| {
+        line.match_indices(name).any(|(at, _)| {
+            let before = at.checked_sub(1).map(|i| bytes[i]);
+            let after = bytes.get(at + name.len()).copied();
+            !before.is_some_and(|b| is_word(b) || b == b'-')
+                && !after.is_some_and(|b| is_word(b) || b == b'-')
+        })
+    })
+}
+
+/// Go source trees read at runtime: `scripts/rust-port/cmd/`, `./internal/`,
+/// `./cmd/` or a string literal that starts with `internal/`.
+fn go_source_tree(line: &str) -> bool {
+    line.contains("scripts/rust-port/cmd/")
+        || line.contains("./internal/")
+        || line.contains("./cmd/")
+        || line.contains("'internal/")
+        || line.contains("\"internal/")
+}
+
 /// Names of the patterns `line` matches.
 fn matches(line: &str) -> Vec<&'static str> {
     let mut found = Vec::new();
@@ -144,6 +263,12 @@ fn matches(line: &str) -> Vec<&'static str> {
     check("golangci", line.contains("golangci"));
     check("govulncheck", line.contains("govulncheck"));
     check("skipping Go", line.contains("skipping Go"));
+    check("go argv list", go_argv(line));
+    check("go_compiler", line.contains("go_compiler"));
+    check("pinned_go(", line.contains("pinned_go("));
+    check("oracle_build", oracle_build(line));
+    check("go.mod|go.sum", go_module_file(line));
+    check("Go source tree", go_source_tree(line));
     found
 }
 
@@ -188,7 +313,14 @@ fn scan_file(path: &Path, root: &Path, hits: &mut Hits, scanned: &mut usize) {
         if LINE_ALLOW.iter().any(|allowed| line.contains(allowed)) {
             continue;
         }
+        let comment = {
+            let t = line.trim_start();
+            t.starts_with('#') || t.starts_with("//")
+        };
         for pattern in matches(line) {
+            if PATH_PATTERNS.contains(&pattern) && (comment || relative.starts_with("crates/")) {
+                continue;
+            }
             hits.entry(relative.clone())
                 .or_default()
                 .push(format!("{}: {pattern}", number + 1));
@@ -280,7 +412,7 @@ fn scan_roots_cover_makefile_workflows_crates_and_scripts() {
     }
     assert_eq!(
         ALLOWLIST.len(),
-        10,
+        24,
         "allowlist grew: document the new entry"
     );
 }
@@ -312,6 +444,23 @@ fn matcher_semantics_fire_on_references_and_not_on_lookalikes() {
         ("golangci-lint run", "golangci"),
         ("govulncheck ./...", "govulncheck"),
         ("echo skipping Go oracle", "skipping Go"),
+        ("checked(['go', 'build', '-o', out], tree)", "go argv list"),
+        ("checked([\"go\",\"test\",\"-c\"], cwd=tree)", "go argv list"),
+        ("subprocess.run(['go','env','GOVERSION'])", "go argv list"),
+        ("run([ 'go' , 'version'])", "go argv list"),
+        ("check_output(('go', 'list', '-f', x))", "go argv list"),
+        ("checked([go, 'build', '.'])", "go argv list"),
+        ("checked([\"go\", \"mod\", \"download\"])", "go argv list"),
+        ("x = go_compiler(tree)", "go_compiler"),
+        ("go, env, compiler = pinned_go(os.environ.copy(), source)", "pinned_go("),
+        ("from oracle_build import build_go", "oracle_build"),
+        ("Build scripts/rust-port/cmd/oraclebuild first", "oracle_build"),
+        ("(tree / 'go.mod').read_text()", "go.mod|go.sum"),
+        ("git diff -- go.sum", "go.mod|go.sum"),
+        ("checked(['cargo'], './scripts/rust-port/cmd/httpseed')", "Go source tree"),
+        ("path = 'internal/mcp/server/x.go'", "Go source tree"),
+        ("p = ROOT / \"internal/vault\"", "Go source tree"),
+        ("cmd = ['./cmd/symvault']", "Go source tree"),
     ];
     for (line, pattern) in fires {
         assert!(
@@ -336,6 +485,20 @@ fn matcher_semantics_fire_on_references_and_not_on_lookalikes() {
         "Command::new(\"cargo\")",
         "setup-rust",
         "cargo-golangi",
+        "for implementation in ['go','rust']:",
+        "assert receipt['go'] == receipt['rust']",
+        "names = ('go', 'rust')",
+        "checked(['cargo', 'build'])",
+        "x = ['ago', 'build']",
+        "x = ['go-rust', 'build']",
+        "x = ['go', 'rust', 'build']",
+        "x = ['go', 'builder']",
+        "go.module and ago.mod",
+        "cargo-go.sum",
+        "let internal = 1; // crate internal/",
+        "crates/symvault-core/src/internal/mod.rs",
+        "README for cmd/",
+        "- 'scripts/rust-port/oracle_build.py'",
     ];
     for line in quiet {
         assert!(
@@ -359,6 +522,16 @@ fn scanner_detects_planted_references_in_every_scan_root_kind() {
     )
     .unwrap();
     fs::write(dir.join("crates/ok.rs"), "let _ = 1;\n").unwrap();
+    fs::write(
+        dir.join("scripts/rust-port/argv.py"),
+        "# checked(['go', 'build'])\nchecked(['go', 'build', '.'])\nopen('go.mod')\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("crates/prov.rs"),
+        "let f = \"internal/vault/x.go\"; // go.mod\n",
+    )
+    .unwrap();
     fs::write(dir.join("Makefile"), "t:\n\tgo test ./...\n").unwrap();
     fs::write(
         dir.join(".github/workflows/ci.yml"),
@@ -376,7 +549,7 @@ fn scanner_detects_planted_references_in_every_scan_root_kind() {
         scan(&dir.join(sub), &dir, &mut hits, &mut scanned);
     }
     fs::remove_dir_all(&dir).unwrap();
-    assert_eq!(scanned, 4, "excluded fixture dir must not be scanned");
+    assert_eq!(scanned, 6, "excluded fixture dir must not be scanned");
     let flat: Vec<String> = hits
         .iter()
         .flat_map(|(file, lines)| lines.iter().map(move |l| format!("{file}:{l}")))
@@ -388,6 +561,9 @@ fn scanner_detects_planted_references_in_every_scan_root_kind() {
             ".github/workflows/ci.yml:3: golangci",
             "Makefile:2: go build|test|run|vet|install",
             "crates/x.rs:1: SYMVAULT_*GO_BINARY",
+            "scripts/rust-port/argv.py:1: go argv list",
+            "scripts/rust-port/argv.py:2: go argv list",
+            "scripts/rust-port/argv.py:3: go.mod|go.sum",
         ]
     );
 }
