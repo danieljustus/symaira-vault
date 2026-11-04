@@ -731,6 +731,13 @@ class Reports(unittest.TestCase):
             self.assertEqual(self.run_main("log-ok", path, "one", "--bogus-option"), 2)
             ignored = self.write(d, "ign", log.replace("0 ignored", "1 ignored"))
             self.assertEqual(self.run_main("log-ok", ignored, "--sum-passed", "9"), 1)
+            darwin = log.replace("0 ignored", "1 ignored") + (
+                "test x::replayed ... ignored, SKIP (darwin recording): replays on macOS only\n")
+            other = log.replace("0 ignored", "1 ignored") + "test x::other ... ignored, flaky\n"
+            for system, want in [("Darwin", 1), ("Linux", 0)]:
+                with mock.patch.object(g.platform, "system", return_value=system):
+                    self.assertEqual(self.run_main("log-ok", self.write(d, "dw", darwin), "--results-ok"), want)
+                    self.assertEqual(self.run_main("log-ok", self.write(d, "ot", other), "--results-ok"), 1)
             self.assertEqual(self.run_main("log-ok", self.write(d, "none", "nothing ran\n"), "--results-ok"), 1)
             zero = self.write(d, "zero", "test result: ok. 0 passed; 0 failed; 0 ignored;\n")
             self.assertEqual(self.run_main("log-ok", zero, "--results-ok"), 1)

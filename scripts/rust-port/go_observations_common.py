@@ -65,6 +65,11 @@ def sha256_file(file):
     return hashlib.sha256(Path(file).read_bytes()).hexdigest()
 
 
+def canonical(document):
+    """The canonical JSON text of an observation document (receipts hash it)."""
+    return json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
 def load(contract, *, oracle_commit=None, goos=None):
     """Return the committed document for this host; missing or foreign means failure."""
     goos = goos or host_goos()

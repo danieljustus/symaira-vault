@@ -50,7 +50,13 @@ fixture or recapturing a recording needs a worktree of the tag.
   (the Windows sync-oracle exception stays a recorded historical contract).
 * **Darwin-only recordings.** The output-modes corpus and the Touch ID
   observation were recorded on Darwin; other hosts replay them with a visible
-  `SKIP`/attestation, not a re-measurement.
+  `SKIP`/attestation, not a re-measurement. Rust tests that replay a darwin
+  transcript are ignored off Darwin with the reason `SKIP (darwin recording):
+  replays on macOS only`; `gate_area_check.py log-ok` accepts exactly those
+  ignored tests, counted and printed, and only on a non-Darwin host. Linux
+  replays darwin observations where the output is host-independent; host-bound
+  lines (OS/Arch, symlink modes, the GUI-dependent Touch ID warning) are
+  projected onto the replay host by the test, not skipped.
 * **Capture side.** `SYMVAULT_ORACLE=capture` of `common/go_oracle.rs` and
   `go_oracle_ext.rs` is removed from the Rust tests (replay-or-fail). Recapture
   = check out `legacy/go-oracle`, build the oracle, run the old capture command

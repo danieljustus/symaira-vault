@@ -45,6 +45,7 @@ from typing import NoReturn
 
 HERE = Path(__file__).resolve().parent
 RESULT = re.compile(r"test result: ok\. (\d+) passed; 0 failed; (\d+) ignored")
+DARWIN_SKIP = re.compile(r"^test \S+ \.\.\. ignored, SKIP \(darwin recording\): replays on macOS only$", re.M)
 
 
 class Check(Exception):
@@ -780,8 +781,15 @@ def log_ok(args):
     if args.results_ok or args.sum_passed is not None:
         if not results:
             fail(f"{args.path}: no `test result: ok` line")
-        if any(int(ignored) != 0 for _, ignored in results):
+        ignored = sum(int(n) for _, n in results)
+        # Go is gone, so a darwin-only recording cannot be replayed elsewhere: off
+        # Darwin those tests are ignored with exactly this reason (ADR 0036,
+        # "Darwin-only recordings"). Only they may be ignored, and only there.
+        darwin_skips = len(DARWIN_SKIP.findall(text)) if platform.system() != "Darwin" else 0
+        if ignored != darwin_skips:
             fail(f"{args.path}: ignored tests in a required run")
+        if darwin_skips:
+            print(f"gate_area_check: SKIP {darwin_skips} darwin-recording test(s) in {args.path}")
         total = sum(int(n) for n, _ in results)
         if total == 0:
             fail(f"{args.path}: zero tests ran")
