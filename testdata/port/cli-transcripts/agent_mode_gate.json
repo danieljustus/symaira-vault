@@ -12,6 +12,826 @@
     "macos"
   ],
   "tests": {
+    "agent_gate_complete_ignores_root_flags": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "aa6757c676e3b26ab2d35bbe73ec03c4d82cfccea9b95cb9629838fab0321d4c",
+          "request": {
+            "args": [
+              "profile",
+              "add",
+              "p1",
+              "--vault",
+              "<ROOT:0>"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Profile \"p1\" added with vault <ROOT:0>\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 1,
+              "path": "config/symaira-vault",
+              "op": "dir",
+              "mode": 448,
+              "content": null
+            },
+            {
+              "root": 1,
+              "path": "config/symaira-vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT:1>/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nprofiles:\n    p1:\n        vault: <ROOT:0>\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "5b92b2c4d23188706c1f7073e2946be06278cad03c3dee3f2eaa1c6e0eca6174",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "daa726cfea25e9294465a56d95502140e513ed8dd8192caeff71bac5b02da333",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "37fd97047278f9cb470286d1f752ae8a68256c4ded83e8a4d33fa2ee9f3d961b",
+          "request": {
+            "args": [
+              "--vault=<ROOT:0>",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "340021c3a854da917dfa7d767bb0e0427b70d6c0b840a2cd40525c2416ec7f26",
+          "request": {
+            "args": [
+              "--vault=<ROOT:0>",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c63e5ada9f3178cadf362bcf8fcd20738d7f01b5500e9af828262b64ae4fffca",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "__completeNoDesc",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "396317ed4dcbb09fd5994bb12b421883ac63828214186b34db54e167f69209b8",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "__completeNoDesc",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4d93e0f6eaa604cfeb36a318227e2520abe9bf1a0ad237f11d28b8a05c6e3e6e",
+          "request": {
+            "args": [
+              "--profile",
+              "p1",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "327e851e82432a0eaa3cadd79d58ec68c44ad62c1b3b1f7a77ea729cec5cf730",
+          "request": {
+            "args": [
+              "--profile",
+              "p1",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b907bea8b0e7c19183bd771ce9bec14f0f15ea747c7df538c1c87ef0b0233d01",
+          "request": {
+            "args": [
+              "--profile",
+              "nosuch",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "772ccf0cec6e04116fcb5983767c0bf2155d7d086675f12328e1cb265aaa0391",
+          "request": {
+            "args": [
+              "--profile",
+              "nosuch",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a0964eb073f2ee4e8ecdd2b2722d1bdb35c081ad6fd98437d44a470ffae57123",
+          "request": {
+            "args": [
+              "__complete",
+              "--vault",
+              "<ROOT:0>",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "d7ea865b76e7f5670efa9e881f9aba37843d62484384b7bd77fca5d707d0dee5",
+          "request": {
+            "args": [
+              "__complete",
+              "--vault",
+              "<ROOT:0>",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f5ce13553cd2d63bed289933c4340f67f5bf0cb8d43d23a619dfe9cc0e92458b",
+          "request": {
+            "args": [
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "7c53fcd7b051aa6ae93188f303b4a750ea19e461b108378af3b2af97c8f2026e",
+          "request": {
+            "args": [
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": null,
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\nError: agent mode: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory: load config from <ROOT:1>/data/symaira-vault/config.yaml: open <ROOT:1>/data/symaira-vault/config.yaml: no such file or directory\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b0ce92b1db32f1ec9aac23c5f1b7a4a2eb9e2803f48e813f2d31dd77a123065f",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/elsewhere",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ":4\n"
+            },
+            "stderr": {
+              "text": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "audit-alpha.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            }
+          ]
+        },
+        {
+          "key": "f0dbfc0c31f933ae34e2d1ac596f171167548f200bfc831d703b80ce0add0b36",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/elsewhere",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "bfc89bbea288b23e9e413305f47c0a53f6faca9ca036863287fd70582fb72597",
+          "request": {
+            "args": [
+              "--profile",
+              "nosuch",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ":4\n"
+            },
+            "stderr": {
+              "text": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a86dea06320d117ee4dce2dd04a67a1bd4ee50e87be1f9a921fec16309539145",
+          "request": {
+            "args": [
+              "--profile",
+              "nosuch",
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c6e1c396289a0d4ffda3172888ae7033256077bd9bd41232b03973f77e8b026b",
+          "request": {
+            "args": [
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ":4\n"
+            },
+            "stderr": {
+              "text": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "c6e2c4b1820cb3a640c120202572005876c6b21f8fd306f28d6443f364cab5cf",
+          "request": {
+            "args": [
+              "__complete",
+              "list",
+              ""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
     "agent_gate_completion_shells_refuse_output_formats_first": {
       "seeds": [],
       "calls": [

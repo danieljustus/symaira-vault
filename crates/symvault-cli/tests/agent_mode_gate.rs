@@ -773,6 +773,61 @@ fn agent_gate_covers_non_utf8_arguments() {
     assert!(pair.rust.listing().contains_key("audit-alpha.log"));
 }
 
+/// Go's `__complete` commands disable flag parsing: `--vault` / `--profile` on
+/// the command line never decide the vault the agent is looked up in.
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_complete_ignores_root_flags() {
+    let (_oracle, pair) = Pair::new("agent_gate_complete_ignores_root_flags");
+    pair.set_config(&Config::Text(PROFILES));
+    let alpha = Some("alpha");
+    let no_env = Opts {
+        no_vault_env: true,
+        extra: &[],
+    };
+    for side in [&pair.go, &pair.rust] {
+        let result = side.run(&["profile", "add", "p1", "--vault", "{ROOT}"], None, no_env);
+        assert!(result.status.success(), "profile add: {result:?}");
+    }
+
+    // Without SYMVAULT_VAULT the default vault (no config there) decides.
+    for args in [
+        &["--vault", "{ROOT}", "__complete", "list", ""][..],
+        &["--vault={ROOT}", "__complete", "list", ""],
+        &["--vault", "{ROOT}", "__completeNoDesc", "list", ""],
+        &["--profile", "p1", "__complete", "list", ""],
+        &["--profile", "nosuch", "__complete", "list", ""],
+        &["__complete", "--vault", "{ROOT}", "list", ""],
+        &["__complete", "list", ""],
+    ] {
+        for agent in [alpha, Some("ghost")] {
+            let (code, _) = pair.check(&format!("{agent:?} {args:?}"), args, agent, no_env);
+            assert_eq!(code, Some(5), "{agent:?} {args:?}");
+        }
+    }
+    assert!(
+        !pair.rust.listing().contains_key("audit-alpha.log"),
+        "the flag vault is never opened"
+    );
+    // With SYMVAULT_VAULT set, that vault decides, flags or not.
+    for args in [
+        &["--vault", "{ROOT}/elsewhere", "__complete", "list", ""][..],
+        &["--profile", "nosuch", "__complete", "list", ""],
+        &["__complete", "list", ""],
+    ] {
+        pair.check(&format!("alpha env {args:?}"), args, alpha, Opts::default());
+        pair.check(
+            &format!("ghost env {args:?}"),
+            args,
+            Some("ghost"),
+            Opts::default(),
+        );
+    }
+}
+
 /// cobra's generated `completion <shell>` commands support no output format;
 /// the format gate runs before the agent check.
 #[test]

@@ -14,7 +14,7 @@
 //! error to report before the agent check; here it is left to the command
 //! itself (the gate stays silent), exactly as when no agent is set.
 
-use std::{ffi::OsString, path::Path};
+use std::path::Path;
 
 use symvault_core::config::Config;
 
@@ -75,25 +75,11 @@ pub(crate) fn preflight(path: &str, vault: Option<&str>, profile: Option<&str>) 
     }
 }
 
-/// The gate for Go's hidden `__complete` / `__completeNoDesc` commands, whose
-/// root flags precede the command word at `index`.
-pub(crate) fn complete_preflight(args: &[OsString], index: usize) -> Option<String> {
-    let mut vault = None;
-    let mut profile = None;
-    let mut tokens = args[1..index].iter().filter_map(|arg| arg.to_str());
-    while let Some(token) = tokens.next() {
-        for (name, slot) in [("--vault", &mut vault), ("--profile", &mut profile)] {
-            if token == name {
-                *slot = tokens.next().map(str::to_owned);
-            } else if let Some(value) = token
-                .strip_prefix(name)
-                .and_then(|rest| rest.strip_prefix('='))
-            {
-                *slot = Some(value.to_owned());
-            }
-        }
-    }
-    preflight("__complete", vault.as_deref(), profile.as_deref())
+/// The gate for Go's hidden `__complete` / `__completeNoDesc` commands. They
+/// disable flag parsing, so `--vault` / `--profile` on the command line never
+/// reach `VaultPath`; only the environment and the default decide the vault.
+pub(crate) fn complete_preflight() -> Option<String> {
+    preflight("__complete", None, None)
 }
 
 /// Go's `agentctx.Load`: the profile lookup in `<vault>/config.yaml`, then the

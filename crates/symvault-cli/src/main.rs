@@ -1388,7 +1388,7 @@ fn run_cli() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(index) = completion_protocol::request_index(&args) {
         // Go's hidden `__complete` command runs the root PersistentPreRunE too.
-        if let Some(message) = agent_gate::complete_preflight(&args, index) {
+        if let Some(message) = agent_gate::complete_preflight() {
             eprintln!("Error: {message}\nError: {message}");
             return ExitCode::from(agent_gate::EXIT_PERMISSION_DENIED);
         }
