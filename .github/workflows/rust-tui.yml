@@ -124,19 +124,35 @@ jobs:
           shutil.copy2(Path(os.environ['CARGO_TARGET_DIR'])/'debug'/name,Path('target/tui-evidence')/name)
           BINARY
           python3 scripts/rust-port/tui_harness_test.py > target/tui-evidence/harness-tests.txt 2>&1
-      - name: Complete clean fifteen-case actual Go and Rust terminal comparison
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            # A second build, never a combined `-p ... -p ...` one: unified features would change the
+            # binary the contract compares byte for byte (Makefile tui-contract does the same).
+            cargo build --manifest-path "$manifest" -p symvault-store --example tui-snapshot --locked > target/tui-evidence/snapshot-build.txt 2>&1
+          fi
+      # The Go side is the committed observation tui-contract.linux.json; no darwin Go observation was
+      # ever recorded and none can be made now (the contract drives the real macOS pasteboard), so the
+      # darwin lane keeps the harness checks above and the static attestation (Makefile tui-harness-check).
+      - name: Complete clean fifteen-case terminal comparison against the recorded Go observation
+        if: runner.os == 'Linux'
         run: |
           set -euo pipefail
           binary="$CARGO_TARGET_DIR/debug/symvault"
-          python3 scripts/rust-port/tui_contract.py --rust-cli "$binary" --receipt target/tui-evidence/native-tui.json > target/tui-evidence/native-tui.txt 2>&1
+          snapshot="$CARGO_TARGET_DIR/debug/examples/tui-snapshot"
+          python3 scripts/rust-port/tui_driver_equivalence.py check > target/tui-evidence/driver-equivalence.txt 2>&1
+          python3 scripts/rust-port/tui_contract.py --rust-cli "$binary" --snapshot-bin "$snapshot" --receipt target/tui-evidence/native-tui.json > target/tui-evidence/native-tui.txt 2>&1
           head=$(git rev-parse HEAD)
           digest=$(python3 -c 'import hashlib; from pathlib import Path; print(hashlib.sha256(Path("target/tui-evidence/native-tui.json").read_bytes()).hexdigest())')
-          python3 scripts/rust-port/tui_contract.py --rust-cli "$binary" --receipt target/tui-evidence/native-tui.json --validate-receipt --candidate "$head" --expected-receipt-sha256 "$digest"
+          python3 scripts/rust-port/tui_contract.py --rust-cli "$binary" --snapshot-bin "$snapshot" --receipt target/tui-evidence/native-tui.json --validate-receipt --candidate "$head" --expected-receipt-sha256 "$digest"
       - name: Reject dirty source, foreign binary and actual production reveal mutation
+        if: runner.os == 'Linux'
         run: |
           set -euo pipefail
           binary="$CARGO_TARGET_DIR/debug/symvault"
-          python3 scripts/rust-port/tui_mutation_test.py --rust-cli "$binary" --native-receipt target/tui-evidence/native-tui.json --receipt target/tui-evidence/native-mutation.json > target/tui-evidence/native-mutation.txt 2>&1
+          snapshot="$CARGO_TARGET_DIR/debug/examples/tui-snapshot"
+          python3 scripts/rust-port/tui_mutation_test.py --rust-cli "$binary" --snapshot-bin "$snapshot" --native-receipt target/tui-evidence/native-tui.json --receipt target/tui-evidence/native-mutation.json > target/tui-evidence/native-mutation.txt 2>&1
+      - name: Verify the recorded Go attestation of the darwin terminal contract
+        if: runner.os == 'macOS'
+        run: python3 scripts/rust-port/go_observations_common.py verify-attestation tui-contract
       - name: Retain all native receipts and failures
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
