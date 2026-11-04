@@ -36,11 +36,17 @@ import time
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_timeout import oracle_build_timeout  # noqa: E402
-from mcp_process_contract import (HTTP_BINDING_MARKER, ORACLE, PipeCapture, checked, free_loopback_port,  # noqa: E402
-                                  isolated, normalise_process_text, settled_snapshot,
-                                  snapshot_delta, stop_group, tree_snapshot)
+from mcp_process_contract import (HTTP_BINDING_MARKER, ORACLE, PipeCapture, add_capture_arguments, bounded,  # noqa: E402
+                                  capture_arguments_ok, checked, free_loopback_port, go_capture_session, isolated,
+                                  load_go_observations, normalise_process_text, pinned_seed, provenance, replay_seed,
+                                  save_go_observations, settled_snapshot, snapshot_delta, stop_group, tree_snapshot)
 
+CONTRACT = "http-drain"
+NORMALIZATION = ["seed vault and tokens pinned in the file (each case picks a free port at run time; no port is recorded: peer ports are "
+                 "normalised inside stderr and the response bodies carry none)",
+                 "Date header, log timestamps, peer ports",
+                 "wall-clock exit_elapsed/peer_closed_after: the real value was asserted inside the case's exit window at capture "
+                 "(in_window) and is recorded as the window midpoint; neither is compared"]
 ROOT = Path(__file__).resolve().parents[2]
 SEED = ROOT / "scripts/rust-port/http_process_seed.go.txt"
 DRAIN_SECONDS = 5.0  # MCP.shutdown_timeout default
@@ -318,35 +324,44 @@ def check_oracle(go):
             assert "context canceled" in row["response"]["body"], ("Go answers 403 context canceled", key)
 
 
-def build_oracle(destination):
-    archive = checked(["git", "archive", ORACLE])
-    source = destination / "src"
-    source.mkdir()
-    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        tar.extractall(source, filter="data")
-    helper = source / "scripts/rust-port/cmd/httpprocessseed"
-    helper.mkdir(parents=True)
-    (helper / "main.go").write_bytes(SEED.read_bytes())
-    env = dict(os.environ, GOWORK="off")
-    go, seed = destination / "symvault-go", destination / "symvault-seed"
-    for output, package in ((go, "."), (seed, "./scripts/rust-port/cmd/httpprocessseed")):
-        checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", output, package], cwd=source, env=env,
-                timeout=oracle_build_timeout())
-    return go, seed
+def normalize_drain(rows):
+    for row in rows:
+        window = CASES[row["case"]][1]
+        row["exit_elapsed"] = bounded(row["exit_elapsed"], window[0], window[1], ("drain exit", row["case"], row["signal"]))
+        row["peer_closed_after"] = row["exit_elapsed"]
+    return rows
+
+
+def capture(args):
+    """Go half only: build the oracle, observe it, write the committed observations."""
+    with go_capture_session(CONTRACT, args, {"seed": ("httpprocessseed", SEED.read_bytes())}) as session:
+        base = session["base"]
+        tokens = pinned_seed(session, "main", base / "seed",
+                             lambda home: json.loads(checked([session["helpers"]["seed"], "--root", home / "vault"], cwd=home, env=isolated(home))))
+        root = base / "go"
+        root.mkdir()
+        rows = exercise(session["go"], root, base / "seed/vault", tokens, "go")
+        check_oracle(rows)
+        normalize_drain(rows)
+        data = dict(info=dict(session["info"], seed_sha256=hashlib.sha256(SEED.read_bytes()).hexdigest()),
+                    seeds=session["seeds"], go=rows)
+        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session["go_version"])
+    print(f"CAPTURED: {len(rows)} Go HTTP drain observations -> {path}")
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rust", required=True, type=Path)
-    parser.add_argument("--receipt", required=True, type=Path)
-    parser.add_argument("--go", type=Path, help="prebuilt Go oracle (development only; needs --go-seed)")
-    parser.add_argument("--go-seed", type=Path, help="prebuilt Go fixture seed helper (development only)")
+    add_capture_arguments(parser, rust_required=False)
     parser.add_argument("--expect-mismatch", action="store_true",
-                        help="negative control: PASS only if the Rust binary differs from Go")
+                        help="negative control: PASS only if the Rust binary differs from the recorded Go observations")
     parser.add_argument("--allow-dirty-for-development", action="store_true")
     args = parser.parse_args()
     if os.name == "nt":
         sys.exit("http_drain_contract.py is Unix-only; refusing to report a vacuous pass.")
+    if capture_arguments_ok(args):
+        return capture(args)
+    document = load_go_observations(CONTRACT, {})
+    recorded = document["data"]
     rust = args.rust.resolve()
     assert rust.is_file(), "a real Rust CLI binary is required"
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
@@ -355,23 +370,19 @@ def main():
                    candidate_worktree_clean=clean, native_os=platform.system(), architecture=platform.machine(),
                    rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),
                    driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                   seed_sha256=hashlib.sha256(SEED.read_bytes()).hexdigest(), drain_seconds=DRAIN_SECONDS,
-                   expect_mismatch=args.expect_mismatch, go=[], rust=[], mismatch="", passed=False)
+                   seed_sha256=recorded["info"]["seed_sha256"], drain_seconds=DRAIN_SECONDS,
+                   expect_mismatch=args.expect_mismatch, go=recorded["go"], rust=[], mismatch="", passed=False,
+                   go_observations=provenance(document), go_binary_sha256=recorded["info"]["go_binary_sha256"])
     args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
     try:
         with tempfile.TemporaryDirectory(prefix="symvault-http-drain-") as raw:
             base = Path(raw)
-            go, seed = (args.go.resolve(), args.go_seed.resolve()) if args.go else build_oracle(base)
-            receipt["go_binary_sha256"] = hashlib.sha256(go.read_bytes()).hexdigest()
             seed_home = base / "seed"
-            seed_home.mkdir()
-            tokens = json.loads(checked([seed, "--root", seed_home / "vault"], cwd=seed_home, env=isolated(seed_home)))
-            roots = {name: base / name for name in ("go", "rust")}
-            for root in roots.values():
-                root.mkdir()
-            receipt["go"] = exercise(go, roots["go"], seed_home / "vault", tokens, "go")
+            tokens = replay_seed(recorded, "main", seed_home)
             check_oracle(receipt["go"])
-            receipt["rust"] = exercise(rust, roots["rust"], seed_home / "vault", tokens, "rust")
+            root = base / "rust"
+            root.mkdir()
+            receipt["rust"] = exercise(rust, root, seed_home / "vault", tokens, "rust")
             try:
                 compare(receipt["go"], receipt["rust"])
             except AssertionError as error:
@@ -386,7 +397,7 @@ def main():
     if args.expect_mismatch:
         print(f"PASS (negative control): mutant rejected: {receipt['mismatch']}")
     else:
-        print(f"PASS: {len(receipt['go'])} actual Go/Rust HTTP drain observations on {platform.system()}")
+        print(f"PASS: {len(receipt['go'])} actual Go/Rust HTTP drain observations on {platform.system()} (Go side replayed from {receipt['go_observations']['path']})")
 
 
 if __name__ == "__main__":

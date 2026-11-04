@@ -19,7 +19,15 @@ from http_framing_contract import INITIALIZE, JSON_ERROR, PING, assert_response,
 from http_head_contract import parse_response
 from http_oauth_contract import PASSPHRASE, PROBE, Server
 from http_process_contract import SECRET, request
-from mcp_process_contract import ORACLE, ROOT, checked, oracle_build_timeout, remove_worktree, inventory, isolated, vault_snapshot
+from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, bounded, capture_arguments_ok, checked, go_capture_session,
+                                  inventory, isolated, load_go_observations, pinned_seed, provenance, replay_seed,
+                                  save_go_observations, vault_snapshot, canonical_close)
+
+CONTRACT='http-slow-peer'
+PORT=28104  # fixed so request bytes (Host header) are identical in capture and replay
+NORMALIZATION=['fixed loopback port','seed vault and tokens pinned in the file','Date header, log timestamps, peer ports',
+               'wall-clock values (elapsed_seconds, first_progress_seconds, idle_wait_seconds) and the sender progress count are asserted '
+               'against the comparison bounds at capture and recorded as the bounds midpoint / minimum (see check_slow_peers)']
 
 
 # Progress cadence. The shortest configured deadline is 1s and the contract needs >=4 progress
@@ -178,12 +186,72 @@ def declared_difference(name,left,right):
     return None
 
 
+def check_slow_peers(observed,implementation,limits=None):
+    """The per-implementation timing/termination verdict (unchanged assertions); idempotent."""
+    limits=limits or {'progressing-header':(3.5,7.5),'progressing-body':(8,12.5)}
+    assert len(observed['slow_peers'])==2
+    for row in observed['slow_peers']:
+        assert_progress(row)
+        assert row['peer_terminal_observed'] and not row['forced_client_close'], 'progressing peer escaped its absolute request deadline'
+        raw=base64.b64decode(row['received_base64'])
+        if raw:
+            assert implementation=='go' and row['case']=='progressing-body', 'unexpected timeout response bytes'
+            response=parse_response(raw)
+            assert_response(response,400,JSON_ERROR)
+            row['termination']='complete-go-json-error-before-write-deadline'
+            row['response']=response
+        else:
+            row['termination']='actual-empty-eof-or-reset'
+        minimum,maximum=limits[row['case']]
+        assert minimum<=row['elapsed_seconds']<=maximum
+    assert len(observed['idle_boundary']['responses'])==2
+    assert observed['idle_boundary']['idle_wait_seconds']>=6
+
+
+def normalize_slow_peers(observed,limits=None):
+    """Capture-time normalisation: replace the measured wall-clock values by the asserted bound."""
+    limits=limits or {'progressing-header':(3.5,7.5),'progressing-body':(8,12.5)}
+    for row in observed['slow_peers']:
+        row['elapsed_seconds']=bounded(row['elapsed_seconds'],*limits[row['case']],('elapsed',row['case']))
+        assert row['first_progress_seconds'] is not None and row['first_progress_seconds']<1
+        row['first_progress_seconds']=PROGRESS_INTERVAL
+        assert row['sent_progress_bytes']>=MIN_PROGRESS_BYTES
+        row['sent_progress_bytes']=MIN_PROGRESS_BYTES
+        canonical_close(row)
+    assert observed['idle_boundary']['idle_wait_seconds']>=6
+    observed['idle_boundary']['idle_wait_seconds']=6
+
+
+def capture(args):
+    """Go half only: build the oracle, observe it, write the committed observations."""
+    with go_capture_session(CONTRACT, args, {'seed': ('httpslowseed', PROBE.read_bytes())}) as session:
+        base = session['base']
+        tokens = pinned_seed(session, 'main', base / 'seed',
+                             lambda home: json.loads(checked([session['helpers']['seed'], '--root', home / 'vault'], home, isolated(home))))
+        snapshot = vault_snapshot(base / 'seed/vault')
+        result = dict(rows=[], processes=[], slow_peers=[], idle_boundary={})
+        home = base / 'go'
+        home.mkdir()
+        shutil.copytree(base / 'seed/vault', home / 'vault')
+        assert vault_snapshot(home / 'vault') == snapshot
+        observe(session['go'], home, PORT, tokens, result)
+        check_slow_peers(result, 'go')
+        normalize_slow_peers(result)
+        data = dict(info=dict(session['info'], seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest()),
+                    port=PORT, fixture_snapshot=snapshot, seeds=session['seeds'], go=result)
+        path = save_go_observations(CONTRACT, data, {}, NORMALIZATION, session['go_version'])
+    print(f'CAPTURED: {len(result["rows"])} Go slow-peer responses -> {path}')
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rust', type=Path, required=True)
-    parser.add_argument('--receipt', type=Path, required=True)
+    add_capture_arguments(parser, rust_required=False)
     parser.add_argument('--allow-dirty-for-development', action='store_true')
     args = parser.parse_args()
+    if capture_arguments_ok(args):
+        return capture(args)
+    document = load_go_observations(CONTRACT, {})
+    recorded = document['data']
     clean = not checked(['git','status','--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust = args.rust.resolve()
@@ -193,83 +261,48 @@ def main():
     receipt = dict(passed=False, candidate_commit=checked(['git','rev-parse','HEAD']).decode().strip(),
                    candidate_worktree_clean=clean, candidate_sources=inventory(paths,ROOT), native_os=platform.system(),
                    architecture=platform.machine(), rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(), oracle_commit=ORACLE,
-                   go=dict(rows=[], processes=[], slow_peers=[], idle_boundary={}), rust=dict(rows=[], processes=[], slow_peers=[], idle_boundary={}), differences=[], declared_differences=[])
+                   go=recorded['go'], rust=dict(rows=[], processes=[], slow_peers=[], idle_boundary={}), differences=[], declared_differences=[],
+                   go_observations=provenance(document), port=recorded['port'], fixture_snapshot=recorded['fixture_snapshot'],
+                   **recorded['info'])
     try:
         with tempfile.TemporaryDirectory(prefix='symvault-http-slow-') as raw:
-            base, tree = Path(raw), Path(raw)/'oracle'
-            checked(['git','worktree','add','--detach',tree,ORACLE])
-            try:
-                files = checked(['git','ls-tree','-r','--name-only',ORACLE]).decode().splitlines()
-                sources = sorted(p for p in files if p in {'go.mod','go.sum'} or p.endswith('.go') and not p.endswith('_test.go'))
-                embedded = sorted(p for p in files if p.startswith('internal/mcp/apitemplates/builtin/'))
-                assert len(embedded)==17
-                receipt.update(oracle_sources=inventory(sources,tree), oracle_embedded=inventory(embedded,tree), seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest())
-                helper = tree/'scripts/rust-port/cmd/httpslowseed'
-                helper.mkdir()
-                (helper/'main.go').write_bytes(PROBE.read_bytes())
-                suffix = '.exe' if os.name=='nt' else ''
-                go,seed = base/('go-cli'+suffix),base/('go-seed'+suffix)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree,timeout=oracle_build_timeout())
-                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpslowseed'],tree,timeout=oracle_build_timeout())
-                receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
-                seed_home=base/'seed';seed_home.mkdir()
-                tokens=json.loads(checked([seed,'--root',seed_home/'vault'],seed_home,isolated(seed_home)))
-                snapshot=vault_snapshot(seed_home/'vault');receipt['fixture_snapshot']=snapshot
-                with socket.socket() as selection:
-                    selection.bind(('127.0.0.1',0));port=selection.getsockname()[1]
-                receipt['port']=port
-                for implementation,binary in [('go',go),('rust',rust)]:
-                    home=base/implementation;home.mkdir();shutil.copytree(seed_home/'vault',home/'vault')
-                    assert vault_snapshot(home/'vault')==snapshot
-                    observe(binary,home,port,tokens,receipt[implementation])
-                for a,b in zip(receipt['go']['rows'],receipt['rust']['rows'],strict=True):
-                    assert a['case']==b['case'] and a['request_sha256']==b['request_sha256']
-                    left,right=a['response'],b['response']
-                    if any(left[k]!=right[k] for k in ['status_line','headers_without_date','body_base64']):
-                        difference=dict(case=a['case'],go=left,rust=right)
-                        declared=declared_difference(a['case'],left,right)
-                        if declared:
-                            receipt['declared_differences'].append(dict(difference,decision=declared))
-                        else:
-                            receipt['differences'].append(difference)
-                expected_count=len(cases(receipt['port'],{}))
-                assert len(receipt['go']['rows'])==len(receipt['rust']['rows'])==expected_count
-                for implementation in ['go','rust']:
-                    observed=receipt[implementation]
-                    assert len(observed['slow_peers'])==2
-                    for row in observed['slow_peers']:
-                        assert_progress(row)
-                        assert row['peer_terminal_observed'] and not row['forced_client_close'], 'progressing peer escaped its absolute request deadline'
-                        raw=base64.b64decode(row['received_base64'])
-                        if raw:
-                            assert implementation=='go' and row['case']=='progressing-body', 'unexpected timeout response bytes'
-                            response=parse_response(raw)
-                            assert_response(response,400,JSON_ERROR)
-                            row['termination']='complete-go-json-error-before-write-deadline'
-                            row['response']=response
-                        else:
-                            row['termination']='actual-empty-eof-or-reset'
-                        minimum,maximum=(3.5,7.5) if row['case']=='progressing-header' else (8,12.5)
-                        assert minimum<=row['elapsed_seconds']<=maximum
-                    assert len(observed['idle_boundary']['responses'])==2
-                    assert observed['idle_boundary']['idle_wait_seconds']>=6
-                for a,b in zip(receipt['go']['slow_peers'],receipt['rust']['slow_peers'],strict=True):
-                    assert a['case']==b['case'] and a['request_prefix_sha256']==b['request_prefix_sha256']
-                assert receipt['go']['idle_boundary']['request_sha256']==receipt['rust']['idle_boundary']['request_sha256']
-                for a,b in zip(receipt['go']['idle_boundary']['responses'],receipt['rust']['idle_boundary']['responses'],strict=True):
-                    assert all(a[k]==b[k] for k in ['status_line','headers_without_date','body_base64'])
-                assert inventory(paths,ROOT)==receipt['candidate_sources']
-                assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
-                assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256']
-                receipt['candidate_worktree_clean_at_end']=not checked(['git','status','--porcelain=v1']).strip()
-                assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
-                assert not receipt['differences'], 'actual undeclared HTTP slow-peer differences retained'
-                receipt['passed']=True
-            finally:
-                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
+            base = Path(raw)
+            seed_home = base/'seed'
+            tokens = replay_seed(recorded, 'main', seed_home)
+            snapshot = vault_snapshot(seed_home/'vault')
+            assert snapshot == receipt['fixture_snapshot'], 'recorded seed vault bytes changed'
+            home=base/'rust';home.mkdir();shutil.copytree(seed_home/'vault',home/'vault')
+            assert vault_snapshot(home/'vault')==snapshot
+            observe(rust,home,receipt['port'],tokens,receipt['rust'])
+            for a,b in zip(receipt['go']['rows'],receipt['rust']['rows'],strict=True):
+                assert a['case']==b['case'] and a['request_sha256']==b['request_sha256']
+                left,right=a['response'],b['response']
+                if any(left[k]!=right[k] for k in ['status_line','headers_without_date','body_base64']):
+                    difference=dict(case=a['case'],go=left,rust=right)
+                    declared=declared_difference(a['case'],left,right)
+                    if declared:
+                        receipt['declared_differences'].append(dict(difference,decision=declared))
+                    else:
+                        receipt['differences'].append(difference)
+            expected_count=len(cases(receipt['port'],{}))
+            assert len(receipt['go']['rows'])==len(receipt['rust']['rows'])==expected_count
+            for implementation in ['go','rust']:
+                check_slow_peers(receipt[implementation],implementation)
+            for a,b in zip(receipt['go']['slow_peers'],receipt['rust']['slow_peers'],strict=True):
+                assert a['case']==b['case'] and a['request_prefix_sha256']==b['request_prefix_sha256']
+            assert receipt['go']['idle_boundary']['request_sha256']==receipt['rust']['idle_boundary']['request_sha256']
+            for a,b in zip(receipt['go']['idle_boundary']['responses'],receipt['rust']['idle_boundary']['responses'],strict=True):
+                assert all(a[k]==b[k] for k in ['status_line','headers_without_date','body_base64'])
+            assert inventory(paths,ROOT)==receipt['candidate_sources']
+            assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
+            assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256']
+            receipt['candidate_worktree_clean_at_end']=not checked(['git','status','--porcelain=v1']).strip()
+            assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
+            assert not receipt['differences'], 'actual undeclared HTTP slow-peer differences retained'
+            receipt['passed']=True
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
-    print(f"PASS: three real runtime responses, two progressing read deadlines and a six-second idle boundary per implementation on {platform.system()}")
+    print(f"PASS: three real runtime responses, two progressing read deadlines and a six-second idle boundary per implementation on {platform.system()} (Go side replayed from {receipt['go_observations']['path']})")
 
 
 if __name__=='__main__':

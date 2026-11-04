@@ -393,7 +393,8 @@ unittest.main(module=test_mcp_oracle, argv=['locale-control',
     def test_cli_cannot_narrow_corrected_mode_or_pass_without_native_evidence(self):
         with tempfile.TemporaryDirectory() as raw:
             output = Path(raw)/'no-native-evidence'
-            argv = ['mcp_fixture_contract.py', '--approval-generator', 'approval-lifetime-v1', '--output', str(output)]
+            # --capture-go drives the live (mocked) Go path: replay has no compiler step to refuse
+            argv = ['mcp_fixture_contract.py', '--capture-go', '--approval-generator', 'approval-lifetime-v1', '--output', str(output)]
             with patch.object(sys, 'argv', argv+['--generator', 'tools-call']), \
                  patch.object(fixtures, 'pinned_go', side_effect=AssertionError('no compiler allowed')) as compiler, \
                  self.assertRaises(SystemExit) as rejected:
@@ -532,7 +533,7 @@ class ProductSourceControls(unittest.TestCase):
                     value['oracle']['commit_sha'] = oracle.ORDERED
                     (tree/name).write_text(json.dumps(value))
                 # P deliberately leaves the historical output unchanged.
-            with patch.object(sys, 'argv', ['gate', '--generator', 'tools-call', '--output', str(output)]), \
+            with patch.object(sys, 'argv', ['gate', '--capture-go', '--generator', 'tools-call', '--output', str(output)]), \
                  patch.object(fixtures, 'git', side_effect=checkout), \
                  patch.object(fixtures, 'pinned_go', return_value=('unit-compiler', {}, {'version':'unit-only'})), \
                  patch.object(fixtures, 'run_step', side_effect=execute), \
