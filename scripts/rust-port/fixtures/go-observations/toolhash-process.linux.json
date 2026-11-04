@@ -26,7 +26,7 @@
     ],
     [
      "token_id",
-     "tok-19700101-00000000"
+     "<token:go_stale>"
     ],
     [
      "req_id",
@@ -64,7 +64,7 @@
     ],
     [
      "token_id",
-     "tok-19700101-00000000"
+     "<token:go_stale_scoped_health>"
     ],
     [
      "req_id",
@@ -98,7 +98,7 @@
     ],
     [
      "token_id",
-     "tok-19700101-00000000"
+     "<token:go_current>"
     ],
     [
      "req_id",
@@ -136,7 +136,7 @@
     ],
     [
      "token_id",
-     "tok-19700101-00000000"
+     "<token:go_stale>"
     ],
     [
      "req_id",
@@ -174,7 +174,7 @@
     ],
     [
      "token_id",
-     "tok-19700101-00000000"
+     "<token:go_current>"
     ],
     [
      "req_id",
@@ -212,7 +212,7 @@
     ],
     [
      "token_id",
-     "tok-19700101-00000000"
+     "<token:go_stale>"
     ],
     [
      "req_id",
@@ -250,7 +250,7 @@
     ],
     [
      "token_id",
-     "tok-19700101-00000000"
+     "<token:go_stale_scoped_health>"
     ],
     [
      "req_id",
@@ -288,7 +288,7 @@
     ],
     [
      "token_id",
-     "tok-19700101-00000000"
+     "<token:go_stale>"
     ],
     [
      "req_id",
@@ -460,6 +460,7 @@
   "fixed loopback port",
   "seed vault, the Go-issued and the Rust-issued CLI tokens (and the shared vault holding them) pinned in the file",
   "prompt-injection data fence nonce (DATA_<16 hex>) and the audit ids (sess_id/req_id) already masked by the driver",
+  "audit token_id resolved through the pinned shared vault registry to <token:LABEL> (the id is stable in the pinned tree)",
   "Rust-issued token minted by the Rust CLI at first capture (needs --rust once); re-captures reuse the pinned shared vault"
  ],
  "oracle_commit": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
