@@ -18064,6 +18064,746 @@
         }
       ]
     },
+    "agent_gate_unknown_command_beats_the_root_help": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "9380f0eb45b5872b6f4318c27ac1eb3c0b30590bf723a9c7bba198f096407295",
+          "request": {
+            "args": [
+              "nosuch",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a0696c3ff3e1ead4c7f55808b1fbab8bc427b862d30cf0ede167302dd690a11d",
+          "request": {
+            "args": [
+              "nosuch",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ff91bd84a50f58e74c9e80e0f2086c9b2c8b78869b567a39277687ea2b00fbaf",
+          "request": {
+            "args": [
+              "nosuch",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "73ddd177753be71935fa5babc1f2f10c0fe2ad9aecb8a570a0f57ca8fb02b869",
+          "request": {
+            "args": [
+              "nosuch",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "422ff7a6c4e48052fc5b4224727797f18ceb9a8b841046df4be52cddc3f06c61",
+          "request": {
+            "args": [
+              "nosuch",
+              "--help=true"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "8984704179942a6697be17eecd13cda79cb04df413e59e541c31a64922398f26",
+          "request": {
+            "args": [
+              "nosuch",
+              "--help=true"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "f0692bec1d00d0da2d65004550bbb650b7aff32f7dc16ed58239e8a9fa916731",
+          "request": {
+            "args": [
+              "nosuch",
+              "sub",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0cf7b5496ecf080bb2865f67cc8f6b33e3a2b16a2ccc1d83eb370999ca54d0fa",
+          "request": {
+            "args": [
+              "nosuch",
+              "sub",
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "44f35db8f11686d2782fc1045ce3a6386712921068896d07e71ebd85c6873cb7",
+          "request": {
+            "args": [
+              "--json",
+              "nosuch",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "cf31c96b8ccf38e3d1840f04bd1705672ad93e9b8ca71d9b5af740cdf7258ba2",
+          "request": {
+            "args": [
+              "--json",
+              "nosuch",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e7146bc7d5a060930ea91e4938a8a1c32badb289a8a4c5aaa159a84b171ec5d6",
+          "request": {
+            "args": [
+              "-h",
+              "nosuch"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a2b6977f63b59cdecee2a14409d24e659376205b2a5512b34ff9a677d5ff57a7",
+          "request": {
+            "args": [
+              "-h",
+              "nosuch"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b6ebfce9135703579a4eb12d2ef552d87d9b09e872e82782366ada5406492d40",
+          "request": {
+            "args": [
+              "--help",
+              "nosuch"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b6a068ca7fb169ef2929ecbd2c86d13fa822f25dec323ad98b9398129b006428",
+          "request": {
+            "args": [
+              "--help",
+              "nosuch"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "fc554ac5f2d967dc6262c8b44a9f7b493538778ab3a77d5b8f2e95629c73b602",
+          "request": {
+            "args": [
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "6462971c6a61e245f515d3819c3319940373e030be77f9c439ff627874fbdebb",
+          "request": {
+            "args": [
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "4605bd13e5e73fed385e9f1b5f378e298d8cc9f878da9fec886bf51453325a1f",
+          "request": {
+            "args": [
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "ded9254f389a8905d8e031610066288cee1083be0db460bd8b959563f37f0851",
+          "request": {
+            "args": [
+              "-h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Quick Start:\n  symvault init            create a vault and identity\n  symvault add <name>      add a credential\n  symvault get <name>      retrieve a credential\n\nSymaira Vault is a Go CLI password manager with an interactive TUI, multi-device\nsync via Git, and an MCP server for AI-agent integration.\n\nFirst-time setup:\n   1. symvault init         create a vault and identity (non-interactive)\n   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)\n   3. symvault doctor       health-check and self-heal\n\nDaily use:\n  symvault add <name>      add a credential (interactive form)\n  symvault ui              browse and edit the vault in a TUI\n  symvault get <name>      print a credential\n  symvault --help          full command list\n\nUsage:\n  symvault [command]\n\nEssentials:\n  add              Add a new password entry\n  delete           Delete a password entry\n  doctor           Check vault health and configuration\n  edit             Edit an existing password entry\n  find             Search for entries\n  get              Get a password entry\n  init             Initialize a new password vault\n  list             List password entries\n  set              Set a password entry or field\n  setup            Interactive setup wizard for Symaira Vault\n  ui               Launch the interactive terminal UI\n\nVault:\n  broker           Run the egress credential broker (loopback MITM proxy)\n  dynamic          Generate dynamic secrets with time-limited leases\n  file             Store, export, and consume file attachments in the vault\n  generate         Generate a secure password\n  recipients       Manage vault recipients for multi-user encryption\n  run              Run a command with secrets injected as environment variables\n  template         Generate configuration files from templates\n\nSharing & Sync:\n  backup           Create a backup archive of the vault\n  device           Manage paired devices for multi-device vault access\n  export           Export vault entries to CSV or JSON\n  git              Git operations on vault\n  import           Import entries from another password manager\n  intake           Review-gated credential intake from loose files\n  remote           Manage git remote for vault sync\n  restore          Restore vault from a backup archive\n  share            Manage secret sharing between agents\n  sync             Sync vault with remote (pull + optional push)\n\nAgents & MCP:\n  agent            Manage agent profiles\n  approval         List and decide pending agent approval requests\n  mcp              Start MCP server for agent access\n\nAuth & Access:\n  auth             Manage vault unlock authentication\n  lock             Lock the vault (clear session)\n  unlock           Unlock the vault and cache the passphrase\n\nAdministration:\n  audit            View MCP audit logs\n  config           Manage Symaira Vault configuration\n  migrate          Vault migration commands\n  policy           Manage declarative policies\n  profile          Manage vault profiles\n  startup-profile  Measure and report CLI startup time\n  update           Check for Symaira Vault updates\n  verify           Verify vault entry integrity against manifest\n\nAdditional Commands:\n  completion       Generate the autocompletion script for the specified shell\n  help             Help about any command\n  version          Print the version of Symaira Vault\n\nFlags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n  -h, --help              help for symvault\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault [command] --help\" for more information about a command.\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b6121dcf053b3d1b357d33fdf59430e9b54080e3739d4a372c74f9c01aaa2560",
+          "request": {
+            "args": [
+              "help",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Help provides help for any command in the application.\nSimply type symvault help [path to command] for full details.\n\nUsage:\n  symvault help [command] [flags]\n\nFlags:\n  -h, --help   help for help\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "deebaeeabf7b59f0a15b2a3088895f382e3ca3f7c3718403e394c2bc0bb4fdc2",
+          "request": {
+            "args": [
+              "help",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "Help provides help for any command in the application.\nSimply type symvault help [path to command] for full details.\n\nUsage:\n  symvault help [command] [flags]\n\nFlags:\n  -h, --help   help for help\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a0696c3ff3e1ead4c7f55808b1fbab8bc427b862d30cf0ede167302dd690a11d",
+          "request": {
+            "args": [
+              "nosuch",
+              "--help"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
     "agent_load_error_branches": {
       "seeds": [],
       "calls": [

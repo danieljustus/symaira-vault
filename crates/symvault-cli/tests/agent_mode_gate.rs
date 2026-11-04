@@ -1138,3 +1138,35 @@ fn agent_gate_group_help_survives_an_unknown_subcommand() {
         assert_eq!(code, Some(0), "{args:?}");
     }
 }
+
+/// An unknown first word is cobra's `unknown command` error (exit 1) even with a
+/// help flag behind it; the root help only wins when the flag comes first (cobra's
+/// `Find` still takes the word as that flag's value).
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_unknown_command_beats_the_root_help() {
+    let (_oracle, pair) = Pair::new("agent_gate_unknown_command_beats_the_root_help");
+    pair.set_config(&Config::Text(PROFILES));
+    let none = Opts::default();
+    for args in [
+        &["nosuch", "--help"][..],
+        &["nosuch", "-h"],
+        &["nosuch", "--help=true"],
+        &["nosuch", "sub", "-h"],
+        &["--json", "nosuch", "--help"],
+        &["-h", "nosuch"],
+        &["--help", "nosuch"],
+        &["--help"],
+        &["-h"],
+        &["help", "--help"],
+    ] {
+        for agent in [Some("ghost"), None] {
+            pair.check(&format!("{agent:?} {args:?}"), args, agent, none);
+        }
+    }
+    let (code, _) = pair.check("unknown", &["nosuch", "--help"], None, none);
+    assert_eq!(code, Some(1));
+}
