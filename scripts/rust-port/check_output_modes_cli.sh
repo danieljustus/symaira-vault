@@ -4,7 +4,7 @@
 # --json, --output yaml, --output json, --quiet) against the pinned oracle, then
 # replay it against the native CLI.
 #
-# A supplied oracle (SYMVAULT_OUTPUT_MODES_GO_BINARY) is still verified by
+# A supplied oracle (SYMVAULT_OUTPUT_MODES_GO_BINARY) is verified by
 # outputmodegen (revision, clean VCS metadata and toolchain). Without one, the
 # pinned commit is cloned and built here, like check_import_cli.sh does.
 #
@@ -56,7 +56,7 @@ if [ "${SYMVAULT_OUTPUT_MODES_REGENERATE:-}" = 1 ]; then
 fi
 "${GO:-go}" run ./scripts/rust-port/cmd/outputmodegen \
     --check --go-binary "$oracle_binary"
-# The live Touch ID comparison runs against the same verified oracle binary.
-SYMVAULT_OUTPUT_MODES_GO_BINARY="$oracle_binary" "${CARGO:-cargo}" test \
-    --manifest-path "$repo_root/Cargo.toml" \
+# The Touch ID probe is replayed from its recorded attestation
+# (testdata/port/cli-observations/output_modes.json, no oracle needed).
+"${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
     -p symvault-cli --test output_modes --locked -- --nocapture

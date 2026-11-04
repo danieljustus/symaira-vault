@@ -126,7 +126,9 @@ impl RecordedHandler {
                     let header = |name: &str| {
                         text.lines().find_map(|line| {
                             let (key, value) = line.split_once(':')?;
-                            key.trim().eq_ignore_ascii_case(name).then(|| value.trim().to_owned())
+                            key.trim()
+                                .eq_ignore_ascii_case(name)
+                                .then(|| value.trim().to_owned())
                         })
                     };
                     let request_line = text.lines().next().unwrap_or_default();
@@ -262,7 +264,12 @@ fn approval_pair_proves_vault_ownership_against_recorded_go_handler() {
     fs::create_dir_all(&home).expect("home");
     fs::create_dir_all(&vault).expect("vault root");
 
-    let init = run(&rust_binary, &vault, &home, &["init", "--auth", "passphrase"]);
+    let init = run(
+        &rust_binary,
+        &vault,
+        &home,
+        &["init", "--auth", "passphrase"],
+    );
     assert!(init.status.success(), "Rust init: {init:?}");
     let secret = vec![0x5A_u8; 32];
     let server = RecordedHandler::start(secret.clone());

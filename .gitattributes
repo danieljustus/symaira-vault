@@ -89,3 +89,5 @@ scripts/rust-port/mcp_fixture_contract.py text eol=lf
 scripts/rust-port/mcp_process_contract.py text eol=lf
 scripts/rust-port/test_mcp_oracle.py text eol=lf
 crates/symvault-mcp/tests/fixtures/tls-* text eol=lf
+# The built-in API templates are hashed by crates/symvault-mcp/tests/apitemplate_assets_sync.rs.
+crates/symvault-mcp/assets/** text eol=lf

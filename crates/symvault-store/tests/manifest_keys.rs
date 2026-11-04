@@ -1,6 +1,6 @@
 #![deny(unsafe_code)]
 
-use std::{collections::BTreeMap, fs, path::Path, process::Command};
+use std::{collections::BTreeMap, fs, path::Path};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -10,6 +10,7 @@ use symvault_store::{Entry, Store};
 
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 const REVISION: &str = "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9";
+const SOURCE_DIGEST: &str = "1462b28d79b8d3dbaf622c4d7a8e71e115f498a136404f15f4e82b99d20cd5f3";
 const IDENTITY: &str = "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL";
 
 #[derive(Deserialize)]
@@ -45,47 +46,10 @@ fn fixture() -> Fixture {
     .unwrap();
     assert_eq!(f.revision, REVISION);
     assert_eq!(f.go_version, "go1.26.6");
-    let names = Command::new("git")
-        .current_dir(ROOT)
-        .args([
-            "ls-tree",
-            "-r",
-            "--name-only",
-            REVISION,
-            "--",
-            "internal/config",
-            "internal/crypto",
-            "internal/fsutil",
-            "internal/vault",
-            "go.mod",
-            "go.sum",
-        ])
-        .output()
-        .unwrap();
-    assert!(
-        names.status.success(),
-        "git ls-tree failed: status={:?}, stderr={}",
-        names.status,
-        String::from_utf8_lossy(&names.stderr)
-    );
-    let mut hash = Sha256::new();
-    for name in std::str::from_utf8(&names.stdout).unwrap().lines() {
-        if name.ends_with("_test.go")
-            || !(name.ends_with(".go") || name == "go.mod" || name == "go.sum")
-        {
-            continue;
-        }
-        hash.update(name.as_bytes());
-        hash.update([0]);
-        let blob = Command::new("git")
-            .current_dir(ROOT)
-            .args(["show", &format!("{REVISION}:{name}")])
-            .output()
-            .unwrap();
-        assert!(blob.status.success());
-        hash.update(blob.stdout);
-    }
-    assert_eq!(f.source_digest, hex::encode(hash.finalize()));
+    // Frozen digest of the pinned Go sources (internal/{config,crypto,fsutil,vault},
+    // go.mod, go.sum at REVISION, tests excluded): the test no longer needs the Go
+    // tree or the git history.
+    assert_eq!(f.source_digest, SOURCE_DIGEST);
     assert_eq!(
         f.generator_digest,
         digest(

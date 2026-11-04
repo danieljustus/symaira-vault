@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages release-contract release-contract-selftest rust-cli manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-generate ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages release-contract release-contract-selftest rust-cli manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential crypto-differential port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-generate ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
 
 # Variables
 BINARY_NAME := symvault
@@ -643,8 +643,8 @@ mcp-http-ratelimit-differential: mcp-http-ratelimit-fixtures-check
 
 # HTTP-003 paired production-handler and Rust adapter lifecycle contracts.
 .PHONY: mcp-oauth-contract
+# Go-free: the Go serverbootstrap OAuth tests were the oracle; the Rust tests below are the contract.
 mcp-oauth-contract:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestOAuthRefreshToken_FullFlow|TestOAuthRefreshToken_ExpiredRefreshDenied|TestOAuthRefreshToken_RegisterResponseIncludesRefresh|TestOAuthRegisterValidationCases|TestOAuthRegisterAcceptsCustomSchemeWithoutUserinfo|TestOAuthRegisterBoundsPersistentClientStore|TestOAuthRefreshToken_WellKnownIncludesRefresh|TestOAuthRefreshToken_UnsupportedGrantType|TestOAuthRefreshToken_MissingRefreshToken)$$' -count=1
 	$(CARGO) test -p symvault-mcp --lib oauth::tests --locked
 	$(CARGO) test -p symvault-mcp --lib http::tests::authorization_server_discovery_is_reachable_through_oauth_listener --locked
 
@@ -808,11 +808,6 @@ yaml-scalar-regenerate:
 output-modes-regenerate:
 	SYMVAULT_OUTPUT_MODES_REGENERATE=1 ./scripts/rust-port/check_output_modes_cli.sh
 
-differential-go-selftest:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
-		--left ./$(BINARY_NAME) --right ./$(BINARY_NAME) --cases $(PORT_CLI_CASES)
-
 crypto-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cryptogen \
 		--check --output testdata/port/crypto/age-kdf.json
@@ -820,11 +815,6 @@ crypto-differential:
 	@mkdir -p target/crypto
 	$(CARGO) run -p symvault-crypto --example crypto_emit --locked > target/crypto/rust-output.txt
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cryptoverify target/crypto/rust-output.txt
-	$(MAKE) crypto-fuzz-smoke
-
-crypto-fuzz-smoke:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) GO=$(GO) ./scripts/go-fuzz-target.sh -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=3s -timeout=30s ./internal/crypto
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) GO=$(GO) ./scripts/go-fuzz-target.sh -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=3s -timeout=30s ./internal/crypto
 
 # Verify the independent fuzz workspace has a present, consistent lockfile.
 # cargo-fuzz 0.13.2 has no --locked flag; the locked Cargo check validates
@@ -929,7 +919,7 @@ port-contract: timestamp-fixtures-check cfg-overrides-fixtures-check mcp-oauth-c
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9 --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential clipboard-linux-differential mcp-prompts-differential mcp-render-differential config-cli-differential config-rewrite-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check tool-registry-hash-differential ffi-differential
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential clipboard-linux-differential mcp-prompts-differential mcp-render-differential config-cli-differential config-rewrite-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential crypto-differential cli-help-differential token-lookup-fixtures-check tool-registry-hash-differential ffi-differential
 
 # TOOLHASH-001: Go-recorded tool-registry hash + call-time drift refusal. The
 # process-level Go/Rust/cross-binary check needs prebuilt binaries (see
@@ -1040,15 +1030,14 @@ audit-differential: audit-fixtures-check
 #
 #   ffi-fixtures-generate  re-record testdata/port/ffi/mobilebind.json from the
 #                          real Go functions (explicit; never part of a check)
-#   ffi-fixtures-check     re-run Go and fail on any byte of drift
-#   ffi-differential       Go --check, then the Rust tests (fixture replay,
-#                          Go<->Rust interoperability against the live Go
-#                          driver, C ABI), then on macOS the Swift package test
+#   ffi-fixtures-check     capture side: re-run Go and fail on any byte of drift
+#   ffi-differential       Go-free: the Rust tests (fixture replay, Go<->Rust
+#                          interoperability replayed from the recorded Go
+#                          verdicts, C ABI), then on macOS the Swift package test
 #                          against the release-grade staticlib. Off macOS the
 #                          Swift part prints a visible SKIP.
 SWIFT ?= swift
 FFI_TARGET_ABS := $(abspath $(CARGO_TARGET_DIR))
-FFI_DRIVER := $(FFI_TARGET_ABS)/ffi-driver/mobilebindgen
 ffi-fixtures-generate ffi-fixtures-check ffi-differential: export SYMVAULT_TEST_KEYRING := memory
 
 # FFI_GENERATE_FLAGS=--keep-seed regenerates from the seed already stored in the
@@ -1064,17 +1053,15 @@ ffi-fixtures-check:
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mobilebindgen \
 		--check --output testdata/port/ffi/mobilebind.json
 
-ffi-differential: ffi-fixtures-check
-	@mkdir -p $(dir $(FFI_DRIVER))
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -o $(FFI_DRIVER) ./scripts/rust-port/cmd/mobilebindgen
-	SYMVAULT_FFI_GO_DRIVER=$(FFI_DRIVER) $(CARGO) test -p symvault-ffi --locked
+ffi-differential:
+	$(CARGO) test -p symvault-ffi --locked
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
 		set -eu; \
 		$(CARGO) build -p symvault-ffi --profile ffi --locked; \
 		cd crates/symvault-ffi/swift && \
 		SYMVAULT_FFI_LIB_DIR=$(FFI_TARGET_ABS)/ffi $(SWIFT) test --scratch-path $(FFI_TARGET_ABS)/ffi-swift; \
 	else \
-		echo "SKIP ffi-differential: Swift package test needs macOS (host: $$(uname -s)); Go check and Rust tests passed"; \
+		echo "SKIP ffi-differential: Swift package test needs macOS (host: $$(uname -s)); Rust tests passed"; \
 	fi
 
 # FFI-001 iOS: SymvaultFFI.xcframework (macOS arm64, iOS device arm64, iOS
@@ -1790,9 +1777,7 @@ help:
 	@echo "  policy-fixtures-check    - Verify Go-oracle policy/tier fixtures have not drifted"
 	@echo "  sync-io-differential - Verify Go-generated sync/import/archive/intake contracts"
 	@echo "  pass-gpg-differential - Verify the pass importer against real gpg (Go oracle)"
-	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
 	@echo "  crypto-differential - Verify Go↔Rust age and KDF cross-decryption"
-	@echo "  crypto-fuzz-smoke - Run the bounded Argon2id parser fuzz smoke"
 	@echo "  store-reopen-fixture  - Generate the deterministic Go↔Rust reopen fixture"
 	@echo "  store-differential - Verify Go↔Rust storage reopen and read-only fixtures"
 	@echo "  data-safety-differential - Verify the pre-Rust-mutation backup gate over Go-created vaults"

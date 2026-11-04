@@ -290,7 +290,8 @@ fn config_of(side: &Side) -> String {
 /// Runs `args` on both binaries over the same starting config and compares the
 /// resulting files and process output.
 fn compare(test: &str, label: &str, config: &str, args: &[&str]) {
-    let oracle = go_oracle::GoOracle::begin("config_rewrite_differential", test, Some(ORACLE_COMMIT));
+    let oracle =
+        go_oracle::GoOracle::begin("config_rewrite_differential", test, Some(ORACLE_COMMIT));
     let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let (go_side, rust_side) = (side(config), side(config));

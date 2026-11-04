@@ -4,7 +4,7 @@
 //! Go↔Rust differential for the interactive `symvault add` form.
 //!
 //! `add_form_pty.rs` pins the Rust side alone; this file is the oracle-bound
-//! half. Each scenario runs the Go oracle (`SYMVAULT_GO_BINARY`) and the Rust
+//! half. Each scenario replays the recorded Go oracle run and runs the Rust
 //! binary under a real pseudo-terminal in separate disposable HOME/XDG roots,
 //! typing the same keystrokes, and compares
 //!

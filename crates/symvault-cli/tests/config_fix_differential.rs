@@ -694,8 +694,11 @@ fn python_available() -> bool {
 
 #[test]
 fn pty_flow_matches_go_contract() {
-    let observations =
-        Observations::begin("config_fix_differential", "pty_flow_matches_go_contract", Some(ORACLE_COMMIT));
+    let observations = Observations::begin(
+        "config_fix_differential",
+        "pty_flow_matches_go_contract",
+        Some(ORACLE_COMMIT),
+    );
     assert!(
         python_available(),
         "python3 with the pty module is required"

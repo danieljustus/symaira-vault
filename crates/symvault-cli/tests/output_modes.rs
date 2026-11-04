@@ -76,6 +76,9 @@
 //! content to hash and is recorded by kind and mode only. The binary runs under
 //! umask 022 in both harnesses.
 
+#[path = "common/go_oracle_ext.rs"]
+mod go_oracle_ext;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -2490,28 +2493,29 @@ fn normalization_rules_are_listed_once_and_consistently() {
     }
 }
 
-/// The Touch ID probe is normalized to `<BOOL>` (rule 5), so it is checked live:
-/// on darwin, with the pinned Go oracle at `SYMVAULT_OUTPUT_MODES_GO_BINARY`
-/// (set by `check_output_modes_cli.sh`), `auth status --json` of Rust and Go in
-/// the same sandbox reports the same `touchIDAvailable`.
+/// The Touch ID probe is normalized to `<BOOL>` (rule 5). It is a property of the
+/// Mac's sensor, so it cannot be replayed from the corpus: the Go oracle's answer
+/// and the Rust answer for the same sandbox were recorded together on the
+/// recording host (`testdata/port/cli-observations/output_modes.json`, oracle
+/// bf7f687b) and the attestation is that they were equal. Replay checks the
+/// recorded attestation and that the current binary still reports the field as
+/// a JSON boolean in that sandbox; whether the value matches Go on a given host
+/// is therefore only established on the recording host (docs/rust-port/
+/// go-oracle-archive.md).
 #[test]
 fn touch_id_availability_matches_go_in_the_same_sandbox() {
     if recording_goos() != "darwin" {
         eprintln!(
-            "SKIP touch-id live comparison: darwin only (running on {})",
+            "SKIP touch-id sandbox probe: recorded on darwin (running on {})",
             recording_goos()
         );
         return;
     }
-    let Some(go) = std::env::var_os("SYMVAULT_OUTPUT_MODES_GO_BINARY")
-        .map(PathBuf::from)
-        .filter(|path| path.is_file())
-    else {
-        eprintln!(
-            "SKIP touch-id live comparison: no Go oracle (SYMVAULT_OUTPUT_MODES_GO_BINARY unset or missing; make output-modes-cli-differential sets it)"
-        );
-        return;
-    };
+    let observations = go_oracle_ext::Observations::begin(
+        "output_modes",
+        "touch_id_availability_matches_go_in_the_same_sandbox",
+        Some("bf7f687bb8f57316e8333965635e733b8f567c72"),
+    );
     let fixture = load_fixture();
     let seed = fixture
         .seeds
@@ -2533,11 +2537,21 @@ fn touch_id_availability_matches_go_in_the_same_sandbox() {
             .as_bool()
             .unwrap_or_else(|| panic!("touchIDAvailable in {value}"))
     };
+    let attestation = observations.observe("touchIDAvailable", |go| {
+        let (go_value, rust_value) = (probe(go), probe(&rust));
+        serde_json::json!({
+            "go": go_value,
+            "rust": rust_value,
+            "recorded_on": std::env::consts::OS,
+        })
+    });
     assert_eq!(
-        probe(&rust),
-        probe(&go),
-        "Touch ID availability differs between Rust and the Go oracle on this host"
+        attestation["go"], attestation["rust"],
+        "recorded: Touch ID availability differs between Rust and the Go oracle"
     );
+    assert!(attestation["go"].is_boolean() && attestation["recorded_on"] == "macos");
+    // The current binary still reports the probe as a boolean in the sandbox.
+    let _ = probe(&rust);
 }
 
 /// Negative control for the audit comparison: a presence-only audit log is

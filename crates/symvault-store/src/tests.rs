@@ -2394,45 +2394,13 @@ struct Store004Case {
     manifest_load: String,
 }
 
-fn store004_digest(root: &Path, names: &[String], oracle: bool) -> String {
-    let mut sorted = names.to_vec();
-    sorted.sort();
-    let mut hasher = Sha256::new();
-    for name in sorted {
-        let bytes = if oracle {
-            let output = Command::new("git")
-                .args([
-                    "-C",
-                    root.to_str().unwrap(),
-                    "show",
-                    &format!("caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44:{name}"),
-                ])
-                .output()
-                .expect("git show oracle source");
-            // Without this the digest is silently taken over empty output when
-            // the oracle commit is absent -- a shallow checkout then looks like
-            // a provenance mismatch instead of a missing object.
-            assert!(
-                output.status.success(),
-                "git show of pinned oracle source {name} failed: {}; \
-                 the oracle commit must be present (fetch-depth: 0)",
-                String::from_utf8_lossy(&output.stderr).trim()
-            );
-            output.stdout
-        } else {
-            fs::read(root.join(&name)).expect("read current generator source")
-        };
-        hasher.update(name.as_bytes());
-        hasher.update([0]);
-        hasher.update(bytes);
-        hasher.update([0]);
-    }
-    hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
+/// Frozen digests of the STORE-004 oracle (sha256 over `name\0bytes\0` of the sorted
+/// source files at the pinned commit, and of the generator files): the check no
+/// longer needs the Go tree or the git history.
+const STORE004_SOURCE_DIGEST: &str =
+    "ce11654f548221307d12fdfdca54654abdad28eec207df765cca73f6b67ea008";
+const STORE004_GENERATOR_DIGEST: &str =
+    "81b44be714ba8026ff8e2b2cd3ade27079d022dc59a02062f7ec7a757b4c9011";
 
 type Store004Mutation = (&'static str, fn(&mut Store004Fixture));
 
@@ -2445,8 +2413,8 @@ fn flip_first_hex_char(digest: &mut String) {
     digest.replace_range(..1, &replacement.to_string());
 }
 
-fn validate_store004_provenance(value: &Store004Fixture, root: &Path) -> Result<(), String> {
-    let source_files = vec![
+fn validate_store004_provenance(value: &Store004Fixture) -> Result<(), String> {
+    let source_files: Vec<String> = vec![
         "internal/config/config.go".into(),
         "internal/config/config_load.go".into(),
         "internal/config/schema.go".into(),
@@ -2454,7 +2422,7 @@ fn validate_store004_provenance(value: &Store004Fixture, root: &Path) -> Result<
         "internal/vault/entry_readwrite.go".into(),
         "internal/vault/manifest.go".into(),
     ];
-    let generator_files = vec![
+    let generator_files: Vec<String> = vec![
         "scripts/rust-port/cmd/store004gen/archive_extract.go".into(),
         "scripts/rust-port/cmd/store004gen/archive_extract_test.go".into(),
         "scripts/rust-port/cmd/store004gen/main.go".into(),
@@ -2470,10 +2438,10 @@ fn validate_store004_provenance(value: &Store004Fixture, root: &Path) -> Result<
     {
         return Err("STORE-004 oracle identity/file inventory mismatch".into());
     }
-    if value.oracle.source_digest != store004_digest(root, &source_files, true) {
+    if value.oracle.source_digest != STORE004_SOURCE_DIGEST {
         return Err("STORE-004 pinned source digest mismatch".into());
     }
-    if value.oracle.generator_digest != store004_digest(root, &generator_files, false) {
+    if value.oracle.generator_digest != STORE004_GENERATOR_DIGEST {
         return Err("STORE-004 generator digest mismatch".into());
     }
     Ok(())
@@ -2487,8 +2455,7 @@ fn store004_fixture_provenance_is_bound_and_mutations_fail_closed() {
     ))
     .unwrap();
     let mut value: Store004Fixture = serde_json::from_str(&raw).unwrap();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    validate_store004_provenance(&value, &root).unwrap();
+    validate_store004_provenance(&value).unwrap();
 
     let mutations: Vec<Store004Mutation> = vec![
         ("commit", |v: &mut Store004Fixture| {
@@ -2511,7 +2478,7 @@ fn store004_fixture_provenance_is_bound_and_mutations_fail_closed() {
         let original = serde_json::to_value(&value).unwrap();
         mutate(&mut value);
         assert!(
-            validate_store004_provenance(&value, &root).is_err(),
+            validate_store004_provenance(&value).is_err(),
             "provenance validator accepted {name} mutation"
         );
         value = serde_json::from_value(original).unwrap();
