@@ -1,5 +1,9 @@
 //! CONFIG-WRITER: commands that rewrite `config.yaml` leave the same bytes as
-//! Go, against the live Go binary (`SYMVAULT_GO_BINARY`).
+//! Go. The Go answers (status, streams and the rewritten `config.yaml`) are
+//! replayed from `testdata/port/cli-transcripts/config_rewrite_differential.json`
+//! (oracle 690647c5); a missing recording fails the test. The recorded verdict of
+//! Go loading the file Rust wrote is bound to that file's sha256 (it is part of
+//! the recorded request), so a changed Rust file cannot reuse it.
 //!
 //! Go's `SaveTo` drops the top-level `paymentPolicies` and `security`
 //! sections; Rust keeps them on purpose (`docs/rust-port/upstream-go-bugs.md`).
@@ -14,14 +18,22 @@
 //! `agent_profile_show_is_unchanged_by_a_rewrite_for_every_tier` needs no
 //! oracle: it compares the effective profile view before and after a rewrite.
 
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
+
+use sha2::{Digest, Sha256};
+
+/// Pinned Go oracle (`scripts/rust-port/check_config_rewrite.sh`).
+const ORACLE_COMMIT: &str = "690647c5068a818a4b237738882bb20c865a134a";
 
 const DECLARED: [&str; 2] = ["paymentPolicies", "security"];
 
@@ -162,10 +174,6 @@ logging:
   format: json
 ";
 
-fn oracle() -> Option<PathBuf> {
-    env::var_os("SYMVAULT_GO_BINARY").map(PathBuf::from)
-}
-
 struct Side {
     _root: test_temp_root::TempRoot,
     vault: PathBuf,
@@ -187,7 +195,14 @@ fn side(config: &str) -> Side {
 }
 
 fn run(binary: &Path, side: &Side, args: &[&str]) -> Output {
-    Command::new(binary)
+    run_with(binary, side, args, None)
+}
+
+/// `bound`: bytes the process reads from the starting vault that the request
+/// does not otherwise name; their sha256 becomes part of the recorded request.
+fn run_with(binary: &Path, side: &Side, args: &[&str], bound: Option<&str>) -> Output {
+    let mut command = Command::new(binary);
+    command
         .arg("--vault")
         .arg(&side.vault)
         .args(args)
@@ -197,9 +212,14 @@ fn run(binary: &Path, side: &Side, args: &[&str]) -> Output {
         .env("XDG_DATA_HOME", side.home.join("data"))
         .env("XDG_CACHE_HOME", side.home.join("cache"))
         .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run CLI")
+        .env("NO_COLOR", "1");
+    if let Some(input) = bound {
+        command.env(
+            "SYMVAULT_ORACLE_INPUT_SHA256",
+            hex::encode(Sha256::digest(input.as_bytes())),
+        );
+    }
+    go_oracle::output(&mut command).expect("run CLI")
 }
 
 fn without_sections(yaml: &str, sections: &[&str]) -> String {
@@ -269,15 +289,13 @@ fn config_of(side: &Side) -> String {
 
 /// Runs `args` on both binaries over the same starting config and compares the
 /// resulting files and process output.
-fn compare(label: &str, config: &str, args: &[&str]) {
-    let Some(go_binary) = oracle() else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
+fn compare(test: &str, label: &str, config: &str, args: &[&str]) {
+    let oracle = go_oracle::GoOracle::begin("config_rewrite_differential", test, Some(ORACLE_COMMIT));
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let (go_side, rust_side) = (side(config), side(config));
-    let go = run(&go_binary, &go_side, args);
-    let rust = run(&rust_binary, &rust_side, args);
+    let go = run_with(&go_binary, &go_side, args, Some(config));
+    let rust = run_with(&rust_binary, &rust_side, args, Some(config));
     assert_eq!(rust.status, go.status, "{label}: exit status");
     let normalise = |bytes: &[u8], side: &Side| {
         mask_token_ids(
@@ -326,7 +344,7 @@ fn compare(label: &str, config: &str, args: &[&str]) {
         let default_config = reload.home.join(".symvault").join("config.yaml");
         fs::create_dir_all(default_config.parent().expect("parent")).expect("config dir");
         fs::write(&default_config, &rust_file).expect("write default config");
-        let output = run(binary, &reload, &["config", "validate"]);
+        let output = run_with(binary, &reload, &["config", "validate"], Some(&rust_file));
         assert!(
             output.status.success(),
             "{label}: {name} cannot load the file Rust wrote: {}{}\n{rust_file}",
@@ -339,11 +357,13 @@ fn compare(label: &str, config: &str, args: &[&str]) {
             "{label}: {name} validate rewrote the file"
         );
     }
+    assert_eq!(oracle.calls(), 2, "{label}: recorded Go calls replayed");
 }
 
 #[test]
 fn agent_uninstall_rewrites_the_config_like_go() {
     compare(
+        "agent_uninstall_rewrites_the_config_like_go",
         "agent uninstall",
         CONFIG,
         &["agent", "uninstall", "other", "--yes"],
@@ -353,6 +373,7 @@ fn agent_uninstall_rewrites_the_config_like_go() {
 #[test]
 fn agent_uninstall_keeps_a_multi_line_description_like_go() {
     compare(
+        "agent_uninstall_keeps_a_multi_line_description_like_go",
         "agent uninstall (multi-line)",
         MULTILINE,
         &["agent", "uninstall", "other", "--yes"],
@@ -362,6 +383,7 @@ fn agent_uninstall_keeps_a_multi_line_description_like_go() {
 #[test]
 fn agent_uninstall_keeps_every_mcp_field_go_keeps() {
     compare(
+        "agent_uninstall_keeps_every_mcp_field_go_keeps",
         "agent uninstall (mcp)",
         MCP,
         &["agent", "uninstall", "other", "--yes"],
@@ -371,6 +393,7 @@ fn agent_uninstall_keeps_every_mcp_field_go_keeps() {
 #[test]
 fn agent_uninstall_keeps_what_go_drops_and_nothing_else_differs() {
     compare(
+        "agent_uninstall_keeps_what_go_drops_and_nothing_else_differs",
         "agent uninstall (dropped by Go)",
         DROPPED_BY_GO,
         &["agent", "uninstall", "other", "--yes"],
@@ -380,6 +403,7 @@ fn agent_uninstall_keeps_what_go_drops_and_nothing_else_differs() {
 #[test]
 fn agent_uninstall_of_the_payment_bound_agent_like_go() {
     compare(
+        "agent_uninstall_of_the_payment_bound_agent_like_go",
         "agent uninstall bot",
         CONFIG,
         &["agent", "uninstall", "bot", "--yes"],
@@ -388,50 +412,34 @@ fn agent_uninstall_of_the_payment_bound_agent_like_go() {
 
 #[test]
 fn doctor_fix_repairs_audit_and_clipboard_like_go() {
-    compare(
-        "doctor --fix",
-        BROKEN,
-        &[
-            "doctor",
-            "--only",
-            "vault.config.validates",
-            "--fix",
-            "--no-network",
-        ],
+    const TEST: &str = "doctor_fix_repairs_audit_and_clipboard_like_go";
+    const ARGS: [&str; 5] = [
+        "doctor",
+        "--only",
+        "vault.config.validates",
+        "--fix",
+        "--no-network",
+    ];
+    compare(TEST, "doctor --fix", BROKEN, &ARGS);
+    // The repair really ran on both sides: the file now validates. The second
+    // Go session records the Go side of the same repair.
+    let oracle = go_oracle::GoOracle::begin(
+        "config_rewrite_differential",
+        "doctor_fix_repairs_audit_and_clipboard_like_go.repair",
+        Some(ORACLE_COMMIT),
     );
-    // The repair really ran on both sides: the file now validates.
-    if let Some(go_binary) = oracle() {
-        let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
-        let rust_side = side(BROKEN);
-        let _ = run(
-            &rust_binary,
-            &rust_side,
-            &[
-                "doctor",
-                "--only",
-                "vault.config.validates",
-                "--fix",
-                "--no-network",
-            ],
-        );
-        let fixed = config_of(&rust_side);
-        assert!(fixed.contains("maxSizeMb: 100\n"), "{fixed}");
-        assert!(fixed.contains("auto_clear_duration: 0\n"), "{fixed}");
-        assert!(fixed.contains("paymentPolicies:"), "{fixed}");
-        let go_side = side(BROKEN);
-        let _ = run(
-            &go_binary,
-            &go_side,
-            &[
-                "doctor",
-                "--only",
-                "vault.config.validates",
-                "--fix",
-                "--no-network",
-            ],
-        );
-        assert!(config_of(&go_side).contains("maxSizeMb: 100\n"));
-    }
+    let go_binary = oracle.binary();
+    let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let rust_side = side(BROKEN);
+    let _ = run(&rust_binary, &rust_side, &ARGS);
+    let fixed = config_of(&rust_side);
+    assert!(fixed.contains("maxSizeMb: 100\n"), "{fixed}");
+    assert!(fixed.contains("auto_clear_duration: 0\n"), "{fixed}");
+    assert!(fixed.contains("paymentPolicies:"), "{fixed}");
+    let go_side = side(BROKEN);
+    let _ = run_with(&go_binary, &go_side, &ARGS, Some(BROKEN));
+    assert!(config_of(&go_side).contains("maxSizeMb: 100\n"));
+    assert_eq!(oracle.calls(), 1);
 }
 
 const TIERS: [&str; 3] = ["read-only", "standard", "admin"];

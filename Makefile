@@ -729,8 +729,9 @@ config-cli-capture:
 	./scripts/rust-port/check_config_cli.sh --capture
 
 # CONFIG-WRITER: Go-recorded SaveTo bytes (pinned oracle 690647c5) replayed
-# against the Rust writer, plus the rewriting commands on the live Go binary.
-.PHONY: config-rewrite-fixtures-generate config-rewrite-differential
+# against the Rust writer, plus the recorded Go runs of the rewriting commands
+# (testdata/port/cli-transcripts/config_rewrite_differential.json); no Go needed.
+.PHONY: config-rewrite-fixtures-generate config-rewrite-differential config-rewrite-capture
 config-rewrite-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configrewritegen \
 		--output testdata/port/config/rewrite.json \
@@ -739,6 +740,10 @@ config-rewrite-fixtures-generate:
 
 config-rewrite-differential:
 	./scripts/rust-port/check_config_rewrite.sh
+
+# Re-records those transcripts from the pinned Go oracle (Go required).
+config-rewrite-capture:
+	./scripts/rust-port/check_config_rewrite.sh --capture
 
 # CLI-005: go-yaml scanner/parser/reader error wording of config.yaml. Re-verifies
 # the frozen Go corpus (pinned oracle 0cc78062) and replays it against the Rust CLI.
