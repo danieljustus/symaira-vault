@@ -1,0 +1,23 @@
+{
+  "direction": "Go CLI creates vaults, the Rust CLI migrates KDF policy and Go reads them back",
+  "go_verdict": {
+    "accepted": true,
+    "command": [
+      "sh",
+      "-c",
+      "CGO_ENABLED=0 go build -o target/port/go-cli-kdf . && cargo test -p symvault-cli --test migrate_kdf_differential --locked -- --ignored"
+    ],
+    "exit_code": 0,
+    "output_sha256": "4c2b547ccdd92d87f8512bc26317faafb4dddda2e8d7d77c6d2debbf3aec8198"
+  },
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "linux",
+  "name": "kdf-go-rust-integration",
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "rust_artifacts_sha256": {
+    "symvault": "ca330ec6e33355163125abb47f68c56a2ba3d03c5dcf1e6346080d8a8a52a1e5"
+  },
+  "rust_commit": "c310045b6b3658084d19667fa1227550d2289b31",
+  "schema": 1
+}

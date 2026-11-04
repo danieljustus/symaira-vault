@@ -2300,7 +2300,7 @@ go-observations-capture-other-tests:
 # Reverse checks (Go verifies or consumes what Rust wrote): run once with Go, commit the attestations
 # under docs/rust-port/evidence/go-removal-attestations/. Needs built Rust artifacts (rust-build).
 go-attest-other:
-	@mkdir -p target/audit target/crypto
+	@rm -rf target/audit target/crypto && mkdir -p target/audit target/crypto
 	$(CARGO) build -p symvault-cli --bin symvault -p symvault-store --example audit-emit -p symvault-crypto --example crypto_emit --locked
 	$(CARGO_TARGET_DIR)/debug/examples/audit-emit target/audit/rust-output.jsonl >/dev/null
 	$(CARGO_TARGET_DIR)/debug/examples/crypto_emit > target/crypto/rust-output.txt

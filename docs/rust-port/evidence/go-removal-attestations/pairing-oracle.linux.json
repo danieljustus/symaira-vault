@@ -1,0 +1,27 @@
+{
+  "direction": "Live Go CLI and Rust CLI interleaved on shared vaults (cli_differential, import quarantine, auth, startup profile)",
+  "go_verdict": {
+    "accepted": true,
+    "command": [
+      "env",
+      "CARGO=cargo",
+      "GO=go",
+      "BUILD_GO_TOOLCHAIN=go1.26.10",
+      "AREA_CHECK=python3 -B scripts/rust-port/gate_area_check.py",
+      "scripts/rust-port/area_pairing_oracle.sh",
+      "/home/dev/ctarget/area-evidence"
+    ],
+    "exit_code": 0,
+    "output_sha256": "f69f7b5bd614fb5a40fa18fe31387cb469ab7c38fa07a93dde7f31cf15997484"
+  },
+  "go_version": "go1.26.6",
+  "goarch": "arm64",
+  "goos": "linux",
+  "name": "pairing-oracle",
+  "oracle_commit": "19e4021c0e375ac06ae0a7203682e4a43176ca0f",
+  "rust_artifacts_sha256": {
+    "symvault": "ca330ec6e33355163125abb47f68c56a2ba3d03c5dcf1e6346080d8a8a52a1e5"
+  },
+  "rust_commit": "c310045b6b3658084d19667fa1227550d2289b31",
+  "schema": 1
+}
