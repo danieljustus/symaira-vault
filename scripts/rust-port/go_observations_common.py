@@ -105,8 +105,12 @@ def save(contract, observations, *, oracle_commit, version, args, goos=None, mat
         except (OSError, ValueError, AttributeError):
             kept = None
         document["material"] = kept if kept is not None else material
+    text = canonical(document).encode("utf-8")
+    leaked = operator_paths(text)
+    if leaked:
+        raise ValueError(f"{contract}: refusing to record operator paths {leaked}")
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(canonical(document).encode("utf-8"))
+    target.write_bytes(text)
     return target
 
 
@@ -138,8 +142,56 @@ def load(contract, *, oracle_commit=None, goos=None):
     return document
 
 
+TREE_ROOT = "@TREE_ROOT@"
+# What must never reach a committed observation or attestation: operator workstation paths and the
+# random mkdtemp directories of a capture (macOS /var/folders/.., Linux /tmp/<prefix>-<random>).
+OPERATOR_PATH = re.compile(rb"/Volumes/|/Users/|/var/folders/|/private/var/|/private/tmp/|/tmp/[A-Za-z0-9_.-]{4,}")
+
+
+def path_forms(root):
+    """Every spelling of a directory a tool may print: as given, resolved (/private/var on macOS), longest first."""
+    root = Path(root)
+    forms = {str(root), str(root.resolve()), os.path.realpath(root)}
+    forms |= {f[len("/private"):] for f in list(forms) if f.startswith("/private/")}
+    return sorted(forms, key=len, reverse=True)
+
+
+def tokenize_paths(data, tokens):
+    """bytes -> bytes with every directory in `tokens` ({directory: token}) replaced by its token."""
+    for directory, token in tokens.items():
+        for form in path_forms(directory):
+            data = data.replace(form.encode(), token.encode())
+    return data
+
+
+def restore_paths(data, tokens):
+    """The inverse of tokenize_paths for this run's directories ({token: directory})."""
+    for token, directory in tokens.items():
+        data = data.replace(token.encode(), str(directory).encode())
+    return data
+
+
+def operator_paths(data):
+    """Distinct operator-path matches in raw bytes, in their base64 decodings, and in JSON string values
+    (packed trees and material hold file contents as base64)."""
+    found = {m.group(0).decode() for m in OPERATOR_PATH.finditer(data)}
+    for chunk in re.finditer(rb"[A-Za-z0-9+/]{16,}={0,2}", data):
+        raw = chunk.group(0)
+        try:
+            decoded = base64.b64decode(raw + b"=" * (-len(raw) % 4))
+        except ValueError:
+            continue
+        found |= {"base64:" + m.group(0).decode() for m in OPERATOR_PATH.finditer(decoded)}
+    return sorted(found)
+
+
 def pack_tree(root):
-    """A directory as {relative path: base64, or None for a directory} (sorted, no links)."""
+    """A directory as {relative path: base64, or None for a directory} (sorted, no links).
+
+    The directory itself (and its /private spelling) is stored as the `@TREE_ROOT@` token, so a Go-written
+    config.yaml does not record the capture host's temporary path; unpack_tree() puts the replay's own
+    directory back. A path that is still an operator path after that is an error, never a commit.
+    """
     root = Path(root)
     packed = {}
     for entry in sorted(root.rglob("*")):
@@ -147,7 +199,11 @@ def pack_tree(root):
         if entry.is_dir() and not entry.is_symlink():
             packed[name] = None
         elif entry.is_file():
-            packed[name] = base64.b64encode(entry.read_bytes()).decode("ascii")
+            data = tokenize_paths(entry.read_bytes(), {root: TREE_ROOT})
+            leaked = operator_paths(data)
+            if leaked:
+                raise ValueError(f"{name}: would record operator paths {leaked}")
+            packed[name] = base64.b64encode(data).decode("ascii")
     return packed
 
 
@@ -165,7 +221,7 @@ def unpack_tree(files, root):
             target.mkdir(exist_ok=True)
             os.chmod(target, 0o700)
         else:
-            target.write_bytes(base64.b64decode(data))
+            target.write_bytes(restore_paths(base64.b64decode(data), {TREE_ROOT: root}))
             os.chmod(target, 0o600)
 
 
@@ -318,10 +374,24 @@ def _run(command, env_pairs):
     return result, env
 
 
+# The Go oracle every helper-driven capture and attestation is keyed to. It is a fixed commit like the other
+# contracts' pins: the last commit that touched the in-tree Go sources (`git log -1 -- '*.go' go.mod go.sum`)
+# when these observations were recorded. Keying them to "the last *.go commit of the checkout" broke as soon
+# as the Go sources were removed, and in shallow clones.
+ORACLE_COMMIT = "19e4021c0e375ac06ae0a7203682e4a43176ca0f"
+
+
 def tree_oracle_commit():
-    """Last commit that touched the in-tree Go sources: stable across unrelated commits."""
-    return subprocess.run(["git", "log", "-1", "--format=%H", "--", "*.go", "go.mod", "go.sum"], cwd=ROOT,
-                          capture_output=True, text=True, check=True).stdout.strip()
+    """The pinned oracle commit. Capture (which has Go and the git history) first proves that the checkout's
+    Go sources are still exactly those of the pin; a deliberate bump of ORACLE_COMMIT is then the only way
+    to record observations of different Go."""
+    moved = subprocess.run(["git", "diff", "--quiet", ORACLE_COMMIT, "--", "*.go", "go.mod", "go.sum"], cwd=ROOT,
+                           capture_output=True)
+    if moved.returncode != 0:
+        raise SystemExit(f"go_observations_common: the Go sources differ from the pinned oracle {ORACLE_COMMIT[:8]} (or the "
+                         "commit is missing from this clone): recording would label other Go with that pin; bump "
+                         "ORACLE_COMMIT deliberately and recapture")
+    return ORACLE_COMMIT
 
 
 def _oracle(env):
@@ -332,29 +402,109 @@ def attestation_path(name, goos=None):
     return ATTEST_DIR / f"{name}.{goos or host_goos()}.json"
 
 
-def write_attestation(name, artifacts, command, env_pairs, note):
-    """Run the Go verdict `command` once and persist the attestation (deterministic keys, no timestamps)."""
+# What each attestation must cover: the artifact labels its `rust_artifacts_sha256` holds. A file with other
+# labels (or none) is not an attestation of this check, whatever else it says. The attestations are static
+# historical claims: "at oracle ORACLE_COMMIT, built from rust_commit, live Go accepted these artifacts".
+# Nothing re-runs Go; the Rust sides of the same checks run live in the make targets that verify them.
+DATA_SAFETY = "data-safety-contract"
+DATA_SAFETY_REVERSE = [f"ffi-seed#{i}" for i in range(5)] + [f"go-init#{i}" for i in range(3, 8)] + ["zero-key#2"]
+EXPECTED_ARTIFACTS = {
+    "audit-differential": ["rust-output.jsonl"],
+    "crypto-differential": ["rust-output.txt"],
+    "reencrypt-journal-differential": ["symvault"],
+    "kdf-go-rust-integration": ["symvault"],
+    "ffi-differential": ["symvault"],
+    "pairing-oracle": ["symvault"],
+    "native-keyring-interop": ["rust-native-keyring-test"],
+    DATA_SAFETY: sorted(DATA_SAFETY_REVERSE),
+}
+# Gaps that are accepted, documented and visible: the verifying target prints them and passes. An entry here
+# is not a skip of a check that exists; the attestation cannot be produced on that OS (see the text).
+ACCEPTED_GAPS = {}
+CI_RUN_URL = re.compile(r"https://github\.com/danieljustus/symaira-vault/actions/runs/[0-9]+")
+
+
+def portable(text):
+    """Text with this checkout, cargo target, home and temp directories replaced by placeholders."""
+    text = str(text)
+    for value, token in ((ROOT, "<repo>"), (os.environ.get("CARGO_TARGET_DIR"), "<cargo-target>"),
+                         (os.environ.get("TMPDIR"), "<tmp>"), (Path.home(), "<home>")):
+        if value:
+            for form in path_forms(value):
+                if form.count("/") >= 2:
+                    text = text.replace(form.rstrip("/"), token)
+    return text
+
+
+def git_output(*argv):
+    return subprocess.run(["git", *argv], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def sources_digest(paths):
+    """One digest over the bytes of the named repository files (path and content, sorted)."""
+    digest = hashlib.sha256()
+    for name in sorted(paths):
+        digest.update(name.encode() + b"\0" + (ROOT / name).read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def write_attestation(name, artifacts, command, env_pairs, note, require=None, forbid=None):
+    """Run the Go verdict `command` once and persist the attestation (deterministic keys, no timestamps).
+
+    `require` / `forbid`: regular expressions the command's output must / must not match, so a verdict that
+    printed a SKIP instead of running the Go half cannot be attested."""
     result, env = _run(command, env_pairs)
-    return record_attestation(name, artifacts, command, env, result.returncode, result.stdout + result.stderr, note)
+    output = result.stdout + result.stderr
+    if require and not re.search(require, output):
+        raise SystemExit(f"attest {name}: the verdict output does not match /{require}/")
+    if forbid and re.search(forbid, output):
+        raise SystemExit(f"attest {name}: the verdict output matches /{forbid}/: the Go half did not run")
+    return record_attestation(name, artifacts, command, env, result.returncode, output, note)
 
 
 def record_attestation(name, artifacts, command, env, returncode, output, note):
     """Persist the attestation of a Go verdict that has already run (its command, exit code and output)."""
-    rust_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
     digests = {}
     for item in artifacts:
         label, _, file = item.partition("=")
         digests[label] = sha256_file(Path(file) if Path(file).is_absolute() else ROOT / file)
+    verdict = {"command": [portable(x) for x in command], "exit_code": returncode,
+               "output_sha256": hashlib.sha256(output.encode()).hexdigest(), "accepted": returncode == 0}
+    return store_attestation(name, digests, verdict, note, env=env)
+
+
+def store_attestation(name, digests, verdict, note, *, env=None, extra=None):
     document = {"schema": SCHEMA, "name": name, "direction": note, "oracle_commit": tree_oracle_commit(),
-                "go_version": go_version(env), "goos": host_goos(), "goarch": host_arch(), "rust_commit": rust_commit,
-                "rust_artifacts_sha256": digests,
-                "go_verdict": {"command": [x for x in command], "exit_code": returncode,
-                               "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
-                               "accepted": returncode == 0}}
+                "go_version": go_version(env), "goos": host_goos(), "goarch": host_arch(),
+                "rust_commit": git_output("rev-parse", "HEAD"), "rust_artifacts_sha256": digests, "go_verdict": verdict}
+    document.update(extra or {})
+    text = canonical(document).encode("utf-8")
+    leaked = operator_paths(text)
+    if leaked:
+        raise ValueError(f"{name}: refusing to record operator paths {leaked}")
     target = attestation_path(name)
     target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(text)
+    return target
+
+
+def write_ci_attestation(name, *, run_url, job_id, commit, source_paths, note):
+    """A native attestation that comes from a recorded CI run instead of a local Go run. The run's commit must
+    have byte-identical `source_paths` to this checkout (checked now, and recomputed by every verification)."""
+    assert CI_RUN_URL.fullmatch(run_url) and int(job_id) > 0 and re.fullmatch(r"[0-9a-f]{40}", commit), "malformed CI run"
+    assert source_paths, "no source paths"
+    same = subprocess.run(["git", "diff", "--quiet", commit, "HEAD", "--", *source_paths], cwd=ROOT).returncode == 0
+    assert same, f"{name}: the sources differ between CI commit {commit[:8]} and HEAD"
+    document = {"schema": SCHEMA, "name": name, "direction": note, "source": "ci-run", "goos": host_goos(),
+                "run_url": run_url, "job_id": int(job_id), "commit": commit, "source_paths": sorted(source_paths),
+                "source_digest": sources_digest(source_paths), "oracle_commit": ORACLE_COMMIT}
+    target = attestation_path(name)
     target.write_bytes(canonical(document).encode("utf-8"))
     return target
+
+
+def accepted_gap(name):
+    return ACCEPTED_GAPS.get((name, host_goos()))
 
 
 def check_attestation(name):
@@ -362,15 +512,34 @@ def check_attestation(name):
     if not source.is_file():
         raise MissingObservation(f"missing Go removal attestation {rel(source)}: run its attest target with the Go oracle present")
     document = json.loads(source.read_bytes())
+    bad = f"{rel(source)}: not an accepting, well-formed attestation of {name}"
+    if document.get("source") == "ci-run":
+        paths = document.get("source_paths")
+        ok = (document.get("schema") == SCHEMA and document.get("name") == name and document.get("goos") == host_goos()
+              and CI_RUN_URL.fullmatch(str(document.get("run_url", ""))) and isinstance(document.get("job_id"), int)
+              and re.fullmatch(r"[0-9a-f]{40}", str(document.get("commit", ""))) and isinstance(paths, list) and paths
+              and re.fullmatch(r"[0-9a-f]{64}", str(document.get("source_digest", ""))))
+        if not ok:
+            raise MissingObservation(bad)
+        if sources_digest(paths) != document["source_digest"]:
+            raise MissingObservation(f"{rel(source)}: the sources the CI run exercised have changed since ({', '.join(paths)})")
+        return document
     verdict = document.get("go_verdict", {})
+    artifacts = document.get("rust_artifacts_sha256") or {}
     ok = (document.get("schema") == SCHEMA and document.get("name") == name and document.get("goos") == host_goos()
           and verdict.get("accepted") is True and verdict.get("exit_code") == 0
-          and re.fullmatch(r"[0-9a-f]{40}", str(document.get("oracle_commit", "")))
+          and document.get("oracle_commit") == ORACLE_COMMIT
           and re.fullmatch(r"[0-9a-f]{40}", str(document.get("rust_commit", "")))
-          and document.get("rust_artifacts_sha256")
-          and all(re.fullmatch(r"[0-9a-f]{64}", v) for v in document["rust_artifacts_sha256"].values()))
+          and sorted(artifacts) == EXPECTED_ARTIFACTS.get(name)
+          and all(re.fullmatch(r"[0-9a-f]{64}", str(v)) for v in artifacts.values()))
     if not ok:
-        raise MissingObservation(f"{rel(source)}: not an accepting, well-formed attestation of {name}")
+        raise MissingObservation(bad)
+    # The attested Rust build is part of this history; an unknown commit (shallow clone, foreign file) fails.
+    ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", document["rust_commit"], "HEAD"], cwd=ROOT,
+                              capture_output=True)
+    if ancestor.returncode != 0:
+        raise MissingObservation(f"{rel(source)}: rust_commit {document['rust_commit'][:8]} is not an ancestor of HEAD "
+                                 "(foreign attestation, or a shallow clone: fetch the full history)")
     return document
 
 
@@ -397,6 +566,8 @@ def main(argv=None):
     p.add_argument("--env", action="append", default=[])
     p.add_argument("--artifact", action="append", default=[])
     p.add_argument("--note", default="")
+    p.add_argument("--require-output", default=None, help="regex the verdict output must match")
+    p.add_argument("--forbid-output", default=None, help="regex the verdict output must not match (e.g. SKIP)")
     p = sub.add_parser("verify-attestation")
     p.add_argument("name")
     for name in ("replay-checked", "replay-verdict"):
@@ -414,12 +585,23 @@ def main(argv=None):
     try:
         if args.command == "attest":
             assert command and args.artifact, "attest needs --artifact LABEL=PATH and a command after --"
-            print(f"attested {rel(write_attestation(args.name, args.artifact, command, args.env, args.note))}")
+            print(f"attested {rel(write_attestation(args.name, args.artifact, command, args.env, args.note, args.require_output, args.forbid_output))}")
             return 0
         if args.command == "verify-attestation":
-            document = check_attestation(args.name)
-            print(f"attestation ok: {args.name} (Go {document['go_version']} accepted Rust build "
-                  f"{document['rust_commit'][:8]} at oracle {document['oracle_commit'][:8]})")
+            try:
+                document = check_attestation(args.name)
+            except MissingObservation:
+                gap = accepted_gap(args.name)
+                if gap is None or attestation_path(args.name).exists():
+                    raise
+                print(f"ACCEPTED GAP: {args.name} has no attestation on {host_goos()} (documented, not a pass of the Go check): {gap}")
+                return 0
+            if document.get("source") == "ci-run":
+                print(f"attestation ok (static CI-run evidence): {args.name} ({document['run_url']}, job {document['job_id']}, "
+                      f"commit {document['commit'][:8]}, sources unchanged)")
+            else:
+                print(f"attestation ok (static, historical; Go is NOT re-run): {args.name} (Go {document['go_version']} accepted Rust "
+                      f"build {document['rust_commit'][:8]} at oracle {document['oracle_commit'][:8]})")
             return 0
         if args.command.startswith("capture-"):
             assert command, "no command after --"
