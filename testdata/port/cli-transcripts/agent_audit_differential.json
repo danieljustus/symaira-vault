@@ -1,0 +1,220 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "agent_audit_matches_go_for_formats_filters_limits_and_missing_logs": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "c067574cf0bc3e4b62858e2e56bee602c697f77589e272b9545ecc59a110da8c",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "audit",
+              "fixture"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "TIMESTAMP                  ACTION               OK       DETAILS\n2020-01-01T00:00:00Z       old                  ✓        old/path\n2099-01-01T00:00:00Z       set                  ✗        safe/<&>:password synthetic\n                                                ✗        -\n                           null-fields          ✗        -\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "5db6da2b58de64bcf0d87029d479a2a0209177e1c8d95e058e3ed7defa3acaf0",
+          "request": {
+            "args": [
+              "--quiet",
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "audit",
+              "fixture"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "TIMESTAMP                  ACTION               OK       DETAILS\n2020-01-01T00:00:00Z       old                  ✓        old/path\n2099-01-01T00:00:00Z       set                  ✗        safe/<&>:password synthetic\n                                                ✗        -\n                           null-fields          ✗        -\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "67c366db8499c8e23f218b6792d1068dd39e771526226738430291bc6712f2fa",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "audit",
+              "fixture",
+              "--format",
+              "json",
+              "--limit",
+              "2"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "[\n  {\n    \"ts\": \"\",\n    \"agent\": \"\",\n    \"action\": \"\",\n    \"ok\": false\n  },\n  {\n    \"ts\": \"\",\n    \"agent\": \"\",\n    \"action\": \"null-fields\",\n    \"ok\": false\n  }\n]\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "60b1896e212e1863b3a7205ddabf8c88277812690e9c85278286b1f32c4f78bf",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "audit",
+              "fixture",
+              "--since",
+              "24h"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "TIMESTAMP                  ACTION               OK       DETAILS\n2099-01-01T00:00:00Z       set                  ✗        safe/<&>:password synthetic\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "88a46e84df8da96586ec907ac2c8f6a560720320707597358a786fe0895c13cf",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "audit",
+              "missing"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "No audit log found for agent \"missing\" at <ROOT:0>/audit-missing.log\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "5fde0b8ce96c46f4e16b47b6f78b28741857d341fd0811a9f69ede9d3cee52ea",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>",
+              "agent",
+              "audit",
+              "../outside"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>",
+              "NO_COLOR": "1",
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:0>"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "No audit log found for agent \"../outside\" at <ROOT:0>/audit-__outside.log\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

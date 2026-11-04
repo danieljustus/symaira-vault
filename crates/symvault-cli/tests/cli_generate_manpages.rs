@@ -1,7 +1,10 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
     collections::BTreeSet,
-    env, fs,
-    path::Path,
+    fs,
+    path::{Path, PathBuf},
     process::{Command, Output},
 };
 
@@ -138,20 +141,20 @@ fn run_with_env(binary: &Path, root: &Path, args: &[&str], environment: &[(&str,
     for (name, value) in environment {
         command.env(name, value);
     }
-    command.output().expect("run generate manpages")
+    go_oracle::output(&mut command).expect("run generate manpages")
 }
 
-fn go_oracle() -> Option<std::path::PathBuf> {
-    match env::var_os("SYMVAULT_GO_BINARY") {
-        Some(binary) => Some(binary.into()),
-        None if env::var_os("SYMVAULT_MANPAGES_REQUIRE_GO_ORACLE").is_some() => {
-            panic!("SYMVAULT_GO_BINARY is required by the manpages port-contract gate")
-        }
-        None => {
-            eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-            None
-        }
-    }
+/// Starts the replay session of one test: the Go answers (stdout, stderr,
+/// status and the generated man-page tree) come from
+/// `testdata/port/cli-transcripts/cli_generate_manpages.json`.
+fn oracle(test: &str) -> (go_oracle::GoOracle, PathBuf) {
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_generate_manpages",
+        test,
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let binary = oracle.binary();
+    (oracle, binary)
 }
 
 fn page_date(root: &Path) -> Vec<String> {
@@ -163,10 +166,12 @@ fn page_date(root: &Path) -> Vec<String> {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn empty_source_date_epoch_matches_the_go_default() {
-    let Some(go_binary) = go_oracle() else {
-        return;
-    };
+    let (oracle, go_binary) = oracle("empty_source_date_epoch_matches_the_go_default");
     let go_root = TempDir::new().expect("go temp root");
     let rust_root = TempDir::new().expect("rust temp root");
     let args = ["generate", "manpages", "man"];
@@ -184,14 +189,17 @@ fn empty_source_date_epoch_matches_the_go_default() {
     assert!(go.stderr.is_empty(), "Go stderr: {:?}", go.stderr);
     assert!(rust.stderr.is_empty(), "Rust stderr: {:?}", rust.stderr);
     assert_eq!(page_date(rust_root.path()), page_date(go_root.path()));
+    assert_eq!(oracle.calls(), 1);
 }
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn source_date_epoch_uses_local_timezone_at_month_boundary() {
-    let Some(go_binary) = go_oracle() else {
-        return;
-    };
+    let (oracle, go_binary) = oracle("source_date_epoch_uses_local_timezone_at_month_boundary");
     let go_root = TempDir::new().expect("go temp root");
     let rust_root = TempDir::new().expect("rust temp root");
     let args = ["generate", "manpages", "man"];
@@ -212,6 +220,7 @@ fn source_date_epoch_uses_local_timezone_at_month_boundary() {
     );
     assert_eq!(page_date(go_root.path()), vec!["Oct", "2026"]);
     assert_eq!(page_date(rust_root.path()), page_date(go_root.path()));
+    assert_eq!(oracle.calls(), 1);
 }
 
 /// Strips each run's own root prefix so the two report lines can be compared.
@@ -235,14 +244,16 @@ fn page_names(root: &Path) -> BTreeSet<String> {
         .collect()
 }
 
-/// Differential evidence against the Go oracle. Skipped unless the caller
-/// exports `SYMVAULT_GO_BINARY`; the expectations themselves are checked by
-/// `assert_header_matches_oracle` even when no oracle binary is available.
+/// Differential evidence against the recorded Go oracle (replay-or-fail); the
+/// header expectations are additionally spelled out in
+/// `assert_header_matches_oracle`.
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn generate_manpages_matches_the_go_oracle() {
-    let Some(go_binary) = go_oracle() else {
-        return;
-    };
+    let (oracle, go_binary) = oracle("generate_manpages_matches_the_go_oracle");
     let go_binary = go_binary.as_path();
 
     let go_root = TempDir::new().expect("go temp root");
@@ -291,16 +302,13 @@ fn generate_manpages_matches_the_go_oracle() {
         "stdout differs from the oracle"
     );
 
-    // The port may lag the oracle on unported commands, but must never invent
-    // a page the oracle does not write, and the shared page headers must match.
+    // The port writes exactly the pages the Go oracle wrote: neither a page the
+    // oracle does not have nor one it lacks.
     let go_pages = page_names(go_root.path());
     let rust_pages = page_names(rust_root.path());
-    assert!(!go_pages.is_empty() && !rust_pages.is_empty());
-    let extra: Vec<_> = rust_pages.difference(&go_pages).collect();
-    assert!(
-        extra.is_empty(),
-        "port generated pages the Go oracle does not: {extra:?}"
-    );
+    if let Err(problem) = page_sets_match(&go_pages, &rust_pages) {
+        panic!("{problem}");
+    }
 
     let shared = "symvault-generate-manpages.1";
     assert!(go_pages.contains(shared) && rust_pages.contains(shared));
@@ -312,4 +320,147 @@ fn generate_manpages_matches_the_go_oracle() {
         &fs::read_to_string(rust_root.path().join("man").join(shared)).expect("port page"),
         "port page",
     );
+
+    // Full-text golden: every page both sides wrote is compared byte for byte
+    // once the wall-clock dates (`.TH` month/year, cobra's HISTORY line) are
+    // masked.
+    let mut differing = Vec::new();
+    let mut declared_seen = BTreeSet::new();
+    for name in rust_pages.intersection(&go_pages) {
+        let go_text = normalize_root(
+            &fs::read_to_string(go_root.path().join("man").join(name)).expect("go page"),
+            go_root.path(),
+        );
+        let rust_text = normalize_root(
+            &fs::read_to_string(rust_root.path().join("man").join(name)).expect("rust page"),
+            rust_root.path(),
+        );
+        let (go_text, rust_text) = (mask_dates(&go_text), mask_dates(&rust_text));
+        if let Some((_, added)) = DECLARED_ADDITIONS.iter().find(|(page, _)| page == name) {
+            // Declared divergence: the port documents `--allow-legacy-kdf`, which
+            // the pinned Go oracle (fca3f894) predates. Go's page must be a
+            // line-subsequence of Rust's and the extra lines exactly `added`.
+            assert_eq!(
+                extra_lines(&go_text, &rust_text),
+                Some(
+                    added
+                        .iter()
+                        .map(|line| (*line).to_owned())
+                        .collect::<Vec<_>>()
+                ),
+                "{name}: declared divergence changed"
+            );
+            declared_seen.insert(name.clone());
+        } else if go_text != rust_text {
+            differing.push(name.clone());
+        }
+    }
+    eprintln!(
+        "man pages compared: {}; declared: {}; differing: {differing:?}",
+        rust_pages.len(),
+        declared_seen.len()
+    );
+    assert!(
+        differing.is_empty(),
+        "pages differ from the recorded Go pages: {differing:?}"
+    );
+    assert_eq!(declared_seen.len(), DECLARED_ADDITIONS.len());
+    assert_eq!(oracle.calls(), 6);
+}
+
+/// Both directions of the page-set comparison: the Go page set equals the Rust
+/// page set.
+fn page_sets_match(go: &BTreeSet<String>, rust: &BTreeSet<String>) -> Result<(), String> {
+    if go.is_empty() || rust.is_empty() {
+        return Err(format!(
+            "empty page set (oracle {}, port {})",
+            go.len(),
+            rust.len()
+        ));
+    }
+    let extra: Vec<_> = rust.difference(go).collect();
+    let missing: Vec<_> = go.difference(rust).collect();
+    if extra.is_empty() && missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "page sets differ: port generated pages the Go oracle does not: {extra:?}; port lacks \
+             pages the Go oracle wrote: {missing:?}"
+        ))
+    }
+}
+
+/// Mutation control for the page-set comparison.
+#[test]
+fn page_set_comparison_rejects_missing_and_extra_pages() {
+    let set = |names: &[&str]| -> BTreeSet<String> {
+        names.iter().map(|name| (*name).to_owned()).collect()
+    };
+    let base = set(&["a.1", "b.1"]);
+    assert_eq!(page_sets_match(&base, &set(&["b.1", "a.1"])), Ok(()));
+    let extra = page_sets_match(&base, &set(&["a.1", "b.1", "c.1"])).unwrap_err();
+    assert!(
+        extra.contains("c.1") && extra.contains("does not"),
+        "{extra}"
+    );
+    let missing = page_sets_match(&base, &set(&["a.1"])).unwrap_err();
+    assert!(
+        missing.contains("b.1") && missing.contains("lacks"),
+        "{missing}"
+    );
+    assert!(page_sets_match(&base, &set(&[])).is_err());
+    assert!(page_sets_match(&set(&[]), &base).is_err());
+}
+
+/// Pages on which the port is ahead of the pinned Go oracle, with the exact lines
+/// the port adds (see the comment at the use site).
+const DECLARED_ADDITIONS: [(&str, &[&str]); 1] = [(
+    "symvault-migrate-kdf.1",
+    &[
+        ".PP",
+        "Older Argon2 budgets require --allow-legacy-kdf. This local migration retains",
+        "identity/config backups and rewrites the same identity with current defaults.",
+        "",
+        "\\fB--allow-legacy-kdf\\fP[=false]",
+        "\tAllow one exclusive historical-budget read for local Argon2 policy migration",
+        "",
+        ".PP",
+    ],
+)];
+
+/// The lines of `rust` that remain after greedily matching every line of `go`
+/// in order; `None` when `go` is not a subsequence of `rust`.
+fn extra_lines(go: &str, rust: &str) -> Option<Vec<String>> {
+    let mut go_lines = go.lines().peekable();
+    let mut extra = Vec::new();
+    for line in rust.lines() {
+        if go_lines.peek() == Some(&line) {
+            go_lines.next();
+        } else {
+            extra.push(line.to_owned());
+        }
+    }
+    go_lines.peek().is_none().then_some(extra)
+}
+
+/// Masks the generation date: the `.TH` month/year and cobra's
+/// `<d>-<Mon>-<yyyy> Auto generated by spf13/cobra` HISTORY line.
+fn mask_dates(page: &str) -> String {
+    page.lines()
+        .map(|line| {
+            if line.starts_with(".TH ") {
+                let mut tokens: Vec<String> = line.split(' ').map(str::to_owned).collect();
+                if tokens.len() > 4 {
+                    tokens[3] = "<MONTH>".into();
+                    tokens[4] = "<YEAR>".into();
+                }
+                tokens.join(" ")
+            } else if line.contains("Auto generated by spf13/cobra") {
+                "<HISTORY>".to_owned()
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

@@ -1,0 +1,168 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "98c786e1bf97fee2b93b79ec391f14c97bfd8694",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "comma_repeated_and_mixed_passthrough_preserve_filtering": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "7f09ebe0336008ee1f2af38d337613a23b81b5a9e88c07bb8b1b6a105789848f",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/vault",
+              "run",
+              "--passthrough",
+              "SYMV_TEST_FIRST,SYMV_TEST_SECOND,SYMV_TEST_API_TOKEN",
+              "--",
+              "sh",
+              "-c",
+              "printf '%s|%s|%s|%s' \"$SYMV_TEST_FIRST\" \"$SYMV_TEST_SECOND\" \"${SYMV_TEST_API_TOKEN+x}\" \"${SYMV_TEST_UNREQUESTED+x}\""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-passthrough-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMV_TEST_API_TOKEN": "synthetic-sensitive-value",
+              "SYMV_TEST_FIRST": "alpha",
+              "SYMV_TEST_SECOND": "beta",
+              "SYMV_TEST_UNREQUESTED": "unrequested",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "alpha|beta||"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    cli:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        exposeValueTools: false\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    legacy_mode: true\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\ngit:\n    commit_template: Update from Symaira Vault\n    auto_push: true\n    auto_pull_interval: 10s\nvaultDir: <ROOT:0>/vault\ndefaultAgent: cli\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            }
+          ]
+        },
+        {
+          "key": "69894c8e3e60196261417b49cf219b2b8da8325546bcc35fedc06d20a3a044be",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/vault",
+              "run",
+              "--passthrough",
+              "SYMV_TEST_FIRST",
+              "--passthrough",
+              "SYMV_TEST_SECOND",
+              "--passthrough",
+              "SYMV_TEST_API_TOKEN",
+              "--",
+              "sh",
+              "-c",
+              "printf '%s|%s|%s|%s' \"$SYMV_TEST_FIRST\" \"$SYMV_TEST_SECOND\" \"${SYMV_TEST_API_TOKEN+x}\" \"${SYMV_TEST_UNREQUESTED+x}\""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-passthrough-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMV_TEST_API_TOKEN": "synthetic-sensitive-value",
+              "SYMV_TEST_FIRST": "alpha",
+              "SYMV_TEST_SECOND": "beta",
+              "SYMV_TEST_UNREQUESTED": "unrequested",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "alpha|beta||"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e8c72932d7f3a4b916607744035b39fc3745c36062814c5c3bba237b853e5d54",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/vault",
+              "run",
+              "--passthrough",
+              "",
+              "--passthrough",
+              ",SYMV_TEST_FIRST,",
+              "--passthrough",
+              "SYMV_TEST_SECOND,SYMV_TEST_API_TOKEN,",
+              "--",
+              "sh",
+              "-c",
+              "printf '%s|%s|%s|%s' \"$SYMV_TEST_FIRST\" \"$SYMV_TEST_SECOND\" \"${SYMV_TEST_API_TOKEN+x}\" \"${SYMV_TEST_UNREQUESTED+x}\""
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "SYMVAULT_ALLOW_ENV_PASSPHRASE": "1",
+              "SYMVAULT_PASSPHRASE": "synthetic-passthrough-passphrase",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "SYMV_TEST_API_TOKEN": "synthetic-sensitive-value",
+              "SYMV_TEST_FIRST": "alpha",
+              "SYMV_TEST_SECOND": "beta",
+              "SYMV_TEST_UNREQUESTED": "unrequested",
+              "XDG_CACHE_HOME": "<ROOT:0>/home/cache",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "alpha|beta||"
+            },
+            "stderr": {
+              "text": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    }
+  }
+}

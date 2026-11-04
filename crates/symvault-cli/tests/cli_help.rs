@@ -1,7 +1,7 @@
-use std::{
-    env,
-    process::{Command, Output},
-};
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
+use std::process::{Command, Output};
 
 use sha2::{Digest, Sha256};
 
@@ -55,15 +55,22 @@ fn help_for_known_subcommand_resolves_the_command_path() {
     assert!(stdout.contains("Usage:"), "missing usage section: {stdout}");
 }
 
+/// Oracle revision the recorded Go help answers come from.
+const ORACLE_COMMIT: &str = go_oracle::CONFIG_CLI_ORACLE;
+
 #[test]
-fn help_matches_checked_out_go_command_tree() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        assert!(
-            env::var_os("SYMVAULT_HELP_REQUIRE_GO_ORACLE").is_none(),
-            "source-bound Go oracle is required"
-        );
-        return;
-    };
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn help_matches_recorded_go_command_tree() {
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_help",
+        "help_matches_recorded_go_command_tree",
+        Some(ORACLE_COMMIT),
+    );
+    let go_binary = oracle.binary();
+    let mut cases = 0;
     for args in [
         &["help"][..],
         &["--quiet", "help"][..],
@@ -74,13 +81,13 @@ fn help_matches_checked_out_go_command_tree() {
         &["help", "get", "missing"][..],
         &["help", "list", "missing"][..],
     ] {
-        let go = Command::new(&go_binary)
-            .args(args)
-            .output()
-            .expect("Go help");
+        let go = go_oracle::output(Command::new(&go_binary).args(args)).expect("Go help");
         let rust = run(args);
         assert_eq!(rust.status.code(), go.status.code(), "status {args:?}");
         assert_eq!(rust.stdout, go.stdout, "stdout {args:?}");
         assert_eq!(rust.stderr, go.stderr, "stderr {args:?}");
+        cases += 1;
     }
+    assert_eq!(oracle.calls(), cases, "every recorded Go call replayed");
+    eprintln!("cli_help: {cases} recorded Go help cases replayed");
 }

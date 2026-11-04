@@ -7,13 +7,17 @@
 //! approve/reject/unavailable decision matrix with a fake `TouchId` lives in
 //! the unit tests of `agent_upgrade_commands.rs`.
 //!
-//! With `SYMVAULT_GO_BINARY` pointing at a `CGO_ENABLED=0` oracle (no Touch ID,
-//! so it takes the same unavailable branch) the same runs are compared with Go.
+//! The `CGO_ENABLED=0` Go oracle (no Touch ID, so it takes the same
+//! unavailable branch) was run once on the same cases; its answers are
+//! replayed from `testdata/port/cli-transcripts/agent_upgrade_biometric.json`
+//! and compared with the Rust output.
+
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use tempfile::TempDir;
 
@@ -37,7 +41,8 @@ fn run(binary: &Path, args: &[&str]) -> Run {
         "defaultAgent: hermes\nagents:\n  hermes:\n    tier: standard\n",
     )
     .expect("seed config");
-    let mut child = Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(["--vault"])
         .arg(&vault)
         .args(["agent", "upgrade", "hermes"])
@@ -51,14 +56,8 @@ fn run(binary: &Path, args: &[&str]) -> Run {
         .env("XDG_DATA_HOME", home.join(".local/share"))
         .env("TMPDIR", &work)
         .env("CI", "1")
-        .env("SYMVAULT_TEST_KEYRING", "memory")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn");
-    drop(child.stdin.take().expect("stdin").flush());
-    let output = child.wait_with_output().expect("wait");
+        .env("SYMVAULT_TEST_KEYRING", "memory");
+    let output = go_oracle::output_with_input(&mut command, Some(b"")).expect("spawn");
     Run {
         status: output.status.code(),
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -133,11 +132,17 @@ fn no_biometric_flag_bypasses_the_gate() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn unavailable_branch_matches_the_no_touch_id_go_oracle() {
-    let Some(go) = std::env::var_os("SYMVAULT_GO_BINARY").map(PathBuf::from) else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_upgrade_biometric",
+        "unavailable_branch_matches_the_no_touch_id_go_oracle",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go = oracle.binary();
     let cases: [&[&str]; 3] = [
         &YES,
         &["--tier", "admin"],
@@ -162,4 +167,5 @@ fn unavailable_branch_matches_the_no_touch_id_go_oracle() {
         assert_eq!(actual.stderr, expected.stderr, "{args:?}: stderr");
         assert_eq!(actual.config, expected.config, "{args:?}: config.yaml");
     }
+    assert_eq!(oracle.calls(), 3);
 }

@@ -1,0 +1,2366 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "tests": {
+    "add_form_matches_the_go_oracle": {
+      "all_empty": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {},
+          "path": "",
+          "secret_meta": {},
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "path": "e1"
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Username: > optional",
+          "Username: > optional",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "auto_rotate_variants": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "auto_rotate": true,
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "auto_rotate": true,
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "Auto Rotate: > yes",
+          "Auto Rotate: > yes",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "auto_rotate_yesno_case": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "Auto Rotate: > YES",
+          "Auto Rotate: > YES",
+          "TOTP Issuer: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "backspace_back_nav": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB",
+            "username": "abZ"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 2,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Username: > optional",
+          "Username: > ab",
+          "Username: > ab",
+          "Password: > required",
+          "Username: > ab",
+          "Password: > required",
+          "Username: > abZ",
+          "Username: > abZ",
+          "Password: > required",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "Type: > password  🗝️ password",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Notes: ┃ optional",
+          "TOTP Secret: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "cancel_after_typing": {
+        "entry": null,
+        "form_seen": true,
+        "list": null,
+        "rc": 1,
+        "stderr_lines": [
+          "Error: canceled",
+          "Error: canceled"
+        ],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > bob",
+          "Username: > bob",
+          "Password: > required",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel"
+        ],
+        "timeout": false
+      },
+      "cancel_ctrlc": {
+        "entry": null,
+        "form_seen": true,
+        "list": null,
+        "rc": 1,
+        "stderr_lines": [
+          "Error: canceled",
+          "Error: canceled"
+        ],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel"
+        ],
+        "timeout": false
+      },
+      "defaults_flags_accept": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "notes": "fn",
+            "password": "Xk9#mP2$vL7qZ!aaBB",
+            "totp": {
+              "account_name": "FA",
+              "issuer": "FI",
+              "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH"
+            },
+            "url": "https://f.example",
+            "username": "u1"
+          },
+          "path": "",
+          "secret_meta": {
+            "auto_rotate": true,
+            "type": "api_key",
+            "usage_hint": "HH"
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "auto_rotate": true,
+            "field_count": 5,
+            "has_value": true,
+            "path": "e1",
+            "type": "api_key",
+            "usage_hint": "HH"
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [
+          "Warning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input."
+        ],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > u1",
+          "Password: > required",
+          "Type: > api_key  🔑 api_key",
+          "Usage Hint: ┃ HH",
+          "┃",
+          "Auto Rotate: > yes",
+          "URL: > https://f.example",
+          "Notes: ┃ fn",
+          "┃",
+          "┃",
+          "TOTP Secret: > JBSWY3DPEHPK3PXPJBSWY3DPEH",
+          "TOTP Issuer: > FI",
+          "TOTP Account: > FA",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > u1",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > api_key  🔑 api_key",
+          "Usage Hint: ┃ HH",
+          "┃",
+          "Auto Rotate: > yes",
+          "URL: > https://f.example",
+          "Notes: ┃ fn",
+          "┃",
+          "TOTP Secret: > JBSWY3DPEHPK3PXPJBSWY3DPEH",
+          "TOTP Issuer: > FI",
+          "TOTP Account: > FA",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "TOTP Account: > FA",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "empty_password": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "username": "nobody"
+          },
+          "path": "",
+          "secret_meta": {},
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "path": "e1"
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > nobody",
+          "Username: > nobody",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "enter_navigation": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB",
+            "url": "https://e",
+            "username": "usr"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 3,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > usr",
+          "Password: > required",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Auto Rotate: > noy",
+          "URL: > optional",
+          "URL: > https://e",
+          "Notes: ┃ optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Notes: ┃ optional",
+          "TOTP Secret: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "esc_noop_then_cancel": {
+        "entry": null,
+        "form_seen": true,
+        "list": null,
+        "rc": 1,
+        "stderr_lines": [
+          "Error: canceled",
+          "Error: canceled"
+        ],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Username: > abc"
+        ],
+        "timeout": false
+      },
+      "exists_force": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": false,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 1,
+        "stderr_lines": [
+          "Error: entry \"e1\" already exists (use 'set' to update or 'edit' to modify)",
+          "Error: entry \"e1\" already exists (use 'set' to update or 'edit' to modify)"
+        ],
+        "stdout_lines": [],
+        "timeout": false
+      },
+      "exists_noforce": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": false,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 1,
+        "stderr_lines": [
+          "Error: entry \"e1\" already exists (use 'set' to update or 'edit' to modify)",
+          "Error: entry \"e1\" already exists (use 'set' to update or 'edit' to modify)"
+        ],
+        "stdout_lines": [],
+        "timeout": false
+      },
+      "expires_at": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "expires_at": "2030-01-02T03:04:05Z",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "fill_all": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "notes": "n1\nn2",
+            "password": "Xk9#mP2$vL7qZ!aaBB",
+            "totp": {
+              "account_name": "acct",
+              "issuer": "Iss",
+              "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH"
+            },
+            "url": "https://x.example",
+            "username": "alice"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 5,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > alice",
+          "Username: > alice",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "Auto Rotate: > noy",
+          "Auto Rotate: > noy",
+          "URL: > https://x.example",
+          "URL: > https://x.example",
+          "Notes: ┃ n1",
+          "┃ n2",
+          "┃",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Notes: ┃ n1",
+          "┃ n2",
+          "TOTP Secret: > JBSWY3DPEHPK3PXPJBSWY3DPEH",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "TOTP Secret: > JBSWY3DPEHPK3PXPJBSWY3DPEH",
+          "TOTP Secret: > JBSWY3DPEHPK3PXPJBSWY3DPEH",
+          "TOTP Issuer: > Iss",
+          "TOTP Issuer: > Iss",
+          "TOTP Account: > acct",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "fill_pw_only": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "flags_override_form": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "notes": "flagnote",
+            "password": "Xk9#mP2$vL7qZ!aaBB",
+            "url": "https://f.example",
+            "username": "flaguserformuser"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 4,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > flaguser",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > https://f.example",
+          "Notes: ┃ flagnote",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > flaguserformuser",
+          "Username: > flaguserformuser",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > https://f.example",
+          "Notes: ┃ flagnote",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "URL: > https://f.examplehttps://form.example",
+          "URL: > https://f.examplehttps://form.example",
+          "Notes: ┃ flagnoteformnotes",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Notes: ┃ flagnoteformnotes",
+          "Notes: ┃ flagnoteformnotes",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "hint_custom": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "my hint\nline2"
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "my hint\nline2"
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "Usage Hint: ┃ my hint",
+          "┃ line2",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Usage Hint: ┃ my hint",
+          "┃ line2",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "hint_textarea_edit": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "notes": "l12\nl3",
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "abcd"
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 2,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "abcd"
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "Usage Hint: ┃ abcd",
+          "┃",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Usage Hint: ┃ abcd",
+          "Notes: ┃ l1",
+          "┃",
+          "┃",
+          "Notes: ┃ l12",
+          "┃ l3",
+          "Notes: ┃ l12",
+          "┃ l3",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "hint_tick_idle_on_type": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {},
+          "path": "",
+          "secret_meta": {
+            "usage_hint": "Follow the specific integration instructions for this secret."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "path": "e1",
+            "usage_hint": "Follow the specific integration instructions for this secret."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ Follow the specific integration instructions for this",
+          "┃ secret.",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ Follow the specific integration instructions for this",
+          "┃ secret.",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Usage Hint: ┃ Follow the specific integration instructions for this",
+          "┃ secret.",
+          "Auto Rotate: > no",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Notes: ┃ optional",
+          "TOTP Secret: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "long_fields": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "notes": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+            "password": "Xk9#mP2$vL7qZ!aaBB",
+            "url": "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+            "username": "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 4,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
+          "Username: > uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
+          "Username: > uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "URL: > hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+          "Notes: ┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnn",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ n",
+          "┃ nnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnn",
+          "┃ nnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnn",
+          "┃ nnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "Notes: ┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "┃ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "TOTP Issuer: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "shift_tab_nav": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB",
+            "username": "usr"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 2,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Username: > optional",
+          "Username: > optional",
+          "Password: > required",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Username: > usr",
+          "Username: > usr",
+          "Password: > ******************",
+          "Password: > ******************",
+          "Type: > password  🗝️ password",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Notes: ┃ optional",
+          "TOTP Secret: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "totp_flag_tty_warning": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB",
+            "totp": {
+              "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH"
+            }
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 2,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [
+          "Warning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input."
+        ],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > JBSWY3DPEHPK3PXPJBSWY3DPEH",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > JBSWY3DPEHPK3PXPJBSWY3DPEH",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "totp_invalid": {
+        "entry": null,
+        "form_seen": true,
+        "list": null,
+        "rc": 1,
+        "stderr_lines": [
+          "Error: TOTP secret too short: minimum 16 bytes required (26 base32 characters)",
+          "Error: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+        ],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "TOTP Secret: > JBSWY3DP",
+          "TOTP Secret: > JBSWY3DP",
+          "TOTP Issuer: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional"
+        ],
+        "timeout": false
+      },
+      "totp_whitespace_only": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "TOTP Secret: >",
+          "TOTP Secret: >",
+          "TOTP Issuer: > iss",
+          "TOTP Issuer: > iss",
+          "TOTP Issuer: > iss",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "trim_fields": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "notes": "note",
+            "password": "Xk9#mP2$vL7qZ!aaBB",
+            "totp": {
+              "account_name": "Acct",
+              "issuer": "Iss",
+              "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH"
+            },
+            "url": "https://t.example",
+            "username": "spaced"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 5,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: >   spaced",
+          "Username: >   spaced",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "URL: >   https://t.example",
+          "URL: >   https://t.example",
+          "Notes: ┃",
+          "┃   note",
+          "┃",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel · Enter: new line",
+          "Notes: ┃",
+          "┃   note",
+          "┃",
+          "TOTP Secret: > JBSWY3DPEHPK3PXPJBSWY3DPEH",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "TOTP Secret: > JBSWY3DPEHPK3PXPJBSWY3DPEH",
+          "TOTP Issuer: >  Iss",
+          "TOTP Issuer: >  Iss",
+          "TOTP Account: >  Acct",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "type_cleared_empty": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Username: > optional",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "Type: > auto-detect 📦 custom",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "type_detect_github": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "bearer_token",
+            "usage_hint": "Set Header Authorization: Bearer <token>"
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "bearer_token",
+            "usage_hint": "Set Header Authorization: Bearer <token>"
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ****************************************",
+          "Strength: OK",
+          "Type: > bearer_token  🎫 bearer_token",
+          "Usage Hint: ┃ Set Header Authorization: Bearer <token>",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ****************************************",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "type_explicit_apikey": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "api_key",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "api_key",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "Type: > API_Key  🔑 api_key",
+          "Type: > API_Key  🔑 api_key",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "type_flag_no_password": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {},
+          "path": "",
+          "secret_meta": {
+            "type": "ssh_key",
+            "usage_hint": "Write to temporary file with chmod 600 before use. Use with ssh -i <keyfile>"
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "path": "e1",
+            "type": "ssh_key",
+            "usage_hint": "Write to temporary file with chmod 600 before use. Use with ssh -i <keyfile>"
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > ssh_key  🔒 ssh_key",
+          "Usage Hint: ┃ Write to temporary file with chmod 600 before use. Use",
+          "┃ with ssh -i <keyfile>",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "type_junk": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "custom",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "custom",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ******************",
+          "Type: > zzz  📦 custom",
+          "Type: > zzz  📦 custom",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "unicode_pw": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Pässwörd-密码🔐aA1!",
+            "username": "ü-пароль-密码-🔐"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 2,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > ü-пароль-密码-🔐",
+          "Username: > ü-пароль-密码-🔐",
+          "Password: > *******************",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > *******************",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "usage_hint_flag_only": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {},
+          "path": "",
+          "secret_meta": {
+            "usage_hint": "FLAGHINT"
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "path": "e1",
+            "usage_hint": "FLAGHINT"
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ FLAGHINT",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "value_flag_tty_quiet": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": false,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [
+          "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input."
+        ],
+        "stdout_lines": [],
+        "timeout": false
+      },
+      "value_flag_tty_warning": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "Xk9#mP2$vL7qZ!aaBB"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": false,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [
+          "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input."
+        ],
+        "stdout_lines": [
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "weak_pw_force": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "weak"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ****",
+          "Strength: OK",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ****",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "weak_pw_noforce": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "password": "weak"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 1,
+            "has_value": true,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > optional",
+          "Password: > ****",
+          "Strength: password too short: must be at least 10 characters (weak — press Enter to continue)",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Password: > ****",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      },
+      "word_edits": {
+        "entry": {
+          "canary": false,
+          "classification": 0,
+          "data": {
+            "url": "abc ef",
+            "username": "foo x"
+          },
+          "path": "",
+          "secret_meta": {
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          },
+          "tags": [],
+          "version": 2,
+          "write_history": 0
+        },
+        "form_seen": true,
+        "list": [
+          {
+            "field_count": 2,
+            "path": "e1",
+            "type": "password",
+            "usage_hint": "Use for authentication. Consider using a password manager or secret injection."
+          }
+        ],
+        "rc": 0,
+        "stderr_lines": [],
+        "stdout_lines": [
+          "Add New Entry",
+          "Username: > optional",
+          "Password: > required",
+          "Type: > auto-detect 📦 custom",
+          "Usage Hint: ┃ auto-generated from type",
+          "┃",
+          "Auto Rotate: > no",
+          "URL: > optional",
+          "Notes: ┃ optional",
+          "┃",
+          "┃",
+          "TOTP Secret: > optional",
+          "TOTP Issuer: > optional",
+          "TOTP Account: > optional",
+          "Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel",
+          "Username: > foo",
+          "Username: > foo x",
+          "Username: > foo x",
+          "Password: > required",
+          "Type: > password  🗝️ password",
+          "Usage Hint: ┃ Use for authentication. Consider using a password manager",
+          "┃ or secret injection.",
+          "Password: > required",
+          "URL: > abc ef",
+          "URL: > abc ef",
+          "TOTP Account: > optional",
+          "Entry created: e1"
+        ],
+        "timeout": false
+      }
+    }
+  }
+}

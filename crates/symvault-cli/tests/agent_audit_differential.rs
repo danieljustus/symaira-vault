@@ -1,19 +1,22 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
 
 fn run(binary: &Path, args: &[&str], vault: &Path) -> Output {
-    Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .env("HOME", vault)
         .env("USERPROFILE", vault)
         .env("SYMVAULT_VAULT", vault)
         .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run agent audit")
+        .env("NO_COLOR", "1");
+    go_oracle::output(&mut command).expect("run agent audit")
 }
 
 fn assert_same(go: &Output, rust: &Output, case: &str) {
@@ -41,13 +44,18 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_audit_matches_go_for_formats_filters_limits_and_missing_logs() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
+    let oracle = go_oracle::GoOracle::begin(
+        "agent_audit_differential",
+        "agent_audit_matches_go_for_formats_filters_limits_and_missing_logs",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
     let rust_binary = env!("CARGO_BIN_EXE_symvault");
-    let go_binary = PathBuf::from(go_binary);
+    let go_binary = oracle.binary();
     let rust_binary = PathBuf::from(rust_binary);
     let vault = tempfile::tempdir().expect("vault fixture");
     fs::write(
@@ -88,4 +96,5 @@ fn agent_audit_matches_go_for_formats_filters_limits_and_missing_logs() {
         let rust = run(&rust_binary, &args, vault.path());
         assert_same(&go, &rust, &format!("{args:?}"));
     }
+    assert_eq!(oracle.calls(), 6);
 }

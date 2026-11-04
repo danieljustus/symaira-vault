@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-check biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages release-contract release-contract-selftest rust-cli manpages-differential port-fixtures-check core-fixtures-check quota-fixtures-check policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential port-contract store-differential audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
+.PHONY: keyring-key-fixtures-check biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages release-contract release-contract-selftest rust-cli manpages-differential port-fixtures-check core-fixtures-check quota-fixtures-check policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-check pairing-differential crypto-differential port-contract store-differential audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check ffi-fixtures-check ffi-differential ffi-xcframework ffi-ios-simulator-test
 
 # Variables
 BINARY_NAME := symvault
@@ -273,7 +273,6 @@ PORT_SESSION_FIXTURE := testdata/port/session/contract.json
 PORT_PLATFORM_FIXTURE := testdata/port/platform/contract.json
 PORT_PERSISTENT_QUOTA_FIXTURE := testdata/port/quotas/contract.json
 PORT_GO_BINARY := target/port/symvault-go
-MANPAGES_GO_BINARY := target/port/symvault-manpages-go
 RUST_BINARY := $(CARGO_TARGET_DIR)/debug/symvault
 PORT_CONTRACT_VERSION ?= v0.0.0-port
 
@@ -464,8 +463,8 @@ mcp-http-ratelimit-differential: mcp-http-ratelimit-fixtures-check
 
 # HTTP-003 paired production-handler and Rust adapter lifecycle contracts.
 .PHONY: mcp-oauth-contract
+# Go-free: the Go serverbootstrap OAuth tests were the oracle; the Rust tests below are the contract.
 mcp-oauth-contract:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestOAuthRefreshToken_FullFlow|TestOAuthRefreshToken_ExpiredRefreshDenied|TestOAuthRefreshToken_RegisterResponseIncludesRefresh|TestOAuthRegisterValidationCases|TestOAuthRegisterAcceptsCustomSchemeWithoutUserinfo|TestOAuthRegisterBoundsPersistentClientStore|TestOAuthRefreshToken_WellKnownIncludesRefresh|TestOAuthRefreshToken_UnsupportedGrantType|TestOAuthRefreshToken_MissingRefreshToken)$$' -count=1
 	$(CARGO) test -p symvault-mcp --lib oauth::tests --locked
 	$(CARGO) test -p symvault-mcp --lib http::tests::authorization_server_discovery_is_reachable_through_oauth_listener --locked
 
@@ -526,10 +525,15 @@ config-cli-capture:
 	./scripts/rust-port/check_config_cli.sh --capture
 
 # CONFIG-WRITER: Go-recorded SaveTo bytes (pinned oracle 690647c5) replayed
-# against the Rust writer, plus the rewriting commands on the live Go binary.
-.PHONY: config-rewrite-differential
+# against the Rust writer, plus the recorded Go runs of the rewriting commands
+# (testdata/port/cli-transcripts/config_rewrite_differential.json); no Go needed.
+.PHONY: config-rewrite-differential config-rewrite-capture
 config-rewrite-differential:
 	./scripts/rust-port/check_config_rewrite.sh
+
+# Re-records those transcripts from the pinned Go oracle (Go required).
+config-rewrite-capture:
+	./scripts/rust-port/check_config_rewrite.sh --capture
 
 # CLI-005: go-yaml scanner/parser/reader error wording of config.yaml. Re-verifies
 # the frozen Go corpus (pinned oracle 0cc78062) and replays it against the Rust CLI.
@@ -576,11 +580,6 @@ output-modes-cli-differential:
 yaml-scalar-differential:
 	$(MAKE) --no-print-directory fixtures-verify FIXTURE="testdata/port/cli/yaml-scalars.json"
 	$(CARGO) test -p symvault-gojson --test yaml_scalars --locked
-
-differential-go-selftest:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
-		--left ./$(BINARY_NAME) --right ./$(BINARY_NAME) --cases $(PORT_CLI_CASES)
 
 crypto-differential:
 	$(MAKE) --no-print-directory fixtures-verify FIXTURE="testdata/port/crypto/age-kdf.json"
@@ -651,16 +650,15 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-# Build the Go oracle from this checked-out source revision so the page tree is
-# compared against the exact CLI tree under review, never an ambient binary.
+# The Go man pages and the Go help pages are replayed from the committed
+# transcripts in testdata/port/cli-transcripts/ (recorded once from the pinned
+# Go oracle, see scripts/rust-port/capture_cli_b.sh); a missing recording fails.
 manpages-differential:
-	@mkdir -p "$(dir $(MANPAGES_GO_BINARY))"
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=true -o "$(MANPAGES_GO_BINARY)" .
-	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_MANPAGES_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_generate_manpages --locked
+	$(CARGO) test -p symvault-cli --test cli_generate_manpages --locked
 
 .PHONY: cli-help-differential
 cli-help-differential: manpages-differential
-	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_HELP_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_help --test cli_get_list_help_differential --test cli_completion_args --test cli_dynamic_setup_help --test cli_update_help --locked
+	$(CARGO) test -p symvault-cli --test cli_help --test cli_help_subcommand --test cli_get_list_help_differential --test cli_completion_args --test cli_dynamic_setup_help --test cli_update_help --locked
 
 # SETUP-001: `symvault setup` through a real PTY against a no-cgo Go oracle built
 # from this checked-out source (a no-cgo build cannot see Touch ID; see
@@ -694,7 +692,7 @@ UPDATE_FIXTURES := crates/symvault-cli/tests/fixtures/update-apply-nonrelease cr
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	$(MAKE) --no-print-directory fixtures-verify FIXTURE="$(UPDATE_FIXTURES)"
-port-contract: fixtures-verify reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential clipboard-linux-differential mcp-prompts-differential mcp-render-differential config-cli-differential config-rewrite-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check tool-registry-hash-differential ffi-differential
+port-contract: fixtures-verify reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential clipboard-linux-differential mcp-prompts-differential mcp-render-differential config-cli-differential config-rewrite-differential yaml-syntax-cli-differential error-taxonomy-cli-differential output-modes-cli-differential yaml-scalar-differential import-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential crypto-differential cli-help-differential token-lookup-fixtures-check tool-registry-hash-differential ffi-differential
 
 # TOOLHASH-001: Go-recorded tool-registry hash + call-time drift refusal. The
 # process-level Go/Rust/cross-binary check needs prebuilt binaries (see
@@ -810,17 +808,15 @@ ffi-fixtures-check ffi-differential: export SYMVAULT_TEST_KEYRING := memory
 ffi-fixtures-check:
 	$(MAKE) --no-print-directory fixtures-verify FIXTURE="testdata/port/ffi/mobilebind.json"
 
-ffi-differential: ffi-fixtures-check
-	@mkdir -p $(dir $(FFI_DRIVER))
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -o $(FFI_DRIVER) ./scripts/rust-port/cmd/mobilebindgen
-	SYMVAULT_FFI_GO_DRIVER=$(FFI_DRIVER) $(CARGO) test -p symvault-ffi --locked
+ffi-differential:
+	$(CARGO) test -p symvault-ffi --locked
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
 		set -eu; \
 		$(CARGO) build -p symvault-ffi --profile ffi --locked; \
 		cd crates/symvault-ffi/swift && \
 		SYMVAULT_FFI_LIB_DIR=$(FFI_TARGET_ABS)/ffi $(SWIFT) test --scratch-path $(FFI_TARGET_ABS)/ffi-swift; \
 	else \
-		echo "SKIP ffi-differential: Swift package test needs macOS (host: $$(uname -s)); Go check and Rust tests passed"; \
+		echo "SKIP ffi-differential: Swift package test needs macOS (host: $$(uname -s)); Rust tests passed"; \
 	fi
 
 # FFI-001 iOS: SymvaultFFI.xcframework (macOS arm64, iOS device arm64, iOS
@@ -1534,7 +1530,6 @@ help:
 	@echo "  policy-fixtures-check    - Verify Go-oracle policy/tier fixtures have not drifted"
 	@echo "  sync-io-differential - Verify Go-generated sync/import/archive/intake contracts"
 	@echo "  pass-gpg-differential - Verify the pass importer against real gpg (Go oracle)"
-	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
 	@echo "  crypto-differential - Verify Go↔Rust age and KDF cross-decryption"
 	@echo "  store-differential - Verify Go↔Rust storage reopen and read-only fixtures"
 	@echo "  data-safety-differential - Verify the pre-Rust-mutation backup gate over Go-created vaults"

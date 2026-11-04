@@ -1,0 +1,2585 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+    "go_version": "go1.26.10",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "tests": {
+    "set_matches_the_go_oracle_on_a_terminal_stdin": {
+      "--stdin-value strong": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {},
+        "stderr": "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "--stdin-value weak": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.\nError: password too short: must be at least 10 characters\nError: password too short: must be at least 10 characters\n",
+        "stdout": ""
+      },
+      "--totp-secret only valid": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {},
+        "stderr": "Warning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "--value empty sensitive": {
+        "code": 9,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: cannot set empty value for sensitive field \"password\" (use --allow-empty to override)\nError: cannot set empty value for sensitive field \"password\" (use --allow-empty to override)\n",
+        "stdout": ""
+      },
+      "--value strong": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {},
+        "stderr": "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "--value strong uninit": {
+        "code": 3,
+        "created": null,
+        "reads": {},
+        "stderr": "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.\nError: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n",
+        "stdout": ""
+      },
+      "--value weak": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.\nError: password too short: must be at least 10 characters\nError: password too short: must be at least 10 characters\n",
+        "stdout": ""
+      },
+      "bad --totp-secret": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.\nWarning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input.\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\n",
+        "stdout": ""
+      }
+    },
+    "set_matches_the_go_oracle_on_answered_prompts": {
+      "empty password": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/b.age",
+          "manifest.age"
+        ],
+        "echo": "u\r\n\r\n\r\n",
+        "stderr": "Username (optional): Password: \nURL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/b\n",
+        "unanswered": 0
+      },
+      "entry": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/b.age",
+          "manifest.age"
+        ],
+        "echo": "bob\r\nhttps://x.test\r\n\r\n",
+        "stderr": "Username (optional): Password: \nURL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/b\n",
+        "unanswered": 0
+      },
+      "entry with --totp-secret": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/b.age",
+          "manifest.age"
+        ],
+        "echo": "\r\n\r\n",
+        "stderr": "Warning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input.\nUsername (optional): Password: \nURL (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/b\n",
+        "unanswered": 0
+      },
+      "entry with a TOTP secret": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/b.age",
+          "manifest.age"
+        ],
+        "echo": "\r\n\r\nJBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\r\n",
+        "stderr": "Username (optional): Password: \nURL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/b\n",
+        "unanswered": 0
+      },
+      "entry with a bad TOTP secret": {
+        "code": 1,
+        "created": [],
+        "echo": "\r\n\r\nSHORT\r\n",
+        "stderr": "Username (optional): Password: \nURL (optional): TOTP Secret (optional): Error: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "entry, vault not initialised": {
+        "code": 3,
+        "created": null,
+        "echo": "u\r\n\r\n\r\n",
+        "stderr": "Username (optional): Password: \nURL (optional): TOTP Secret (optional): Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "plain field": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "echo": "",
+        "stderr": "Enter value for note: \nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n",
+        "unanswered": 0
+      },
+      "plain field, empty": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "echo": "",
+        "stderr": "Enter value for note: \nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n",
+        "unanswered": 0
+      },
+      "plain field, padded": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "echo": "",
+        "stderr": "Enter value for note: \nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n",
+        "unanswered": 0
+      },
+      "sensitive field": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "echo": "",
+        "stderr": "Enter value for password: \nConfirm value for password: \nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n",
+        "unanswered": 0
+      },
+      "sensitive field, empty": {
+        "code": 9,
+        "created": [],
+        "echo": "",
+        "stderr": "Enter value for password: \nError: cannot set empty value for sensitive field \"password\" (use --allow-empty to override)\nError: cannot set empty value for sensitive field \"password\" (use --allow-empty to override)\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "sensitive field, empty --allow-empty": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "echo": "",
+        "stderr": "Enter value for password: \nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n",
+        "unanswered": 0
+      },
+      "sensitive field, empty confirmation": {
+        "code": 9,
+        "created": [],
+        "echo": "",
+        "stderr": "Enter value for password: \nConfirm value for password: \nError: confirmation cannot be empty\nError: confirmation cannot be empty\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "sensitive field, mismatch": {
+        "code": 9,
+        "created": [],
+        "echo": "",
+        "stderr": "Enter value for password: \nConfirm value for password: \nError: values do not match\nError: values do not match\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "unlock prompt after a field prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "echo": "",
+        "stderr": "Enter value for note: \nPassphrase: \n",
+        "stdout": "Entry saved: w/a\n",
+        "unanswered": 0
+      },
+      "unlock prompt after the entry prompts": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/b.age",
+          "manifest.age"
+        ],
+        "echo": "bob\r\n\r\n\r\n",
+        "stderr": "Username (optional): Password: \nURL (optional): TOTP Secret (optional): Passphrase: \n",
+        "stdout": "Entry saved: w/b\n",
+        "unanswered": 0
+      },
+      "unlock prompt, empty answer (list)": {
+        "code": 1,
+        "created": [],
+        "echo": "",
+        "stderr": "Passphrase: \nError: open vault: passphrase is empty\nError: open vault: passphrase is empty\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "unlock prompt, right passphrase (get)": {
+        "code": 2,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "manifest.age"
+        ],
+        "echo": "",
+        "stderr": "Passphrase: \nError: entry not found: w/a.password: entry not found\nError: entry not found: w/a.password: entry not found\nTry: symvault find <search-term>\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "unlock prompt, right passphrase (list)": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "manifest.age"
+        ],
+        "echo": "",
+        "stderr": "Passphrase: \n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "unlock prompt, then the delete confirmation": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "manifest.age"
+        ],
+        "echo": "n\r\n",
+        "stderr": "Passphrase: \nDelete w/a? (y/N): Canceled\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "unlock prompt, wrong passphrase (get)": {
+        "code": 1,
+        "created": [],
+        "echo": "",
+        "stderr": "Passphrase: \nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "unlock prompt, wrong passphrase (list)": {
+        "code": 1,
+        "created": [],
+        "echo": "",
+        "stderr": "Passphrase: \nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "unlock prompt, wrong passphrase (set --value)": {
+        "code": 1,
+        "created": [],
+        "echo": "",
+        "stderr": "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.\nPassphrase: \nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "weak password, --force": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/b.age",
+          "manifest.age"
+        ],
+        "echo": "\r\n\r\n\r\n",
+        "stderr": "Username (optional): Password: \nURL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/b\n",
+        "unanswered": 0
+      },
+      "weak password, --quiet": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/b.age",
+          "manifest.age"
+        ],
+        "echo": "\r\ny\r\n\r\n\r\n",
+        "stderr": "Username (optional): Password: \nWarning: password too short: must be at least 10 characters\nUse this password anyway? (y/N): URL (optional): TOTP Secret (optional): ",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "weak password, default answer": {
+        "code": 1,
+        "created": [],
+        "echo": "\r\n\r\n",
+        "stderr": "Username (optional): Password: \nWarning: password too short: must be at least 10 characters\nUse this password anyway? (y/N): Error: password rejected by user\nError: password rejected by user\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "weak password, refused": {
+        "code": 1,
+        "created": [],
+        "echo": "\r\nn\r\n",
+        "stderr": "Username (optional): Password: \nWarning: password too short: must be at least 10 characters\nUse this password anyway? (y/N): Error: password rejected by user\nError: password rejected by user\n",
+        "stdout": "",
+        "unanswered": 0
+      },
+      "weak password, use anyway": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/b.age",
+          "manifest.age"
+        ],
+        "echo": "\r\ny\r\n\r\n\r\n",
+        "stderr": "Username (optional): Password: \nWarning: password too short: must be at least 10 characters\nUse this password anyway? (y/N): URL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/b\n",
+        "unanswered": 0
+      }
+    },
+    "set_matches_the_go_oracle_on_piped_input": {
+      "--no-pipe-warning after the command": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "hello\n"
+          ]
+        },
+        "stderr": "Enter value for note: SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "--no-pipe-warning on a field prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "hello\n"
+          ]
+        },
+        "stderr": "Enter value for note: SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "--no-pipe-warning on a sensitive prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.api_key": [
+            0,
+            "s3cretvalue\n"
+          ]
+        },
+        "stderr": "Enter value for api_key: Confirm value for api_key: SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "--no-pipe-warning on the entry prompts": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.password": [
+            0,
+            "StrongPassword123!\n"
+          ],
+          "w/a.username": [
+            0,
+            "alice\n"
+          ]
+        },
+        "stderr": "Username (optional): Password: URL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "--no-pipe-warning on the unlock prompt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Passphrase: Error: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "--quiet on a field prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "hello\n"
+          ]
+        },
+        "stderr": "Enter value for note: ",
+        "stdout": ""
+      },
+      "--quiet valid": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "x\n"
+          ]
+        },
+        "stderr": "",
+        "stdout": ""
+      },
+      "--stdin-value EOF": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: read --stdin-value: EOF\nError: read --stdin-value: EOF\n",
+        "stdout": ""
+      },
+      "--stdin-value EOF uninit": {
+        "code": 1,
+        "created": null,
+        "reads": {},
+        "stderr": "Error: read --stdin-value: EOF\nError: read --stdin-value: EOF\n",
+        "stdout": ""
+      },
+      "--stdin-value bad TOTP": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\n",
+        "stdout": ""
+      },
+      "--stdin-value strong": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.password": [
+            0,
+            "StrongPassword123!\n"
+          ]
+        },
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "--stdin-value weak": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: password too short: must be at least 10 characters\nError: password too short: must be at least 10 characters\n",
+        "stdout": ""
+      },
+      "CRLF field prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "hi\n"
+          ]
+        },
+        "stderr": "Enter value for note: Reading Enter value for note from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "add: empty identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\n",
+        "stdout": ""
+      },
+      "add: garbage identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\n",
+        "stdout": ""
+      },
+      "add: identity for another recipient type": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\n",
+        "stdout": ""
+      },
+      "add: identity that is a private key": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\n",
+        "stdout": ""
+      },
+      "add: identity with a Latin-1 intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\n",
+        "stdout": ""
+      },
+      "add: identity with a malformed closing line": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\n",
+        "stdout": ""
+      },
+      "add: identity with a malformed stanza body": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\n",
+        "stdout": ""
+      },
+      "add: identity with only the intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\n",
+        "stdout": ""
+      },
+      "add: identity without a newline": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\n",
+        "stdout": ""
+      },
+      "add: scrypt identity, missing work factor": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\n",
+        "stdout": ""
+      },
+      "add: scrypt identity, work factor too large": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\n",
+        "stdout": ""
+      },
+      "add: scrypt identity, wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\n",
+        "stdout": ""
+      },
+      "add: truncated identity, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "add: wrong passphrase of the same length, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "add: wrong passphrase, comment-only recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "add: wrong passphrase, empty recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "add: wrong passphrase, garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "add: wrong passphrase, no recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "add: wrong passphrase, recipients.txt is a directory": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "add: wrong passphrase, symlinked recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "add: wrong passphrase, valid and garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "add: wrong passphrase, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "collect: EOF at password": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read password: read Password: EOF\nError: read password: read Password: EOF\n",
+        "stdout": ""
+      },
+      "collect: EOF at url": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): Error: read url: EOF\nError: read url: EOF\n",
+        "stdout": ""
+      },
+      "collect: EOF at username": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Username (optional): Error: read username: EOF\nError: read username: EOF\n",
+        "stdout": ""
+      },
+      "collect: TOTP flag skips the TOTP prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "collect: TOTP prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "collect: TOTP prompt without newline": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): TOTP Secret (optional): Error: read TOTP secret: EOF\nError: read TOTP secret: EOF\n",
+        "stdout": ""
+      },
+      "collect: all fields": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.password": [
+            0,
+            "StrongPassword123!\n"
+          ],
+          "w/a.url": [
+            0,
+            "https://x.test\n"
+          ],
+          "w/a.username": [
+            0,
+            "alice\n"
+          ]
+        },
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "collect: bad TOTP flag, uninit": {
+        "code": 1,
+        "created": null,
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): Error: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\n",
+        "stdout": ""
+      },
+      "collect: empty input": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "collect: invalid TOTP prompt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): TOTP Secret (optional): Error: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\n",
+        "stdout": ""
+      },
+      "collect: trailing dot": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "collect: weak password --force": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.password": [
+            0,
+            "abc\n"
+          ]
+        },
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "collect: weak password --quiet": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Username (optional): Password: Warning: password too short: must be at least 10 characters\nError: password too short: must be at least 10 characters — use --force to bypass this check (the entry will be tagged as weak)\nError: password too short: must be at least 10 characters — use --force to bypass this check (the entry will be tagged as weak)\n",
+        "stdout": ""
+      },
+      "collect: weak password refused off a terminal": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nWarning: password too short: must be at least 10 characters\nError: password too short: must be at least 10 characters — use --force to bypass this check (the entry will be tagged as weak)\nError: password too short: must be at least 10 characters — use --force to bypass this check (the entry will be tagged as weak)\n",
+        "stdout": ""
+      },
+      "delete prompts off a terminal": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "delete: empty identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\n",
+        "stdout": ""
+      },
+      "delete: garbage identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\n",
+        "stdout": ""
+      },
+      "delete: identity for another recipient type": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\n",
+        "stdout": ""
+      },
+      "delete: identity that is a private key": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\n",
+        "stdout": ""
+      },
+      "delete: identity with a Latin-1 intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\n",
+        "stdout": ""
+      },
+      "delete: identity with a malformed closing line": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\n",
+        "stdout": ""
+      },
+      "delete: identity with a malformed stanza body": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\n",
+        "stdout": ""
+      },
+      "delete: identity with only the intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\n",
+        "stdout": ""
+      },
+      "delete: identity without a newline": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\n",
+        "stdout": ""
+      },
+      "delete: scrypt identity, missing work factor": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\n",
+        "stdout": ""
+      },
+      "delete: scrypt identity, work factor too large": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\n",
+        "stdout": ""
+      },
+      "delete: scrypt identity, wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\n",
+        "stdout": ""
+      },
+      "delete: truncated identity, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "delete: wrong passphrase of the same length, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "delete: wrong passphrase, comment-only recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "delete: wrong passphrase, empty recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "delete: wrong passphrase, garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "delete: wrong passphrase, no recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "delete: wrong passphrase, recipients.txt is a directory": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "delete: wrong passphrase, symlinked recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "delete: wrong passphrase, valid and garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "delete: wrong passphrase, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "edit: empty identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\n",
+        "stdout": ""
+      },
+      "edit: garbage identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\n",
+        "stdout": ""
+      },
+      "edit: identity for another recipient type": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\n",
+        "stdout": ""
+      },
+      "edit: identity that is a private key": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\n",
+        "stdout": ""
+      },
+      "edit: identity with a Latin-1 intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\n",
+        "stdout": ""
+      },
+      "edit: identity with a malformed closing line": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\n",
+        "stdout": ""
+      },
+      "edit: identity with a malformed stanza body": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\n",
+        "stdout": ""
+      },
+      "edit: identity with only the intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\n",
+        "stdout": ""
+      },
+      "edit: identity without a newline": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\n",
+        "stdout": ""
+      },
+      "edit: scrypt identity, missing work factor": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\n",
+        "stdout": ""
+      },
+      "edit: scrypt identity, work factor too large": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\n",
+        "stdout": ""
+      },
+      "edit: scrypt identity, wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\n",
+        "stdout": ""
+      },
+      "edit: truncated identity, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "edit: wrong passphrase of the same length, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "edit: wrong passphrase, comment-only recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "edit: wrong passphrase, empty recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "edit: wrong passphrase, garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "edit: wrong passphrase, no recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "edit: wrong passphrase, recipients.txt is a directory": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "edit: wrong passphrase, symlinked recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "edit: wrong passphrase, valid and garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "edit: wrong passphrase, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "empty --value": {
+        "code": 9,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: cannot set empty value for sensitive field \"password\" (use --allow-empty to override)\nError: cannot set empty value for sensitive field \"password\" (use --allow-empty to override)\n",
+        "stdout": ""
+      },
+      "empty --value, non-sensitive field": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "\n"
+          ]
+        },
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "empty --value, token field": {
+        "code": 9,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: cannot set empty value for sensitive field \"api_token\" (use --allow-empty to override)\nError: cannot set empty value for sensitive field \"api_token\" (use --allow-empty to override)\n",
+        "stdout": ""
+      },
+      "find: empty identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\n",
+        "stdout": ""
+      },
+      "find: garbage identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\n",
+        "stdout": ""
+      },
+      "find: identity for another recipient type": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\n",
+        "stdout": ""
+      },
+      "find: identity that is a private key": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\n",
+        "stdout": ""
+      },
+      "find: identity with a Latin-1 intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\n",
+        "stdout": ""
+      },
+      "find: identity with a malformed closing line": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\n",
+        "stdout": ""
+      },
+      "find: identity with a malformed stanza body": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\n",
+        "stdout": ""
+      },
+      "find: identity with only the intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\n",
+        "stdout": ""
+      },
+      "find: identity without a newline": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\n",
+        "stdout": ""
+      },
+      "find: scrypt identity, missing work factor": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\n",
+        "stdout": ""
+      },
+      "find: scrypt identity, work factor too large": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\n",
+        "stdout": ""
+      },
+      "find: scrypt identity, wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\n",
+        "stdout": ""
+      },
+      "find: truncated identity, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "find: wrong passphrase of the same length, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "find: wrong passphrase, comment-only recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "find: wrong passphrase, empty recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "find: wrong passphrase, garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "find: wrong passphrase, no recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "find: wrong passphrase, recipients.txt is a directory": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "find: wrong passphrase, symlinked recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "find: wrong passphrase, valid and garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "find: wrong passphrase, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "get --print does not prompt off a terminal": {
+        "code": 4,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1\nError: vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+        "stdout": ""
+      },
+      "get does not prompt off a terminal": {
+        "code": 4,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1\nError: vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+        "stdout": ""
+      },
+      "get: empty identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\n",
+        "stdout": ""
+      },
+      "get: garbage identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\n",
+        "stdout": ""
+      },
+      "get: identity for another recipient type": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\n",
+        "stdout": ""
+      },
+      "get: identity that is a private key": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\n",
+        "stdout": ""
+      },
+      "get: identity with a Latin-1 intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\n",
+        "stdout": ""
+      },
+      "get: identity with a malformed closing line": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\n",
+        "stdout": ""
+      },
+      "get: identity with a malformed stanza body": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\n",
+        "stdout": ""
+      },
+      "get: identity with only the intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\n",
+        "stdout": ""
+      },
+      "get: identity without a newline": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\n",
+        "stdout": ""
+      },
+      "get: scrypt identity, missing work factor": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\n",
+        "stdout": ""
+      },
+      "get: scrypt identity, work factor too large": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\n",
+        "stdout": ""
+      },
+      "get: scrypt identity, wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\n",
+        "stdout": ""
+      },
+      "get: truncated identity, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "get: wrong passphrase of the same length, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "get: wrong passphrase, comment-only recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "get: wrong passphrase, empty recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "get: wrong passphrase, garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "get: wrong passphrase, no recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "get: wrong passphrase, recipients.txt is a directory": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "get: wrong passphrase, symlinked recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "get: wrong passphrase, valid and garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "get: wrong passphrase, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "interactive .password weak is accepted": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.password": [
+            0,
+            "abc\n"
+          ]
+        },
+        "stderr": "Enter value for password: Reading Enter value for password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nConfirm value for password: SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "interactive .password weak uninit is exit 3": {
+        "code": 3,
+        "created": null,
+        "reads": {},
+        "stderr": "Enter value for password: Reading Enter value for password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nConfirm value for password: Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n",
+        "stdout": ""
+      },
+      "interactive field": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "hello\n"
+          ]
+        },
+        "stderr": "Enter value for note: Reading Enter value for note from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "interactive field + bad TOTP": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Enter value for note: Reading Enter value for note from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\n",
+        "stdout": ""
+      },
+      "interactive field + bad TOTP uninit": {
+        "code": 1,
+        "created": null,
+        "reads": {},
+        "stderr": "Enter value for note: Reading Enter value for note from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\n",
+        "stdout": ""
+      },
+      "invalid TOTP": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\n",
+        "stdout": ""
+      },
+      "invalid TOTP base32": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: TOTP secret must be Base32-encoded (spaces allowed)\nError: TOTP secret must be Base32-encoded (spaces allowed)\n",
+        "stdout": ""
+      },
+      "invalid TOTP uninit": {
+        "code": 1,
+        "created": null,
+        "reads": {},
+        "stderr": "Error: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\n",
+        "stdout": ""
+      },
+      "invalid TOTP wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\nError: TOTP secret too short: minimum 16 bytes required (26 base32 characters)\n",
+        "stdout": ""
+      },
+      "list prompts off a terminal": {
+        "code": 4,
+        "created": [],
+        "reads": {},
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+        "stdout": ""
+      },
+      "list with a wrong piped passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "list: empty identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\n",
+        "stdout": ""
+      },
+      "list: garbage identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\n",
+        "stdout": ""
+      },
+      "list: identity for another recipient type": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\n",
+        "stdout": ""
+      },
+      "list: identity that is a private key": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\n",
+        "stdout": ""
+      },
+      "list: identity with a Latin-1 intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\n",
+        "stdout": ""
+      },
+      "list: identity with a malformed closing line": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\n",
+        "stdout": ""
+      },
+      "list: identity with a malformed stanza body": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\n",
+        "stdout": ""
+      },
+      "list: identity with only the intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\n",
+        "stdout": ""
+      },
+      "list: identity without a newline": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\n",
+        "stdout": ""
+      },
+      "list: scrypt identity, missing work factor": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\n",
+        "stdout": ""
+      },
+      "list: scrypt identity, work factor too large": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\n",
+        "stdout": ""
+      },
+      "list: scrypt identity, wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\n",
+        "stdout": ""
+      },
+      "list: truncated identity, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "list: wrong passphrase of the same length, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "list: wrong passphrase, comment-only recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "list: wrong passphrase, empty recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "list: wrong passphrase, garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "list: wrong passphrase, no recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "list: wrong passphrase, recipients.txt is a directory": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "list: wrong passphrase, symlinked recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "list: wrong passphrase, valid and garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "list: wrong passphrase, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "non-UTF-8 --stdin-value": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "caf� ��x\n"
+          ]
+        },
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "non-UTF-8 entry prompts": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.url": [
+            0,
+            "https://x.test/�\n"
+          ],
+          "w/a.username": [
+            0,
+            "al�ce\n"
+          ]
+        },
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): TOTP Secret (optional): SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "non-UTF-8 field prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "caf� ��x\n"
+          ]
+        },
+        "stderr": "Enter value for note: Reading Enter value for note from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "non-UTF-8 sensitive prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.api_key": [
+            0,
+            "caf�secret\n"
+          ]
+        },
+        "stderr": "Enter value for api_key: Reading Enter value for api_key from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nConfirm value for api_key: SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "padded field prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "hi there\n"
+          ]
+        },
+        "stderr": "Enter value for note: Reading Enter value for note from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "pipe warning on a field prompt": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "hello\n"
+          ]
+        },
+        "stderr": "Enter value for note: Reading Enter value for note from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "pipe warning on the unlock prompt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "sensitive confirmation EOF": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Enter value for api_key: Reading Enter value for api_key from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nConfirm value for api_key: Error: read confirmation: read Confirm value for api_key: EOF\nError: read confirmation: read Confirm value for api_key: EOF\n",
+        "stdout": ""
+      },
+      "sensitive confirmation empty is exit 9": {
+        "code": 9,
+        "created": [],
+        "reads": {},
+        "stderr": "Enter value for api_key: Reading Enter value for api_key from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nConfirm value for api_key: Error: confirmation cannot be empty\nError: confirmation cannot be empty\n",
+        "stdout": ""
+      },
+      "sensitive confirmation matches": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.api_key": [
+            0,
+            "s3cretvalue\n"
+          ]
+        },
+        "stderr": "Enter value for api_key: Reading Enter value for api_key from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nConfirm value for api_key: SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "sensitive confirmation mismatch is exit 9": {
+        "code": 9,
+        "created": [],
+        "reads": {},
+        "stderr": "Enter value for api_key: Reading Enter value for api_key from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nConfirm value for api_key: Error: values do not match\nError: values do not match\n",
+        "stdout": ""
+      },
+      "sensitive value empty --allow-empty": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.api_key": [
+            0,
+            "\n"
+          ]
+        },
+        "stderr": "Enter value for api_key: Reading Enter value for api_key from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nSYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "sensitive value empty is exit 9": {
+        "code": 9,
+        "created": [],
+        "reads": {},
+        "stderr": "Enter value for api_key: Reading Enter value for api_key from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: cannot set empty value for sensitive field \"api_key\" (use --allow-empty to override)\nError: cannot set empty value for sensitive field \"api_key\" (use --allow-empty to override)\n",
+        "stdout": ""
+      },
+      "sensitive value read EOF": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Enter value for api_key: Reading Enter value for api_key from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read value: read Enter value for api_key: EOF\nError: read value: read Enter value for api_key: EOF\n",
+        "stdout": ""
+      },
+      "set: empty identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\n",
+        "stdout": ""
+      },
+      "set: garbage identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\n",
+        "stdout": ""
+      },
+      "set: identity for another recipient type": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\n",
+        "stdout": ""
+      },
+      "set: identity that is a private key": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\n",
+        "stdout": ""
+      },
+      "set: identity with a Latin-1 intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\n",
+        "stdout": ""
+      },
+      "set: identity with a malformed closing line": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\n",
+        "stdout": ""
+      },
+      "set: identity with a malformed stanza body": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\n",
+        "stdout": ""
+      },
+      "set: identity with only the intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\n",
+        "stdout": ""
+      },
+      "set: identity without a newline": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\n",
+        "stdout": ""
+      },
+      "set: scrypt identity, missing work factor": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\n",
+        "stdout": ""
+      },
+      "set: scrypt identity, work factor too large": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\n",
+        "stdout": ""
+      },
+      "set: scrypt identity, wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\n",
+        "stdout": ""
+      },
+      "set: truncated identity, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "set: wrong passphrase of the same length, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "set: wrong passphrase, comment-only recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "set: wrong passphrase, empty recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "set: wrong passphrase, garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "set: wrong passphrase, no recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "set: wrong passphrase, recipients.txt is a directory": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "set: wrong passphrase, symlinked recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "set: wrong passphrase, valid and garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "set: wrong passphrase, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "uninit + empty --stdin-value": {
+        "code": 9,
+        "created": null,
+        "reads": {},
+        "stderr": "Error: cannot set empty value for sensitive field \"password\" (use --allow-empty to override)\nError: cannot set empty value for sensitive field \"password\" (use --allow-empty to override)\n",
+        "stdout": ""
+      },
+      "uninit + empty --value": {
+        "code": 9,
+        "created": null,
+        "reads": {},
+        "stderr": "Error: cannot set empty value for sensitive field \"password\" (use --allow-empty to override)\nError: cannot set empty value for sensitive field \"password\" (use --allow-empty to override)\n",
+        "stdout": ""
+      },
+      "uninit + empty --value --allow-empty": {
+        "code": 3,
+        "created": null,
+        "reads": {},
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n",
+        "stdout": ""
+      },
+      "uninit + valid": {
+        "code": 3,
+        "created": null,
+        "reads": {},
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n",
+        "stdout": ""
+      },
+      "unlock prompt after --stdin-value": {
+        "code": 4,
+        "created": [],
+        "reads": {},
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nError: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+        "stdout": ""
+      },
+      "unlock prompt after --value": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.note": [
+            0,
+            "x\n"
+          ]
+        },
+        "stderr": "Passphrase: Reading Passphrase from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "unlock prompt after a field prompt": {
+        "code": 4,
+        "created": [],
+        "reads": {},
+        "stderr": "Enter value for note: Reading Enter value for note from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nPassphrase: Error: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+        "stdout": ""
+      },
+      "unlock prompt after the entry prompts": {
+        "code": 4,
+        "created": [],
+        "reads": {},
+        "stderr": "Username (optional): Password: Reading Password from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.\nURL (optional): TOTP Secret (optional): Passphrase: Error: read passphrase: read Passphrase: EOF\nError: read passphrase: read Passphrase: EOF\nUnlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.\n",
+        "stdout": ""
+      },
+      "unlock: empty identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\n",
+        "stdout": ""
+      },
+      "unlock: garbage identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\n",
+        "stdout": ""
+      },
+      "unlock: identity for another recipient type": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\n",
+        "stdout": ""
+      },
+      "unlock: identity that is a private key": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\n",
+        "stdout": ""
+      },
+      "unlock: identity with a Latin-1 intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\n",
+        "stdout": ""
+      },
+      "unlock: identity with a malformed closing line": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\n",
+        "stdout": ""
+      },
+      "unlock: identity with a malformed stanza body": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\n",
+        "stdout": ""
+      },
+      "unlock: identity with only the intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\n",
+        "stdout": ""
+      },
+      "unlock: identity without a newline": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\n",
+        "stdout": ""
+      },
+      "unlock: scrypt identity, missing work factor": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\n",
+        "stdout": ""
+      },
+      "unlock: scrypt identity, work factor too large": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\n",
+        "stdout": ""
+      },
+      "unlock: scrypt identity, wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\n",
+        "stdout": ""
+      },
+      "unlock: truncated identity, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "unlock: wrong passphrase of the same length, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "unlock: wrong passphrase, comment-only recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "unlock: wrong passphrase, empty recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "unlock: wrong passphrase, garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "unlock: wrong passphrase, no recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "unlock: wrong passphrase, recipients.txt is a directory": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "unlock: wrong passphrase, symlinked recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "unlock: wrong passphrase, valid and garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "unlock: wrong passphrase, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "valid": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.password": [
+            0,
+            "StrongPassword123!\n"
+          ]
+        },
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "verify: empty identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: file is empty\n",
+        "stdout": ""
+      },
+      "verify: garbage identity": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"garbage not age data\\n\"\n",
+        "stdout": ""
+      },
+      "verify: identity for another recipient type": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: file is not passphrase-encrypted\n",
+        "stdout": ""
+      },
+      "verify: identity that is a private key": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro, expected \"age-encryption.org/v1\\n\"\n",
+        "stdout": ""
+      },
+      "verify: identity with a Latin-1 intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected intro: \"caf\\xe9 junk\\n\"\n",
+        "stdout": ""
+      },
+      "verify: identity with a malformed closing line": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: malformed closing line \"--- AAAA\\n\": <nil>\n",
+        "stdout": ""
+      },
+      "verify: identity with a malformed stanza body": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\nError: open vault: load identity: decryption failed: failed to read header: failed to parse header: parsing age header: malformed body line \"!!!!\\n\": illegal base64 data at input byte 0\n",
+        "stdout": ""
+      },
+      "verify: identity with only the intro": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: failed to read header: EOF\n",
+        "stdout": ""
+      },
+      "verify: identity without a newline": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\nError: open vault: load identity: decryption failed: failed to read header: parsing age header: unexpected EOF reading intro: \"abc\"\n",
+        "stdout": ""
+      },
+      "verify: scrypt identity, missing work factor": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\nError: open vault: load identity: decryption failed: invalid scrypt recipient block\n",
+        "stdout": ""
+      },
+      "verify: scrypt identity, work factor too large": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\nError: open vault: load identity: decryption failed: scrypt work factor too large: 30\n",
+        "stdout": ""
+      },
+      "verify: scrypt identity, wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\nError: open vault: load identity: decryption failed: identity did not match any of the recipients: incorrect identity for recipient block: incorrect passphrase\n",
+        "stdout": ""
+      },
+      "verify: truncated identity, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "verify: wrong passphrase of the same length, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "verify: wrong passphrase, comment-only recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "verify: wrong passphrase, empty recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "verify: wrong passphrase, garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "verify: wrong passphrase, no recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "verify: wrong passphrase, recipients.txt is a directory": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "verify: wrong passphrase, symlinked recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\nError: open vault: load identity: zero-key recovery requires a trusted recipients.txt\n",
+        "stdout": ""
+      },
+      "verify: wrong passphrase, valid and garbage recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\nError: open vault: load identity: zero-key recovery requires valid recipients.txt authority\n",
+        "stdout": ""
+      },
+      "verify: wrong passphrase, valid recipients.txt": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: open vault: load identity: zero-key recovery failed: decryption failed\nError: open vault: load identity: zero-key recovery failed: decryption failed\n",
+        "stdout": ""
+      },
+      "weak --force": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.password": [
+            0,
+            "abc\n"
+          ]
+        },
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      },
+      "weak password": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: password too short: must be at least 10 characters\nError: password too short: must be at least 10 characters\n",
+        "stdout": ""
+      },
+      "weak password uninit (exit 1, not 3)": {
+        "code": 1,
+        "created": null,
+        "reads": {},
+        "stderr": "Error: password too short: must be at least 10 characters\nError: password too short: must be at least 10 characters\n",
+        "stdout": ""
+      },
+      "weak password wins over bad TOTP": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: password too short: must be at least 10 characters\nError: password too short: must be at least 10 characters\n",
+        "stdout": ""
+      },
+      "weak password wrong passphrase": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: password too short: must be at least 10 characters\nError: password too short: must be at least 10 characters\n",
+        "stdout": ""
+      },
+      "weak password, default field": {
+        "code": 1,
+        "created": [],
+        "reads": {},
+        "stderr": "Error: password too short: must be at least 10 characters\nError: password too short: must be at least 10 characters\n",
+        "stdout": ""
+      },
+      "weak value on a non-password field": {
+        "code": 0,
+        "created": [
+          ".lock",
+          ".symvault-migrated",
+          "entries/w/a.age",
+          "manifest.age"
+        ],
+        "reads": {
+          "w/a.pwd": [
+            0,
+            "abc\n"
+          ]
+        },
+        "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+        "stdout": "Entry saved: w/a\n"
+      }
+    }
+  }
+}

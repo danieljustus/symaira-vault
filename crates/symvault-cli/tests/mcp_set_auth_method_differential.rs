@@ -1,25 +1,33 @@
-//! Live Go-oracle differential for the MCP `set_auth_method` tool and `tools/list`.
+//! Recorded Go-oracle differential for the MCP `set_auth_method` tool and
+//! `tools/list`.
 //!
-//! Needs `SYMVAULT_GO_BINARY` to name a Go oracle built **without cgo**
+//! The Go answers (stdout bytes, exit status, the `config.yaml` the run leaves
+//! behind) are replayed from
+//! `testdata/port/cli-transcripts/mcp_set_auth_method_differential.json`. The
+//! recording comes from a Go oracle built **without cgo**
 //! (`CGO_ENABLED=0`): that build has no Touch ID (the noop authenticator and
 //! passphrase store), so every state exercised here is deterministic and can
 //! never raise a system prompt. A cgo oracle on a Touch ID Mac would show a real
 //! dialog for `method=passphrase`; the test refuses to run against one (it
 //! checks `get_auth_status` first). Both implementations run on identical copies
-//! of one Go-initialised vault inside disposable HOME/XDG/TMPDIR roots and the
-//! comparison covers the exact stdout bytes, the exit status and the auth keys
-//! `set_auth_method` writes to `config.yaml`.
-//!
-//! Skipped (loudly) when `SYMVAULT_GO_BINARY` is unset, like the other
-//! `*_differential` tests.
+//! of one Go-initialised vault (frozen as a seed) inside disposable
+//! HOME/XDG/TMPDIR roots and the comparison covers the exact stdout bytes, the
+//! exit status and the auth keys `set_auth_method` writes to `config.yaml`.
+
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
 
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use serde_json::{Value, json};
 use tempfile::TempDir;
+
+/// Go oracle: the last commit that carries the Go sources (`CGO_ENABLED=0`
+/// build, so no Touch ID); the tool catalog (`run_command` file inputs) of the
+/// older config-cli oracle differs.
+const ORACLE_COMMIT: &str = "c069d3f2b17d704525cedc1bd42840cc6a3e9896";
 
 const PASSPHRASE: &str = "differential-passphrase-1";
 
@@ -88,23 +96,13 @@ fn run_mcp(binary: &Path, template: &Path, label: &str, agent: &str, input: &str
     copy_tree(template, &vault);
     let mut command = Command::new(binary);
     sandbox_env(&mut command, scratch.path());
-    let mut child = command
+    command
         .current_dir(scratch.path())
         .args(["--vault"])
         .arg(&vault)
-        .args(["mcp", "--stdio", "--agent", agent])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+        .args(["mcp", "--stdio", "--agent", agent]);
+    let output = go_oracle::output_with_input(&mut command, Some(input.as_bytes()))
         .unwrap_or_else(|error| panic!("spawn {label}: {error}"));
-    child
-        .stdin
-        .take()
-        .expect("stdin")
-        .write_all(input.as_bytes())
-        .expect("write frames");
-    let output = child.wait_with_output().expect("wait");
     Outcome {
         status: output.status.code(),
         stdout: output.stdout,
@@ -112,32 +110,36 @@ fn run_mcp(binary: &Path, template: &Path, label: &str, agent: &str, input: &str
     }
 }
 
-fn template_vault(go: &Path) -> (TempDir, PathBuf) {
+/// The Go-initialised template vault; `init` generates random keys, so the
+/// whole tree is frozen as a seed and installed on replay.
+fn template_vault(oracle: &go_oracle::GoOracle, go: &Path) -> (TempDir, PathBuf) {
     let root = TempDir::new().expect("template root");
     let vault = root.path().join("template-vault");
-    let mut init = Command::new(go);
-    sandbox_env(&mut init, root.path());
-    let output = init
-        .current_dir(root.path())
-        .args(["init"])
-        .arg(&vault)
-        .args(["--auth", "passphrase"])
-        .output()
-        .expect("go init");
-    assert!(
-        output.status.success(),
-        "go init: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let config_path = vault.join("config.yaml");
-    let config = fs::read_to_string(&config_path).expect("config");
-    let patched = config.replacen(
-        "agents:\n    cli:",
-        "agents:\n    adm:\n        tier: admin\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        requireApproval: false\n    mgr:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        requireApproval: false\n    cli:",
-        1,
-    );
-    assert_ne!(config, patched, "config seed shape changed:\n{config}");
-    fs::write(config_path, patched).expect("seed agents");
+    oracle.seed("go-template-vault", &[root.path()], || {
+        let mut init = Command::new(go);
+        sandbox_env(&mut init, root.path());
+        let output = init
+            .current_dir(root.path())
+            .args(["init"])
+            .arg(&vault)
+            .args(["--auth", "passphrase"])
+            .output()
+            .expect("go init");
+        assert!(
+            output.status.success(),
+            "go init: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let config_path = vault.join("config.yaml");
+        let config = fs::read_to_string(&config_path).expect("config");
+        let patched = config.replacen(
+            "agents:\n    cli:",
+            "agents:\n    adm:\n        tier: admin\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        requireApproval: false\n    mgr:\n        allowedPaths:\n            - '*'\n        canWrite: true\n        canManageConfig: true\n        requireApproval: false\n    cli:",
+            1,
+        );
+        assert_ne!(config, patched, "config seed shape changed:\n{config}");
+        fs::write(config_path, patched).expect("seed agents");
+    });
     (root, vault)
 }
 
@@ -173,13 +175,20 @@ fn auth_keys(config: &[u8]) -> Value {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn set_auth_method_and_tools_list_match_the_go_oracle() {
-    let Some(go) = std::env::var_os("SYMVAULT_GO_BINARY").map(PathBuf::from) else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
+    // The recording comes from a CGO_ENABLED=0 build of the pinned commit.
+    let oracle = go_oracle::GoOracle::begin(
+        "mcp_set_auth_method_differential",
+        "set_auth_method_and_tools_list_match_the_go_oracle",
+        Some(ORACLE_COMMIT),
+    );
+    let go = oracle.binary();
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
-    let (_guard, template) = template_vault(&go);
+    let (_guard, template) = template_vault(&oracle, &go);
 
     // Safety gate: this oracle must not be able to show a Touch ID prompt.
     let probe = run_mcp(
@@ -192,7 +201,7 @@ fn set_auth_method_and_tools_list_match_the_go_oracle() {
     let probe_text = String::from_utf8_lossy(&probe.stdout);
     assert!(
         probe_text.contains("touchIDAvailable\\\":false"),
-        "SYMVAULT_GO_BINARY must be a CGO_ENABLED=0 oracle without Touch ID; got {probe_text}"
+        "the recorded Go oracle must be a CGO_ENABLED=0 build without Touch ID; got {probe_text}"
     );
 
     type Case<'a> = (&'a str, &'a str, Vec<(&'a str, Value)>, bool);
@@ -252,4 +261,5 @@ fn set_auth_method_and_tools_list_match_the_go_oracle() {
             &frames(&calls, list_tools),
         );
     }
+    assert_eq!(oracle.calls(), 8);
 }

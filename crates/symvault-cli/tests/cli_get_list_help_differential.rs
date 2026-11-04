@@ -1,3 +1,6 @@
+#[path = "common/go_oracle.rs"]
+mod go_oracle;
+
 use std::{
     env,
     path::Path,
@@ -5,14 +8,14 @@ use std::{
 };
 
 fn run(binary: &Path, args: &[&str], home: &Path) -> Output {
-    Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .env("HOME", home)
         .env("USERPROFILE", home)
         .env("CI", "1")
-        .env("NO_COLOR", "1")
-        .output()
-        .expect("run CLI")
+        .env("NO_COLOR", "1");
+    go_oracle::output(&mut command).expect("run CLI")
 }
 
 fn assert_same(go: &Output, rust: &Output, args: &[&str]) {
@@ -28,12 +31,17 @@ fn assert_same(go: &Output, rust: &Output, args: &[&str]) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn get_and_list_help_and_extra_argument_errors_match_go() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let go_binary = std::path::PathBuf::from(go_binary);
+    let oracle = go_oracle::GoOracle::begin(
+        "cli_get_list_help_differential",
+        "get_and_list_help_and_extra_argument_errors_match_go",
+        Some(go_oracle::CONFIG_CLI_ORACLE),
+    );
+    let go_binary = oracle.binary();
     let rust_binary =
         std::path::PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = tempfile::tempdir().expect("temporary home");
@@ -62,4 +70,5 @@ fn get_and_list_help_and_extra_argument_errors_match_go() {
         }
         assert_same(&go, &rust, args);
     }
+    assert_eq!(oracle.calls(), 8);
 }

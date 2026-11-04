@@ -10,19 +10,28 @@
 //! stream), the resulting `config.yaml` bytes and the directory listing, i.e.
 //! any backup or temporary file. Go keeps no backup; the listing proves it.
 //!
-//! The Go half needs `SYMVAULT_GO_BINARY`; `rust_flow_matches_recorded_go_output`
-//! pins the same flows against bytes recorded from the Go oracle and runs
-//! without it.
+//! The Go side of every scenario was recorded once from the pinned oracle
+//! (`testdata/port/cli-observations/config_fix_differential.json`) and is
+//! replayed; `rust_flow_matches_recorded_go_output` additionally pins the same
+//! flows against bytes written out below.
 #![cfg(unix)]
 #![deny(unsafe_code)]
 
+#[path = "common/go_oracle_ext.rs"]
+mod go_oracle_ext;
+
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
+use go_oracle_ext::Observations;
+use serde::{Deserialize, Serialize};
 use symvault_core::config::Config;
+
+/// Pinned Go oracle.
+const ORACLE_COMMIT: &str = "fca3f89401833b5e14ec4ec74ef736b0f63bca74";
 
 const PROMPT: &str = "(y/N): ";
 const OK_CFG: &str = "vaultDir: /tmp/x\n";
@@ -473,7 +482,7 @@ fn scenarios() -> Vec<Scenario> {
     list
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 struct Outcome {
     exit: String,
     stdout: String,
@@ -672,10 +681,6 @@ fn set_mode(path: &Path, mode: u32) {
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).expect("set mode");
 }
 
-fn go_binary() -> Option<PathBuf> {
-    env::var_os("SYMVAULT_GO_BINARY").map(PathBuf::from)
-}
-
 fn rust_binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_symvault"))
 }
@@ -689,10 +694,11 @@ fn python_available() -> bool {
 
 #[test]
 fn pty_flow_matches_go_contract() {
-    let Some(go) = go_binary() else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
+    let observations = Observations::begin(
+        "config_fix_differential",
+        "pty_flow_matches_go_contract",
+        Some(ORACLE_COMMIT),
+    );
     assert!(
         python_available(),
         "python3 with the pty module is required"
@@ -700,10 +706,12 @@ fn pty_flow_matches_go_contract() {
     let rust = rust_binary();
     let mut compared = 0;
     for scenario in scenarios() {
-        let (Some(go_out), Some(rust_out)) = (run_pty(&go, &scenario), run_pty(&rust, &scenario))
-        else {
-            eprintln!("skipping {}: needs an unprivileged user", scenario.name);
-            continue;
+        let recorded = observations.observe(scenario.name, |go| {
+            serde_json::to_value(run_pty(go, &scenario)).expect("Go outcome json")
+        });
+        let go_out: Option<Outcome> = serde_json::from_value(recorded).expect("recorded outcome");
+        let (Some(go_out), Some(rust_out)) = (go_out, run_pty(&rust, &scenario)) else {
+            panic!("{}: the scenario needs an unprivileged user", scenario.name);
         };
         // Both must have consumed every scripted answer, or the comparison
         // proves nothing about the prompts that were never reached.
@@ -717,15 +725,17 @@ fn pty_flow_matches_go_contract() {
         compared += 1;
     }
     assert!(compared >= 55, "only {compared} scenarios ran");
+    assert_eq!(observations.count(), compared);
 }
 
 /// Non-terminal `--fix` is plain validation, byte for byte.
 #[test]
 fn non_tty_fix_matches_go_contract() {
-    let Some(go) = go_binary() else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
+    let observations = Observations::begin(
+        "config_fix_differential",
+        "non_tty_fix_matches_go_contract",
+        Some(ORACLE_COMMIT),
+    );
     let rust = rust_binary();
     let cases: &[(&str, &[&str])] = &[
         ("valid", &[OK_CFG]),
@@ -742,8 +752,7 @@ fn non_tty_fix_matches_go_contract() {
     ];
     for (name, config) in cases {
         for extra in [&[][..], &["--json"][..], &["--quiet"][..]] {
-            let mut results = Vec::new();
-            for binary in [&go, &rust] {
+            let run_one = |binary: &Path| -> (Option<i32>, String, String, String) {
                 let root = tempfile::Builder::new()
                     .prefix("symvault-config-fix-nontty-")
                     .tempdir()
@@ -763,13 +772,20 @@ fn non_tty_fix_matches_go_contract() {
                     .output()
                     .expect("run");
                 let root_text = root_path.to_string_lossy().into_owned();
-                results.push((
+                (
                     output.status.code(),
                     String::from_utf8_lossy(&output.stdout).replace(&root_text, "<ROOT>"),
                     String::from_utf8_lossy(&output.stderr).replace(&root_text, "<ROOT>"),
                     fs::read_to_string(&path).expect("config"),
-                ));
-            }
+                )
+            };
+            let recorded = observations.observe(&format!("{name} {extra:?}"), |go| {
+                serde_json::to_value(run_one(go)).expect("Go result json")
+            });
+            let results = [
+                serde_json::from_value(recorded).expect("recorded Go result"),
+                run_one(&rust),
+            ];
             assert_eq!(results[0], results[1], "non-tty {name} {extra:?}");
             assert_eq!(
                 results[1].3, config[0],
@@ -777,6 +793,7 @@ fn non_tty_fix_matches_go_contract() {
             );
         }
     }
+    assert_eq!(observations.count(), cases.len() * 3);
 }
 
 /// Bytes recorded from the Go oracle (`symvault-go config validate --fix` on a
@@ -989,13 +1006,18 @@ fn intentional_deviation_copy_by_default_false_survives_fix() {
         python_available(),
         "python3 with the pty module is required"
     );
+    let observations = Observations::begin(
+        "config_fix_differential",
+        "intentional_deviation_copy_by_default_false_survives_fix",
+        Some(ORACLE_COMMIT),
+    );
     let scenario = copy_off_scenario();
     let native = run_pty(&rust_binary(), &scenario).expect("scenario runs");
     assert_eq!(native.exit, "0", "{native:#?}");
     assert_eq!(native.steps_done, 1, "the clipboard prompt was answered");
 
     // Bytes recorded from the Go oracle for the same scenario: the opt-out is
-    // dropped. This half runs without the oracle.
+    // dropped.
     let go_saved = format!("{GO_SAVED_AGENTS}{GO_COPY_OFF_CLIPBOARD}{GO_SAVED_TAIL}");
     let native_saved = native.cfg.clone().expect("repaired config");
     let kept =
@@ -1023,14 +1045,12 @@ fn intentional_deviation_copy_by_default_false_survives_fix() {
         "reloading Go's file flips the opt-out to opt-in"
     );
 
-    let Some(go) = go_binary() else {
-        eprintln!("recorded Go bytes only: SYMVAULT_GO_BINARY is not set");
-        return;
-    };
-    let Some(oracle) = run_pty(&go, &scenario) else {
-        eprintln!("skipping the live Go half: needs an unprivileged user");
-        return;
-    };
+    let recorded = observations.observe("copy-off scenario", |go| {
+        serde_json::to_value(run_pty(go, &scenario)).expect("Go outcome json")
+    });
+    let oracle: Outcome = serde_json::from_value::<Option<Outcome>>(recorded)
+        .expect("recorded outcome")
+        .expect("the recorded Go scenario ran");
     assert_eq!(
         oracle.cfg.as_deref(),
         Some(go_saved.as_str()),

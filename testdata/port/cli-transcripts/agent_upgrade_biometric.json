@@ -1,0 +1,155 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
+  "tests": {
+    "unavailable_branch_matches_the_no_touch_id_go_oracle": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "cbe050eda12a08b020de830e097938d0f6f594197e4ca8da09ca0b0b8581a62f",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:0>/vault",
+              "agent",
+              "upgrade",
+              "hermes",
+              "--tier",
+              "admin",
+              "--yes",
+              "--reason",
+              "unit"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:0>/home",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:0>/work",
+              "USERPROFILE": "<ROOT:0>/home",
+              "XDG_CONFIG_HOME": "<ROOT:0>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:0>/home/.local/share"
+            },
+            "cwd": "<ROOT:0>/work",
+            "stdin": {
+              "text": ""
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Agent:   hermes\nCurrent: standard\nTarget:  admin\nReason:  unit\n\nTier changes:\n  FIELD                    CURRENT                  NEW\n  ------------------------------------------------------------------------\n  ✓ canWrite               false                    true\n  ✓ canRunCommands         false                    true\n  ✓ canManageConfig        false                    true\n  canUseClipboard         true                     true (unchanged)\n  canUseAutotype          true                     true (unchanged)\n  canReadValues           true                     true (unchanged)\n  ✓ exposeValueTools       false                    true\n  ✓ autoUnseal             false                    true\n  requireApproval         true                     true (unchanged)\n  approvalMode            prompt                   prompt (unchanged)\n  allowedExecutables      curl, git, terraform, npm, node, python, python3, docker, kubectl curl, git, terraform, npm, node, python, python3, docker, kubectl (unchanged)\n  allowedTools            (all)                    (all) (unchanged)\n\nError: biometric verification is required for non-interactive tier upgrades on this platform.\nRe-run with --no-biometric to bypass (not recommended)\nError: biometric verification is required for non-interactive tier upgrades on this platform.\nRe-run with --no-biometric to bypass (not recommended)\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "9098d29da1a2473ed29297c16b319251c400b5c2062ec482ea89b68933411b8c",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:2>/vault",
+              "agent",
+              "upgrade",
+              "hermes",
+              "--tier",
+              "admin"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:2>/home",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:2>/work",
+              "USERPROFILE": "<ROOT:2>/home",
+              "XDG_CONFIG_HOME": "<ROOT:2>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:2>/home/.local/share"
+            },
+            "cwd": "<ROOT:2>/work",
+            "stdin": {
+              "text": ""
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Agent:   hermes\nCurrent: standard\nTarget:  admin\n\nTier changes:\n  FIELD                    CURRENT                  NEW\n  ------------------------------------------------------------------------\n  ✓ canWrite               false                    true\n  ✓ canRunCommands         false                    true\n  ✓ canManageConfig        false                    true\n  canUseClipboard         true                     true (unchanged)\n  canUseAutotype          true                     true (unchanged)\n  canReadValues           true                     true (unchanged)\n  ✓ exposeValueTools       false                    true\n  ✓ autoUnseal             false                    true\n  requireApproval         true                     true (unchanged)\n  approvalMode            prompt                   prompt (unchanged)\n  allowedExecutables      curl, git, terraform, npm, node, python, python3, docker, kubectl curl, git, terraform, npm, node, python, python3, docker, kubectl (unchanged)\n  allowedTools            (all)                    (all) (unchanged)\n\n⚠ Biometric verification is not available on this platform.\n   The upgrade will proceed after interactive confirmation.\nUpgrade canceled.\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "e680c24f2fe4ff43668dc19d33c0a6176b33e0b39d8e27e57a80fddbae55f78a",
+          "request": {
+            "args": [
+              "--vault",
+              "<ROOT:4>/vault",
+              "agent",
+              "upgrade",
+              "hermes",
+              "--tier",
+              "admin",
+              "--yes",
+              "--reason",
+              "unit",
+              "--no-biometric"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:4>/home",
+              "PATH": "/usr/bin:/bin",
+              "SYMVAULT_TEST_KEYRING": "memory",
+              "TMPDIR": "<ROOT:4>/work",
+              "USERPROFILE": "<ROOT:4>/home",
+              "XDG_CONFIG_HOME": "<ROOT:4>/home/.config",
+              "XDG_DATA_HOME": "<ROOT:4>/home/.local/share"
+            },
+            "cwd": "<ROOT:4>/work",
+            "stdin": {
+              "text": ""
+            }
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Agent:   hermes\nCurrent: standard\nTarget:  admin\nReason:  unit\n\nTier changes:\n  FIELD                    CURRENT                  NEW\n  ------------------------------------------------------------------------\n  ✓ canWrite               false                    true\n  ✓ canRunCommands         false                    true\n  ✓ canManageConfig        false                    true\n  canUseClipboard         true                     true (unchanged)\n  canUseAutotype          true                     true (unchanged)\n  canReadValues           true                     true (unchanged)\n  ✓ exposeValueTools       false                    true\n  ✓ autoUnseal             false                    true\n  requireApproval         true                     true (unchanged)\n  approvalMode            prompt                   prompt (unchanged)\n  allowedExecutables      curl, git, terraform, npm, node, python, python3, docker, kubectl curl, git, terraform, npm, node, python, python3, docker, kubectl (unchanged)\n  allowedTools            (all)                    (all) (unchanged)\n\n✓ Profile for \"hermes\" upgraded to \"admin\"\n⚠ Skill refresh: skill not installed: open <ROOT:4>/home/.hermes/skills/symvault/SKILL.md: no such file or directory\n"
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 4,
+              "path": "vault/config.yaml",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        tier: admin\n        approvalMode: prompt\n        canWrite: true\n        canRunCommands: true\n        canManageConfig: true\n        canUseClipboard: true\n        canUseAutotype: true\n        canReadValues: true\n        exposeValueTools: true\n        autoUnseal: true\n        requireApproval: true\n        allowedExecutables:\n            - curl\n            - git\n            - terraform\n            - npm\n            - node\n            - python\n            - python3\n            - docker\n            - kubectl\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT:4>/home/.local/share/symaira-vault\ndefaultAgent: hermes\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
