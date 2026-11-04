@@ -290,16 +290,13 @@ fn generate_manpages_matches_the_go_oracle() {
         "stdout differs from the oracle"
     );
 
-    // The port may lag the oracle on unported commands, but must never invent
-    // a page the oracle does not write, and the shared page headers must match.
+    // The port writes exactly the pages the Go oracle wrote: neither a page the
+    // oracle does not have nor one it lacks.
     let go_pages = page_names(go_root.path());
     let rust_pages = page_names(rust_root.path());
-    assert!(!go_pages.is_empty() && !rust_pages.is_empty());
-    let extra: Vec<_> = rust_pages.difference(&go_pages).collect();
-    assert!(
-        extra.is_empty(),
-        "port generated pages the Go oracle does not: {extra:?}"
-    );
+    if let Err(problem) = page_sets_match(&go_pages, &rust_pages) {
+        panic!("{problem}");
+    }
 
     let shared = "symvault-generate-manpages.1";
     assert!(go_pages.contains(shared) && rust_pages.contains(shared));
@@ -357,6 +354,50 @@ fn generate_manpages_matches_the_go_oracle() {
     );
     assert_eq!(declared_seen.len(), DECLARED_ADDITIONS.len());
     assert_eq!(oracle.calls(), 6);
+}
+
+/// Both directions of the page-set comparison: the Go page set equals the Rust
+/// page set.
+fn page_sets_match(go: &BTreeSet<String>, rust: &BTreeSet<String>) -> Result<(), String> {
+    if go.is_empty() || rust.is_empty() {
+        return Err(format!(
+            "empty page set (oracle {}, port {})",
+            go.len(),
+            rust.len()
+        ));
+    }
+    let extra: Vec<_> = rust.difference(go).collect();
+    let missing: Vec<_> = go.difference(rust).collect();
+    if extra.is_empty() && missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "page sets differ: port generated pages the Go oracle does not: {extra:?}; port lacks \
+             pages the Go oracle wrote: {missing:?}"
+        ))
+    }
+}
+
+/// Mutation control for the page-set comparison.
+#[test]
+fn page_set_comparison_rejects_missing_and_extra_pages() {
+    let set = |names: &[&str]| -> BTreeSet<String> {
+        names.iter().map(|name| (*name).to_owned()).collect()
+    };
+    let base = set(&["a.1", "b.1"]);
+    assert_eq!(page_sets_match(&base, &set(&["b.1", "a.1"])), Ok(()));
+    let extra = page_sets_match(&base, &set(&["a.1", "b.1", "c.1"])).unwrap_err();
+    assert!(
+        extra.contains("c.1") && extra.contains("does not"),
+        "{extra}"
+    );
+    let missing = page_sets_match(&base, &set(&["a.1"])).unwrap_err();
+    assert!(
+        missing.contains("b.1") && missing.contains("lacks"),
+        "{missing}"
+    );
+    assert!(page_sets_match(&base, &set(&[])).is_err());
+    assert!(page_sets_match(&set(&[]), &base).is_err());
 }
 
 /// Pages on which the port is ahead of the pinned Go oracle, with the exact lines
