@@ -174,15 +174,21 @@ and 2 here. The matrix text "33 recorded open divergences" is stale.
 - Recommendation: **ratify** (limit); open a separate issue for the latency.
 - **Pinned (local/pins-cli, 2026-11-03; no Status cell changes).** `config-yaml-syntax.json` (`yamlsyntaxgen`, oracle `0cc78062`) holds
   the open entries `nesting_depth_257` and `nesting_depth_10000` (kind `behavior`; Go
-  `config get a` prints the value and `config set` rewrites the file) and
-  `nesting_depth_10001` (kind `wording`; Go refuses with `yaml: exceeded max depth of 10000`,
-  which records Go's upper bound). `RATIFIED` in `config_yaml_syntax.rs` pins the native
+  `config get a` prints the value and `config set` rewrites the file). A third entry,
+  `nesting_depth_10001` (kind `wording`; Go refuses with `yaml: exceeded max depth of 10000`),
+  was dropped when local/nest closed it: the loader now refuses with Go's wording and the
+  `nest_flow_sequence_10001` case records it. `RATIFIED` in `config_yaml_syntax.rs` pins the native
   refusal byte for byte (exit 6, `Parse error at line 1, column 260: Collection nested too deeply (limit 256)`,
   file unchanged) and `native_nesting_limit_is_256_levels` the 256/257 boundary.
   Resolved 'Uncertain': the read path has no limit of 256. `config validate` accepts 257,
   10000 and 10001 levels (about 10 s at 10000 on this machine), so the 256 limit is
   specific to `config get`/`config set`. At 10001 Go refuses and `validate` accepts: a
   further difference that this ratification does not cover and that is not recorded.
+- Update (local/nest, maintainer default of ADR 0035: Go parity): the loader now enforces Go's two
+  limits of 10000 (`go_yaml_depth`) and is pinned by 26 Go-recorded `nest_*` cases; only `config get` /
+  `config set` between 257 and 10000 flow levels remain refused by `yaml_edit` (two open divergences,
+  `nest_get_set_flow_sequence_257` and `_10000`; the same inputs as `nesting_depth_257` and `_10000`
+  above, which stay recorded because `RATIFIED` pins their native refusal byte for byte).
 
 **7. `profiles: {x: null}`.**
 - Rows: CLI-005. Also recorded as Go bug 7 in `upstream-go-bugs.md`.

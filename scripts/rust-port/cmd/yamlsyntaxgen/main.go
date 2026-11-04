@@ -153,6 +153,11 @@ type fixture struct {
 	DoctorIDs       []string         `json:"doctor_ids"`
 	Cases           []fixtureCase    `json:"cases"`
 	OpenDivergences []openDivergence `json:"open_divergences"`
+	// LoaderWarningCounts (PLATFORM/CLI-005, ADR 0034 item 9): how often the
+	// pinned Go CLI prints the `envWhitelist` deprecation warning for one
+	// ordinary command. Go re-reads config.yaml at several unrelated seams, and
+	// every read warns.
+	LoaderWarningCounts loaderWarningCounts `json:"loader_warning_counts"`
 }
 
 type input struct {
@@ -266,7 +271,8 @@ func inputs() []input {
 	all = append(all, decodeInputs()...)
 	all = append(all, loadInputs()...)
 	all = append(all, sectionInputs()...)
-	return append(all, residInputs()...)
+	all = append(all, residInputs()...)
+	return append(all, nestingInputs()...)
 }
 
 // decodeInputs are documents that parse but that yaml.v3 cannot decode into the
@@ -414,6 +420,63 @@ func residInputs() []input {
 		{"resid_warn_then_loader_rejection", "loader", "Go prints the warning and then rejects the document", lines("envWhitelist: [a]", "mcp:", "  bind: ''")},
 		{"resid_warn_then_validation_error", "loader", "Go prints the warning, then validate reports the audit error", lines("envWhitelist: [a]", "audit:", "  maxSizeMb: 0")},
 		{"resid_warn_not_when_decode_fails", "loader", "a document that does not decode warns about nothing", lines("envWhitelist: [a]", "mcp:", "  port: abc")},
+	}
+}
+
+func nestingFlowSequence(n int) []byte {
+	return bytes.Join([][]byte{[]byte("a: "), []byte(strings.Repeat("[", n)), []byte(strings.Repeat("]", n)), []byte("\n")}, nil)
+}
+
+// nestingEditReason explains the get/set gap of the nesting open divergences.
+const nestingEditReason = "config get and config set parse the document with yaml_edit 0.3.3, whose parser refuses collections nested deeper than MAX_FLOW_DEPTH = 256 ('Collection nested too deeply (limit 256)'); " +
+	"Go reads and rewrites them (re-encoding the flow sequence wrapped at its emitter width). The loader itself (validate, doctor, every Config::load caller) accepts these documents like Go. " +
+	"Closing this needs a node editor without that bound or a port of yaml.v3's emitter wrapping."
+
+// nestingInputs freeze the two limits of yaml.v3's scanner (scannerc.go):
+// `max_flow_level` bounds the open flow collections and `max_indents` the
+// block indentation stack, each at 10000 and counted separately, and both fail
+// with the scanner problem `exceeded max depth of 10000`. libyaml has no such
+// limit, so the native CLI needs its own check (ADR 0034 item 6, ADR 0035).
+//
+// Every rejected case sits one level beyond the limit and its accepted twin
+// exactly on it. The accepted flow documents are class "accepted"; the block
+// ones are not mappings, so Go accepts the scan and rejects the document in
+// its typed decode (class "loader"), which is how the boundary shows up.
+func nestingInputs() []input {
+	rep := func(unit string, n int) []byte { return []byte(strings.Repeat(unit, n)) }
+	cat := func(parts ...[]byte) []byte { return bytes.Join(parts, nil) }
+	flowSeq := nestingFlowSequence
+	flowMap := func(n int) []byte { return cat([]byte("a: "), rep("{k: ", n), []byte("1"), rep("}", n), []byte("\n")) }
+	blockSeq := func(n int) []byte { return cat(rep("- ", n), []byte("x\n")) }
+	explicitKey := func(n int) []byte { return cat(rep("? ", n), []byte("x\n")) }
+	seqThenMapping := func(dashes int) []byte { return cat(rep("- ", dashes), []byte("k: x\n")) }
+	return []input{
+		{"nest_flow_sequence_257", "accepted", "257 nested flow sequences: past yaml_edit's limit of 256, well inside Go's 10000", flowSeq(257)},
+		{"nest_flow_sequence_10000", "accepted", "exactly max_flow_level (10000) nested flow sequences", flowSeq(10000)},
+		{"nest_flow_sequence_10001", "scanner", "one flow sequence past max_flow_level: `exceeded max depth of 10000`, no line on the first line", flowSeq(10001)},
+		{"nest_flow_sequence_20000", "scanner", "twice max_flow_level", flowSeq(20000)},
+		{"nest_flow_mapping_10001", "scanner", "one flow mapping past max_flow_level", flowMap(10001)},
+		{"nest_flow_sequence_10001_on_line_three", "scanner", "the failing bracket on the third line: the message carries `line 3`", cat([]byte("a: 1\nb: 2\nc: "), rep("[", 10001), rep("]", 10001), []byte("\n"))},
+		{"nest_flow_sequence_10001_unterminated", "scanner", "the depth failure comes before the end-of-input failure of a sequence that is never closed", cat([]byte("a: "), rep("[", 10001), []byte("\n"))},
+		{"nest_flow_sequence_after_document_start", "scanner", "an explicit `---` line before the deep flow sequence: `line 2`", cat([]byte("---\na: "), rep("[", 10001), rep("]", 10001), []byte("\n"))},
+		{"nest_error_before_depth", "scanner", "a mapping-value error on line 2 is reached before the 10001st bracket and wins", cat([]byte("a: 1\nb: c: d\nx: "), rep("[", 10001), rep("]", 10001), []byte("\n"))},
+		{"nest_depth_before_error", "scanner", "the 10001st bracket is reached before the mapping-value error on the next line", cat([]byte("x: "), rep("[", 10001), rep("]", 10001), []byte("\nb: c: d\n"))},
+		{"nest_block_sequence_10000", "loader", "exactly max_indents (10000) compact block sequence entries: the scan passes, the typed decode rejects the root sequence", blockSeq(10000)},
+		{"nest_block_sequence_10001", "scanner", "one block sequence entry past max_indents", blockSeq(10001)},
+		{"nest_block_explicit_key_10000", "loader", "exactly 10000 compact explicit keys", explicitKey(10000)},
+		{"nest_block_explicit_key_10001", "scanner", "one explicit key past max_indents", explicitKey(10001)},
+		{"nest_block_mapping_after_9999_dashes", "loader", "9999 sequence entries and a block mapping: 10000 indentation levels", seqThenMapping(9999)},
+		{"nest_block_mapping_after_10000_dashes", "scanner", "10000 sequence entries and a block mapping: the mapping is the 10001st level", seqThenMapping(10000)},
+		{"nest_counters_are_independent", "loader", "9999 block levels plus 10000 flow levels: each counter stays within its own limit", cat(rep("- ", 9999), rep("[", 10000), rep("]", 10000), []byte("\n"))},
+		{"nest_block_over_with_flow_inside", "scanner", "10001 block levels, so the flow sequence after them is never reached", cat(rep("- ", 10001), []byte("[]\n"))},
+		{"nest_brackets_in_double_quotes", "accepted", "10001 brackets inside a double-quoted scalar are text", cat([]byte("a: \""), rep("[", 10001), []byte("\"\n"))},
+		{"nest_brackets_in_single_quotes", "accepted", "10001 brackets inside a single-quoted scalar are text", cat([]byte("a: '"), rep("{", 10001), []byte("'\n"))},
+		{"nest_brackets_in_comment", "accepted", "10001 brackets in a comment are text", cat([]byte("a: 1 # "), rep("[", 10001), []byte("\n"))},
+		{"nest_brackets_in_block_scalar", "accepted", "10001 brackets in a literal block scalar are text", cat([]byte("a: |\n  "), rep("[", 10001), []byte("\n"))},
+		{"nest_brackets_in_plain_scalar", "accepted", "a plain scalar that does not start with a bracket may contain them", cat([]byte("a: x"), rep("[", 10001), []byte("\n"))},
+		{"nest_second_document_too_deep", "accepted", "a trailing document that fails to scan is not counted, so the stream is one document", cat([]byte("a: 1\n---\nx: "), rep("[", 10001), rep("]", 10001), []byte("\n"))},
+		{"nest_second_document_at_limit", "loader", "a trailing document that scans (10000 levels) is a second document and is rejected as such", cat([]byte("a: 1\n---\nx: "), rep("[", 10000), rep("]", 10000), []byte("\n"))},
+		{"nest_many_sequence_entries", "accepted", "10001 flat sequence entries under a key are not nesting", cat([]byte("a:\n"), rep("  - [x]\n", 10001))},
 	}
 }
 
@@ -654,11 +717,17 @@ func openInputs() []openEntry {
 			kindBehavior, []string{"get_nested", "set"}, nestingReason},
 		{input{"nesting_depth_10000", "accepted", "10000 nested flow sequences, all closed: the deepest document yaml.v3 accepts", nestedFlowSequence(10000)},
 			kindBehavior, []string{"get_nested", "set"}, nestingReason},
-		{input{"nesting_depth_10001", "accepted", "10001 nested flow sequences: yaml.v3 refuses with its own depth error", nestedFlowSequence(10001)},
-			kindWording, []string{"get_nested", "set"}, "both refuse the document with exit 6 and leave the file alone: yaml.v3 says 'yaml: exceeded max depth of 10000', the native yaml_edit parser 'Collection nested too deeply (limit 256)'; this entry records Go's upper limit"},
 		// ADR 0034 item 9: the loader warning is printed once per config load.
 		{input{"completion_loader_warnings", "accepted", "the deprecated envWhitelist key in the global config, read by shell completion", []byte("envWhitelist: [FOO]\n")},
 			kindWording, []string{"complete_get", "completion_bash"}, "Go loads the global config at startup for __complete and for completion <shell> (the root's vault-path resolution), so the deprecation warning is printed twice for __complete get '' and once for completion bash; the native completion path loads only what the completer needs: once and not at all. Exit status and stdout are equal (completion bash is compared by its sha256)"},
+		// Nesting between yaml_edit's limit and Go's (ADR 0034 item 6): the loader
+		// accepts these documents like Go (nest_flow_sequence_257 and _10000 in
+		// the corpus); `config get` and `config set` read and rewrite the node
+		// tree with yaml_edit, which refuses collections nested deeper than 256.
+		{input{"nest_get_set_flow_sequence_257", "accepted", "257 nested flow sequences: Go reads and rewrites them, yaml_edit refuses beyond 256", nestingFlowSequence(257)},
+			kindBehavior, []string{"get", "set"}, nestingEditReason},
+		{input{"nest_get_set_flow_sequence_10000", "accepted", "10000 nested flow sequences: Go reads and rewrites them (up to max_flow_level), yaml_edit refuses beyond 256", nestingFlowSequence(10000)},
+			kindBehavior, []string{"get", "set"}, nestingEditReason},
 	}
 }
 
@@ -707,12 +776,17 @@ func main() {
 	if err != nil {
 		fatal("build open divergences: %v", err)
 	}
+	warningCounts, err := buildLoaderWarningCounts(*goBinary)
+	if err != nil {
+		fatal("build loader warning counts: %v", err)
+	}
 	content, err := marshalJSON(fixture{
-		SchemaVersion:   1,
-		Oracle:          oracle{commitLabel, resolved, releaseLabel, sources, sourceDigest, generatorDigest},
-		DoctorIDs:       doctorIDs,
-		Cases:           cases,
-		OpenDivergences: divergences,
+		SchemaVersion:       1,
+		Oracle:              oracle{commitLabel, resolved, releaseLabel, sources, sourceDigest, generatorDigest},
+		DoctorIDs:           doctorIDs,
+		Cases:               cases,
+		OpenDivergences:     divergences,
+		LoaderWarningCounts: warningCounts,
 	})
 	if err != nil {
 		fatal("marshal fixture: %v", err)
@@ -1282,6 +1356,167 @@ func repositoryRoot() (string, error) {
 		return "", fmt.Errorf("locate generator")
 	}
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..")), nil
+}
+
+// loaderWarningRun is one ordinary command whose stderr is counted for the
+// `envWhitelist is deprecated` line.
+type loaderWarningRun struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+	// Layout is where the vault lives: "vault_env" selects it through
+	// SYMVAULT_VAULT (the global config is never read to find it),
+	// "legacy_default" is the existing ~/.symvault directory, whose config.yaml
+	// is the global config and the vault config at once.
+	Layout string `json:"layout"`
+	// GoMin and GoMax bound the count over repeated runs. They differ only
+	// where Go builds the in-memory search index on a goroutine that may not
+	// finish before the process exits (`go_race`); the generator fails when a
+	// run falls outside them.
+	GoMin int `json:"go_min"`
+	GoMax int `json:"go_max"`
+	// GoRace names the optional goroutine read when GoMax > GoMin.
+	GoRace string `json:"go_race,omitempty"`
+	// GoSites are the config reads that print, in order, from an
+	// instrumented build of the pinned sources (runtime.Callers in warnf);
+	// they document the bounds and are not measured by the generator.
+	GoSites []string `json:"go_sites"`
+}
+
+type loaderWarningCounts struct {
+	Note   string             `json:"note"`
+	Runs   int                `json:"runs_per_case"`
+	Config string             `json:"config"`
+	Cases  []loaderWarningRun `json:"cases"`
+}
+
+const (
+	siteRootPreRun   = "internal/cli.NewRootCmd PersistentPreRunE (cli.go:289) -> VaultPath -> config.Load(global config) [reads only when the vault is not given by --vault/SYMVAULT_VAULT]"
+	siteOwnVaultPath = "the command's own VaultPath (WithVault/WithVaultRaw/WithVaultForScripting or the command body) -> config.Load(global config) [same condition]"
+	siteResolve      = "internal/cli.resolveConfig (unlockVault) -> config.Load(vault config)"
+	siteOpen         = "internal/vault.Open (OpenWithPassphrase) -> config.Load(vault config)"
+	siteOpList       = "internal/vault.List -> listWithBudget -> loadVaultConfig -> config.Load(vault config)"
+	siteOpGet        = "internal/vault.ReadEntry -> readEntryInner -> loadVaultConfig -> config.Load(vault config)"
+	siteOpFind       = "internal/vault.FindWithOptions -> listWithBudget -> loadVaultConfig -> config.Load(vault config)"
+	siteOpVerify     = "internal/vault.VerifyManifestIntegrity -> loadVaultConfig -> config.Load(vault config)"
+	siteRace         = "internal/vault.EncryptedIndex.BuildMemoryOnly -> buildIndex -> listWithBudget -> loadVaultConfig -> config.Load(vault config), on a goroutine: printed only when it finishes before the process exits"
+)
+
+func loaderWarningTable() []loaderWarningRun {
+	unlock := []string{siteResolve, siteOpen}
+	vaultEnv := func(command string, args []string, min, max int, race string, sites ...string) loaderWarningRun {
+		return loaderWarningRun{Command: command, Args: args, Layout: "vault_env", GoMin: min, GoMax: max, GoRace: race, GoSites: sites}
+	}
+	legacy := func(command string, args []string, min, max int, race string, sites ...string) loaderWarningRun {
+		return loaderWarningRun{Command: command, Args: args, Layout: "legacy_default", GoMin: min, GoMax: max, GoRace: race, GoSites: sites}
+	}
+	global := []string{siteRootPreRun, siteOwnVaultPath}
+	join := func(parts ...[]string) []string {
+		var out []string
+		for _, part := range parts {
+			out = append(out, part...)
+		}
+		return out
+	}
+	op := func(site string) []string { return []string{site} }
+	return []loaderWarningRun{
+		vaultEnv("list", []string{"list"}, 3, 4, siteRace, join(unlock, op(siteOpList))...),
+		legacy("list", []string{"list"}, 5, 6, siteRace, join(global, unlock, op(siteOpList))...),
+		vaultEnv("get", []string{"get", "demo/entry.password", "--print"}, 3, 4, siteRace, join(unlock, op(siteOpGet))...),
+		legacy("get", []string{"get", "demo/entry.password", "--print"}, 5, 6, siteRace, join(global, unlock, op(siteOpGet))...),
+		vaultEnv("find", []string{"find", "demo"}, 3, 4, siteRace, join(unlock, op(siteOpFind))...),
+		legacy("find", []string{"find", "demo"}, 5, 6, siteRace, join(global, unlock, op(siteOpFind))...),
+		vaultEnv("verify", []string{"verify"}, 3, 4, siteRace, join(unlock, op(siteOpVerify))...),
+		legacy("verify", []string{"verify"}, 5, 6, siteRace, join(global, unlock, op(siteOpVerify))...),
+		vaultEnv("recipients list", []string{"recipients", "list"}, 0, 0, ""),
+		legacy("recipients list", []string{"recipients", "list"}, 2, 2, "", global...),
+		vaultEnv("lock", []string{"lock"}, 0, 0, ""),
+		legacy("lock", []string{"lock"}, 2, 2, "", global...),
+		vaultEnv("generate", []string{"generate"}, 0, 0, ""),
+		legacy("generate", []string{"generate"}, 1, 1, "", siteRootPreRun),
+		// agent list is annotated requires-vault=false: no PreRun read, and
+		// the command loads its own config twice in the legacy layout.
+		vaultEnv("agent list", []string{"agent", "list"}, 1, 1, "", "cmd/mcp.newAgentListCmd -> config.Load(vault config)"),
+		legacy("agent list", []string{"agent", "list"}, 2, 2, "", "cmd/mcp.newAgentListCmd -> config.Load(global config)", "cmd/mcp.newAgentListCmd -> config.Load(vault config)"),
+	}
+}
+
+const loaderWarningRuns = 8
+
+func buildLoaderWarningCounts(goBinary string) (loaderWarningCounts, error) {
+	out := loaderWarningCounts{
+		Note:   "Number of `envWhitelist is deprecated ...` lines on stderr for one run of the command, with `envWhitelist: [a]` appended to the vault config after the vault was initialized and one entry added. Go re-reads config.yaml at every seam listed in go_sites and every read warns; the per-operation reads (vault.List, ReadEntry, FindWithOptions, VerifyManifestIntegrity) and the second global read are incidental to Go's structure. Counts are bounds over repeated runs, not single observations.",
+		Runs:   loaderWarningRuns,
+		Config: "envWhitelist: [a]\n",
+	}
+	for _, row := range loaderWarningTable() {
+		for run := 0; run < loaderWarningRuns; run++ {
+			count, err := countLoaderWarnings(goBinary, row)
+			if err != nil {
+				return out, err
+			}
+			if count < row.GoMin || count > row.GoMax {
+				return out, fmt.Errorf("%s (%s) printed the envWhitelist warning %d times, outside the declared bounds [%d, %d]", row.Command, row.Layout, count, row.GoMin, row.GoMax)
+			}
+		}
+		if row.GoSites == nil {
+			row.GoSites = []string{}
+		}
+		out.Cases = append(out.Cases, row)
+	}
+	return out, nil
+}
+
+// countLoaderWarnings builds a fresh vault with the oracle, appends the
+// deprecated key to its config and counts the warning lines of one run.
+func countLoaderWarnings(goBinary string, row loaderWarningRun) (int, error) {
+	box, err := newSandbox()
+	if err != nil {
+		return 0, err
+	}
+	home := filepath.Join(box.root, "home")
+	vault := filepath.Join(home, "vault")
+	box.env = append(box.env,
+		"SYMVAULT_PASSPHRASE=loader-warning-count", "SYMVAULT_ALLOW_ENV_PASSPHRASE=1", "SYMVAULT_TEST_KEYRING=memory")
+	args := []string{"init"}
+	switch row.Layout {
+	case "vault_env":
+		args = append(args, vault)
+		box.env = append(box.env, "SYMVAULT_VAULT="+vault)
+	case "legacy_default":
+		vault = filepath.Join(home, ".symvault")
+		if mkErr := os.MkdirAll(vault, 0o700); mkErr != nil {
+			return 0, errors.Join(mkErr, box.close())
+		}
+	default:
+		return 0, errors.Join(fmt.Errorf("unknown layout %q", row.Layout), box.close())
+	}
+	for _, step := range [][]string{args, {"add", "demo/entry", "--value", "demo-value-1234"}} {
+		code, _, stderr, runErr := runOracle(goBinary, box, step)
+		if runErr != nil || code != 0 {
+			return 0, errors.Join(fmt.Errorf("setup %v: exit %d %v %q", step, code, runErr, stderr), box.close())
+		}
+	}
+	configPath := filepath.Join(vault, "config.yaml")
+	// #nosec G304 G302 -- fixed path inside this case's private sandbox.
+	f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return 0, errors.Join(err, box.close())
+	}
+	if _, werr := f.WriteString("envWhitelist: [a]\n"); werr != nil {
+		return 0, errors.Join(werr, f.Close(), box.close())
+	}
+	if cerr := f.Close(); cerr != nil {
+		return 0, errors.Join(cerr, box.close())
+	}
+	code, _, stderr, err := runOracle(goBinary, box, row.Args)
+	if err != nil {
+		return 0, errors.Join(err, box.close())
+	}
+	if code != 0 {
+		return 0, errors.Join(fmt.Errorf("%s exited %d: %q", row.Command, code, stderr), box.close())
+	}
+	count := strings.Count(string(stderr), "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead\n")
+	return count, box.close()
 }
 
 func marshalJSON(value any) ([]byte, error) {

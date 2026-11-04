@@ -6772,6 +6772,80 @@ mod get_clipboard_wiring_tests {
         assert_eq!(negative_zero, 3, "copy, print and length of -0");
     }
 
+    /// ADR 0034 item 22 (ratified: "Rust copies JSON text, null as empty
+    /// text"). Measured at this revision the described difference does not
+    /// exist: Rust copies exactly what Go's `fmt.Sprintf("%v", value)` puts on
+    /// the clipboard, `<nil>` for null and `map[...]` for objects included
+    /// (PLATFORM-001-FIDELITY, residual 10, landed after the ADR's baseline).
+    /// This pins the ADR's named shapes (number, bool, null, object, array)
+    /// byte for byte against the Go recording and proves that the three that
+    /// the ADR said would differ (null, object, array) still tell Go's text
+    /// from JSON text, so a regression to the ADR's description is detected.
+    #[test]
+    fn adr_0034_item_22_non_string_values_copy_as_go_prints_them() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/platform/get_clipboard.json"
+        ))
+        .unwrap();
+        let cases = fixture["value_scenarios"].as_array().unwrap();
+        let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 0\n"));
+        // (case, Go's clipboard text, whether JSON text would equal it)
+        let named = [
+            ("copy_integer", "42", true),
+            ("copy_bool_true", "true", true),
+            ("copy_bool_false", "false", true),
+            ("copy_null", "<nil>", false),
+            ("copy_empty_object", "map[]", false),
+            (
+                "copy_object_sorted_keys",
+                "map[a:[1 2] b:1 c:map[y:s z:<nil>]]",
+                false,
+            ),
+            ("copy_array_mixed", "[1 a <nil> true 2.5]", false),
+        ];
+        let mut differs_from_json_text = 0;
+        for (name, go_text, json_equal) in named {
+            let case = cases
+                .iter()
+                .find(|case| case["name"] == name)
+                .unwrap_or_else(|| panic!("{name} is not in the Go recording"));
+            assert_eq!(
+                case["clipboard_ops"][0].as_str().unwrap(),
+                format!("copy:{go_text}"),
+                "{name}: Go's recorded clipboard text"
+            );
+            let plaintext = format!(
+                "{{\"data\":{{\"value\":{}}}}}",
+                case["value_json"].as_str().unwrap()
+            );
+            let value = symvault_store::decode_entry_plaintext(plaintext.as_bytes(), "fixture")
+                .unwrap()
+                .data
+                .remove("value")
+                .unwrap();
+            let json_text = serde_json::to_string(&value).unwrap();
+            assert_eq!(json_text == go_text, json_equal, "{name}: JSON text");
+            differs_from_json_text += usize::from(json_text != go_text);
+            let outcome = run(
+                vault.path(),
+                field("value", value),
+                "text",
+                false,
+                true,
+                false,
+            );
+            assert_eq!(outcome.result, Ok(()), "{name}");
+            assert_eq!(
+                outcome.clipboard.state.lock().unwrap().0,
+                go_text,
+                "{name}: Rust's clipboard text"
+            );
+        }
+        // null, empty object, object and array: the shapes where JSON text and
+        // Go's `%v` differ; none of them is copied as JSON text or as empty.
+        assert_eq!(differs_from_json_text, 4);
+    }
+
     /// Go rejects a negative `clipboard.auto_clear_duration` when the command
     /// opens the vault (exit 6), so `get` never reaches the clipboard with one;
     /// it does not clamp it. The Rust validator must produce the same message.

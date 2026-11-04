@@ -8,7 +8,7 @@
     "internal/ui/cliout/cliout.go"
   ],
   "source_hash": "0ca868c0001f9a72b7414ca3003199777d4987f5dab6289c2d420cff05d9bb60",
-  "generator_hash": "54a924edc9e3dcc2a828b2884cdd84c7e0ab0b474b5dda7befbe00f7143290f8",
+  "generator_hash": "52f3932e5b24744fda9b7d9a1cd0a4450fd725aa7c6bb704a34a6bd2189283a3",
   "note": "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) with an in-memory clipboard; no host clipboard or credential was used.",
   "scenarios": [
     {
@@ -2130,6 +2130,182 @@
       "clipboard_ops": [],
       "final_clipboard": "",
       "start_auto_clear_seconds": 0
+    }
+  ],
+  "colour_scenarios": [
+    {
+      "name": "colour_always_cleared",
+      "secret": "s3cret-col1",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "timer_stub_ms": 150,
+      "color": "always",
+      "stdout": "",
+      "stderr": "\u001b[38;5;82m[copied to clipboard]\u001b[0m\n\r[clearing clipboard in 1s] \r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-col1",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "colour_always_auto_clear_disabled",
+      "secret": "s3cret-col0",
+      "auto_clear_seconds": 0,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "color": "always",
+      "stdout": "",
+      "stderr": "\u001b[38;5;82m[copied to clipboard]\u001b[0m\n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-col0"
+      ],
+      "final_clipboard": "s3cret-col0",
+      "start_auto_clear_seconds": 0
+    },
+    {
+      "name": "colour_always_history_manager_restores_secret",
+      "secret": "s3cret-colh",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "restore_secret",
+      "timer_stub_ms": 150,
+      "color": "always",
+      "stdout": "",
+      "stderr": "\u001b[38;5;82m[copied to clipboard]\u001b[0m\n\r[clearing clipboard in 1s] \rWarning: clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-colh",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "colour_always_clear_fails",
+      "secret": "s3cret-colc",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "clear_error": "clear boom",
+      "read_mode": "honest",
+      "timer_stub_ms": 150,
+      "color": "always",
+      "stdout": "",
+      "stderr": "\u001b[38;5;82m[copied to clipboard]\u001b[0m\n\r[clearing clipboard in 1s] \u001b[38;5;220mWarning: failed to clear clipboard: clear boom\u001b[0m\n\rWarning: clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-colc",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "s3cret-colc",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "colour_always_verify_read_error",
+      "secret": "s3cret-colr",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "error",
+      "read_error": "paste tool exploded",
+      "timer_stub_ms": 150,
+      "color": "always",
+      "stdout": "",
+      "stderr": "\u001b[38;5;82m[copied to clipboard]\u001b[0m\n\r[clearing clipboard in 1s] \rWarning: paste tool exploded — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-colr",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "colour_always_copy_fails",
+      "secret": "s3cret-colf",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "copy_error": "no clipboard utilities",
+      "read_mode": "honest",
+      "color": "always",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: no clipboard utilities\n\u001b[38;5;203mError: copy to clipboard: no clipboard utilities\u001b[0m\n",
+      "exit_code": 1,
+      "clipboard_ops": [
+        "copy:s3cret-colf"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 0
+    },
+    {
+      "name": "colour_never_cleared",
+      "secret": "s3cret-coln",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "timer_stub_ms": 150,
+      "color": "never",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-coln",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "colour_flag_always_is_read_too_late",
+      "secret": "s3cret-colg",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "timer_stub_ms": 150,
+      "color": "auto",
+      "color_flag": "always",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-colg",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
     }
   ]
 }

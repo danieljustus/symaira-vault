@@ -15,7 +15,7 @@
     "internal/ui/cliout/cliout.go"
   ],
   "source_hash": "f9d7e86a493ff328e91980879e24cf3b022d26a974331ffa15717080d34735eb",
-  "generator_hash": "a7350d68af26b6d0235bec3ba20032d28aae8052b069f0371f3d47cafd36f796",
+  "generator_hash": "3f1309cf629d8c34291f7363fab4699728acf3ff9ad21e0ba5d6ad2208e571ae",
   "note": "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) with clipboard.DefaultClipboard() (atotto v0.1.4 pbcopy/pbpaste) over POSIX-shell fake tools on a disposable PATH; no real pasteboard was touched.",
   "darwin_signal_names_executed": {
     "0": "signal 0",
@@ -565,6 +565,99 @@
         },
         {
           "tool": "pbcopy",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "copy_exit_1_tool_stderr",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "exit:1",
+      "paste": "ok",
+      "tool_stderr": "pbcopy: unable to connect to the pasteboard server",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nprintf '%s\\n' 'pbcopy: unable to connect to the pasteboard server' >&2; exit 1\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: exit status 1\nError: copy to clipboard: exit status 1\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "copy_signal_kill_tool_stderr",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "signal:KILL",
+      "paste": "ok",
+      "tool_stderr": "pbcopy: terminated by the window server",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nprintf '%s\\n' 'pbcopy: terminated by the window server' >&2; kill -s KILL $$\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: signal: killed\nError: copy to clipboard: signal: killed\n",
+      "exit_code": 1,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        }
+      ]
+    },
+    {
+      "name": "clear_exit_3_tool_stderr",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "exit:3",
+      "paste": "ok",
+      "copy_fail_on_call": 2,
+      "tool_stderr": "pbcopy: pasteboard is locked",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nif [ \"$n\" = 2 ]; then printf '%s\\n' 'pbcopy: pasteboard is locked' >&2; exit 3; fi\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\n/bin/cat \"$REC/clip\" 2>/dev/null\nexit 0\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] Warning: failed to clear clipboard: exit status 3\n\r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        },
+        {
+          "tool": "pbpaste",
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "paste_exit_1_tool_stderr",
+      "secret": "s3cret-pb",
+      "auto_clear_seconds": 1,
+      "copy": "ok",
+      "paste": "exit:1",
+      "tool_stderr": "pbpaste: no pasteboard available",
+      "pbcopy_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbcopy > \"$REC/call.$n\"\n/bin/cat > \"$REC/call.$n.stdin\"\n/bin/cp \"$REC/call.$n.stdin\" \"$REC/clip\"\nexit 0\n",
+      "pbpaste_script": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nprintf '%s\\n' pbpaste > \"$REC/call.$n\"\nprintf '%s\\n' 'pbpaste: no pasteboard available' >&2\nexit 1\n",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \rWarning: exit status 1 — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "tool_calls": [
+        {
+          "tool": "pbcopy",
+          "stdin": "s3cret-pb"
+        },
+        {
+          "tool": "pbcopy",
+          "stdin": ""
+        },
+        {
+          "tool": "pbpaste",
           "stdin": ""
         }
       ]

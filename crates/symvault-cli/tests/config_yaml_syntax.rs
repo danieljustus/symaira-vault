@@ -108,13 +108,14 @@ struct Fixture {
     doctor_ids: Vec<String>,
     cases: Vec<Case>,
     open_divergences: Vec<OpenDivergence>,
+    loader_warning_counts: LoaderWarningCounts,
 }
 
 /// Cases whose Go output the native CLI must reproduce byte for byte.
-const MATCHING_CASES: usize = 250;
+const MATCHING_CASES: usize = 276;
 /// Comparisons the replay executes: every recorded config observation, one
 /// `doctor` run per case and the `agent list` runs.
-const REPLAYED_COMPARISONS: usize = 960;
+const REPLAYED_COMPARISONS: usize = 1062;
 /// The `load_*` cases (CONFIG-LOAD-001): what the loader and validator accept
 /// or reject once the bytes parse as YAML.
 const LOAD_CASES: usize = 90;
@@ -122,7 +123,9 @@ const LOAD_CASES: usize = 90;
 /// each kind of scalar and how the section merge treats it.
 const SECTION_CASES: usize = 58;
 /// Inputs on which the native CLI is known to differ from Go.
-const OPEN_DIVERGENCES: usize = 33;
+const OPEN_DIVERGENCES: usize = 34;
+/// The `nest_*` cases (ADR 0034 item 6): yaml.v3's two scanner limits of 10000.
+const NEST_CASES: usize = 26;
 
 fn fixture() -> Fixture {
     const CONTENT: &[u8] = include_bytes!("../../../testdata/port/cli/config-yaml-syntax.json");
@@ -1344,25 +1347,8 @@ const RATIFIED: &[Ratified] = &[
         stderr: Some(NESTING_REFUSAL),
         config_unchanged: Some(true),
     },
-    // Go's own limit: both refuse, with different wording.
-    Ratified {
-        name: "nesting_depth_10001",
-        item: "ADR 0034 item 6",
-        command: "get_nested",
-        exit_code: None,
-        stdout: None,
-        stderr: Some(NESTING_REFUSAL),
-        config_unchanged: None,
-    },
-    Ratified {
-        name: "nesting_depth_10001",
-        item: "ADR 0034 item 6",
-        command: "set",
-        exit_code: None,
-        stdout: None,
-        stderr: Some(NESTING_REFUSAL),
-        config_unchanged: None,
-    },
+    // Go's own limit (10001 levels) is no longer a divergence: the loader enforces
+    // it with Go's wording, pinned by the `nest_flow_sequence_10001` cases.
     // Item 9: shell completion loads the global config fewer times.
     Ratified {
         name: "completion_loader_warnings",
@@ -1484,7 +1470,6 @@ fn ratified_native_behaviour_of_adr_0034_items_6_and_9_is_pinned() {
     for name in [
         "nesting_depth_257",
         "nesting_depth_10000",
-        "nesting_depth_10001",
         "completion_loader_warnings",
     ] {
         let divergence = fixture
@@ -1500,13 +1485,9 @@ fn ratified_native_behaviour_of_adr_0034_items_6_and_9_is_pinned() {
             );
         }
     }
-    // Go's side of the nesting limit: 10000 levels are read and written, one
-    // more is refused by yaml.v3 itself.
-    for (name, exit) in [
-        ("nesting_depth_257", 0),
-        ("nesting_depth_10000", 0),
-        ("nesting_depth_10001", 6),
-    ] {
+    // Go's side of the nesting limit: 10000 levels are read and written (the
+    // refusal one level further is pinned by the `nest_*` cases).
+    for (name, exit) in [("nesting_depth_257", 0), ("nesting_depth_10000", 0)] {
         let divergence = fixture
             .open_divergences
             .iter()
@@ -1520,19 +1501,6 @@ fn ratified_native_behaviour_of_adr_0034_items_6_and_9_is_pinned() {
             );
         }
     }
-    let go_get_257 = fixture
-        .open_divergences
-        .iter()
-        .find(|divergence| divergence.name == "nesting_depth_10001")
-        .and_then(|divergence| divergence.observations.first())
-        .expect("10001 get");
-    assert!(
-        go_get_257
-            .stderr
-            .contains("yaml: exceeded max depth of 10000"),
-        "{}",
-        go_get_257.stderr
-    );
     let complete = fixture
         .open_divergences
         .iter()
@@ -1686,4 +1654,477 @@ fn native_nesting_limit_is_256_levels() {
             );
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct LoaderWarningCounts {
+    runs_per_case: usize,
+    config: String,
+    cases: Vec<LoaderWarningRun>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoaderWarningRun {
+    command: String,
+    args: Vec<String>,
+    layout: String,
+    go_min: usize,
+    go_max: usize,
+    #[serde(default)]
+    go_race: String,
+    go_sites: Vec<String>,
+}
+
+/// What the native CLI prints for the same runs: `(command, layout) -> count`.
+///
+/// Go re-reads `config.yaml` at several seams that Rust does not repeat (see
+/// `go_sites` in the fixture): the root `PersistentPreRunE` and the command's
+/// own `VaultPath` both load the global config (so a default-location vault
+/// warns twice more), and every vault operation (`List`, `ReadEntry`,
+/// `FindWithOptions`, `VerifyManifestIntegrity`) loads the vault config once
+/// again, in addition to a background index build. Rust loads the global
+/// config once (`resolve_vault`) and the vault config twice (`config::fix` and
+/// the unlock), exactly Go's `resolveConfig` and `vault.Open`; only `get`
+/// reads the vault config a third time, like Go's `ReadEntry`.
+const NATIVE_WARNING_COUNTS: &[(&str, &str, usize)] = &[
+    ("list", "vault_env", 2),
+    ("list", "legacy_default", 3),
+    ("get", "vault_env", 3),
+    ("get", "legacy_default", 4),
+    ("find", "vault_env", 2),
+    ("find", "legacy_default", 3),
+    ("verify", "vault_env", 2),
+    ("verify", "legacy_default", 3),
+    ("recipients list", "vault_env", 0),
+    ("recipients list", "legacy_default", 1),
+    ("lock", "vault_env", 0),
+    ("lock", "legacy_default", 1),
+    ("generate", "vault_env", 0),
+    ("generate", "legacy_default", 0),
+    ("agent list", "vault_env", 1),
+    ("agent list", "legacy_default", 2),
+];
+
+const ENV_WHITELIST_WARNING: &str = "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead\n";
+
+/// Runs `symvault` in a throw-away HOME (no real keychain: the session cache is
+/// in memory under `CI=1`) and returns `(exit code, stderr)`.
+fn run_isolated(root: &Path, vault_env: Option<&Path>, args: &[&str]) -> (i32, String) {
+    let home = root.join("home");
+    fs::create_dir_all(&home).expect("create isolated home");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_symvault"));
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with("SYMVAULT_") {
+            command.env_remove(name);
+        }
+    }
+    command
+        .current_dir(root)
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("XDG_CONFIG_HOME", root.join("xdg-config"))
+        .env("XDG_DATA_HOME", root.join("xdg-data"))
+        .env("XDG_CACHE_HOME", root.join("xdg-cache"))
+        .env("CI", "1")
+        .env("NO_COLOR", "1")
+        .env("SYMVAULT_PASSPHRASE", "loader-warning-count")
+        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+        .stdin(std::process::Stdio::null())
+        .args(args);
+    if let Some(vault) = vault_env {
+        command.env("SYMVAULT_VAULT", vault);
+    }
+    let output = command.output().expect("run symvault");
+    (
+        output.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
+
+fn native_warning_count(row: &LoaderWarningRun, config: &str) -> usize {
+    let sandbox = Sandbox::new();
+    let root: &Path = &sandbox.root;
+    let home = root.join("home");
+    let (vault, vault_env) = match row.layout.as_str() {
+        "vault_env" => (home.join("vault"), Some(home.join("vault"))),
+        "legacy_default" => {
+            let vault = home.join(".symvault");
+            fs::create_dir_all(&vault).expect("legacy vault directory");
+            (vault, None)
+        }
+        other => panic!("unknown layout {other}"),
+    };
+    let init_dir = vault.to_string_lossy().into_owned();
+    let init: Vec<&str> = if vault_env.is_some() {
+        vec!["init", &init_dir]
+    } else {
+        vec!["init"]
+    };
+    for step in [
+        init,
+        vec!["add", "demo/entry", "--value", "demo-value-1234"],
+    ] {
+        let (code, stderr) = run_isolated(root, vault_env.as_deref(), &step);
+        assert_eq!(code, 0, "setup {step:?}: {stderr}");
+    }
+    let config_path = vault.join("config.yaml");
+    let mut text = fs::read_to_string(&config_path).expect("read vault config");
+    text.push_str(config);
+    fs::write(&config_path, text).expect("append the deprecated key");
+    let args: Vec<&str> = row.args.iter().map(String::as_str).collect();
+    let (code, stderr) = run_isolated(root, vault_env.as_deref(), &args);
+    assert_eq!(code, 0, "{} ({}): {stderr}", row.command, row.layout);
+    stderr.matches(ENV_WHITELIST_WARNING).count()
+}
+
+/// ADR 0034 item 9 says ordinary commands print the loader warning as often as
+/// Go. They do not, and this pins what is true. Go's recorded bounds
+/// (`loader_warning_counts`, from the pinned oracle) come from re-reading the
+/// config at seams Rust does not repeat; the native counts are pinned exactly,
+/// the rows where Go and Rust agree must lie inside Go's bounds, and every
+/// other row must stay below Go's minimum (an open divergence: fewer
+/// duplicate deprecation lines, no other output differs). A native change that
+/// closes or widens a gap fails here and must update the table and the
+/// matrix row together.
+#[test]
+fn native_loader_warning_counts_are_pinned_against_go() {
+    let fixture = fixture();
+    let counts = &fixture.loader_warning_counts;
+    assert_eq!(counts.config, "envWhitelist: [a]\n");
+    assert_eq!(counts.runs_per_case, 8);
+    assert_eq!(counts.cases.len(), NATIVE_WARNING_COUNTS.len());
+    let (mut equal, mut fewer) = (0, 0);
+    for (row, (command, layout, native_expected)) in counts.cases.iter().zip(NATIVE_WARNING_COUNTS)
+    {
+        assert_eq!(
+            (row.command.as_str(), row.layout.as_str()),
+            (*command, *layout)
+        );
+        assert!(row.go_min <= row.go_max);
+        assert_eq!(
+            row.go_race.is_empty(),
+            row.go_min == row.go_max,
+            "{command}/{layout}: a range exists only where a goroutine read races the exit"
+        );
+        assert_eq!(
+            row.go_sites.len(),
+            row.go_min,
+            "{command}/{layout}: every certain site prints once; the race adds at most one"
+        );
+        let native = native_warning_count(row, &counts.config);
+        assert_eq!(native, *native_expected, "{command}/{layout}: native count");
+        if (row.go_min..=row.go_max).contains(&native) {
+            equal += 1;
+        } else {
+            assert!(
+                native < row.go_min,
+                "{command}/{layout}: native {native} must stay below Go's {}..={}",
+                row.go_min,
+                row.go_max
+            );
+            fewer += 1;
+        }
+    }
+    // `get` with the vault given explicitly (Rust's own entry read is the
+    // operation-level load), recipients list, lock and generate with the vault
+    // given explicitly, and both agent list rows, agree; the other ten print
+    // fewer duplicates.
+    assert_eq!((equal, fewer), (6, 10));
+}
+
+#[test]
+fn warning_count_pin_tells_a_match_from_a_gap() {
+    // The comparison used above: inside Go's bounds is a match, below is the
+    // recorded gap, above would be a new divergence.
+    let gap = |native: usize, min: usize, max: usize| {
+        if (min..=max).contains(&native) {
+            "match"
+        } else if native < min {
+            "fewer"
+        } else {
+            "more"
+        }
+    };
+    assert_eq!(gap(2, 3, 4), "fewer");
+    assert_eq!(gap(3, 3, 4), "match");
+    assert_eq!(gap(5, 3, 4), "more");
+    assert_eq!(gap(1, 1, 1), "match");
+}
+
+/// ADR 0034 item 6 / ADR 0035: yaml.v3's scanner stops at 10000 open flow
+/// collections and at 10000 nested block collections (two separate counters),
+/// with the scanner problem `exceeded max depth of 10000`. The native loader
+/// used to read 10001 levels in full. The replay above compares every
+/// `nest_*` command byte for byte; this test pins what that comparison has to
+/// show, so a corpus that quietly lost its boundary pairs cannot pass.
+#[test]
+fn nesting_limit_boundaries_are_pinned_to_go() {
+    let fixture = fixture();
+    let nest: Vec<&Case> = fixture
+        .cases
+        .iter()
+        .filter(|case| case.name.starts_with("nest_"))
+        .collect();
+    assert_eq!(nest.len(), NEST_CASES);
+    let case = |name: &str| -> &Case {
+        nest.iter()
+            .copied()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("{name} is not part of the corpus"))
+    };
+    let validate = |name: &str| -> &Observation {
+        case(name)
+            .observations
+            .iter()
+            .find(|observation| observation.command == "validate")
+            .unwrap_or_else(|| panic!("{name} records no validate run"))
+    };
+    const LIMIT: &str = "exceeded max depth of 10000";
+
+    // Exactly on the limit: the scan passes (flow documents validate; the block
+    // ones are rejected by the typed decode, not by the scanner).
+    for name in ["nest_flow_sequence_257", "nest_flow_sequence_10000"] {
+        assert_eq!(validate(name).exit_code, 0, "{name}");
+    }
+    for name in [
+        "nest_block_sequence_10000",
+        "nest_block_explicit_key_10000",
+        "nest_block_mapping_after_9999_dashes",
+        "nest_counters_are_independent",
+    ] {
+        let observation = validate(name);
+        assert_eq!(observation.exit_code, 6, "{name}");
+        assert!(!observation.stderr.contains(LIMIT), "{name}");
+        assert!(observation.stderr.contains("unmarshal"), "{name}");
+    }
+    // One past it: the scanner problem, with the line only past the first.
+    for (name, line) in [
+        ("nest_flow_sequence_10001", None),
+        ("nest_flow_sequence_20000", None),
+        ("nest_flow_mapping_10001", None),
+        ("nest_flow_sequence_10001_unterminated", None),
+        ("nest_depth_before_error", None),
+        ("nest_block_sequence_10001", None),
+        ("nest_block_explicit_key_10001", None),
+        ("nest_block_mapping_after_10000_dashes", None),
+        ("nest_block_over_with_flow_inside", None),
+        ("nest_flow_sequence_10001_on_line_three", Some(3)),
+        ("nest_flow_sequence_after_document_start", Some(2)),
+    ] {
+        let observation = validate(name);
+        assert_eq!(observation.exit_code, 6, "{name}");
+        let wording = match line {
+            None => format!("yaml: {LIMIT}"),
+            Some(line) => format!("yaml: line {line}: {LIMIT}"),
+        };
+        assert!(
+            observation.stderr.contains(&wording),
+            "{name}: {:?}",
+            observation.stderr
+        );
+        // Go's own `get` and `set` stop at the same scanner failure.
+        for command in ["get", "set"] {
+            let run = case(name)
+                .observations
+                .iter()
+                .find(|observation| observation.command == command)
+                .unwrap_or_else(|| panic!("{name} records no {command} run"));
+            assert_eq!(run.exit_code, 6, "{name} {command}");
+            assert!(run.stderr.contains(&wording), "{name} {command}");
+        }
+    }
+    // The failure that comes first in the stream wins.
+    assert!(
+        validate("nest_error_before_depth")
+            .stderr
+            .contains("line 2: mapping values are not allowed")
+    );
+    // Brackets that are text, flat documents and a trailing document that fails
+    // to scan are not nesting.
+    for name in [
+        "nest_brackets_in_double_quotes",
+        "nest_brackets_in_single_quotes",
+        "nest_brackets_in_comment",
+        "nest_brackets_in_block_scalar",
+        "nest_brackets_in_plain_scalar",
+        "nest_many_sequence_entries",
+        "nest_second_document_too_deep",
+    ] {
+        assert_eq!(validate(name).exit_code, 0, "{name}");
+    }
+    assert!(
+        validate("nest_second_document_at_limit")
+            .stderr
+            .contains("more than one YAML document")
+    );
+
+    // The native CLI reproduces the refusals (the full replay above runs every
+    // recorded command of every `nest_*` case, the 10000-level acceptances
+    // included; they take seconds each in a debug build, so only the cheap
+    // rejections are repeated here).
+    for name in [
+        "nest_flow_sequence_10001",
+        "nest_flow_sequence_10001_on_line_three",
+        "nest_block_sequence_10001",
+        "nest_error_before_depth",
+    ] {
+        let case = case(name);
+        let bytes = decode_hex(&case.config_hex);
+        for observation in &case.observations {
+            assert!(
+                run_config_observation(&bytes, observation).is_none(),
+                "{} {}",
+                case.name,
+                observation.command
+            );
+        }
+    }
+}
+
+/// The 257..10000 flow range is open only for `config get` and `config set`:
+/// both read the node tree with yaml_edit (256 levels), while the loader
+/// accepts those documents. The divergence is recorded with Go's bytes.
+#[test]
+fn nesting_between_256_and_10000_is_open_only_for_get_and_set() {
+    let fixture = fixture();
+    let names: Vec<&str> = fixture
+        .open_divergences
+        .iter()
+        .map(|divergence| divergence.name.as_str())
+        .filter(|name| name.starts_with("nest_"))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "nest_get_set_flow_sequence_257",
+            "nest_get_set_flow_sequence_10000"
+        ]
+    );
+    for divergence in fixture
+        .open_divergences
+        .iter()
+        .filter(|divergence| divergence.name.starts_with("nest_"))
+    {
+        assert_eq!(divergence.kind, "behavior");
+        let commands: Vec<&str> = divergence
+            .observations
+            .iter()
+            .map(|observation| observation.command.as_str())
+            .collect();
+        assert_eq!(commands, ["get", "set"]);
+        let set = &divergence.observations[1];
+        assert_eq!(set.exit_code, 0, "Go rewrites the nested document");
+        assert_eq!(set.config_unchanged, Some(false));
+        let bytes = decode_hex(&divergence.config_hex);
+        let difference = open_divergence_differences(divergence, &fixture.doctor_ids);
+        assert!(
+            difference.iter().any(|(command, _)| command == "set"),
+            "{}: set now matches Go; promote the case",
+            divergence.name
+        );
+        // The loader side of the same document is part of the matching corpus.
+        assert!(bytes.starts_with(b"a: ["));
+    }
+}
+
+/// Runs `config validate` on `config` and fails when it has not exited after
+/// `seconds`; returns `(exit code, normalised stdout, normalised stderr)`.
+///
+/// The bound is independent of the build profile: it sits an order of magnitude
+/// above what a debug build needs and well below what the quadratic or
+/// whole-document behaviour it guards against needs.
+fn validate_within(seconds: u64, config: &[u8]) -> (i32, String, String) {
+    use std::{
+        io::Read,
+        process::Stdio,
+        time::{Duration, Instant},
+    };
+    let sandbox = Sandbox::new();
+    let path = sandbox.config_path();
+    fs::write(&path, config).expect("write isolated config");
+    let home = sandbox.root.join("home");
+    fs::create_dir_all(&home).expect("create isolated home");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_symvault"));
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with("SYMVAULT_") {
+            command.env_remove(name);
+        }
+    }
+    let mut child = command
+        .current_dir(&*sandbox.root)
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("XDG_CONFIG_HOME", sandbox.root.join("xdg-config"))
+        .env("XDG_DATA_HOME", sandbox.root.join("xdg-data"))
+        .env("XDG_CACHE_HOME", sandbox.root.join("xdg-cache"))
+        .env("CI", "1")
+        .env("NO_COLOR", "1")
+        .args(["config", "validate"])
+        .arg(&path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run symvault");
+    let mut stdout = child.stdout.take().expect("piped stdout");
+    let mut stderr = child.stderr.take().expect("piped stderr");
+    let out = std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        let _ = stdout.read_to_end(&mut buffer);
+        buffer
+    });
+    let err = std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        let _ = stderr.read_to_end(&mut buffer);
+        buffer
+    });
+    let deadline = Instant::now() + Duration::from_secs(seconds);
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("poll symvault") {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("config validate was still running after {seconds} s");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let stdout = sandbox.normalize(&out.join().expect("stdout reader"));
+    let stderr = sandbox.normalize(&err.join().expect("stderr reader"));
+    (status.code().unwrap_or(255), stdout, stderr)
+}
+
+/// A long run of blanks inside a plain scalar of a document big enough to be
+/// depth-scanned used to be rescanned from every blank (quadratic): a 400 KB
+/// config took over two minutes. Go reads it in well under a second.
+#[test]
+fn a_long_run_of_blanks_in_a_deep_config_validates_in_linear_time() {
+    let mut config = String::new();
+    for index in 0..11_000 {
+        config.push_str(&format!("k{index}: 1\n"));
+    }
+    config.push_str("last: x");
+    config.push_str(&" ".repeat(300_000));
+    config.push_str("y\n");
+    let (code, stdout, stderr) = validate_within(60, config.as_bytes());
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stdout, "Configuration is valid (__CONFIG__)\n");
+}
+
+/// A depth violation ends the read: libyaml (and so `serde_yaml_ng`) used to
+/// parse the rest of the stream in full, which took half a minute for 100000
+/// opening brackets in a debug build; Go stops at level 10001 in 0.02 s.
+#[test]
+fn a_depth_violation_does_not_make_the_rest_of_the_stream_expensive() {
+    let config = format!("a: {}\n", "[".repeat(100_000));
+    let (code, stdout, stderr) = validate_within(15, config.as_bytes());
+    assert_eq!(code, 6, "{stderr}");
+    assert_eq!(stdout, "");
+    assert_eq!(
+        stderr,
+        "Error: cannot load config from __CONFIG__: yaml: exceeded max depth of 10000: yaml: exceeded max depth of 10000\n\
+         Error: cannot load config from __CONFIG__: yaml: exceeded max depth of 10000: yaml: exceeded max depth of 10000\n\
+         Run 'symvault doctor' to diagnose and fix configuration issues.\n"
+    );
 }

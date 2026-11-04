@@ -917,6 +917,7 @@ impl Config {
         // left unread while the stream is checked.
         if let Some(second) = documents.next()
             && crate::go_yaml::decodes_as_go_node(second)
+            && crate::go_yaml_depth::violation_in_document(bytes, 1).is_none()
         {
             return Err(ConfigError::Yaml(MULTIPLE_DOCUMENTS_MESSAGE.to_owned()));
         }

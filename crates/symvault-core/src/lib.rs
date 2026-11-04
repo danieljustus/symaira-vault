@@ -11,6 +11,7 @@ pub mod config_typed;
 pub mod error;
 mod go_unicode_print_15;
 pub mod go_yaml;
+pub mod go_yaml_depth;
 pub mod keychain_status;
 pub mod password;
 pub mod persistent_quota;
