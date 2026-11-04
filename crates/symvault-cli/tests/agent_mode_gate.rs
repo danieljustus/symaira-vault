@@ -42,7 +42,8 @@ struct Side {
 struct Opts<'a> {
     /// Leave `SYMVAULT_VAULT` unset (the vault then comes from flags/profiles).
     no_vault_env: bool,
-    /// `{ROOT}` in the values is replaced by the side's vault directory.
+    /// `{ROOT}` in the values is replaced by the side's vault directory and every
+    /// `{FF}` by the byte 0xFF (not UTF-8), also in the agent name.
     extra: &'a [(&'a str, &'a str)],
 }
 
@@ -153,11 +154,11 @@ impl Side {
             command.env("SYMVAULT_VAULT", self.root.path());
         }
         match agent {
-            Some(agent) => command.env("SYMVAULT_AGENT", agent),
+            Some(agent) => command.env("SYMVAULT_AGENT", self.argument(agent)),
             None => command.env_remove("SYMVAULT_AGENT"),
         };
         for (key, value) in opts.extra {
-            command.env(key, self.substitute(value));
+            command.env(key, self.argument(value));
         }
         go_oracle::output(&mut command).expect("run symvault")
     }
@@ -1169,4 +1170,197 @@ fn agent_gate_unknown_command_beats_the_root_help() {
     }
     let (code, _) = pair.check("unknown", &["nosuch", "--help"], None, none);
     assert_eq!(code, Some(1));
+}
+
+/// cobra's `stripFlags` skips the empty string, so it never names a command: the
+/// help flag still wins (root help or the help of the command named after it).
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_empty_words_are_no_command() {
+    let (_oracle, pair) = Pair::new("agent_gate_empty_words_are_no_command");
+    pair.set_config(&Config::Text(PROFILES));
+    let none = Opts::default();
+    for args in [
+        &["", "--help"][..],
+        &["", "-h"],
+        &["", "--help=true"],
+        &[""],
+        &["", ""],
+        &["", "--help=false"],
+        &["", "", "--help"],
+        &["--json", "", "--help"],
+        &["", "get", "-h"],
+        &["", "agent", "--help"],
+        &["", "agent", "nosuch", "-h"],
+        &["--help", "", "nosuch"],
+        &["", "nosuch", "--help"],
+        &["", "nosuch"],
+    ] {
+        for agent in [Some("ghost"), None] {
+            pair.check(&format!("{agent:?} {args:?}"), args, agent, none);
+        }
+    }
+    let (code, _) = pair.check("empty help", &["", "--help"], Some("ghost"), none);
+    assert_eq!(code, Some(0));
+    let (code, _) = pair.check("empty then unknown", &["", "nosuch", "--help"], None, none);
+    assert_eq!(code, Some(1));
+}
+
+/// A bare `-h` / `--help` is unknown to `Find` and takes only the next word as its
+/// value (as any flag that wants one does), so a second word after it is still the
+/// command; the earlier fixed shapes keep their answers.
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_bare_help_swallows_only_the_next_word() {
+    let (_oracle, pair) = Pair::new("agent_gate_bare_help_swallows_only_the_next_word");
+    pair.set_config(&Config::Text(PROFILES));
+    let none = Opts::default();
+    let unknown: &[&[&str]] = &[
+        &["--help", "--help", "nosuch"],
+        &["-h", "--help", "nosuch"],
+        &["--help", "-h", "nosuch"],
+        &["-h", "-h", "nosuch"],
+        &["--help", "--help", "--help", "--help", "nosuch"],
+        &["--help", "--json", "nosuch"],
+        &["--help", "--", "nosuch"],
+        &["--help", "", "nosuch"],
+        &["--help", "--help=true", "nosuch"],
+        &["--json", "--help", "--help", "nosuch"],
+    ];
+    let help: &[&[&str]] = &[
+        &["--help"],
+        &["-h"],
+        &["--help", "nosuch"],
+        &["-h", "nosuch"],
+        &["--help", "--help"],
+        &["--help", "-h"],
+        &["--help", "--help", "--help", "nosuch"],
+        &["--help", "--help", "get"],
+        &["--help", "get"],
+        &["--help", "get", "-h"],
+        &["--help", "--"],
+        &["--help", "", ""],
+        &["--json", "--help", "nosuch"],
+        &["-h", "--json", "--help", "nosuch"],
+        &["--help=true", "--help", "nosuch"],
+        &["agent", "--help", "nosuch"],
+        &["agent", "nosuch", "-h=true"],
+        &["completion", "bash", "extra", "--help"],
+        &["nosuch", "--help"],
+    ];
+    for (args, want) in unknown
+        .iter()
+        .map(|args| (*args, Some(1)))
+        .chain(help.iter().map(|args| (*args, None)))
+    {
+        for agent in [Some("ghost"), None] {
+            let (code, _) = pair.check(&format!("{agent:?} {args:?}"), args, agent, none);
+            if let Some(want) = want {
+                assert_eq!(code, Some(want), "{agent:?} {args:?}");
+            }
+        }
+    }
+}
+
+/// `SYMVAULT_AGENT` and `SYMVAULT_PROFILE` are raw bytes for Go: a name that is not
+/// UTF-8 matches no agent (`alpha\xff` is not the agent `alpha\u{FFFD}`) and no
+/// profile (exit 1, `resolve profile`) -- before the agent check when it is the
+/// profile that decides the vault.
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_non_utf8_agent_and_profile_names_match_nothing() {
+    let (_oracle, pair) = Pair::new("agent_gate_non_utf8_agent_and_profile_names_match_nothing");
+    pair.set_config(&Config::Text(
+        "agents:\n  alpha:\n    tier: standard\n  \"alpha\\uFFFD\":\n    tier: standard\n",
+    ));
+    let none = Opts::default();
+
+    // The replacement character is a valid name; the invalid byte is not.
+    let (code, stderr) = pair.check("alpha FF", &["list"], Some("alpha{FF}"), none);
+    assert_eq!(code, Some(5));
+    assert!(
+        stderr.contains("agent \"alpha\\xff\" not found in config"),
+        "{stderr}"
+    );
+    let (code, _) = pair.check("alpha FFFD", &["get", "x"], Some("alpha\u{FFFD}"), none);
+    assert_eq!(code, Some(3));
+    pair.check("only FF", &["list"], Some("{FF}"), none);
+    pair.check("FF mid", &["find", "x"], Some("al{FF}pha"), none);
+    pair.check("FF, exempt command", &["version"], Some("alpha{FF}"), none);
+    pair.check("FF, help", &["list", "--help"], Some("alpha{FF}"), none);
+    pair.check(
+        "FF, no config",
+        &["list", "--vault", "{ROOT}/missing"],
+        Some("alpha{FF}"),
+        none,
+    );
+
+    // A profile name that is not UTF-8 resolves to no profile, whatever the agent.
+    let no_env = |extra| Opts {
+        no_vault_env: true,
+        extra,
+    };
+    let bad_profile: &[(&str, &str)] = &[("SYMVAULT_PROFILE", "p{FF}")];
+    let spaced_profile: &[(&str, &str)] = &[("SYMVAULT_PROFILE", " p{FF} ")];
+    for agent in [Some("alpha"), Some("alpha{FF}"), Some("ghost")] {
+        let (code, _) = pair.check(
+            &format!("{agent:?} profile env FF, no global config"),
+            &["list"],
+            agent,
+            no_env(bad_profile),
+        );
+        assert_eq!(code, Some(1), "{agent:?}");
+    }
+    pair.set_global_config(
+        "profiles:\n  p:\n    vault: '{ROOT}'\n  \"p\\uFFFD\":\n    vault: '{ROOT}'\n",
+    );
+    for agent in [Some("alpha"), Some("ghost")] {
+        for extra in [bad_profile, spaced_profile] {
+            let (code, stderr) = pair.check(
+                &format!("{agent:?} profile env FF {extra:?}"),
+                &["list"],
+                agent,
+                no_env(extra),
+            );
+            assert_eq!(code, Some(1), "{agent:?}");
+            assert!(stderr.starts_with("Error: resolve profile: profile \"p\\xff\" not found"));
+        }
+    }
+    pair.check(
+        "exempt command",
+        &["version"],
+        Some("alpha"),
+        no_env(bad_profile),
+    );
+    // A vault flag / variable or a profile flag decides before the profile variable.
+    pair.check(
+        "vault env wins",
+        &["list"],
+        Some("alpha"),
+        Opts {
+            no_vault_env: false,
+            extra: bad_profile,
+        },
+    );
+    pair.check(
+        "vault flag wins",
+        &["list", "--vault", "{ROOT}"],
+        Some("alpha"),
+        no_env(bad_profile),
+    );
+    pair.check(
+        "profile flag wins",
+        &["list", "--profile", "p"],
+        Some("alpha"),
+        no_env(bad_profile),
+    );
 }

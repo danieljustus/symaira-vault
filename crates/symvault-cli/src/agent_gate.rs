@@ -16,17 +16,31 @@
 //! `expand vault path: <cause>`, printed twice). Without an agent the gate stays
 //! silent and the command reports its own error, as before.
 //!
-//! Known gaps against Go. The first two can change the exit status or the verdict
-//! (both need a value that is not UTF-8); the third is wording only:
+//! Environment values are raw bytes for Go, so they are here too: a `SYMVAULT_AGENT`
+//! that is not UTF-8 matches no agent (`alpha\xff` is not the agent `alpha\u{FFFD}`)
+//! and is quoted `\xff` in `agent "<name>" not found in config`; a `SYMVAULT_PROFILE` that is not UTF-8 is a profile request that no
+//! profile matches (exit 1, `resolve profile: profile "<name>" not found`, or
+//! `cannot load config: ...`), unless a vault flag, `SYMVAULT_VAULT` or a profile
+//! flag decides first.
+//!
+//! Known gaps against Go. The first three can change the exit status or the verdict
+//! (each needs a value that is not UTF-8); the last two are wording only:
 //! - a `SYMVAULT_VAULT` that is not UTF-8 is refused with exit 1 and `vault path
 //!   must be UTF-8`, where Go carries on with the raw bytes (exit 5 from the agent
 //!   check, or the command runs);
 //! - a `--vault` value that is not UTF-8 is gated on its lossy text (U+FFFD for
 //!   each bad byte), so the path the agent check reads can differ from Go's;
+//! - the non-UTF-8 `SYMVAULT_PROFILE` refusal exists only here, in agent mode, for
+//!   the commands that require a vault: without an agent, the commands themselves
+//!   (and `__complete`) still ignore such a profile where Go ends with exit 1, and
+//!   its surrounding blanks are trimmed as ASCII only (Go trims Unicode spaces);
+//! - `agent whoami` is not gated and reads `SYMVAULT_AGENT` as UTF-8 only: a
+//!   non-UTF-8 name reports `SYMVAULT_AGENT not set` (exit 1) where Go reports the
+//!   failed config load or lookup (exit 1);
 //! - a profile name with control characters is quoted by Rust's `{:?}` rather than
 //!   Go's `%q`.
 
-use std::path::Path;
+use std::{ffi::OsStr, path::Path};
 
 use symvault_core::config::Config;
 
@@ -87,8 +101,7 @@ pub(crate) fn preflight(path: &str, vault: Option<&str>, profile: Option<&str>) 
         return None;
     }
     let agent = std::env::var_os(AGENT_ENV).filter(|value| !value.is_empty())?;
-    let agent = agent.to_string_lossy().into_owned();
-    let root = match crate::resolve_vault_with(vault.map(Path::new), profile, go_config) {
+    let root = match crate::resolve_vault_with(vault.map(Path::new), profile, go_config, true) {
         Ok(root) => root,
         Err(error) => {
             return Some(Refusal {
@@ -120,11 +133,14 @@ const VAULT_PROFILE: &str = "resolve profile";
 /// vault (flag or environment) or the default, `resolve profile` for a profile.
 fn vault_error_prefix(vault: Option<&str>, profile: Option<&str>) -> &'static str {
     let env = |name: &str| std::env::var(name).ok();
+    // A profile name that is not UTF-8 still is a (non-empty) request for a profile.
+    let env_profile =
+        std::env::var_os("SYMVAULT_PROFILE").map(|value| value.to_string_lossy().into_owned());
     error_prefix(
         vault,
         profile,
         env("SYMVAULT_VAULT").as_deref(),
-        env("SYMVAULT_PROFILE").as_deref(),
+        env_profile.as_deref(),
     )
 }
 
@@ -160,21 +176,25 @@ fn go_config(path: &Path) -> Result<Config, String> {
 }
 
 /// Go's `agentctx.Load`: the profile lookup in `<vault>/config.yaml`, then the
-/// audit logger (best effort: a failure there never fails the load).
-fn load(agent: &str, root: &Path) -> Result<(), String> {
+/// audit logger (best effort: a failure there never fails the load). The agent
+/// name is compared as raw bytes: a name that is not UTF-8 matches no profile.
+fn load(agent: &OsStr, root: &Path) -> Result<(), String> {
     // `filepath.Join` cleans: a vault of `.` yields `config.yaml`, not `./config.yaml`.
     let config_path = crate::agent_list_commands::clean_path(&root.join("config.yaml"));
     let config = go_config(&config_path)
         .map_err(|cause| format!("load config from {}: {cause}", config_path.display()))?;
-    if !config.agents.contains_key(agent) {
+    let Some(name) = agent
+        .to_str()
+        .filter(|name| config.agents.contains_key(*name))
+    else {
         return Err(format!(
             "agent {} not found in config",
-            crate::cli_artifacts::quote_go_string(agent)
+            crate::cli_artifacts::quote_go_bytes(agent.as_encoded_bytes())
         ));
-    }
+    };
     if let Some(keyring) = crate::runtime_session_manager().keyring.as_deref() {
         let _ = symvault_store::audit::open_with_keyring(
-            agent,
+            name,
             root,
             keyring,
             symvault_store::audit::RotationConfig::default(),

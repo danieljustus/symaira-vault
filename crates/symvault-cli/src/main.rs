@@ -6047,17 +6047,23 @@ fn parse_vault_flag(value: &str) -> Result<PathBuf, std::convert::Infallible> {
 }
 
 fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathBuf, String> {
-    resolve_vault_with(explicit, profile, |path| {
-        Config::load(path).map_err(|error| error.to_string())
-    })
+    resolve_vault_with(
+        explicit,
+        profile,
+        |path| Config::load(path).map_err(|error| error.to_string()),
+        false,
+    )
 }
 
 /// [`resolve_vault`] with the config loader (and so the wording of its error) chosen
-/// by the caller; the agent-mode gate words it the way Go does.
+/// by the caller; the agent-mode gate words it the way Go does. With
+/// `strict_profile_env` a `SYMVAULT_PROFILE` that is not UTF-8 is a profile request
+/// that matches no profile, as in Go (otherwise it is ignored).
 fn resolve_vault_with(
     explicit: Option<&Path>,
     profile: Option<&str>,
     load_config: impl FnOnce(&Path) -> Result<Config, String>,
+    strict_profile_env: bool,
 ) -> Result<PathBuf, String> {
     let vault_env = if explicit.is_some() {
         None
@@ -6070,13 +6076,30 @@ fn resolve_vault_with(
             }
         }
     };
-    let profile_env = std::env::var("SYMVAULT_PROFILE").ok();
     let resolver = PathResolver::new();
+    let profile_env_raw = std::env::var_os("SYMVAULT_PROFILE");
+    let profile_env = profile_env_raw.as_deref().and_then(std::ffi::OsStr::to_str);
+    if let Some(raw) = profile_env_raw
+        .as_deref()
+        .filter(|_| strict_profile_env && profile_env.is_none())
+    {
+        // A profile name that is not UTF-8 is a non-empty request that no profile
+        // can match; Go's `VaultPath` fails on it unless a vault flag / variable
+        // or a profile flag decides first.
+        let decided = |value: Option<&str>| value.is_some_and(|value| !value.trim().is_empty());
+        if explicit.is_none() && !decided(vault_env.as_deref()) && !decided(profile) {
+            load_config(&resolver.config_path()).map_err(|e| format!("cannot load config: {e}"))?;
+            return Err(format!(
+                "profile {} not found",
+                cli_artifacts::quote_go_bytes(raw.as_encoded_bytes().trim_ascii())
+            ));
+        }
+    }
     symvault_core::config_overrides::VaultOverrides {
         vault_flag: explicit,
         profile_flag: profile,
         vault_env: vault_env.as_deref(),
-        profile_env: profile_env.as_deref(),
+        profile_env,
     }
     .resolve(
         &resolver,
