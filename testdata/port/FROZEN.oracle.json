@@ -1,12 +1,12 @@
 {
  "version": 1,
- "generator_ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+ "generator_ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
  "entries": {
   "crates/symvault-cli/tests/fixtures/import-command/cases.json#/oracle#generator_digest": {
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "8c4514f80d1d92513f54d17ebc73776f37f1f231ab432f0eb699563aaf8ef1ae"
   },
   "crates/symvault-cli/tests/fixtures/import-command/cases.json#/oracle#source_digest": {
@@ -258,7 +258,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "e207059733157a14d9acf077335b193095553f5d1435c2756bdbf0643e971d77"
   },
   "testdata/port/approval/device-enroll.json#/oracle#source_digest": {
@@ -314,7 +314,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "e27ebebe59c6e77019140358f2b5e5cc8d4bb5d2c1fd98411b0abd936b1f66c0"
   },
   "testdata/port/audit/audit.json#/oracle#source_digest": {
@@ -385,7 +385,7 @@
    "class": "recorded",
    "algo": "claimed",
    "ref": null,
-   "value": "c9ab4468b1b7252ec0889de597bc1da73ee3a6d9262553fbda168d98b563dcad"
+   "value": "10dd22ee926ac68255394c538e60e67e08d0cff432cdc13e0b5b1c56277a509e"
   },
   "testdata/port/cli/config-yaml-syntax.json#/oracle#source_digest": {
    "kind": "source",
@@ -412,7 +412,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "297362a5b0f38058db5ac9f7d94dd3a4d86e8731d4221e555d6d81293205d439"
   },
   "testdata/port/cli/export-backup-restore.json#/oracle#source_digest": {
@@ -426,7 +426,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "e34b999042fa4d7459ad55d49ede8a736c146e42c9d1962ace115fca020a3b1f"
   },
   "testdata/port/cli/export.json#/oracle#source_digest": {
@@ -447,8 +447,8 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
-   "value": "8d96042699dc9536e780fe5fac693597cd00f2630b6d2f0f83a175e1cf67607a"
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
+   "value": "5b62dffb9b2d59d1b3708a94e2b433de73d2ce940dd65689179b9a8d0d1b4a61"
   },
   "testdata/port/cli/output-modes.json#/oracle#source_digest": {
    "kind": "source",
@@ -482,7 +482,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "84581e4de826889fea51396e28381b0cd58253bacc8fe73cac80e867162a6496"
   },
   "testdata/port/config/bytes.json#/oracle#generator_digest": {
@@ -587,7 +587,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "a78309411bda4b18cf17352f43cbd9ec9bb96ae4d7cc804b81b5fa676d558cb4"
   },
   "testdata/port/config_profiles_contract.json#/oracle#source_digest": {
@@ -685,7 +685,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "ca4bbd74bb522310093157aaed280121be2b1a0aa003af5ee7ac5cd8cc224623"
   },
   "testdata/port/crypto/age-kdf.json#/oracle#source_digest": {
@@ -734,7 +734,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "73f6bb3f75220dcbb38137df2c348a5dc0c6b2bfee718ecd34555841cd4803fb"
   },
   "testdata/port/ffi/mobilebind.json#/oracle#source_digest": {
@@ -748,7 +748,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "e5dcedee199d8d4d7a7afddedc39060d3315586e9d0274d63809ca1e292e0eee"
   },
   "testdata/port/import/cxf.json#/oracle#source_digest": {
@@ -790,7 +790,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "cdfe16fc91b76aeb8b14110e3546500feeab5766e09706b54854b560de3aa9a1"
   },
   "testdata/port/mcp/anomaly-detector.json#/oracle#source_digest": {
@@ -804,7 +804,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "fe47b7b9fc243adf1e4b077d31558f64122efe0b48fd6dc6b43361c696180a68"
   },
   "testdata/port/mcp/api-templates.json#/oracle#source_digest": {
@@ -874,7 +874,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "dd5554c133f811a3baa39cfc4e3f7262309952bc63a1140ebbad7f7e7f64ba06"
   },
   "testdata/port/mcp/clipboard-auto-clear.json#/oracle#source_hash": {
@@ -895,7 +895,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "be03305fb1800b3898bee47297d0657594b59355ee542c7f0bee3e16c003d0d2"
   },
   "testdata/port/mcp/copy-clipboard-linux.json#/oracle#source_hash": {
@@ -909,7 +909,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "f4e872751f222ce84892d178eeeb75dc60b3d98d851060f3c4e2c5b94754ee62"
   },
   "testdata/port/mcp/copy-clipboard.json#/oracle#source_hash": {
@@ -930,7 +930,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "117ecf807237c9d78d9bf7e1bb09d418c2fe8d6d607475b20df619bf0c02ba30"
   },
   "testdata/port/mcp/execute-api-https.json#/oracle#source_digest": {
@@ -944,7 +944,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "0f85ca2de5a6bae7c57c7f37263e6d92a07f7364d47011414c54d9cdd6edc9c7"
   },
   "testdata/port/mcp/execute-api-policy.json#/oracle#source_digest": {
@@ -958,7 +958,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "a698725a3af2982bdf95fd87de1b8e9656a5a4d8691bb0d8ba0d63194360dd01"
   },
   "testdata/port/mcp/execute-api-request.json#/oracle#source_digest": {
@@ -972,7 +972,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "cb5c5a5cc317d5cf33fc4f0fe73022511298fadab796820cb82d8dd3933e3646"
   },
   "testdata/port/mcp/execute-with-secret.json#/oracle#source_digest": {
@@ -986,7 +986,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "c0a20861accca99ad2af2b97338571c4e30ba861a50d69cf9f8320bd8abb4717"
   },
   "testdata/port/mcp/http-initialize.json#/oracle#source_digest": {
@@ -1000,7 +1000,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "67ad01aff1ef13e7621cb754698f32e6942c04a452b2da4deec946d7259d0718"
   },
   "testdata/port/mcp/http-ratelimit.json#/oracle#source_digest": {
@@ -1028,7 +1028,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "54597b3fbef9e2097fd46bbc64b715213a9014477f69bc77987a0e2949295190"
   },
   "testdata/port/mcp/perplexity.json#/oracle#source_hash": {
@@ -1049,7 +1049,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "54597b3fbef9e2097fd46bbc64b715213a9014477f69bc77987a0e2949295190"
   },
   "testdata/port/mcp/prepare-payment.json#/oracle#source_hash": {
@@ -1077,7 +1077,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "b27c284334b8e7ad7ac09cb016c5b65bb41eeca8dbf466b508fcb1a05c50e38d"
   },
   "testdata/port/mcp/secure-input.json#/oracle#source_hash": {
@@ -1350,7 +1350,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "9f1f5a81f983e54b241bd9486370382f10b8d045890e844be723d6dc659b0fd7"
   },
   "testdata/port/mcp/tools-sharing.json#/oracle#source_hash": {
@@ -1385,7 +1385,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "7f2896f51ee99c7c7d09be2b1899f1a1d502fc41e3c7667f0ea0d195d3eddf7a"
   },
   "testdata/port/mcp/write-tty-approval.json#/oracle#source_hash": {
@@ -1420,7 +1420,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "71595dc629c7de9b50aa33755bbc3fc69ef38afc1119ef11ba5bd3410dd92b44"
   },
   "testdata/port/pairing/contract.json#/oracle#source_digest": {
@@ -1491,7 +1491,7 @@
    "class": "recorded",
    "algo": "claimed",
    "ref": null,
-   "value": "54a924edc9e3dcc2a828b2884cdd84c7e0ab0b474b5dda7befbe00f7143290f8"
+   "value": "52f3932e5b24744fda9b7d9a1cd0a4450fd725aa7c6bb704a34a6bd2189283a3"
   },
   "testdata/port/platform/get_clipboard.json#/#source_hash": {
    "kind": "source",
@@ -1505,7 +1505,7 @@
    "class": "recorded",
    "algo": "claimed",
    "ref": null,
-   "value": "a7350d68af26b6d0235bec3ba20032d28aae8052b069f0371f3d47cafd36f796"
+   "value": "3f1309cf629d8c34291f7363fab4699728acf3ff9ad21e0ba5d6ad2208e571ae"
   },
   "testdata/port/platform/get_clipboard_darwin.json#/#source_hash": {
    "kind": "source",
@@ -1518,8 +1518,8 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-nonul",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
-   "value": "2d5cc4132d362a12a12e31bbadb6da99eb09ece162e3070b8c71f5ecd02dd636"
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
+   "value": "5b5a1046bc58ca22e76251cdf1e8314227cc3c25d5305f5749a9f662c8da5c97"
   },
   "testdata/port/platform/get_clipboard_linux.json#/oracle#source_hash": {
    "kind": "source",
@@ -1644,7 +1644,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance-sorted",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "44c716fabcb5ca392740d7ad4e765955c5b4dfc54ba27c62e536cbb923fd819a"
   },
   "testdata/port/store/store.json#/oracle#source_digest": {
@@ -1658,7 +1658,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "81b44be714ba8026ff8e2b2cd3ade27079d022dc59a02062f7ec7a757b4c9011"
   },
   "testdata/port/store/store004_manifest_failure.json#/oracle#source_digest": {
@@ -1756,7 +1756,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "1202752f922c7d1b1d078ea59afd1c404ec8daa45e20d7bd196324948b5c56fa"
   },
   "testdata/port/sync/portable.json#/oracle#source_digest": {
@@ -1798,7 +1798,7 @@
    "kind": "generator",
    "class": "recomputed",
    "algo": "provenance",
-   "ref": "c069d3f2b17d704525cedc1bd42840cc6a3e9896",
+   "ref": "4f9bd5790d5a35f5923e385b1ede1570880315e6",
    "value": "1202752f922c7d1b1d078ea59afd1c404ec8daa45e20d7bd196324948b5c56fa"
   },
   "testdata/port/sync/sync.json#/oracle#source_digest": {
