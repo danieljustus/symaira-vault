@@ -199,8 +199,10 @@ def mask_audit(rows, drop_ids=False):
                 if drop_ids:
                     continue
                 value = '<req>'
-            elif key == 'token_id' and drop_ids:
-                continue
+            elif key == 'token_id':
+                if drop_ids:
+                    continue
+                value = re.sub(r'tok-\d{8}-[0-9a-f]{8}', 'tok-19700101-00000000', value)   # the recording stores the id normalised
             out.append([key, value])
         keys = [k for k, _ in out]
         if not drop_ids:
