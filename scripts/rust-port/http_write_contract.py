@@ -23,7 +23,7 @@ from http_framing_contract import INITIALIZE, PING, PING_BODY, assert_response
 from http_head_contract import parse_response
 from http_oauth_contract import PASSPHRASE, PROBE, Server
 from http_process_contract import SECRET, request
-from http_tls_contract import IDENTITY, NativeServer, context, exchange as tls_exchange
+from http_tls_contract import IDENTITY, EmptyTLSResponse, NativeServer, context, exchange as tls_exchange
 from http_head_contract import exchange as tcp_exchange
 from http_tls_contract import secure_identities
 from mcp_process_contract import (ORACLE, ROOT, add_capture_arguments, bounded, canonical_close, capture_arguments_ok, checked,
@@ -64,6 +64,41 @@ def budget_seconds(budget):
 
 class OutputPreconditionUnmet(Exception):
     """The slow-read phase never saw progressing output, so no write-deadline verdict exists for this attempt."""
+
+
+# The plain request/response exchanges (initialize, ping-before, ping-after) are not deadline probes, but the server
+# applies the profile's write budget to them as well: a TLS handshake must finish within min(read, write) and a
+# response must be written within the write budget measured from the request head. The *-short profiles use 1s. If
+# the process or its CPU is stalled for longer than that between accept and the first response byte (a starved
+# docker VM: observed as ConnectionResetError in the TLS handshake and in the TCP recv at the 1s profiles), the
+# server correctly closes the connection before a response exists. Both Go and Rust do (re-observed on Linux by
+# SIGSTOPping the server for 1.3s mid-handshake: Go answers EOF, Rust a reset, TLS 1.3 Go may even finish). That is
+# a precondition failure of the exchange, not a verdict, so the whole profile is re-run on fresh state, like the
+# output probes. A server that closes every attempt, dies, or sends part of a response still fails.
+EXCHANGE_ATTEMPTS=3
+
+
+class ExchangeStarved(Exception):
+    """A live server closed the connection before any response byte: no verdict exists for this attempt."""
+
+    def __init__(self,details):
+        super().__init__(details);self.details=details
+
+
+def received_bytes(row):
+    return base64.b64decode(row.get('raw_base64') or row.get('received_base64') or '')
+
+
+def starved_exchange(server,binary,profile,case,row,exchange):
+    """Run one plain exchange; classify a pre-response close by a still-running server as ExchangeStarved."""
+    started=time.monotonic()
+    try:return exchange()
+    except (ConnectionError,ssl.SSLEOFError,EmptyTLSResponse,ValueError) as error:
+        # ValueError: parse_response() of an empty buffer, i.e. a clean close without a single byte.
+        if server.child.poll() is not None or received_bytes(row):raise
+        raise ExchangeStarved(dict(binary=Path(str(binary)).name,profile=profile,case=case,error_type=type(error).__name__,
+                                   error=str(error)[:200],elapsed_seconds=time.monotonic()-started,
+                                   load_average=os.getloadavg() if hasattr(os,'getloadavg') else None)) from error
 
 
 def output_progressing(output):
@@ -275,7 +310,7 @@ def observe(binary,home,port,tokens,identities,profile,version,result,budget=30)
             data=request('/mcp',port,tokens,body=body)
             row=dict(case=name,request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),response={})
             result['rows'].append(row)
-            row['response'].update(tls_exchange(port,data,tls,row,timeout=EXCHANGE_TIMEOUT) if tls else tcp_exchange(port,data,row,timeout=EXCHANGE_TIMEOUT))
+            row['response'].update(starved_exchange(server,binary,profile,name,row,lambda:tls_exchange(port,data,tls,row,timeout=EXCHANGE_TIMEOUT) if tls else tcp_exchange(port,data,row,timeout=EXCHANGE_TIMEOUT)))
             assert row['response']['status_line']=='HTTP/1.1 200 OK'
         late_body(port,tokens,tls,result['late_body'])
         if tls and profile!='tls-output':handshake_peer(port,tls,result['handshake_peer'])
@@ -284,7 +319,7 @@ def observe(binary,home,port,tokens,identities,profile,version,result,budget=30)
             if not output_progressing(result['slow_output']):raise OutputPreconditionUnmet(profile)
         data=request('/mcp',port,tokens,body=PING)
         row=dict(case='ping-after',request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),response={})
-        result['rows'].append(row);row['response'].update(tls_exchange(port,data,tls,row,timeout=EXCHANGE_TIMEOUT) if tls else tcp_exchange(port,data,row,timeout=EXCHANGE_TIMEOUT))
+        result['rows'].append(row);row['response'].update(starved_exchange(server,binary,profile,'ping-after',row,lambda:tls_exchange(port,data,tls,row,timeout=EXCHANGE_TIMEOUT) if tls else tcp_exchange(port,data,row,timeout=EXCHANGE_TIMEOUT)))
         assert_response(row['response'],200,PING_BODY)
         known=[SECRET,PASSPHRASE]+list(tokens.values())
         responses=[base64.b64decode(r['response']['raw_base64']) for r in result['rows']]+[base64.b64decode(result['late_body']['received_base64'])]
@@ -412,14 +447,24 @@ def capture(args):
                 shutil.copytree(base / 'seed-base/vault', seed_home / 'vault')
                 (seed_home / 'vault/config.yaml').write_bytes(base64.b64decode(prior_config))
                 snapshot = vault_snapshot(seed_home / 'vault')
-                home = base / ('go-' + profile + '-' + tried)
-                home.mkdir()
-                shutil.copytree(seed_home / 'vault', home / 'vault')
-                assert vault_snapshot(home / 'vault') == snapshot
-                result = dict(rows=[], processes=[], late_body={}, handshake_peer={}, slow_output={})
                 print(f'capture-go: {profile} write budget {tried}', file=sys.stderr, flush=True)
                 try:
-                    observe(session['go'], home, PORT, tokens, identities, profile, version, result, budget_seconds(tried))
+                    for attempt in range(EXCHANGE_ATTEMPTS):
+                        # A host stall longer than the profile's 1s budget between accept and the first response byte makes the
+                        # Go server close the exchange: no verdict exists for that attempt, so it is repeated on fresh state and
+                        # never recorded (only a completed observation is).
+                        home = base / ('go-' + profile + '-' + tried + '-' + str(attempt))
+                        home.mkdir()
+                        shutil.copytree(seed_home / 'vault', home / 'vault')
+                        assert vault_snapshot(home / 'vault') == snapshot
+                        result = dict(rows=[], processes=[], late_body={}, handshake_peer={}, slow_output={})
+                        try:
+                            observe(session['go'], home, PORT, tokens, identities, profile, version, result, budget_seconds(tried))
+                            break
+                        except ExchangeStarved as starved:
+                            print(f'capture-go: {profile} attempt {attempt} starved: {starved.details}', file=sys.stderr, flush=True)
+                            if attempt == EXCHANGE_ATTEMPTS - 1:
+                                raise
                 except OutputPreconditionUnmet:
                     recorded[profile][tried] = dict(unmet=True, fixture_snapshot=snapshot)
                     continue
@@ -479,25 +524,29 @@ def main():
             for profile,budget,version in profiles:
                 output_profile=profile in {'tcp-output','tls-output'}
                 unmet=[]
-                for tried in (OUTPUT_BUDGETS if output_profile else (budget,)):
+                # The recorded Go row is fixed: only the live Rust side is repeated (fresh dirs per attempt), and only when a
+                # live server closed a plain exchange before any response byte (ExchangeStarved, bounded by EXCHANGE_ATTEMPTS).
+                for tried,attempt in [(t,a) for t in (OUTPUT_BUDGETS if output_profile else (budget,)) for a in range(1 if output_profile else EXCHANGE_ATTEMPTS)]:
                     entry=recorded['profiles'][profile][tried]
                     if entry['unmet']:
                         unmet.append(dict(write_budget=tried,implementation='go',recorded_unmet=True));continue
-                    seed_home=base/('seed-'+profile+'-'+tried)
+                    seed_home=base/('seed-'+profile+'-'+tried+'-'+str(attempt))
                     tokens=replay_seed(recorded,'base',seed_home)
                     (seed_home/'vault/config.yaml').write_bytes(base64.b64decode(recorded['configs'][profile+'-'+tried]))
                     snapshot=vault_snapshot(seed_home/'vault');assert snapshot==entry['fixture_snapshot'],'recorded seed vault bytes changed'
                     receipt['profiles'][profile]=dict(write_budget=tried,fixture_snapshot=snapshot,unmet_precondition_attempts=unmet)
                     receipt['go'][profile]=entry['go'];receipt['declared_differences']+=entry['declared']
-                    home=base/('rust-'+profile+'-'+tried);home.mkdir();shutil.copytree(seed_home/'vault',home/'vault');assert vault_snapshot(home/'vault')==snapshot
+                    home=base/('rust-'+profile+'-'+tried+'-'+str(attempt));home.mkdir();shutil.copytree(seed_home/'vault',home/'vault');assert vault_snapshot(home/'vault')==snapshot
                     result=dict(rows=[],processes=[],late_body={},handshake_peer={},slow_output={});receipt['rust'][profile]=result
                     try:observe(rust,home,port,tokens,identities,profile,version,result,budget_seconds(tried))
                     except OutputPreconditionUnmet:
                         so=result['slow_output'];unmet.append(dict(write_budget=tried,implementation='rust',slow_read_calls=so['slow_read_calls'],
                             slow_received_bytes=so['slow_received_bytes'],first_byte_seconds=so.get('first_byte_seconds'),load_average_before=so.get('load_average_before')))
                         continue
+                    except ExchangeStarved as starved:
+                        unmet.append(dict(write_budget=tried,implementation='rust',exchange_starved=starved.details));continue
                     break
-                else:assert False,'actual progressing output required'
+                else:assert False,f'no attempt of {profile} produced a verdict (actual progressing output / uninterrupted exchanges required): {unmet}'
             for profile,budget,version in profiles:
                 a,b=receipt['go'][profile],receipt['rust'][profile]
                 assert len(a['rows'])==len(b['rows'])==3

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Synthetic socket-error controls, not native deadline acceptance evidence."""
+import base64
 import copy
 import io
 import ssl
@@ -687,6 +688,65 @@ class StarvedOutputPrecondition(unittest.TestCase):
         _, _, exchanged, _ = self.observe(dict(slow_read_calls=5, slow_received_bytes=8192, received_base64=''))
         for call in exchanged.call_args_list:
             self.assertEqual(call.kwargs['timeout'], contract.EXCHANGE_TIMEOUT)
+
+
+class StarvedExchange(unittest.TestCase):
+    """A live server closing a plain exchange before any response byte is a starved attempt, nothing else is."""
+
+    def server(self, alive=True):
+        server = mock.Mock()
+        server.child.pid = 1
+        server.child.poll.return_value = None if alive else 1
+        return server
+
+    def classify(self, error, row, alive=True):
+        def exchange():
+            raise error
+        try:
+            contract.starved_exchange(self.server(alive), '/x/bin/symvault', 'tls12-short', 'initialize', row, exchange)
+        except BaseException as caught:
+            return caught
+        self.fail('exchange error was swallowed')
+
+    def test_reset_before_any_byte_by_a_live_server_is_starved(self):
+        for error in [ConnectionResetError(104, 'reset'), ssl.SSLEOFError(8, 'eof'), http_tls_contract.EmptyTLSResponse('empty'),
+                      ValueError('not enough values to unpack')]:
+            caught = self.classify(error, dict(raw_base64=''))
+            self.assertIsInstance(caught, contract.ExchangeStarved, error)
+            self.assertEqual(caught.details['binary'], 'symvault')
+            self.assertEqual(caught.details['profile'], 'tls12-short')
+            self.assertEqual(caught.details['case'], 'initialize')
+            self.assertEqual(caught.details['error_type'], type(error).__name__)
+
+    def test_partial_response_dead_server_and_other_errors_still_fail(self):
+        partial = dict(raw_base64=base64.b64encode(b'HTTP/1.1 200 OK\r\n').decode())
+        reset = ConnectionResetError(104, 'reset')
+        self.assertIs(self.classify(reset, partial), reset)
+        self.assertIs(self.classify(reset, dict(raw_base64=''), alive=False), reset)
+        tls_partial = dict(received_base64=base64.b64encode(b'x').decode())
+        self.assertIs(self.classify(reset, tls_partial), reset)
+        other = AssertionError('status')
+        self.assertIs(self.classify(other, dict(raw_base64='')), other)
+
+    def test_successful_exchange_is_returned_unchanged(self):
+        response = {'status_line': 'HTTP/1.1 200 OK'}
+        self.assertIs(contract.starved_exchange(self.server(), 'b', 'p', 'c', {}, lambda: response), response)
+
+    def test_attempts_are_bounded_and_repeat_the_same_budget(self):
+        self.assertGreaterEqual(contract.EXCHANGE_ATTEMPTS, 2)
+        self.assertLessEqual(contract.EXCHANGE_ATTEMPTS, 3)
+
+    def test_observe_reports_a_starved_plain_exchange(self):
+        server = self.server()
+        reset = mock.Mock(side_effect=ConnectionResetError(104, 'reset'))
+        result = dict(rows=[], processes=[], late_body={'received_base64': ''}, handshake_peer={}, slow_output={})
+        with mock.patch.object(contract, 'Server', return_value=server), \
+                mock.patch.object(contract, 'request', return_value=b'GET'), \
+                mock.patch.object(contract, 'tcp_exchange', reset):
+            with self.assertRaises(contract.ExchangeStarved) as caught:
+                contract.observe('bin', 'home', 1, {}, None, 'tcp-short', None, result, 1)
+        self.assertEqual(caught.exception.details['case'], 'initialize')
+        server.close.assert_called_once()
 
 
 if __name__ == '__main__':
