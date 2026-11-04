@@ -311,14 +311,13 @@ def vault_snapshot(root):
         if path.is_file():
             data = path.read_bytes()
             entry = {'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
-            rebased = _REBASED.get(str(path.resolve()))
-            if rebased and rebased['now_sha256'] == entry['sha256']:
-                entry = dict(rebased['recorded'])   # still the working copy we rebased: report the recorded bytes
+            if entry['sha256'] in _REBASED:
+                entry = dict(_REBASED[entry['sha256']])   # byte-identical copy of a registry we rebased: report the recorded bytes
             result[path.relative_to(root).as_posix()] = entry
     return result
 
 
-_REBASED = {}   # resolved path -> {'now_sha256', 'recorded': {'bytes', 'sha256'}} of token registries rebased by rebase_token_clock
+_REBASED = {}   # sha256 of a rebased token registry -> {'bytes', 'sha256'} of the recorded bytes it was rebased from
 
 
 # ---------------------------------------------------------------------------
@@ -545,8 +544,7 @@ def rebase_token_clock(path, now=None):
     rebased = (json.dumps(document, indent=2) + '\n').encode()
     Path(path).write_bytes(rebased)
     # vault_snapshot keeps reporting the recorded bytes for this untouched working copy (the seed-bytes assertion).
-    _REBASED[str(Path(path).resolve())] = dict(now_sha256=hashlib.sha256(rebased).hexdigest(),
-                                               recorded=dict(bytes=len(original), sha256=hashlib.sha256(original).hexdigest()))
+    _REBASED[hashlib.sha256(rebased).hexdigest()] = dict(bytes=len(original), sha256=hashlib.sha256(original).hexdigest())
 
 
 def bounded(value, lower, upper, what):
