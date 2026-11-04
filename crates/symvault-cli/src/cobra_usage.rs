@@ -618,13 +618,26 @@ fn arity_message(path: &str, count: usize, flags: ValidatorFlags) -> Option<Stri
 /// The format the gate refuses for this command, if any: `--json` wins over
 /// `--output`, exactly like the persistent flags it models.
 fn refused_format(path: &str, json_flag: bool, output: Option<&str>) -> Option<String> {
-    if json_flag && JSON_REFUSED.contains(&path) {
+    // cobra's generated `completion <shell>` commands support no other format.
+    let builtin = path.starts_with("completion ");
+    if json_flag && (builtin || JSON_REFUSED.contains(&path)) {
         return Some("json".to_owned());
     }
     output
         .filter(|value| *value != "text")
-        .filter(|_| OUTPUT_REFUSED.contains(&path))
+        .filter(|_| builtin || OUTPUT_REFUSED.contains(&path))
         .map(str::to_owned)
+}
+
+/// The shells cobra generates a `completion <shell>` subcommand for.
+const COMPLETION_SHELLS: &[&str] = &["bash", "fish", "powershell", "zsh"];
+
+/// `completion <shell>` for the `completion` command with a shell positional:
+/// the command cobra actually runs.
+fn completion_shell(path: &str, positionals: &[String]) -> Option<String> {
+    let shell = positionals.first()?;
+    (path == "completion" && COMPLETION_SHELLS.contains(&shell.as_str()))
+        .then(|| format!("completion {shell}"))
 }
 
 /// Cobra's `validateRequiredFlags` message, if a required flag is unset.
@@ -1595,13 +1608,17 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
     if let Some(message) = arity_message(&path_text, parsed.positionals.len(), parsed.validator) {
         return fail(&message, 1);
     }
-    if let Some(format) = refused_format(&path_text, parsed.json_flag, parsed.output.as_deref()) {
-        return fail(&gate_message(&format, &path_text), 9);
+    // `completion <shell>` is cobra's built-in subcommand: the gate and the
+    // agent check see its full path. `completion` alone only prints group help.
+    let shell_path = completion_shell(&path_text, &parsed.positionals);
+    let command_path = shell_path.as_deref().unwrap_or(&path_text);
+    if let Some(format) = refused_format(command_path, parsed.json_flag, parsed.output.as_deref()) {
+        return fail(&gate_message(&format, command_path), 9);
     }
     // Root PersistentPreRunE's last step: the agent-mode gate, before cobra's
-    // required-flag validation. `completion` without a shell prints group help.
+    // required-flag validation.
     if required
-        && !(path_text == "completion" && parsed.positionals.is_empty())
+        && !(path_text == "completion" && shell_path.is_none())
         && let Some(message) = crate::agent_gate::preflight(
             &path_text,
             parsed.vault.as_deref(),

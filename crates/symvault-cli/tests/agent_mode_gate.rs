@@ -698,3 +698,47 @@ fn agent_gate_resolves_help_tokens_like_pflag() {
         assert_eq!(code, Some(1), "ghost {args:?} is a usage error");
     }
 }
+
+/// cobra's generated `completion <shell>` commands support no output format;
+/// the format gate runs before the agent check.
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_completion_shells_refuse_output_formats_first() {
+    let (_oracle, pair) = Pair::new("agent_gate_completion_shells_refuse_output_formats_first");
+    pair.set_config(&Config::Text(PROFILES));
+    let none = Opts::default();
+    for shell in ["bash", "zsh", "fish", "powershell"] {
+        for format in [
+            &["--json"][..],
+            &["--output", "json"],
+            &["--output", "yaml"],
+        ] {
+            let mut args = vec!["completion", shell];
+            args.extend_from_slice(format);
+            for agent in [Some("ghost"), Some("alpha"), None] {
+                let (code, stderr) = pair.check(&format!("{agent:?} {args:?}"), &args, agent, none);
+                assert_eq!(code, Some(9), "{agent:?} {args:?}");
+                assert!(stderr.contains(&format!("'symvault completion {shell}'")));
+            }
+        }
+        // `--output text` is the default: the agent gate decides.
+        let (code, _) = pair.check(
+            &format!("ghost {shell} text"),
+            &["completion", shell, "--output", "text"],
+            Some("ghost"),
+            none,
+        );
+        assert_eq!(code, Some(5));
+    }
+    // Without a shell the group only prints help, gate and agent alike.
+    for args in [
+        &["completion", "--json"][..],
+        &["completion", "nosuch"],
+        &["completion", "bash", "extra"],
+    ] {
+        pair.check(&format!("ghost {args:?}"), args, Some("ghost"), none);
+    }
+}
