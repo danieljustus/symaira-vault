@@ -12,6 +12,7 @@ mod go_oracle;
 
 use std::{
     collections::BTreeMap,
+    ffi::OsString,
     fs,
     path::{Path, PathBuf},
     process::{Command, Output},
@@ -102,11 +103,34 @@ impl Side {
         text.replace("{ROOT}", &self.root.path().to_string_lossy())
     }
 
+    /// An argument with `{ROOT}` replaced and every `{FF}` turned into the
+    /// byte 0xFF (not UTF-8).
+    fn argument(&self, text: &str) -> OsString {
+        let text = self.substitute(text);
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            let mut bytes = Vec::new();
+            let mut rest = text.as_str();
+            while let Some(at) = rest.find("{FF}") {
+                bytes.extend_from_slice(&rest.as_bytes()[..at]);
+                bytes.push(0xFF);
+                rest = &rest[at + 4..];
+            }
+            bytes.extend_from_slice(rest.as_bytes());
+            OsString::from_vec(bytes)
+        }
+        #[cfg(not(unix))]
+        {
+            OsString::from(text.replace("{FF}", "\u{FFFD}"))
+        }
+    }
+
     fn run(&self, args: &[&str], agent: Option<&str>, opts: Opts<'_>) -> Output {
         let home = self.home.path();
         let mut command = Command::new(&self.binary);
         command
-            .args(args.iter().map(|arg| self.substitute(arg)))
+            .args(args.iter().map(|arg| self.argument(arg)))
             .env("HOME", home)
             .env("USERPROFILE", home)
             .env("XDG_CONFIG_HOME", home.join("config"))
@@ -697,6 +721,56 @@ fn agent_gate_resolves_help_tokens_like_pflag() {
         let (code, _) = pair.check(&format!("ghost {args:?}"), args, ghost, none);
         assert_eq!(code, Some(1), "ghost {args:?} is a usage error");
     }
+}
+
+/// An argument that is not UTF-8 must not skip the gate.
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_covers_non_utf8_arguments() {
+    let (_oracle, pair) = Pair::new("agent_gate_covers_non_utf8_arguments");
+    pair.set_config(&Config::Text(PROFILES));
+    let ghost = Some("ghost");
+    let none = Opts::default();
+
+    for args in [
+        &["backup", "/tmp/{FF}.tar"][..],
+        &["get", "{FF}"],
+        &["list", "{FF}"],
+        &["list", "--output", "{FF}"],
+        &["add", "x", "--vault", "{FF}"],
+        &["list", "--vault", "/tmp/{FF}nov"],
+    ] {
+        let (code, _) = pair.check(&format!("ghost {args:?}"), args, ghost, none);
+        assert_eq!(code, Some(5), "ghost {args:?} is gated");
+    }
+    // Go's earlier stages still come first.
+    for (args, want) in [
+        (&["backup", "{FF}", "--json"][..], 9),
+        (&["add", "{FF}", "extra", "more"][..], 1),
+        (&["nosuch", "{FF}"][..], 1),
+    ] {
+        let (code, _) = pair.check(&format!("ghost {args:?}"), args, ghost, none);
+        assert_eq!(code, Some(want), "ghost {args:?}");
+    }
+    // Commands that need no vault are not gated.
+    for args in [&["version", "{FF}"][..], &["agent", "whoami", "{FF}"]] {
+        let (code, _) = pair.check(&format!("ghost {args:?}"), args, ghost, none);
+        assert_ne!(code, Some(5), "ghost {args:?} is not gated");
+    }
+    // A known agent passes the gate (and opens its log); with none set the
+    // command runs as before.
+    for agent in [Some("alpha"), None, Some("")] {
+        pair.check(
+            &format!("{agent:?} backup"),
+            &["backup", "/tmp/{FF}.tar"],
+            agent,
+            none,
+        );
+    }
+    assert!(pair.rust.listing().contains_key("audit-alpha.log"));
 }
 
 /// cobra's generated `completion <shell>` commands support no output format;

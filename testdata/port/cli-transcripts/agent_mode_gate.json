@@ -1591,6 +1591,519 @@
         }
       ]
     },
+    "agent_gate_covers_non_utf8_arguments": {
+      "seeds": [],
+      "calls": [
+        {
+          "key": "2ac918e3802d4fdcb55fb32f012085397206be79031b5b5a3e312cbe6637447d",
+          "request": {
+            "args": [
+              "backup",
+              "/tmp/�.tar"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "73bd0542f198a134e86d1c2840c483b5572efe45fa16736deeb9730a53020f3a",
+          "request": {
+            "args": [
+              "get",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "dee06fdd8bcc355adedcd8a56a6c9570c79c5cd60cab860572cec03f9d43faaa",
+          "request": {
+            "args": [
+              "list",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "374218755c726f2df495ef96151c7999b8e901430b18f323e8d630572e905caf",
+          "request": {
+            "args": [
+              "list",
+              "--output",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\nError: agent mode: agent \"ghost\" not found in config: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "a72529be3be9f6b8413fd56e83efc845297d606ec9ec68050e0d8013c43461b5",
+          "request": {
+            "args": [
+              "add",
+              "x",
+              "--vault",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "b64": "RXJyb3I6IGFnZW50IG1vZGU6IGxvYWQgY29uZmlnIGZyb20g/y9jb25maWcueWFtbDogb3BlbiD/L2NvbmZpZy55YW1sOiBubyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5OiBsb2FkIGNvbmZpZyBmcm9tIP8vY29uZmlnLnlhbWw6IG9wZW4g/y9jb25maWcueWFtbDogbm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQpFcnJvcjogYWdlbnQgbW9kZTogbG9hZCBjb25maWcgZnJvbSD/L2NvbmZpZy55YW1sOiBvcGVuIP8vY29uZmlnLnlhbWw6IG5vIHN1Y2ggZmlsZSBvciBkaXJlY3Rvcnk6IGxvYWQgY29uZmlnIGZyb20g/y9jb25maWcueWFtbDogb3BlbiD/L2NvbmZpZy55YW1sOiBubyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5Cg=="
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "42a9877ddb424439baddb0354c15a014280fb47ebca50826f5201a484a6d1d48",
+          "request": {
+            "args": [
+              "list",
+              "--vault",
+              "/tmp/�nov"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "b64": "RXJyb3I6IGFnZW50IG1vZGU6IGxvYWQgY29uZmlnIGZyb20gL3RtcC//bm92L2NvbmZpZy55YW1sOiBvcGVuIC90bXAv/25vdi9jb25maWcueWFtbDogbm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeTogbG9hZCBjb25maWcgZnJvbSAvdG1wL/9ub3YvY29uZmlnLnlhbWw6IG9wZW4gL3RtcC//bm92L2NvbmZpZy55YW1sOiBubyBzdWNoIGZpbGUgb3IgZGlyZWN0b3J5CkVycm9yOiBhZ2VudCBtb2RlOiBsb2FkIGNvbmZpZyBmcm9tIC90bXAv/25vdi9jb25maWcueWFtbDogb3BlbiAvdG1wL/9ub3YvY29uZmlnLnlhbWw6IG5vIHN1Y2ggZmlsZSBvciBkaXJlY3Rvcnk6IGxvYWQgY29uZmlnIGZyb20gL3RtcC//bm92L2NvbmZpZy55YW1sOiBvcGVuIC90bXAv/25vdi9jb25maWcueWFtbDogbm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeQo="
+            },
+            "exit_code": 5,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "06f3c7d29a1c22ace9457265b7dbb938d67c199c7a98741fe54cb68bfb7b7719",
+          "request": {
+            "args": [
+              "backup",
+              "�",
+              "--json"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: output format \"json\" is not supported by 'symvault backup' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault backup' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+            },
+            "exit_code": 9,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "eacaab2abb4283ae0948c124a0a93f6b773cd065df23f786fe9775871ae2d1cf",
+          "request": {
+            "args": [
+              "add",
+              "�",
+              "extra",
+              "more"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: accepts 1 arg(s), received 3\nError: accepts 1 arg(s), received 3\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "0a2f9da759fa1ca4e1a4a68a4ad76ba0187f0af957d8a14247b0cf91b2f348b6",
+          "request": {
+            "args": [
+              "nosuch",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: unknown command \"nosuch\" for \"symvault\"\nRun 'symvault --help' for usage.\nError: unknown command \"nosuch\" for \"symvault\"\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "b2839f7c10759b3cf9307f8dc4e213b55a7a07633e47151703410569ff0c0a6f",
+          "request": {
+            "args": [
+              "version",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": "symvault dev\n"
+            },
+            "stderr": {
+              "text": ""
+            },
+            "exit_code": 0,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "5a9507ee79e9e960b332c69befc30dd7c059f11c3ebf20d49515ff1784b46107",
+          "request": {
+            "args": [
+              "agent",
+              "whoami",
+              "�"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "ghost",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: agent \"ghost\" not found in config\nError: agent \"ghost\" not found in config\n"
+            },
+            "exit_code": 1,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "29a4de58aeb57f04f7f3b83f00fe8e2bb1176e2227eb12be9b50f880d7064692",
+          "request": {
+            "args": [
+              "backup",
+              "/tmp/�.tar"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "alpha",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": [
+            {
+              "root": 0,
+              "path": "audit-alpha.log",
+              "op": "file",
+              "mode": 384,
+              "content": {
+                "text": ""
+              }
+            }
+          ]
+        },
+        {
+          "key": "0c58a752ffac65f79739eaf98fb5b77041bee24bc70f560c0edcd10b8e0957e4",
+          "request": {
+            "args": [
+              "backup",
+              "/tmp/�.tar"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": null,
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        },
+        {
+          "key": "039c02fbce3434bf366edbceb46204e764db0ca1f4acfc3dd140e3032d4e5e4b",
+          "request": {
+            "args": [
+              "backup",
+              "/tmp/�.tar"
+            ],
+            "env": {
+              "CI": "1",
+              "HOME": "<ROOT:1>",
+              "NO_COLOR": "1",
+              "SYMVAULT_AGENT": "",
+              "SYMVAULT_PASSPHRASE": null,
+              "SYMVAULT_PROFILE": null,
+              "SYMVAULT_VAULT": "<ROOT:0>",
+              "USERPROFILE": "<ROOT:1>",
+              "XDG_CACHE_HOME": "<ROOT:1>/cache",
+              "XDG_CONFIG_HOME": "<ROOT:1>/config",
+              "XDG_DATA_HOME": "<ROOT:1>/data"
+            },
+            "cwd": null,
+            "stdin": null
+          },
+          "response": {
+            "stdout": {
+              "text": ""
+            },
+            "stderr": {
+              "text": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+            },
+            "exit_code": 3,
+            "signal": null
+          },
+          "fs_delta": []
+        }
+      ]
+    },
     "agent_gate_ordering_flags_and_output_modes": {
       "seeds": [],
       "calls": [

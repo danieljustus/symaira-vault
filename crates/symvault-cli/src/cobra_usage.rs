@@ -1716,16 +1716,56 @@ pub fn clap_arguments(args: Vec<std::ffi::OsString>, mut root: Command) -> Vec<s
     rewritten
 }
 
+/// Arguments that are not UTF-8 stay out of the emulation unless an agent is
+/// set (the regular parser reports them otherwise, as before). In agent mode the
+/// command must not run unless Go's pre-run would let it: the emulation runs on
+/// the lossy text of the arguments and every refusal it reaches (usage error,
+/// output-format gate, agent gate, unresolvable vault path) ends the process.
+/// Messages echo a non-UTF-8 argument with U+FFFD where Go prints the raw bytes.
+fn gate_non_utf8(
+    args: &[std::ffi::OsString],
+    root: Command,
+    agent_mode: bool,
+) -> Option<std::process::ExitCode> {
+    use std::io::Write;
+    if !agent_mode {
+        return None;
+    }
+    let lossy: Vec<String> = args
+        .iter()
+        .skip(1)
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    match evaluate_with_required(&lossy, root) {
+        Verdict::Fail { stderr, code } => {
+            let _ = std::io::stderr().write_all(stderr.as_bytes());
+            Some(std::process::ExitCode::from(code))
+        }
+        Verdict::Proceed | Verdict::GroupHelp(_) => None,
+    }
+}
+
 /// Runs the emulation on the process arguments and prints Go's diagnostic.
 /// `Some(code)` means the process must exit with `code`.
 pub fn check(args: &[std::ffi::OsString], root: Command) -> Option<std::process::ExitCode> {
+    check_with(args, root, crate::agent_gate::agent_active())
+}
+
+/// [`check`] with agent mode (`SYMVAULT_AGENT` non-empty) given explicitly.
+fn check_with(
+    args: &[std::ffi::OsString],
+    root: Command,
+    agent_mode: bool,
+) -> Option<std::process::ExitCode> {
     use std::io::Write;
     let strings: Option<Vec<String>> = args
         .iter()
         .skip(1)
         .map(|arg| arg.to_str().map(str::to_owned))
         .collect();
-    let strings = strings?;
+    let Some(strings) = strings else {
+        return gate_non_utf8(args, root, agent_mode);
+    };
     match evaluate_with_required(&strings, root) {
         Verdict::Proceed => None,
         Verdict::Fail { stderr, code } => {
@@ -1883,6 +1923,35 @@ mod tests {
             run(&["nosuch", "--help"]),
             Verdict::Fail { code: 1, .. }
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_arguments_are_checked_in_agent_mode_only() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt, process::ExitCode};
+        let args = |tail: &[&[u8]]| -> Vec<OsString> {
+            std::iter::once(OsString::from("symvault"))
+                .chain(tail.iter().map(|arg| OsString::from_vec(arg.to_vec())))
+                .collect()
+        };
+        // Go's usage error comes first (`add` takes one argument); the lossy
+        // text is enough to see it.
+        let usage = args(&[b"add", b"\xff", b"extra", b"more"]);
+        assert_eq!(
+            check_with(&usage, root(), true),
+            Some(ExitCode::from(1)),
+            "agent mode evaluates arguments that are not UTF-8"
+        );
+        assert_eq!(
+            check_with(&usage, root(), false),
+            None,
+            "no agent: unchanged"
+        );
+        // A command that would run (nothing for the emulation to refuse here)
+        // is left to the regular path, whichever mode.
+        let runs = args(&[b"get", b"\xff"]);
+        assert_eq!(check_with(&runs, root(), true), None);
+        assert_eq!(check_with(&runs, root(), false), None);
     }
 
     #[test]

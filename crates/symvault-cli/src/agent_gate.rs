@@ -54,6 +54,11 @@ pub(crate) fn requires_vault(path: &str) -> bool {
     !(in_exempt_tree || EXEMPT_COMMANDS.contains(&path))
 }
 
+/// Whether `SYMVAULT_AGENT` is set to a non-empty value (agent mode).
+pub(crate) fn agent_active() -> bool {
+    std::env::var_os(AGENT_ENV).is_some_and(|value| !value.is_empty())
+}
+
 /// Runs the gate for the command `path` with the `--vault` / `--profile` flag
 /// values the command line carries. Returns the error text (without the
 /// `Error: ` prefix) when the agent may not run.
