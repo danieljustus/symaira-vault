@@ -20,8 +20,8 @@ keyring-core = "=1.0.1"
 security-framework = { version = "=3.7.0", default-features = false, features = ["OSX_10_15"] }
 
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "=1.1.5", features = ["fs", "termios"] }
-signal-hook = "=0.4.5"
+rustix = { version = "=1.1.6", features = ["fs", "termios"] }
+signal-hook = "=0.4.6"
 
 [dev-dependencies]
 serde.workspace = true

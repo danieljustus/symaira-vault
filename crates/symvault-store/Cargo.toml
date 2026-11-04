@@ -14,10 +14,10 @@ serde.workspace = true
 serde_json.workspace = true
 hex = "=0.4.3"
 serde_yaml_ng = "=0.10.0"
-sha2 = "=0.11.0"
+sha2 = "=0.11.1"
 hmac = "=0.13.0"
 getrandom = "=0.4.3"
-rustix = { version = "=1.1.5", features = ["fs"] }
+rustix = { version = "=1.1.6", features = ["fs"] }
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 thiserror = "=2.0.21"
 time = { version = "=0.3.55", features = ["formatting", "parsing"] }
