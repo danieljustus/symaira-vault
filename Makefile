@@ -2174,7 +2174,9 @@ mcp-copy-clipboard-differential: mcp-copy-clipboard-fixtures-check mcp-clipboard
 
 .PHONY: mcp-secure-input-fixtures-check mcp-secure-input-differential
 mcp-secure-input-fixtures-check: mcp-ordered-fixtures-check
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/secure_input_unicode
+	# The Go IsPrint table check ran `go run secure_input_unicode`; Go is not needed any more: the table
+	# still has the bytes the Go check accepted (captured by go-observations-capture-other).
+	python3 scripts/rust-port/go_observations_common.py replay-checked secure-input-unicode --file crates/symvault-core/src/go_unicode_print_15.rs
 
 mcp-secure-input-differential: mcp-secure-input-fixtures-check
 	$(CARGO) test -p symvault-mcp --test secure_input_contract --locked
@@ -2291,6 +2293,7 @@ go-observations-capture-other-tests:
 	$(GO_OBS_HELPER_HTTP) capture-go-json sync-observations-syncgen -- $(GO) test -race ./scripts/rust-port/cmd/syncgen -count=1 -json
 	$(GO_OBS_HELPER_HTTP) capture-go-json sync-observations-backup -- $(GO) test -race ./cmd/admin -run '^TestCreateBackup_NormalizesTarMemberSeparators$$' -count=1 -json
 	$(GO_OBS_HELPER_HTTP) capture-checked sync-observations-fixtures --file testdata/port/sync/portable.json --file testdata/port/sync/git-io.json -- sh -c '$(GO) run ./scripts/rust-port/cmd/syncgen --portable --check --output testdata/port/sync/portable.json && $(GO) run ./scripts/rust-port/cmd/gitio --check --output testdata/port/sync/git-io.json'
+	$(GO_OBS_HELPER) capture-checked secure-input-unicode --file crates/symvault-core/src/go_unicode_print_15.rs -- $(GO) run ./scripts/rust-port/cmd/secure_input_unicode
 	$(GO_OBS_HELPER_HTTP) capture-go-text pairing-process-tree -- $(GO) test -count=1 -v ./scripts/rust-port/cmd/caserun ./scripts/rust-port/cmd/devicelistdriver ./scripts/rust-port/internal/diff
 	$(CARGO) build -p symvault-cli --bin symvault --locked
 	$(CARGO) build -p symvault-sync --example data_safety_probe --locked
