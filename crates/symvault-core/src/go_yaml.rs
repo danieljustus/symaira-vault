@@ -75,7 +75,13 @@ pub fn first_document_syntax_error(bytes: &[u8]) -> Option<String> {
     // nested block collections; libyaml, and so `serde_yaml_ng`, has no such
     // limit. Whichever failure comes first in the stream is the one Go reports.
     let depth = crate::go_yaml_depth::first_violation(bytes);
-    let mut documents = serde_yaml_ng::Deserializer::from_slice(bytes);
+    // Only what precedes the violation can win over it (a libyaml failure
+    // there is reported at an earlier index), so the rest of the stream is not
+    // handed to libyaml at all: it would be parsed in full, however deep.
+    let readable = depth.map_or(bytes, |violation| {
+        &bytes[..violation.offset.min(bytes.len())]
+    });
+    let mut documents = serde_yaml_ng::Deserializer::from_slice(readable);
     let found = documents.next().and_then(|first| {
         let error = IgnoredAny::deserialize(first).err()?;
         let text = syntax_error_text(&error).or_else(|| unknown_anchor_text(&error, bytes))?;
@@ -379,5 +385,25 @@ mod tests {
             "{HINT}"
         );
         assert_eq!(render(&anchor), None, "{HINT}");
+    }
+
+    #[test]
+    fn a_depth_violation_stops_the_read_and_an_earlier_failure_still_wins() {
+        // libyaml would parse all 100000 brackets; the read ends at level 10001.
+        let deep = format!("a: {}\n", "[".repeat(100_000));
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(first_document_syntax_error(deep.as_bytes()));
+        });
+        let found = receiver
+            .recv_timeout(std::time::Duration::from_secs(20))
+            .expect("the read did not stop at the depth violation");
+        assert_eq!(found.as_deref(), Some("yaml: exceeded max depth of 10000"));
+        // A libyaml failure before the violation is reported instead of it.
+        let early = format!("a: b: c\n{}\n", "[".repeat(10_001));
+        assert_eq!(
+            text(&early).as_deref(),
+            Some("yaml: mapping values are not allowed in this context")
+        );
     }
 }

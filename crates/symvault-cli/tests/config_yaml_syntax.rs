@@ -2061,3 +2061,105 @@ fn nesting_between_256_and_10000_is_open_only_for_get_and_set() {
         assert!(bytes.starts_with(b"a: ["));
     }
 }
+
+/// Runs `config validate` on `config` and fails when it has not exited after
+/// `seconds`; returns `(exit code, normalised stdout, normalised stderr)`.
+///
+/// The bound is independent of the build profile: it sits an order of magnitude
+/// above what a debug build needs and well below what the quadratic or
+/// whole-document behaviour it guards against needs.
+fn validate_within(seconds: u64, config: &[u8]) -> (i32, String, String) {
+    use std::{
+        io::Read,
+        process::Stdio,
+        time::{Duration, Instant},
+    };
+    let sandbox = Sandbox::new();
+    let path = sandbox.config_path();
+    fs::write(&path, config).expect("write isolated config");
+    let home = sandbox.root.join("home");
+    fs::create_dir_all(&home).expect("create isolated home");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_symvault"));
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with("SYMVAULT_") {
+            command.env_remove(name);
+        }
+    }
+    let mut child = command
+        .current_dir(&*sandbox.root)
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("XDG_CONFIG_HOME", sandbox.root.join("xdg-config"))
+        .env("XDG_DATA_HOME", sandbox.root.join("xdg-data"))
+        .env("XDG_CACHE_HOME", sandbox.root.join("xdg-cache"))
+        .env("CI", "1")
+        .env("NO_COLOR", "1")
+        .args(["config", "validate"])
+        .arg(&path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run symvault");
+    let mut stdout = child.stdout.take().expect("piped stdout");
+    let mut stderr = child.stderr.take().expect("piped stderr");
+    let out = std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        let _ = stdout.read_to_end(&mut buffer);
+        buffer
+    });
+    let err = std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        let _ = stderr.read_to_end(&mut buffer);
+        buffer
+    });
+    let deadline = Instant::now() + Duration::from_secs(seconds);
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("poll symvault") {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("config validate was still running after {seconds} s");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let stdout = sandbox.normalize(&out.join().expect("stdout reader"));
+    let stderr = sandbox.normalize(&err.join().expect("stderr reader"));
+    (status.code().unwrap_or(255), stdout, stderr)
+}
+
+/// A long run of blanks inside a plain scalar of a document big enough to be
+/// depth-scanned used to be rescanned from every blank (quadratic): a 400 KB
+/// config took over two minutes. Go reads it in well under a second.
+#[test]
+fn a_long_run_of_blanks_in_a_deep_config_validates_in_linear_time() {
+    let mut config = String::new();
+    for index in 0..11_000 {
+        config.push_str(&format!("k{index}: 1\n"));
+    }
+    config.push_str("last: x");
+    config.push_str(&" ".repeat(300_000));
+    config.push_str("y\n");
+    let (code, stdout, stderr) = validate_within(60, config.as_bytes());
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stdout, "Configuration is valid (__CONFIG__)\n");
+}
+
+/// A depth violation ends the read: libyaml (and so `serde_yaml_ng`) used to
+/// parse the rest of the stream in full, which took half a minute for 100000
+/// opening brackets in a debug build; Go stops at level 10001 in 0.02 s.
+#[test]
+fn a_depth_violation_does_not_make_the_rest_of_the_stream_expensive() {
+    let config = format!("a: {}\n", "[".repeat(100_000));
+    let (code, stdout, stderr) = validate_within(15, config.as_bytes());
+    assert_eq!(code, 6, "{stderr}");
+    assert_eq!(stdout, "");
+    assert_eq!(
+        stderr,
+        "Error: cannot load config from __CONFIG__: yaml: exceeded max depth of 10000: yaml: exceeded max depth of 10000\n\
+         Error: cannot load config from __CONFIG__: yaml: exceeded max depth of 10000: yaml: exceeded max depth of 10000\n\
+         Run 'symvault doctor' to diagnose and fix configuration issues.\n"
+    );
+}

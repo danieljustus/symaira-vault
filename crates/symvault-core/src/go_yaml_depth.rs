@@ -412,34 +412,69 @@ impl<'a> Scan<'a> {
         }
     }
 
-    /// A literal or folded scalar: the header line and every following line that
-    /// is blank or indented deeper than the enclosing block.
+    /// A literal or folded scalar, scanned the way
+    /// `yaml_parser_scan_block_scalar` does: the content indentation is the
+    /// explicit indentation indicator (`|2`, `>-3`) added to the enclosing
+    /// indentation, or else the widest indentation seen on the leading blank
+    /// lines and the first content line (never less than the enclosing
+    /// indentation plus one, nor 1). The scalar ends at the first line that
+    /// is indented less.
     fn block_scalar(&mut self) {
         let parent = self.indent;
-        self.skip_line();
         self.plain_open = false;
-        let content = (parent + 1).max(1);
-        loop {
-            let mut probe = self.pos;
-            // Step over the line break that ends the current line.
-            match self.bytes.get(probe) {
-                Some(b'\r') if self.bytes.get(probe + 1) == Some(&b'\n') => probe += 2,
-                Some(b'\r' | b'\n') => probe += 1,
-                _ => return,
+        self.advance();
+        // Chomping (`+`, `-`) and indentation (`1`-`9`) indicators, in either
+        // order.
+        let mut increment = 0_i64;
+        for _ in 0..2 {
+            match self.peek(0) {
+                Some(b'+' | b'-') => self.advance(),
+                Some(digit @ b'1'..=b'9') if increment == 0 => {
+                    increment = i64::from(digit - b'0');
+                    self.advance();
+                }
+                _ => break,
             }
-            let mut spaces = 0_i64;
-            while self.bytes.get(probe + usize::try_from(spaces).unwrap_or(0)) == Some(&b' ') {
-                spaces += 1;
-            }
-            let after = probe + usize::try_from(spaces).unwrap_or(0);
-            let blank = matches!(self.bytes.get(after), None | Some(b'\r' | b'\n'));
-            if !blank && spaces < content {
-                return;
-            }
-            while self.pos < probe {
+        }
+        self.skip_line();
+        // The line break that ends the header.
+        if self.at_break() {
+            self.advance();
+        }
+        let mut indent = match increment {
+            0 => 0,
+            n if parent >= 0 => parent + n,
+            n => n,
+        };
+        self.block_scalar_breaks(parent, &mut indent);
+        while i64::try_from(self.col).is_ok_and(|c| c == indent) && self.peek(0).is_some() {
+            self.skip_line();
+            if self.at_break() {
                 self.advance();
             }
-            self.skip_line();
+            self.block_scalar_breaks(parent, &mut indent);
+        }
+    }
+
+    /// yaml.v3's `yaml_parser_scan_block_scalar_breaks`: eats indentation and
+    /// empty lines, fixing `indent` from the widest indentation seen when it
+    /// is still unknown (`0`).
+    fn block_scalar_breaks(&mut self, parent: i64, indent: &mut i64) {
+        let mut widest = 0_i64;
+        loop {
+            while self.peek(0) == Some(b' ')
+                && (*indent == 0 || i64::try_from(self.col).is_ok_and(|c| c < *indent))
+            {
+                self.advance();
+            }
+            widest = widest.max(i64::try_from(self.col).unwrap_or(i64::MAX));
+            if !self.at_break() {
+                break;
+            }
+            self.advance();
+        }
+        if *indent == 0 {
+            *indent = widest.max(parent + 1).max(1);
         }
     }
 
@@ -455,7 +490,17 @@ impl<'a> Scan<'a> {
                     break;
                 }
                 Some(b':') if !in_flow && self.blank_at(1) => break,
-                Some(b' ' | b'\t') if self.hash_follows() => break,
+                Some(b' ' | b'\t') => {
+                    // Step over the whole run of blanks once; a `#` right
+                    // behind it starts a comment. (Looking ahead from every
+                    // blank of the run is quadratic in the run's length.)
+                    while matches!(self.peek(0), Some(b' ' | b'\t')) {
+                        self.advance();
+                    }
+                    if self.peek(0) == Some(b'#') {
+                        break;
+                    }
+                }
                 Some(b',' | b'[' | b']' | b'{' | b'}') if in_flow => break,
                 Some(b':') if in_flow && self.flow_indicator_at(1) => break,
                 Some(_) => self.advance(),
@@ -463,15 +508,6 @@ impl<'a> Scan<'a> {
         }
         self.allowed = false;
         self.plain_open = !in_flow && ended_at_break;
-    }
-
-    /// Blanks followed by `#`, where a comment starts.
-    fn hash_follows(&self) -> bool {
-        let mut at = 0;
-        while matches!(self.peek(at), Some(b' ' | b'\t')) {
-            at += 1;
-        }
-        self.peek(at) == Some(b'#')
     }
 
     fn flow_indicator_at(&self, ahead: usize) -> bool {
@@ -624,6 +660,98 @@ mod tests {
             document.push_str("  - more\n");
         }
         assert_eq!(first_violation(document.as_bytes()), None);
+    }
+
+    /// Runs `work` on its own thread and fails when it does not finish within
+    /// `seconds`; a quadratic scan of a megabyte would take minutes.
+    fn finishes_within<T: Send + 'static>(
+        seconds: u64,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> T {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(work());
+        });
+        receiver
+            .recv_timeout(std::time::Duration::from_secs(seconds))
+            .expect("the scan did not finish in time (quadratic?)")
+    }
+
+    /// More than `MAX_DEPTH` colons make the scanner walk the whole document.
+    fn walked(tail: &str) -> Vec<u8> {
+        let mut document = String::new();
+        for index in 0..=MAX_DEPTH {
+            document.push_str(&format!("k{index}: 1\n"));
+        }
+        document.push_str(tail);
+        document.into_bytes()
+    }
+
+    #[test]
+    fn a_long_run_of_blanks_in_a_plain_scalar_is_scanned_once() {
+        for blank in [" ", "\t", " \t"] {
+            let document = walked(&format!("tail: x{}y\n", blank.repeat(500_000)));
+            assert_eq!(
+                finishes_within(20, move || first_violation(&document)),
+                None
+            );
+        }
+        // A comment behind the run still ends the scalar, and a violation after
+        // it is still found.
+        let mut document = walked(&format!("tail: x{}# c\n", " ".repeat(500_000)));
+        document.extend(flow(10_001));
+        let found = finishes_within(20, move || first_violation(&document));
+        assert!(found.is_some());
+    }
+
+    #[test]
+    fn blanks_before_a_comment_end_the_plain_scalar() {
+        // `x ` + comment: the brackets in the comment are text.
+        let document = walked(&format!("tail: x   # {}\n", "[".repeat(10_001)));
+        assert_eq!(first_violation(&document), None);
+        // Without the comment marker they continue the scalar and are text
+        // too; either way no level is opened outside a flow collection.
+        let document = walked(&format!("tail: x   {}\n", "[".repeat(10_001)));
+        assert_eq!(first_violation(&document), None);
+    }
+
+    /// `header` and the line after it, then enough brackets to exceed the flow
+    /// limit: the brackets are scalar text when the scalar still covers their
+    /// line, and open flow levels (a violation) when it has ended before it.
+    fn brackets_after(header: &str) -> Vec<u8> {
+        format!("{header}{}\n", "[".repeat(10_001)).into_bytes()
+    }
+
+    #[test]
+    fn leading_blank_lines_set_the_block_scalar_indentation() {
+        // The widest leading blank line (8 spaces) is the indentation, as in
+        // yaml.v3: a line indented by 2 is not content ...
+        assert!(first_violation(&brackets_after("a: |\n        \n  ")).is_some());
+        assert!(first_violation(&brackets_after("a: |\n\n        \n    ")).is_some());
+        // ... and one indented by 8 is. Before, `parent + 1` made both text.
+        assert_eq!(
+            first_violation(&brackets_after("a: |\n        \n        ")),
+            None
+        );
+        // Without a wider blank line the first content line sets it.
+        assert_eq!(first_violation(&brackets_after("a: |\n\n  ")), None);
+        assert_eq!(first_violation(&brackets_after("a: |\n    \n    ")), None);
+    }
+
+    #[test]
+    fn an_explicit_indentation_indicator_fixes_the_block_scalar_indentation() {
+        // `|2` under a mapping at column 0 means content at column 2.
+        assert_eq!(first_violation(&brackets_after("a: |2\n  ")), None);
+        // `|4`: a line indented by only 2 has ended the scalar.
+        assert!(first_violation(&brackets_after("a: |4\n  ")).is_some());
+        assert_eq!(first_violation(&brackets_after("a: |4\n    ")), None);
+        // The indicator may come before or after the chomping indicator.
+        assert!(first_violation(&brackets_after("a: |-4\n  ")).is_some());
+        assert!(first_violation(&brackets_after("a: >4+\n  ")).is_some());
+        assert_eq!(first_violation(&brackets_after("a: >-2\n  ")), None);
+        // It counts from the enclosing indentation (here 2).
+        assert_eq!(first_violation(&brackets_after("x:\n  a: |3\n     ")), None);
+        assert!(first_violation(&brackets_after("x:\n  a: |4\n     ")).is_some());
     }
 
     #[test]
