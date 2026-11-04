@@ -1231,8 +1231,8 @@ worktree-prune-check:
 # This is the ONE target that needs Go: it builds the pinned Go oracle and re-records the Go half
 # (GOTOOLCHAIN=go1.26.6; run once per OS, on Linux inside the gate image). Two consecutive runs are
 # byte-identical; commit the changed files. CAPTURE_ARGS=--reseed regenerates the pinned seed vaults/identities.
-# A first capture on a new OS reuses the seeds of an existing OS (encrypted vaults are OS independent). The shutdown Go
-# tests and the toolhash first capture need the Rust CLI (AREA_BUILD_CLI) only as the Go test harness input.
+# A first capture on a new OS reuses the seeds of an existing OS (encrypted vaults are OS independent). Only the very first
+# toolhash capture (no observation on any OS yet) needs --rust once, to mint the Rust-issued token.
 GO_OBSERVATION_CAPTURES := \
 	http_framing_contract.py http_head_contract.py http_origin_contract.py http_slow_peer_contract.py \
 	http_timeout_contract.py http_tls_contract.py http_write_contract.py http_oauth_contract.py \
@@ -1248,12 +1248,11 @@ go-observations-capture-http: area-oracle-runner
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_ORACLE) $(AREA_PYTHON) -B scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)" --capture-go
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/test_http001init_isolation.py --capture-go
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/go_timestamp_fixtures.py --record-go
-	$(AREA_BUILD_CLI)
 	$(AREA_ENV) $(AREA_HTTP_GO) $(AREA_PYTHON) -B scripts/rust-port/mcp_http_shutdown_go_tests.py --capture-go
 	$(AREA_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-cli" .
 	$(AREA_GO) $(GO) build -trimpath -buildvcs=false -o "$(AREA_BIN)/toolhash-go-seed" ./scripts/rust-port/cmd/toolhashseed
 	$(AREA_ENV) $(AREA_GO) $(AREA_PYTHON) -B scripts/rust-port/toolhash_process_contract.py --capture-go \
-		--go-cli "$(AREA_BIN)/toolhash-go-cli" --go-seed "$(AREA_BIN)/toolhash-go-seed" --rust "$(AREA_CLI)" $(CAPTURE_ARGS)
+		--go-cli "$(AREA_BIN)/toolhash-go-cli" --go-seed "$(AREA_BIN)/toolhash-go-seed" $(CAPTURE_ARGS)
 
 http-framing-contract:
 	@mkdir -p "$(AREA_EVIDENCE)"

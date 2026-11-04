@@ -571,14 +571,15 @@ def main():
                     for name,count in selected.items():
                         if replay:
                             entry = lane_captures[name]
-                            if lane == 'historical':
-                                captured = historical_file(ROOT,name).read_bytes()
-                                if hashlib.sha256(captured).hexdigest() != entry['sha256']:
-                                    raise ValueError('recorded historical Go capture differs from the anchored bytes: '+name)
-                            else:
+                            if 'gzip_base64' in entry:
                                 captured = gzip.decompress(base64.b64decode(entry['gzip_base64']))
                                 if hashlib.sha256(captured).hexdigest() != entry['sha256']:
                                     raise ValueError('recorded Go capture is corrupt: '+name)
+                            else:
+                                assert lane == 'historical' and not (mapping is not None and name == APPROVAL_FIXTURE), ('capture bytes missing', lane, name)
+                                captured = historical_file(ROOT,name).read_bytes()
+                                if hashlib.sha256(captured).hexdigest() != entry['sha256']:
+                                    raise ValueError('recorded historical Go capture differs from the anchored bytes: '+name)
                         else:
                             captured=(tree/name).read_bytes()
                         (lane_out/Path(name).name).write_bytes(captured)
@@ -601,7 +602,7 @@ def main():
                         for name in selected:
                             data = (lane_out/Path(name).name).read_bytes()
                             entry = {'sha256': hashlib.sha256(data).hexdigest()}
-                            if lane != 'historical':
+                            if lane != 'historical' or (mapping is not None and name == APPROVAL_FIXTURE):   # regenerated on H: not the anchored bytes
                                 entry['gzip_base64'] = base64.b64encode(gzip.compress(data, 9, mtime=0)).decode()
                             entries[name] = entry
                         observed['lanes'][execution] = {

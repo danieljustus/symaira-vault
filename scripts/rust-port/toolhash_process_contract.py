@@ -42,7 +42,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from mcp_process_contract import (load_go_observations, pack_tree, provenance, save_go_observations,  # noqa: E402
+from mcp_process_contract import (load_go_observations, native_goos, pack_tree, provenance, save_go_observations,  # noqa: E402
                                   unpack_tree)
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -291,6 +291,13 @@ def capture(args):
     go_cli, go_seed = args.go_cli.resolve(), args.go_seed.resolve()
     recorded = json.loads(FIXTURE.read_text())['registry']['hash']
     prior = None if args.reseed else load_go_observations(CONTRACT, oracle=GO_SOURCE_COMMIT, required=False)
+    if prior is None and not args.reseed:
+        # Encrypted seed vaults and the minted tokens are OS independent: a first capture on another OS reuses them.
+        for other in ('darwin', 'linux'):
+            if other != native_goos():
+                prior = load_go_observations(CONTRACT, oracle=GO_SOURCE_COMMIT, required=False, goos=other)
+                if prior is not None:
+                    break
     prior = prior['data'] if prior else None
     with tempfile.TemporaryDirectory(prefix='symvault-toolhash-') as raw:
         base = Path(raw)
