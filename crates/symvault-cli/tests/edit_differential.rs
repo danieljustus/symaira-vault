@@ -56,8 +56,11 @@ fn edit_matches_go_editor_json_roundtrip_and_cleans_private_temp_file() {
     fs::create_dir_all(&home).expect("home");
     fs::create_dir_all(&fixture_dir).expect("fixtures");
 
-    // `init` generates random keys: frozen as a seed for replay.
-    if let Some(init) = oracle.seed("init", &[&root, &home], || {
+    // `init` generates random keys: the Rust init runs live in every mode and is
+    // compared with the recording (exit, output, file set, modes, structure);
+    // the recorded state is then installed so the recorded Go calls see what
+    // they saw on capture.
+    let init = oracle.seed_run("init", &[&root, &home], || {
         run(
             &rust_binary,
             &[
@@ -70,9 +73,8 @@ fn edit_matches_go_editor_json_roundtrip_and_cleans_private_temp_file() {
             &root,
             &home,
         )
-    }) {
-        assert_success(&init, "Rust init");
-    }
+    });
+    assert_success(&init, "Rust init");
 
     let set = run(
         &go_binary,
