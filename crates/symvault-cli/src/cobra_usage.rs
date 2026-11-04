@@ -1584,6 +1584,12 @@ fn evaluate_stages(args: &[String], mut root: Command, required: bool) -> Verdic
     // parse reached counts: `--tools --help` hands `--help` to `--tools` as its
     // value and the command runs.
     if parsed.help {
+        // A group prints its own help, also when the command line carries an
+        // unknown subcommand (`agent x -h=true`): cobra's `Find` leaves the group
+        // as the command that handles the help flag.
+        if GROUPS.contains(&path_text.as_str()) {
+            return Verdict::GroupHelp(path_text);
+        }
         return Verdict::Proceed;
     }
     if current.path.is_empty() {
@@ -2387,6 +2393,22 @@ mod tests {
         }
         // The format gate still decides without an extra argument.
         assert!(refused(&["completion", "bash", "--json"]));
+    }
+
+    /// A group prints its own help for a true help flag, an unknown subcommand
+    /// included.
+    #[test]
+    fn group_help_flag_wins_over_an_unknown_subcommand() {
+        for args in [
+            &["agent", "x", "-h=true"][..],
+            &["auth", "x", "--help=true"],
+            &["device", "x", "-h=true"],
+        ] {
+            assert!(
+                matches!(verdict(args), Verdict::GroupHelp(_)),
+                "{args:?} must print the group help"
+            );
+        }
     }
 
     fn refused(args: &[&str]) -> bool {

@@ -1087,3 +1087,54 @@ fn agent_gate_completion_shell_rejects_extra_arguments_first() {
         }
     }
 }
+
+/// A group handles the help flag itself, also for an unknown subcommand
+/// (`agent x -h=true`): help, exit 0, no agent check.
+#[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
+fn agent_gate_group_help_survives_an_unknown_subcommand() {
+    let (_oracle, pair) = Pair::new("agent_gate_group_help_survives_an_unknown_subcommand");
+    pair.set_config(&Config::Text(PROFILES));
+    let none = Opts::default();
+    for group in [
+        "agent",
+        "agent profile",
+        "agent skill",
+        "agent token",
+        "approval",
+        "auth",
+        "config",
+        "device",
+        "migrate",
+        "policy",
+        "profile",
+        "recipients",
+        "remote",
+        "share",
+        "template",
+    ] {
+        let words: Vec<&str> = group.split(' ').collect();
+        for tail in [
+            &["x", "-h=true"][..],
+            &["x", "--help=true"],
+            &["x", "-h"],
+            &["x", "y", "--help"],
+            &["-h=true"],
+            &["x", "-h=false"],
+        ] {
+            let mut args = words.clone();
+            args.extend_from_slice(tail);
+            for agent in [Some("ghost"), None] {
+                pair.check(&format!("{agent:?} {args:?}"), &args, agent, none);
+            }
+        }
+        // A true help flag is exit 0 with the agent gate out of the way.
+        let mut args = words.clone();
+        args.extend_from_slice(&["x", "-h=true"]);
+        let (code, _) = pair.check("ghost help", &args, Some("ghost"), none);
+        assert_eq!(code, Some(0), "{args:?}");
+    }
+}
