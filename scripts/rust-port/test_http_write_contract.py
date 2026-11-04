@@ -3,6 +3,7 @@
 import base64
 import copy
 import io
+import platform
 import ssl
 import subprocess
 import unittest
@@ -563,10 +564,14 @@ class WindowsGoTcpOutputDeclaredDifference(unittest.TestCase):
         self.assertEqual(source.count("'expired write resumed after fast client drain'"), 1)
         self.assertIn("else:assert output['received_chunk_bytes']<output['declared_chunk_length'],", source)
 
+    VALIDATOR = 'python3 scripts/rust-port/gate_area_check.py receipt target/native-http-write.json --profile http-write'
+
     def validator(self):
+        """The hosted workflow validates the receipt with the local gate's http-write profile."""
         text = (contract.ROOT / '.github/workflows/rust-http-write.yml').read_text(encoding='utf-8')
-        block = text.split("python3 - <<'CHECK'\n", 1)[1].split('\n          CHECK\n', 1)[0]
-        return '\n'.join(line[10:] for line in block.split('\n'))
+        self.assertIn(self.VALIDATOR, text)
+        return [contract.sys.executable, '-B', str(contract.ROOT / 'scripts/rust-port/gate_area_check.py'),
+                'receipt', 'target/native-http-write.json', '--profile', 'http-write']
 
     def receipt(self, native_os, commit, declared, rust_complete=False):
         profiles = ['tcp-five', 'tcp-short', 'tls12-short', 'tls13-short', 'tcp-output', 'tls-output']
@@ -604,28 +609,28 @@ class WindowsGoTcpOutputDeclaredDifference(unittest.TestCase):
             (base / 'target').mkdir()
             (base / 'target/native-http-write.json').write_text(contract.json.dumps(
                 self.receipt(native_os, commit, declared, rust_complete)), encoding='utf-8')
-            script = base / 'check.py'
-            script.write_text(self.validator(), encoding='utf-8')
-            return subprocess.run([contract.sys.executable, '-B', str(script)], cwd=base,
-                                           capture_output=True, text=True).returncode
+            return subprocess.run(self.validator(), cwd=base, capture_output=True, text=True).returncode
 
     def test_workflow_validator_is_platform_correct_and_never_exempts_rust(self):
         entry = contract.declared_write_difference('go', 'tcp-output', 'Windows', self.OUTPUT)
         assert entry is not None
-        self.assertEqual(self.run_validator('Linux', []), 0)
-        self.assertEqual(self.run_validator('Darwin', []), 0)
+        # The receipt must come from the host that validates it (the http-write profile checks native_os).
+        host = platform.system()
+        other = 'Darwin' if host == 'Linux' else 'Linux'
+        self.assertEqual(self.run_validator(host, []), 0)
+        self.assertNotEqual(self.run_validator(other, []), 0)
         # The Windows legs are dropped (ADR 0036): the hosted validator accepts Linux and Darwin only, so a Windows
         # receipt fails with or without the recorded declared difference.
         self.assertNotEqual(self.run_validator('Windows', [entry]), 0)
         self.assertNotEqual(self.run_validator('Windows', []), 0)
-        self.assertNotEqual(self.run_validator('Linux', [entry]), 0)
+        self.assertNotEqual(self.run_validator(host, [entry]), 0)
         self.assertNotEqual(self.run_validator('Windows', [entry, entry]), 0)
         self.assertNotEqual(self.run_validator('Windows', [{**entry, 'implementation': 'rust'}]), 0)
         self.assertNotEqual(self.run_validator('Windows', [{**entry, 'profile': 'tls-output'}]), 0)
         self.assertNotEqual(self.run_validator('Windows', [{**entry, 'reason': 'no reference'}]), 0)
         self.assertNotEqual(self.run_validator('Windows', [{**entry, 'received_chunk_bytes': 1}]), 0)
         self.assertNotEqual(self.run_validator('Windows', [entry], rust_complete=True), 0)
-        self.assertNotEqual(self.run_validator('Linux', [], rust_complete=True), 0)
+        self.assertNotEqual(self.run_validator(host, [], rust_complete=True), 0)
 
 
 class StarvedOutputPrecondition(unittest.TestCase):

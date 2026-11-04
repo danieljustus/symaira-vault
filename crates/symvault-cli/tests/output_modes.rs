@@ -2548,8 +2548,43 @@ fn touch_id_availability_matches_go_in_the_same_sandbox() {
     // The live Rust probe in the recorded sandbox must equal what the recording
     // host's Rust reported, which in turn equalled Go's answer there.
     let live = probe(&rust);
+    // A Mac whose sensor state differs from the recording host's (a hosted
+    // runner has no Touch ID) cannot reproduce the recorded value. There the
+    // live Rust answer must equal what LocalAuthentication itself reports on
+    // this host, asked independently of the binary.
+    let host = host_touch_id_available();
+    if attestation["rust"].as_bool() != Some(host) {
+        eprintln!(
+            "NOTE touch-id: this host reports {host}, the recording host {}; checking Rust against this host",
+            attestation["rust"]
+        );
+        assert_eq!(
+            live, host,
+            "live Rust touchIDAvailable={live} differs from this host's LocalAuthentication answer {host}"
+        );
+        return;
+    }
     if let Err(problem) = check_touch_id_attestation(&attestation, live) {
         panic!("{problem}");
+    }
+}
+
+/// `LAContext canEvaluatePolicy(DeviceOwnerAuthenticationWithBiometrics)` of
+/// this host, through JavaScript for Automation (no prompt).
+fn host_touch_id_available() -> bool {
+    let output = std::process::Command::new("/usr/bin/osascript")
+        .args(["-l", "JavaScript", "-e"])
+        .arg(
+            "ObjC.import('LocalAuthentication');\n\
+             var c = $.LAContext.alloc.init; var e = $();\n\
+             c.canEvaluatePolicyError(1, e) ? 'available' : 'unavailable';",
+        )
+        .output()
+        .expect("run osascript");
+    match String::from_utf8_lossy(&output.stdout).trim() {
+        "available" => true,
+        "unavailable" => false,
+        other => panic!("unexpected LocalAuthentication answer {other:?}: {output:?}"),
     }
 }
 
