@@ -59,6 +59,10 @@ fn help_for_known_subcommand_resolves_the_command_path() {
 const ORACLE_COMMIT: &str = go_oracle::CONFIG_CLI_ORACLE;
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn help_matches_recorded_go_command_tree() {
     let oracle = go_oracle::GoOracle::begin(
         "cli_help",

@@ -42,6 +42,10 @@ fn assert_success(output: &Output, command: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn edit_matches_go_editor_json_roundtrip_and_cleans_private_temp_file() {
     let oracle = go_oracle::GoOracle::begin(
         "edit_differential",

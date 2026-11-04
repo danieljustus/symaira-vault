@@ -12,6 +12,10 @@ fn run_flag(binary: &Path, topic: &[&str]) -> std::process::Output {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn dynamic_and_setup_help_match_pinned_go_bytes() {
     let oracle = go_oracle::GoOracle::begin(
         "cli_dynamic_setup_help",

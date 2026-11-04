@@ -132,6 +132,10 @@ fn no_biometric_flag_bypasses_the_gate() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn unavailable_branch_matches_the_no_touch_id_go_oracle() {
     let oracle = go_oracle::GoOracle::begin(
         "agent_upgrade_biometric",

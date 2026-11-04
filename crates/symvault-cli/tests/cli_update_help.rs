@@ -37,6 +37,10 @@ fn run(binary: &Path, args: &[&str], home: &Path) -> Output {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn update_help_matches_frozen_and_actual_go_without_accessing_vault_or_updater() {
     let home = tempfile::tempdir().expect("disposable HOME/XDG root");
     let oracle = go_oracle::GoOracle::begin(

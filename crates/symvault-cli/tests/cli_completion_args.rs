@@ -79,6 +79,10 @@ fn completion_word_shapes_follow_the_cobra_contract() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn completion_word_shapes_match_the_go_binary() {
     let oracle = go_oracle::GoOracle::begin(
         "cli_completion_args",

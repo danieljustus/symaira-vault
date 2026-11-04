@@ -44,6 +44,10 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_audit_matches_go_for_formats_filters_limits_and_missing_logs() {
     let oracle = go_oracle::GoOracle::begin(
         "agent_audit_differential",

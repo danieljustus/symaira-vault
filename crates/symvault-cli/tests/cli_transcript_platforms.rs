@@ -72,8 +72,10 @@ fn transcripts_declare_replay_platforms_and_tests_are_gated_accordingly() {
                     "{file}::{test}: unknown platform {platform}"
                 );
             }
-            let attributes = attributes_of(&source, test)
-                .unwrap_or_else(|| panic!("{file}: no test function `{test}` in {stem}.rs"));
+            // `<test>.<variant>` is a second recording of the same test function.
+            let function = test.split('.').next().unwrap_or(test);
+            let attributes = attributes_of(&source, function)
+                .unwrap_or_else(|| panic!("{file}: no test function `{function}` in {stem}.rs"));
             // rustfmt may split the attribute over several lines.
             let attribute_text = attributes.join(" ");
             let is_gated = attribute_text.contains("cfg_attr(")

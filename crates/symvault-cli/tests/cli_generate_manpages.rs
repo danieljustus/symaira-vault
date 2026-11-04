@@ -166,6 +166,10 @@ fn page_date(root: &Path) -> Vec<String> {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn empty_source_date_epoch_matches_the_go_default() {
     let (oracle, go_binary) = oracle("empty_source_date_epoch_matches_the_go_default");
     let go_root = TempDir::new().expect("go temp root");
@@ -190,6 +194,10 @@ fn empty_source_date_epoch_matches_the_go_default() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn source_date_epoch_uses_local_timezone_at_month_boundary() {
     let (oracle, go_binary) = oracle("source_date_epoch_uses_local_timezone_at_month_boundary");
     let go_root = TempDir::new().expect("go temp root");
@@ -240,6 +248,10 @@ fn page_names(root: &Path) -> BTreeSet<String> {
 /// header expectations are additionally spelled out in
 /// `assert_header_matches_oracle`.
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn generate_manpages_matches_the_go_oracle() {
     let (oracle, go_binary) = oracle("generate_manpages_matches_the_go_oracle");
     let go_binary = go_binary.as_path();

@@ -175,6 +175,10 @@ fn auth_keys(config: &[u8]) -> Value {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn set_auth_method_and_tools_list_match_the_go_oracle() {
     // The recording comes from a CGO_ENABLED=0 build of the pinned commit.
     let oracle = go_oracle::GoOracle::begin(

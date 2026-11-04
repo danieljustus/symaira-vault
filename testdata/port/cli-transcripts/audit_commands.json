@@ -8,6 +8,9 @@
     "vcs_modified": "false"
   },
   "platform_note": "recorded on darwin/arm64; replay on other hosts compares the live Rust binary against this recording and has not been separately verified there",
+  "replay_platforms": [
+    "macos"
+  ],
   "tests": {
     "audit_tail_filter_and_render_match_go_without_vault_access": {
       "seeds": [],

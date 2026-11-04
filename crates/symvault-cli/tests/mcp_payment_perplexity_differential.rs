@@ -308,6 +308,10 @@ fn visa(merchant: &str, amount: &str, currency: &str) -> Value {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn prepare_payment_and_perplexity_match_go_for_non_interactive_cases() {
     let oracle = go_oracle::GoOracle::begin(
         "mcp_payment_perplexity_differential",
@@ -519,6 +523,10 @@ fn prepare_payment_and_perplexity_match_go_for_non_interactive_cases() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn tools_list_with_all_tools_is_byte_identical_and_names_the_three_tools() {
     let oracle = go_oracle::GoOracle::begin(
         "mcp_payment_perplexity_differential",

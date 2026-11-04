@@ -31,6 +31,10 @@ fn assert_same(go: &Output, rust: &Output, args: &[&str]) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn get_and_list_help_and_extra_argument_errors_match_go() {
     let oracle = go_oracle::GoOracle::begin(
         "cli_get_list_help_differential",

@@ -134,6 +134,10 @@ fn find<'a>(items: &'a [serde_json::Value], id: &str) -> &'a serde_json::Value {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn differential_doctor_keyring_checks_in_forced_memory_states() {
     let (oracle, go, rust) =
         oracle_binaries("differential_doctor_keyring_checks_in_forced_memory_states");

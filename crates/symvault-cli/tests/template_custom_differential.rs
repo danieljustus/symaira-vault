@@ -175,6 +175,10 @@ fn comparable_stderr(raw: &[u8], home: &Path) -> String {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn custom_templates_match_go_cli() {
     let (oracle, go, native, base, _guard) = setup("custom_templates_match_go_cli");
     let root = base.join("vault");
@@ -265,6 +269,10 @@ fn custom_templates_match_go_cli() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn unreadable_custom_template_directory_matches_go() {
     let (oracle, go, native, base, _guard) =
         setup("unreadable_custom_template_directory_matches_go");

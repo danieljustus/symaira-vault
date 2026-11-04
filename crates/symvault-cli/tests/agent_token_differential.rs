@@ -61,6 +61,10 @@ fn assert_same(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_token_list_matches_go_plaintext_registry() {
     let oracle = go_oracle::GoOracle::begin(
         "agent_token_differential",
@@ -190,6 +194,10 @@ fn agent_token_list_matches_go_plaintext_registry() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_token_list_rejects_malformed_registry_like_go() {
     let oracle = go_oracle::GoOracle::begin(
         "agent_token_differential",

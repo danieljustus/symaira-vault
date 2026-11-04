@@ -6,6 +6,10 @@ mod audit_commands;
 use std::{fs, path::Path, process::Command};
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn audit_tail_filter_and_render_match_go_without_vault_access() {
     let oracle = go_oracle::GoOracle::begin(
         "audit_commands",

@@ -12,6 +12,10 @@ fn run(binary: &std::path::Path, args: &[&str]) -> std::process::Output {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn help_command_reaches_root_and_nested_help_like_go() {
     // Go answers are replayed from the recording of the oracle built from
     // cmd/root.go blob 39960e0ef8de334f13a0f8686c5e29c50d0f8d5a with the pinned

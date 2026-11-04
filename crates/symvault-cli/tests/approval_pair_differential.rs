@@ -513,6 +513,10 @@ fn replay_handler_follows_the_go_enroll_code_rules() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn approval_pair_rejects_loopback_server_like_go_oracle() {
     let oracle = go_oracle::GoOracle::begin(
         "approval_pair_differential",

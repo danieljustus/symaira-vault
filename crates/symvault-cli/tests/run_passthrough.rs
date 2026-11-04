@@ -25,6 +25,10 @@ fn command(binary: &Path, vault: &Path, home: &Path) -> Command {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn comma_repeated_and_mixed_passthrough_preserve_filtering() {
     let oracle = go_oracle::GoOracle::begin(
         "run_passthrough",

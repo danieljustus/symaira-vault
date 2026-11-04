@@ -95,6 +95,10 @@ fn tier_of(config: &str, profile: &str) -> Option<String> {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn migrate_v4_matches_go_assignments_and_stays_idempotent() {
     let oracle = go_oracle::GoOracle::begin(
         "migrate_v4_differential",

@@ -362,6 +362,10 @@ fn compare(test: &str, label: &str, config: &str, args: &[&str]) {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_uninstall_rewrites_the_config_like_go() {
     compare(
         "agent_uninstall_rewrites_the_config_like_go",
@@ -372,6 +376,10 @@ fn agent_uninstall_rewrites_the_config_like_go() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_uninstall_keeps_a_multi_line_description_like_go() {
     compare(
         "agent_uninstall_keeps_a_multi_line_description_like_go",
@@ -382,6 +390,10 @@ fn agent_uninstall_keeps_a_multi_line_description_like_go() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_uninstall_keeps_every_mcp_field_go_keeps() {
     compare(
         "agent_uninstall_keeps_every_mcp_field_go_keeps",
@@ -392,6 +404,10 @@ fn agent_uninstall_keeps_every_mcp_field_go_keeps() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_uninstall_keeps_what_go_drops_and_nothing_else_differs() {
     compare(
         "agent_uninstall_keeps_what_go_drops_and_nothing_else_differs",
@@ -402,6 +418,10 @@ fn agent_uninstall_keeps_what_go_drops_and_nothing_else_differs() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn agent_uninstall_of_the_payment_bound_agent_like_go() {
     compare(
         "agent_uninstall_of_the_payment_bound_agent_like_go",
@@ -412,6 +432,10 @@ fn agent_uninstall_of_the_payment_bound_agent_like_go() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "SKIP (darwin recording): replays on macOS only"
+)]
 fn doctor_fix_repairs_audit_and_clipboard_like_go() {
     const TEST: &str = "doctor_fix_repairs_audit_and_clipboard_like_go";
     const ARGS: [&str; 5] = [
