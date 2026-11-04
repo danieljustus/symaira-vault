@@ -23,17 +23,29 @@
 //! `cannot load config: ...`), unless a vault flag, `SYMVAULT_VAULT` or a profile
 //! flag decides first.
 //!
-//! Known gaps against Go. The first three can change the exit status or the verdict
-//! (each needs a value that is not UTF-8); the last two are wording only:
+//! Known gaps against Go. None lets a command run in agent mode that Go refuses:
+//! where Rust and Go disagree, Rust refuses with another exit status or prints
+//! help. The first five can change the exit status or the verdict; the last two
+//! are wording only:
 //! - a `SYMVAULT_VAULT` that is not UTF-8 is refused with exit 1 and `vault path
 //!   must be UTF-8`, where Go carries on with the raw bytes (exit 5 from the agent
 //!   check, or the command runs);
-//! - a `--vault` value that is not UTF-8 is gated on its lossy text (U+FFFD for
-//!   each bad byte), so the path the agent check reads can differ from Go's;
-//! - the non-UTF-8 `SYMVAULT_PROFILE` refusal exists only here, in agent mode, for
-//!   the commands that require a vault: without an agent, the commands themselves
-//!   (and `__complete`) still ignore such a profile where Go ends with exit 1, and
-//!   its surrounding blanks are trimmed as ASCII only (Go trims Unicode spaces);
+//! - a `--vault` value that is not UTF-8 is rejected by clap (exit 1) before the
+//!   gate, where Go checks the raw path (exit 5, or the command runs);
+//! - the unknown-profile refusal (exit 1, `resolve profile`) exists only here, in
+//!   agent mode, for the commands that require a vault: without an agent, other
+//!   commands (`help x`, `__complete`, ...) still ignore a `SYMVAULT_PROFILE` that
+//!   names no profile (UTF-8 or not) where Go ends with exit 1, and the variable's
+//!   surrounding blanks are trimmed as ASCII only (Go trims Unicode spaces);
+//! - an empty word outside the help shapes (`'' list`) is rejected by clap
+//!   (exit 1) where Go skips it and runs the command; and `__complete` /
+//!   `__completeNoDesc` reached only through cobra's `Find` after a bare help flag
+//!   or an empty word (`-h set __completeNoDesc`, `'' __complete get ''`) is not
+//!   run: Rust prints help (exit 0) or reports `unknown command` (exit 1) where Go
+//!   applies the agent check (exit 5 for an ineligible agent);
+//! - `__complete` / `__completeNoDesc` without arguments run the agent check
+//!   before the argument count (exit 5, and a valid agent's audit log is created)
+//!   where Go reports the argument count first (exit 1);
 //! - `agent whoami` is not gated and reads `SYMVAULT_AGENT` as UTF-8 only: a
 //!   non-UTF-8 name reports `SYMVAULT_AGENT not set` (exit 1) where Go reports the
 //!   failed config load or lookup (exit 1);
