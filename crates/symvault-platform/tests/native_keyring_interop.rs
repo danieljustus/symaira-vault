@@ -68,3 +68,49 @@ fn native_keyring_go_write_rust_update_go_read_delete() {
         RUST_PAYLOAD
     );
 }
+
+/// The Rust half of the same boundary, runnable without Go. The Go `write` and `verify` stages are
+/// recorded as an attestation (`docs/rust-port/evidence/go-removal-attestations/native-keyring-interop.<os>.json`)
+/// of a live run of the test above; here Rust stores the very bytes Go stored (the attested payload),
+/// updates the item, reads it back and deletes it, in a disposable native keyring.
+#[test]
+#[ignore = "requires explicit disposable hosted runner"]
+fn native_keyring_rust_half_set_update_read_delete() {
+    assert_eq!(
+        env::var("GITHUB_ACTIONS").as_deref(),
+        Ok("true"),
+        "native keyring test is disposable-runner only"
+    );
+    assert_eq!(
+        env::var(AUTH_ENV).as_deref(),
+        Ok("1"),
+        "native keyring test requires disposable-runner authorization"
+    );
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let key = format!(
+        "symvault:rust-cross-language-{}-{nanos}|cross-language-binary",
+        std::process::id()
+    );
+    let keyring = OsKeyring;
+    assert!(
+        keyring.get(&key).is_err(),
+        "native namespace preflight must be missing"
+    );
+    keyring.set(&key, GO_PAYLOAD).expect("Rust store Go payload");
+    assert_eq!(keyring.get(&key).expect("Rust read-back"), GO_PAYLOAD);
+    keyring
+        .set(&key, RUST_PAYLOAD)
+        .expect("Rust update native item");
+    assert_eq!(
+        keyring.get(&key).expect("Rust update read-back"),
+        RUST_PAYLOAD
+    );
+    keyring.delete(&key).expect("Rust delete native item");
+    assert!(
+        keyring.get(&key).is_err(),
+        "native item remained after delete"
+    );
+}

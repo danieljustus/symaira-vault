@@ -335,6 +335,11 @@ def attestation_path(name, goos=None):
 def write_attestation(name, artifacts, command, env_pairs, note):
     """Run the Go verdict `command` once and persist the attestation (deterministic keys, no timestamps)."""
     result, env = _run(command, env_pairs)
+    return record_attestation(name, artifacts, command, env, result.returncode, result.stdout + result.stderr, note)
+
+
+def record_attestation(name, artifacts, command, env, returncode, output, note):
+    """Persist the attestation of a Go verdict that has already run (its command, exit code and output)."""
     rust_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
     digests = {}
     for item in artifacts:
@@ -343,9 +348,9 @@ def write_attestation(name, artifacts, command, env_pairs, note):
     document = {"schema": SCHEMA, "name": name, "direction": note, "oracle_commit": tree_oracle_commit(),
                 "go_version": go_version(env), "goos": host_goos(), "goarch": host_arch(), "rust_commit": rust_commit,
                 "rust_artifacts_sha256": digests,
-                "go_verdict": {"command": [x for x in command], "exit_code": result.returncode,
-                               "output_sha256": hashlib.sha256((result.stdout + result.stderr).encode()).hexdigest(),
-                               "accepted": result.returncode == 0}}
+                "go_verdict": {"command": [x for x in command], "exit_code": returncode,
+                               "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
+                               "accepted": returncode == 0}}
     target = attestation_path(name)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(canonical(document).encode("utf-8"))

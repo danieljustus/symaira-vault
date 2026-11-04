@@ -3,6 +3,19 @@
 
 Service mode is only authorized on disposable GitHub-hosted runners. Go native
 keyring evidence proves resource availability, not a missing Rust adapter.
+
+Go-free by default. The two places that needed the Go oracle are recorded once per OS:
+
+  portable   `policygen` regenerated the policy fixture natively and `--check`ed it. The committed
+             fixture still has the bytes that native Go regeneration produced (observation
+             `native-closeout-policy.<goos>.json`, `--capture-go`), and Rust runs against it.
+  keyring    Go wrote an item to the native keyring, Rust updated it, Go read it. The Go halves are
+             the attestation `native-keyring-interop.<goos>.json` (`--attest-go`, a live three-stage
+             run); the Rust half (store the attested payload, update, read back, delete) runs live.
+
+`--live-go` keeps the original Go-driven runs (hosted CI, a Go capture host); `--capture-go`
+(portable) and `--attest-go` (keyring, which implies `--live-go`) write the records above.
+A missing or malformed record is a failure, never a skip.
 """
 import argparse
 import contextlib
@@ -18,18 +31,102 @@ import subprocess
 import sys
 import tempfile
 
+import go_observations_common as obs
+
+POLICY_FIXTURE = "testdata/port/core/policy-contract.json"
+POLICY_OBSERVATION = "native-closeout-policy"
+KEYRING_ATTESTATION = "native-keyring-interop"
+POLICY_ORACLE_COMMIT = "f195aab"
+
 
 def checked(argv, root, env):
     return subprocess.check_output(argv, cwd=root, env=env, text=True, timeout=60).strip()
 
 
+def policy_generator(output):
+    # POLICY-001 deliberately advances its own production-Go oracle. policygen
+    # verifies this commit against git objects, so a stale pin here fails loudly
+    # rather than silently regenerating a mislabeled fixture.
+    return ["go", "run", "./scripts/rust-port/cmd/policygen", "--output", str(output),
+            "--oracle-commit", POLICY_ORACLE_COMMIT, "--oracle-release", "unreleased"]
+
+
+def native_policy_regeneration(root, env, output, report):
+    """Live Go: regenerate the policy fixture natively and require it to equal the committed one."""
+    generator = policy_generator(output)
+    report["policy_generator"] = generator
+    # Set the test backend in the child environment before Go initializes
+    # packages that capture their keyring backend.
+    generator_env = env.copy()
+    generator_env["SYMVAULT_TEST_KEYRING"] = "memory"
+    checked(generator, root, generator_env)
+    checked(generator + ["--check"], root, generator_env)
+    native_bytes = output.read_bytes()
+    report["policy_fixture_sha256"] = hashlib.sha256(native_bytes).hexdigest()
+    # The policy contract is defined over slash-separated logical paths and is
+    # OS-independent, so a fixture regenerated natively on this host must be
+    # byte-identical to the committed one. This is the input-equality gate:
+    # before it, the generator rewrote paths to native separators for Go only
+    # and the two implementations were compared on different inputs.
+    committed_bytes = (root / POLICY_FIXTURE).read_bytes()
+    report["policy_fixture_matches_committed"] = native_bytes == committed_bytes
+    if native_bytes != committed_bytes:
+        raise SystemExit(
+            f"natively generated policy fixture differs from the committed one on {platform.system()}: "
+            f"{report['policy_fixture_sha256']} vs {hashlib.sha256(committed_bytes).hexdigest()}"
+        )
+
+
+def capture_policy(root, env, output_dir):
+    """`--capture-go portable`: record the native Go regeneration of the policy fixture (needs Go)."""
+    env.update(GOTOOLCHAIN="go1.26.6", GOWORK="off")
+    report = {}
+    output_dir.mkdir(parents=True, exist_ok=True)
+    native_policy_regeneration(root, env, output_dir / "policy-contract.json", report)
+    observations = {"oracle_pin": POLICY_ORACLE_COMMIT, "oracle_release": "unreleased", "check_exit": 0,
+                    "committed_fixture": POLICY_FIXTURE, "native_fixture_sha256": report["policy_fixture_sha256"],
+                    "native_matches_committed": True}
+    commit, version = obs.tree_oracle_commit(), obs.go_version(env, root)
+    saved = obs.save(POLICY_OBSERVATION, observations, oracle_commit=commit, version=version, args=policy_generator("<output>"))
+    print(f"captured {obs.rel(saved)}")
+
+
+def replay_policy(root, report):
+    """Go-free: the committed fixture is the one native Go regeneration produced on this OS."""
+    document = obs.load(POLICY_OBSERVATION)
+    recorded = document["observations"]
+    committed = hashlib.sha256((root / POLICY_FIXTURE).read_bytes()).hexdigest()
+    if not (recorded.get("native_matches_committed") is True and recorded.get("check_exit") == 0
+            and recorded.get("oracle_pin") == POLICY_ORACLE_COMMIT
+            and recorded.get("committed_fixture") == POLICY_FIXTURE):
+        raise SystemExit(f"{obs.rel(obs.path(POLICY_OBSERVATION))}: not an accepting native policy regeneration")
+    if recorded.get("native_fixture_sha256") != committed:
+        raise SystemExit(f"{POLICY_FIXTURE} no longer has the bytes native Go regeneration produced "
+                         f"({committed} vs {recorded.get('native_fixture_sha256')})")
+    report["policy_fixture_sha256"] = committed
+    report["policy_fixture_matches_committed"] = True
+    report["policy_go_observation"] = {"goos": document["goos"], "go_version": document["go_version"],
+                                       "oracle_commit": document["oracle_commit"]}
+    return root / POLICY_FIXTURE
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=["portable", "keyring", "daemon", "clipboard"])
+    parser.add_argument("--live-go", action="store_true", help="drive the Go oracle live (hosted CI, capture hosts)")
+    parser.add_argument("--capture-go", action="store_true", help="portable: record the native Go policy regeneration")
+    parser.add_argument("--attest-go", action="store_true", help="keyring: live three-stage run, then write the attestation")
     args = parser.parse_args()
+    if args.attest_go:
+        args.live_go = True
+    assert not (args.capture_go and args.mode != "portable"), "--capture-go records the portable policy regeneration"
+    assert not (args.attest_go and args.mode != "keyring"), "--attest-go records the keyring interop attestation"
     root = Path(__file__).resolve().parents[2]
     env = os.environ.copy()
     assert Path(checked(["git", "rev-parse", "--show-toplevel"], root, env)).resolve() == root
+    if args.capture_go:
+        capture_policy(root, env, root / "target" / "native-closeout" / "policy-capture")
+        return
     if args.mode != "portable":
         assert env.get("GITHUB_ACTIONS") == "true"
         assert env.get("SYMVAULT_DISPOSABLE_NATIVE_RUNNER") == "1"
@@ -40,50 +137,34 @@ def main():
     output = root / "target" / "native-closeout" / args.mode
     output.mkdir(parents=True, exist_ok=True)
     report_path = output / "report.json"
-    report = {"head": head, "platform": platform.system(), "architecture": platform.machine(), "mode": args.mode, "passed": False, "commands": []}
+    report = {"head": head, "platform": platform.system(), "architecture": platform.machine(), "mode": args.mode, "passed": False,
+              "commands": [], "go_free": not args.live_go}
     home = Path.home()
     env["CARGO_HOME"] = env.get("CARGO_HOME", str(home / ".cargo"))
     env["RUSTUP_HOME"] = env.get("RUSTUP_HOME", str(home / ".rustup"))
-    env.update(GOTOOLCHAIN="go1.26.6", RUSTUP_TOOLCHAIN="1.98.0", GOWORK="off")
-    goroot = checked(["go", "env", "GOROOT"], root, env)
-    env["PATH"] = str(Path(goroot) / "bin") + os.pathsep + env["PATH"]
-    env["GOMODCACHE"] = checked(["go", "env", "GOMODCACHE"], root, env)
-    env["GOCACHE"] = checked(["go", "env", "GOCACHE"], root, env)
-    env["CARGO_TARGET_DIR"] = str(root / "target")
+    env.update(RUSTUP_TOOLCHAIN="1.98.0")
+    if args.live_go:
+        env.update(GOTOOLCHAIN="go1.26.6", GOWORK="off")
+        goroot = checked(["go", "env", "GOROOT"], root, env)
+        env["PATH"] = str(Path(goroot) / "bin") + os.pathsep + env["PATH"]
+        env["GOMODCACHE"] = checked(["go", "env", "GOMODCACHE"], root, env)
+        env["GOCACHE"] = checked(["go", "env", "GOCACHE"], root, env)
+    env["CARGO_TARGET_DIR"] = env.get("CARGO_TARGET_DIR", str(root / "target"))
     env.pop("SYMVAULT_PASSPHRASE", None)
     env.pop("SYMVAULT_ALLOW_ENV_PASSPHRASE", None)
-    report["go"] = checked(["go", "version"], root, env)
+    if args.live_go:
+        report["go"] = checked(["go", "version"], root, env)
+        assert report["go"].startswith("go version go1.26.6 ")
     report["rust"] = checked(["rustc", "--version"], root, env)
-    assert report["go"].startswith("go version go1.26.6 ")
     assert report["rust"].startswith("rustc 1.98.0 ")
     cargo = ["cargo", "test", "--manifest-path", str(root / "Cargo.toml"), "--locked"]
+    attested_stages = None
     if args.mode == "portable":
-        native_fixture = output / "policy-contract.json"
-        # POLICY-001 deliberately advances its own production-Go oracle. policygen
-        # verifies this commit against git objects, so a stale pin here fails loudly
-        # rather than silently regenerating a mislabeled fixture.
-        generator = ["go", "run", "./scripts/rust-port/cmd/policygen", "--output", str(native_fixture), "--oracle-commit", "f195aab", "--oracle-release", "unreleased"]
-        report["policy_generator"] = generator
-        # Set the test backend in the child environment before Go initializes
-        # packages that capture their keyring backend.
-        generator_env = env.copy()
-        generator_env["SYMVAULT_TEST_KEYRING"] = "memory"
-        checked(generator, root, generator_env)
-        checked(generator + ["--check"], root, generator_env)
-        native_bytes = native_fixture.read_bytes()
-        report["policy_fixture_sha256"] = hashlib.sha256(native_bytes).hexdigest()
-        # The policy contract is defined over slash-separated logical paths and is
-        # OS-independent, so a fixture regenerated natively on this host must be
-        # byte-identical to the committed one. This is the input-equality gate:
-        # before it, the generator rewrote paths to native separators for Go only
-        # and the two implementations were compared on different inputs.
-        committed_bytes = (root / "testdata" / "port" / "core" / "policy-contract.json").read_bytes()
-        report["policy_fixture_matches_committed"] = native_bytes == committed_bytes
-        if native_bytes != committed_bytes:
-            raise SystemExit(
-                f"natively generated policy fixture differs from the committed one on {platform.system()}: "
-                f"{report['policy_fixture_sha256']} vs {hashlib.sha256(committed_bytes).hexdigest()}"
-            )
+        if args.live_go:
+            native_fixture = output / "policy-contract.json"
+            native_policy_regeneration(root, env, native_fixture, report)
+        else:
+            native_fixture = replay_policy(root, report)
         env["SYMVAULT_POLICY_FIXTURE"] = str(native_fixture)
         commands = [cargo + ["-p", "symvault-cli", "--test", "device_pairing_cli", "--", "--nocapture"],
                     cargo + ["-p", "symvault-core", "-p", "symvault-platform", "--all-targets", "--all-features", "--", "--nocapture"]]
@@ -94,14 +175,21 @@ def main():
         assert platform.system() == "Darwin"
         commands = [cargo + ["-p", "symvault-platform", "--test", "native_clipboard", "--all-features", "--", "--ignored", "--exact", "native_clipboard_set_read_clear", "--nocapture"]]
     else:
-        stages = [
-            ["go", "run", "./scripts/rust-port/cmd/nativekeyringinterop", "write"],
-            cargo + ["-p", "symvault-platform", "--test", "native_keyring_interop", "--all-features", "--", "--ignored", "--exact", "native_keyring_go_write_rust_update_go_read_delete", "--nocapture"],
-            ["go", "run", "./scripts/rust-port/cmd/nativekeyringinterop", "verify"],
-        ]
+        if args.live_go:
+            stages = [
+                ["go", "run", "./scripts/rust-port/cmd/nativekeyringinterop", "write"],
+                cargo + ["-p", "symvault-platform", "--test", "native_keyring_interop", "--all-features", "--", "--ignored", "--exact", "native_keyring_go_write_rust_update_go_read_delete", "--nocapture"],
+                ["go", "run", "./scripts/rust-port/cmd/nativekeyringinterop", "verify"],
+            ]
+        else:
+            # The Go write/verify halves are the committed attestation; Rust stores the attested payload itself.
+            attestation = obs.check_attestation(KEYRING_ATTESTATION)
+            report["go_attestation"] = {"name": KEYRING_ATTESTATION, "goos": attestation["goos"], "go_version": attestation["go_version"],
+                                        "oracle_commit": attestation["oracle_commit"], "rust_commit": attestation["rust_commit"]}
+            stages = [cargo + ["-p", "symvault-platform", "--test", "native_keyring_interop", "--all-features", "--", "--ignored", "--exact", "native_keyring_rust_half_set_update_read_delete", "--nocapture"]]
         sequence = " && ".join(shlex.join(stage) for stage in stages)
         if platform.system() == "Linux":
-            # All three stages must use the same disposable Secret Service.
+            # All stages must use the same disposable Secret Service.
             sequence = "printf 'disposable-native-test\\n' | gnome-keyring-daemon --unlock --components=secrets; " + sequence
             commands = [["dbus-run-session", "--", "bash", "-euc", sequence]]
         else:
@@ -168,11 +256,12 @@ def main():
                 if result.returncode != 0:
                     entry["failed"] = True
                     continue
-                if command[0] == "cargo":
+                rust_only = command[0] == "cargo" or (args.mode == "keyring" and not args.live_go)
+                if rust_only:
                     counts = [int(n) for n in re.findall(r"test result: ok\. (\d+) passed", text)]
                     entry["executed_tests"] = sum(counts)
                     assert entry["executed_tests"] > 0, "zero executed tests"
-                    if "--ignored" in command:
+                    if any("--ignored" in str(part) for part in command):
                         assert counts == [1], "native test must execute exactly once"
                 else:
                     records = [json.loads(line) for line in text.splitlines() if line.startswith('{"')]
@@ -181,6 +270,7 @@ def main():
                         assert all(r["passed"] is True for r in records)
                         assert re.findall(r"test result: ok\. (\d+) passed", text) == ["1"]
                         entry["native_observation"] = {"passed": True, "rust_parity": True, "stages": records}
+                        attested_stages = records
                     else:
                         assert len(records) == 1 and records[0]["passed"] is True
                         entry["native_observation"] = records[0]
@@ -194,6 +284,14 @@ def main():
     finally:
         report_path.write_text(json.dumps(report, indent=2))
         print(json.dumps(report, indent=2))
+    if args.attest_go and report["passed"]:
+        # The Go verdict is the pair of stage records (write, verify), without the per-run item key.
+        verdict = json.dumps(attested_stages, sort_keys=True)
+        saved = obs.record_attestation(
+            KEYRING_ATTESTATION, ["rust-native-keyring-test=crates/symvault-platform/tests/native_keyring_interop.rs"],
+            ["native_closeout.py", "keyring", "--attest-go"], env, 0, verdict,
+            "Go NewOSKeyring writes a native item, the Rust adapter updates it, Go reads it back and deletes it")
+        print(f"attested {obs.rel(saved)}")
     if not report["passed"]:
         raise SystemExit(1)
 
