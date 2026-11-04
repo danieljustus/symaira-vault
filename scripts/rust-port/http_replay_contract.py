@@ -414,7 +414,11 @@ def health_equal_except_clock(left, right, port, recorded_go_clock=False):
         assert sorted(body) == ['port', 'status', 'timestamp', 'version'] and body['port'] == port and body['status'] == 'healthy'
         assert body['version'] == 'dev' and re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', body['timestamp']), 'complete health document'
     stamps = [time.mktime(time.strptime(b['timestamp'], '%Y-%m-%dT%H:%M:%SZ')) - time.timezone for b in bodies]
-    if recorded_go_clock:
+    if recorded_go_clock == 'receipt':
+        # Re-audit of a finished receipt (gate_area_check): the Go clock is the recorded epoch and the Rust clock was
+        # checked against the wall clock when the contract ran; a later re-audit cannot repeat a time-of-run check.
+        pass
+    elif recorded_go_clock:
         # The Go document was recorded with its clock normalised to the epoch; the Rust clock must agree with the wall clock.
         assert abs(stamps[1] - time.time()) < 120, 'Rust health clock agrees with the wall clock'
     else:

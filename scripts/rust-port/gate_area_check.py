@@ -544,7 +544,7 @@ def http_replay(r):
         wire_rows(o["rows"], impl)
         processes_ok(o["processes"], 1, f"{impl} processes")
     identical, declared, semantic, interim_only = driver_calls("replay comparison", driver.compare,
-                                                                r["go"]["rows"], r["rust"]["rows"], r["port"])
+                                                                r["go"]["rows"], r["rust"]["rows"], r["port"], "receipt")
     eq(len(identical), 194, "identical cases")
     eq(len(declared), 71, "declared cases")
     eq(len(semantic), 8, "semantic (health clock) cases")
