@@ -157,21 +157,33 @@ missing or stale recording is a failure, never a skip), compares a committed
 golden, or hashes a frozen input. This file records how each was converted and
 the few things that were retired instead.
 
-### Recapture (capture side, needs Go; never part of a gate)
+### Recapture (needs the archived Go tree; not possible from this tree)
+
+The Rust tests are **replay-only**: `common/go_oracle.rs` (transcripts,
+`testdata/port/cli-transcripts/`) and `common/go_oracle_ext.rs` (keyed
+observations, `testdata/port/cli-observations/`) no longer have a capture mode,
+and `SYMVAULT_ORACLE=capture` is not read any more. A missing or stale recording
+fails the test.
+
+To record again on purpose, use the archived tree and the helpers as they were
+there (they verify the oracle binary's `vcs.revision`/`vcs.modified` and refuse
+to overwrite a recording with a different value unless the test declares the
+normalization):
 
 ```sh
+git worktree add --detach ../symvault-go-oracle legacy/go-oracle
+cd ../symvault-go-oracle
+# build the oracle binary there (Go toolchain from go.mod), then:
 SYMVAULT_ORACLE=capture SYMVAULT_GO_BINARY=<oracle> \
-  [SYMVAULT_GO_BINARY_<first 8 hex of the oracle commit>=<oracle>] \
   cargo test -p symvault-cli --test <name> --locked
+# copy the changed recordings back, review the delta, then in the current tree:
+python3 scripts/rust-port/fixtures_verify.py --write
 ```
 
-`common/go_oracle.rs` (transcripts, `testdata/port/cli-transcripts/`) and
-`common/go_oracle_ext.rs` (keyed observations,
-`testdata/port/cli-observations/`) verify the oracle binary's
-`vcs.revision`/`vcs.modified`, refuse to
-overwrite a recording with a different value unless the test declares the
-normalization under which two captures are the same. Capture is deterministic:
-two consecutive captures of the same test produce byte-identical files.
+The same applies to every removed `*-capture` / `go-attest-*` /
+`go-observations-capture*` Makefile target: the recipes are in the Makefile at
+`legacy/go-oracle`. Capture is deterministic: two consecutive captures of the same test
+produce byte-identical files.
 
 Recordings never carry the capturing machine's paths. Per-run directories are
 stored as placeholders (`<ROOT:n>` / `<TMPFILE>` in transcripts; `<ROOT>`,

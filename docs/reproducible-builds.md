@@ -52,7 +52,7 @@ Reproducible builds ensure that anyone can independently verify that the distrib
 
 ## Prerequisites
 
-- Rust (the toolchain pinned in `rust-toolchain.toml`; historically Go 1.26)
+- Rust (the toolchain pinned in `rust-toolchain.toml`)
 - Git
 - GnuPG (for release signing)
 - `shasum` or `sha256sum`
@@ -71,11 +71,16 @@ Reproducible builds protect against:
 
 To achieve reproducible builds, we standardize:
 
-1. **Go version**: Specified in `go.mod`
-2. **Build flags**: Deterministic `-ldflags` with explicit timestamps
-3. **Module proxy**: Use `GOPROXY=https://proxy.golang.org,direct`
-4. **CGO**: Disabled (`CGO_ENABLED=0`) for maximum portability
-5. **Architecture**: Explicit `GOOS` and `GOARCH`
+1. **Rust version**: pinned in `rust-toolchain.toml`
+2. **Dependencies**: committed `Cargo.lock`, every build uses `--locked`
+3. **Build flags**: release profile from `Cargo.toml`; the only build stamp the CLI reads is `SYMVAULT_VERSION`
+4. **Architecture**: explicit `--target` triple per release artifact
+
+> **Historical (Go era):** the `Dockerfile.build`, workflow and `go build`
+> examples further down document the retired Go release pipeline (Go sources
+> removed, see [ADR 0036](adr/0036-go-removal.md)). They are kept only as a
+> template for the verification procedure (checksums, signatures); the Go
+> toolchain is no longer used anywhere in this repository.
 
 ### Build Process
 

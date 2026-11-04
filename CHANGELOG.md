@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Binaries are built with `cargo build --release --locked -p symvault-cli --bin symvault`;
   osv-scanner scans `Cargo.lock`; `scripts/setup-dev.sh` installs rustup and the
   pinned cargo tools.
+  The last Go tree is archived at tag `legacy/go-oracle`; frozen fixtures and
+  recordings stay and are verified by `make fixtures-verify`. Reverse oracles
+  (Go verifying Rust-written data), the Go backend test volume, the Go
+  fuzzers, Windows/FreeBSD and the capture mode of the Rust differential helpers
+  are no longer verified, see [ADR 0036](docs/adr/0036-go-removal.md). Flake
+  packaging uses `rustPlatform.buildRustPackage`.
 
 ## [v0.23.2] - 2026-10-21
 

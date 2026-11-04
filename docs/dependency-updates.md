@@ -474,7 +474,8 @@ cargo update -p <crate> --precise <previous-version>
 | `github.com/ProtonMail/go-crypto` | `v1.1.6` | `v1.4.1` | Deferred — wait for `go-git` migration | 2026-07-20 |
 | `github.com/golang/protobuf` | `v1.5.4` | Migrate to `google.golang.org/protobuf` | Deferred — wait for `groupcache` migration | 2026-07-20 |
 
-See inline comments in [`go.mod`](../go.mod) for full deferral rationale.
+The Go module tree (`go.mod`) was removed ([ADR 0036](adr/0036-go-removal.md)); the
+full deferral rationale is in the archived tree at tag `legacy/go-oracle`.
 
 ### Useful Commands
 
