@@ -265,7 +265,6 @@ def check_dist(dist, native_runs=True, docker_runs=True):
     chk.add("snapshot version shape", re.fullmatch(r"\d+\.\d+\.\d+(-next)?", version), version)
 
     # --- archives -----------------------------------------------------
-    archives = {}
     want_names = {f"{PROJECT}_{version}_{o}_{a}.tar.gz": (o, a) for o, a in TARGETS}
     have = {p.name for p in dist.glob(f"{PROJECT}_*.tar.gz")}
     chk.add("archive set is exactly darwin_arm64+linux_amd64+linux_arm64", have == set(want_names),

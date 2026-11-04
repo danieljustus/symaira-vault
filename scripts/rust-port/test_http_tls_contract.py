@@ -8,7 +8,6 @@ the contract's own observation function (`alpn_offer`) and pin (`alpn_check`,
 `h2` must fail the pin, a Go-like server must pass it, and a tampered
 observation must fail it.
 """
-import copy
 import shutil
 import socket
 import ssl

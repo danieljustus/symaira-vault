@@ -195,7 +195,7 @@ class TokenContract(unittest.TestCase):
         tokens.check_token_rows(self.rows(), self.rows())
         mutated = self.rows()
         index = next(i for i, r in enumerate(mutated) if r['case'] == 'past1s:ping')
-        mutated[index] = token_row('past1s:ping', 200, b'', f'past1sping'.encode())
+        mutated[index] = token_row('past1s:ping', 200, b'', 'past1sping'.encode())
         with self.assertRaisesRegex(AssertionError, 'undeclared token-state difference'):
             tokens.check_token_rows(self.rows(), mutated)
         both_wrong_go, both_wrong_rust = self.rows(), self.rows()

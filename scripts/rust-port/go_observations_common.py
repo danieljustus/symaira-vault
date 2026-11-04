@@ -361,10 +361,8 @@ def main(argv=None):
         p.add_argument("--file", action="append", default=[])
         p.add_argument("--artifact", action="append", default=[])
     argv = list(sys.argv[1:] if argv is None else argv)
-    command = []
     if "--" in argv:
-        split = argv.index("--")
-        argv, command = argv[:split], argv[split + 1:]
+        argv = argv[:argv.index("--")]
     args = parser.parse_args(argv)
 
     try:

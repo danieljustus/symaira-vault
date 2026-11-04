@@ -13,7 +13,6 @@ mutated copy of the helper (used for guard-revert controls).
 """
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path

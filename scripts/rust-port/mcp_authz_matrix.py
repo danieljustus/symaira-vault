@@ -172,7 +172,7 @@ def main():
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--check', action='store_true', help='replay: verify the frozen fixture against the recorded Go observation (no Go)')
-    args = parser.parse_args()
+    parser.parse_args()
     goos = host_goos()
     fixture_file = fixture_path(goos)
     fixture = replay_check(goos, fixture_file)

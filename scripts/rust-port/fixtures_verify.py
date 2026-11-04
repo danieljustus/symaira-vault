@@ -480,9 +480,7 @@ def check_digests(root: Path, git: Git, scan: Scan, selected: list[str], failure
         except (ValueError, KeyError) as exc:
             failures.add(f"{ORACLE_MANIFEST}: unreadable: {exc}")
     counts: dict[str, dict[str, int]] = {}
-    block_class: dict[tuple[str, str, str], str] = {}
     seen_ids = set()
-    gen_ref = None
     for rec in collect_entries(scan, git, None, selected):
         kind = rec["kind"]
         bucket = counts.setdefault(kind, {"recomputed": 0, "recorded": 0, "no-digest": 0})

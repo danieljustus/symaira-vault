@@ -14,7 +14,6 @@ import os
 from pathlib import Path
 import re
 import subprocess
-import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 LONG_FLAG = re.compile(r"--([a-zA-Z0-9][a-zA-Z0-9-]*)")
