@@ -176,7 +176,10 @@ fn go_argv(line: &str) -> bool {
                 return false;
             }
             end += 1;
-        } else if bytes.get(end).is_some_and(|b| is_word(*b) || *b == b'-' || *b == b'.') {
+        } else if bytes
+            .get(end)
+            .is_some_and(|b| is_word(*b) || *b == b'-' || *b == b'.')
+        {
             return false;
         }
         // Preceded by `[` or `(` (after blanks), followed by `,`.
@@ -196,9 +199,9 @@ fn go_argv(line: &str) -> bool {
             return false;
         };
         let word = &rest[1..];
-        GO_VERBS.iter().any(|verb| {
-            word.starts_with(verb) && word.as_bytes().get(verb.len()) == Some(&q)
-        })
+        GO_VERBS
+            .iter()
+            .any(|verb| word.starts_with(verb) && word.as_bytes().get(verb.len()) == Some(&q))
     })
 }
 
@@ -445,19 +448,31 @@ fn matcher_semantics_fire_on_references_and_not_on_lookalikes() {
         ("govulncheck ./...", "govulncheck"),
         ("echo skipping Go oracle", "skipping Go"),
         ("checked(['go', 'build', '-o', out], tree)", "go argv list"),
-        ("checked([\"go\",\"test\",\"-c\"], cwd=tree)", "go argv list"),
+        (
+            "checked([\"go\",\"test\",\"-c\"], cwd=tree)",
+            "go argv list",
+        ),
         ("subprocess.run(['go','env','GOVERSION'])", "go argv list"),
         ("run([ 'go' , 'version'])", "go argv list"),
         ("check_output(('go', 'list', '-f', x))", "go argv list"),
         ("checked([go, 'build', '.'])", "go argv list"),
         ("checked([\"go\", \"mod\", \"download\"])", "go argv list"),
         ("x = go_compiler(tree)", "go_compiler"),
-        ("go, env, compiler = pinned_go(os.environ.copy(), source)", "pinned_go("),
+        (
+            "go, env, compiler = pinned_go(os.environ.copy(), source)",
+            "pinned_go(",
+        ),
         ("from oracle_build import build_go", "oracle_build"),
-        ("Build scripts/rust-port/cmd/oraclebuild first", "oracle_build"),
+        (
+            "Build scripts/rust-port/cmd/oraclebuild first",
+            "oracle_build",
+        ),
         ("(tree / 'go.mod').read_text()", "go.mod|go.sum"),
         ("git diff -- go.sum", "go.mod|go.sum"),
-        ("checked(['cargo'], './scripts/rust-port/cmd/httpseed')", "Go source tree"),
+        (
+            "checked(['cargo'], './scripts/rust-port/cmd/httpseed')",
+            "Go source tree",
+        ),
         ("path = 'internal/mcp/server/x.go'", "Go source tree"),
         ("p = ROOT / \"internal/vault\"", "Go source tree"),
         ("cmd = ['./cmd/symvault']", "Go source tree"),
