@@ -1697,12 +1697,16 @@ tui-harness-check: $(AREA_VENV)/.ready
 # `make go-observations-capture-tui` (Go, Xvfb) records both once.
 TUI_TARGET := $(AREA_EVIDENCE)/tui-candidate
 TUI_BUILD_ENV := CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
-TUI_CARGO_BUILD := CARGO_TARGET_DIR="$(TUI_TARGET)" $(TUI_BUILD_ENV) $(CARGO) build -p symvault-cli --bin symvault -p symvault-store --example tui-snapshot --locked
+# Two builds: one combined `-p ... -p ...` build unifies features differently and the binary would no longer
+# be the byte-identical source rebuild the contract checks.
+TUI_CARGO_BUILD := CARGO_TARGET_DIR="$(TUI_TARGET)" $(TUI_BUILD_ENV) $(CARGO) build -p symvault-cli --bin symvault --locked
+TUI_CARGO_SNAPSHOT := CARGO_TARGET_DIR="$(TUI_TARGET)" $(TUI_BUILD_ENV) $(CARGO) build -p symvault-store --example tui-snapshot --locked
 TUI_SNAPSHOT := $(TUI_TARGET)/debug/examples/tui-snapshot
 
 tui-contract: $(AREA_VENV)/.ready
 	@rm -rf "$(AREA_EVIDENCE)/tui" && mkdir -p "$(AREA_EVIDENCE)/tui"
 	$(TUI_CARGO_BUILD)
+	$(TUI_CARGO_SNAPSHOT)
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_harness_test.py
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_driver_equivalence.py check
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py \
@@ -1722,6 +1726,7 @@ tui-contract: $(AREA_VENV)/.ready
 go-observations-capture-tui: $(AREA_VENV)/.ready
 	@rm -rf "$(AREA_EVIDENCE)/tui-capture" && mkdir -p "$(AREA_EVIDENCE)/tui-capture"
 	$(TUI_CARGO_BUILD)
+	$(TUI_CARGO_SNAPSHOT)
 	$(AREA_ENV) $(AREA_HTTP_GO) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py --capture-go \
 		--rust-cli "$(TUI_TARGET)/debug/symvault" --reference-rust-out "$(AREA_EVIDENCE)/tui-capture/reference-rust.json"
 	$(AREA_ENV) "$(AREA_VENV)/bin/python3" scripts/rust-port/tui_contract.py --allow-dirty-for-development \
