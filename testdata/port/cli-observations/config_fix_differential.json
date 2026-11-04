@@ -1,0 +1,842 @@
+{
+  "schema": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "go_version": "go1.26.6",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "vcs_modified": "false"
+  },
+  "tests": {
+    "intentional_deviation_copy_by_default_false_survives_fix": {
+      "copy-off scenario": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 30\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      }
+    },
+    "non_tty_fix_matches_go_contract": {
+      "argon [\"--json\"]": [
+        6,
+        "{\"errors\":[\"vault.argon2id_time: 1 is below minimum floor of 2\"],\"valid\":false}\n",
+        "Error: config validation failed: vault.argon2id_time: 1 is below minimum floor of 2\nError: config validation failed: vault.argon2id_time: 1 is below minimum floor of 2\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "vault:\n  argon2id_time: 1\nvaultDir: /tmp/x\n"
+      ],
+      "argon [\"--quiet\"]": [
+        6,
+        "",
+        "Error: config validation failed: vault.argon2id_time: 1 is below minimum floor of 2\nError: config validation failed: vault.argon2id_time: 1 is below minimum floor of 2\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "vault:\n  argon2id_time: 1\nvaultDir: /tmp/x\n"
+      ],
+      "argon []": [
+        6,
+        "Configuration is invalid (<ROOT>/config.yaml):\n  ✗ vault.argon2id_time: 1 is below minimum floor of 2\n",
+        "Error: config validation failed: vault.argon2id_time: 1 is below minimum floor of 2\nError: config validation failed: vault.argon2id_time: 1 is below minimum floor of 2\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "vault:\n  argon2id_time: 1\nvaultDir: /tmp/x\n"
+      ],
+      "audit [\"--json\"]": [
+        6,
+        "{\"errors\":[\"audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\"],\"valid\":false}\n",
+        "Error: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nError: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "audit:\n  maxSizeMb: 0\nvaultDir: /tmp/x\n"
+      ],
+      "audit [\"--quiet\"]": [
+        6,
+        "",
+        "Error: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nError: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "audit:\n  maxSizeMb: 0\nvaultDir: /tmp/x\n"
+      ],
+      "audit []": [
+        6,
+        "Configuration is invalid (<ROOT>/config.yaml):\n  ✗ audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\n",
+        "Error: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nError: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "audit:\n  maxSizeMb: 0\nvaultDir: /tmp/x\n"
+      ],
+      "audit_and_clipboard [\"--json\"]": [
+        6,
+        "{\"errors\":[\"audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\",\"clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\"],\"valid\":false}\n",
+        "Error: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nclipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nclipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "audit:\n  maxSizeMb: -1\nclipboard:\n  auto_clear_duration: -1\nvaultDir: /tmp/x\n"
+      ],
+      "audit_and_clipboard [\"--quiet\"]": [
+        6,
+        "",
+        "Error: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nclipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nclipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "audit:\n  maxSizeMb: -1\nclipboard:\n  auto_clear_duration: -1\nvaultDir: /tmp/x\n"
+      ],
+      "audit_and_clipboard []": [
+        6,
+        "Configuration is invalid (<ROOT>/config.yaml):\n  ✗ audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\n  ✗ clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\n",
+        "Error: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nclipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: config validation failed: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nclipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "audit:\n  maxSizeMb: -1\nclipboard:\n  auto_clear_duration: -1\nvaultDir: /tmp/x\n"
+      ],
+      "blank_vault_dir [\"--json\"]": [
+        6,
+        "{\"errors\":[\"vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\"],\"valid\":false}\n",
+        "Error: config validation failed: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\nError: config validation failed: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "vaultDir: ' '\n"
+      ],
+      "blank_vault_dir [\"--quiet\"]": [
+        6,
+        "",
+        "Error: config validation failed: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\nError: config validation failed: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "vaultDir: ' '\n"
+      ],
+      "blank_vault_dir []": [
+        6,
+        "Configuration is invalid (<ROOT>/config.yaml):\n  ✗ vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\n",
+        "Error: config validation failed: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\nError: config validation failed: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "vaultDir: ' '\n"
+      ],
+      "clipboard [\"--json\"]": [
+        6,
+        "{\"errors\":[\"clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\"],\"valid\":false}\n",
+        "Error: config validation failed: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: config validation failed: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n"
+      ],
+      "clipboard [\"--quiet\"]": [
+        6,
+        "",
+        "Error: config validation failed: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: config validation failed: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n"
+      ],
+      "clipboard []": [
+        6,
+        "Configuration is invalid (<ROOT>/config.yaml):\n  ✗ clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\n",
+        "Error: config validation failed: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: config validation failed: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n"
+      ],
+      "empty [\"--json\"]": [
+        0,
+        "{\"path\":\"<ROOT>/config.yaml\",\"valid\":true}\n",
+        "",
+        ""
+      ],
+      "empty [\"--quiet\"]": [
+        0,
+        "",
+        "",
+        ""
+      ],
+      "empty []": [
+        0,
+        "Configuration is valid (<ROOT>/config.yaml)\n",
+        "",
+        ""
+      ],
+      "valid [\"--json\"]": [
+        0,
+        "{\"path\":\"<ROOT>/config.yaml\",\"valid\":true}\n",
+        "",
+        "vaultDir: /tmp/x\n"
+      ],
+      "valid [\"--quiet\"]": [
+        0,
+        "",
+        "",
+        "vaultDir: /tmp/x\n"
+      ],
+      "valid []": [
+        0,
+        "Configuration is valid (<ROOT>/config.yaml)\n",
+        "",
+        "vaultDir: /tmp/x\n"
+      ],
+      "yaml [\"--json\"]": [
+        6,
+        "{\"error\":\"yaml: line 1: did not find expected node content\",\"valid\":false}\n",
+        "Error: config load failed: yaml: line 1: did not find expected node content\nError: config load failed: yaml: line 1: did not find expected node content\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "agents: [\n"
+      ],
+      "yaml [\"--quiet\"]": [
+        6,
+        "",
+        "Error: cannot load config from <ROOT>/config.yaml: yaml: line 1: did not find expected node content: yaml: line 1: did not find expected node content\nError: cannot load config from <ROOT>/config.yaml: yaml: line 1: did not find expected node content: yaml: line 1: did not find expected node content\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "agents: [\n"
+      ],
+      "yaml []": [
+        6,
+        "",
+        "Error: cannot load config from <ROOT>/config.yaml: yaml: line 1: did not find expected node content: yaml: line 1: did not find expected node content\nError: cannot load config from <ROOT>/config.yaml: yaml: line 1: did not find expected node content: yaml: line 1: did not find expected node content\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "agents: [\n"
+      ]
+    },
+    "pty_flow_matches_go_contract": {
+      "allowed_paths_glob_edit": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: agents.a.allowedPaths[0]: invalid glob pattern \"[a\" (use valid filepath.Match syntax, configure in config.yaml)\nOpen config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "approval_load_error": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: agent \"a\": invalid approvalMode \"weird\" (valid: none, deny, prompt)\nOpen config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "argon_only_decline": {
+        "cfg": "vault:\n  argon2id_time: 1\nvaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: vault.argon2id_time: 1 is below minimum floor of 2\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "argon_only_edit": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: vault.argon2id_time: 1 is below minimum floor of 2\nOpen config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "argon_remains_after_autofix_decline": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    authMethod: passphrase\n    search_index: true\n    scrypt_work_factor: 18\n    auto_heal_zero_key: true\n    format_version: 1\n    argon2id_time: 1\nclipboard:\n    auto_clear_duration: 30\n    copyByDefault: true\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\n  ✗ Validation error: vault.argon2id_time: 1 is below minimum floor of 2\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 2
+      },
+      "argon_remains_after_autofix_edit": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\n  ✗ Validation error: vault.argon2id_time: 1 is below minimum floor of 2\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\nOpen config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 2
+      },
+      "audit_decline_edit": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nField 'audit.maxFileSize' must be greater than 0. Suggestion: 100MB. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 2
+      },
+      "audit_logging_scan_patterns_survive_save": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: 100\n    maxBackups: 5\n    maxAgeDays: 9\nlogging:\n    level: debug\n    format: text\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nscan_patterns:\n    - name: foo\n      pattern: a.*b\n      description: d\n      severity: high\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nField 'audit.maxFileSize' must be greater than 0. Suggestion: 100MB. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "audit_negative_keeps_other_fields": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: 100\n    maxBackups: 7\n    maxAgeDays: 30\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nField 'audit.maxFileSize' must be greater than 0. Suggestion: 100MB. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "audit_zero": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: 100\n    maxBackups: 5\n    maxAgeDays: 30\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\nField 'audit.maxFileSize' must be greater than 0. Suggestion: 100MB. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "chain_autofix": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 30\n    copyByDefault: true\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 2
+      },
+      "chain_decline_all": {
+        "cfg": "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 3
+      },
+      "chain_decline_then_edit_still_invalid": {
+        "cfg": "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: config still invalid after manual edit: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: config still invalid after manual edit: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 3
+      },
+      "clipboard_decline_decline": {
+        "cfg": "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 2
+      },
+      "clipboard_decline_edit_fail": {
+        "cfg": "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: editor failed: exit status 3\nError: config fix failed: editor failed: exit status 3\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 2
+      },
+      "clipboard_decline_edit_fix": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 2
+      },
+      "clipboard_decline_edit_garble": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: config still invalid after manual edit: yaml: line 1: did not find expected node content\nError: config still invalid after manual edit: yaml: line 1: did not find expected node content\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 2
+      },
+      "clipboard_decline_edit_noop": {
+        "cfg": "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: config still invalid after manual edit: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: config still invalid after manual edit: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 2
+      },
+      "clipboard_decline_edit_still_bad": {
+        "cfg": "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: config still invalid after manual edit: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: config still invalid after manual edit: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 2
+      },
+      "clipboard_eof_twice": {
+        "cfg": "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 2
+      },
+      "clipboard_fix": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 30\n    copyByDefault: true\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "clipboard_logging_survives_save": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 30\n    copyByDefault: true\nlogging:\n    level: warn\n    format: json\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "directory_as_config": {
+        "cfg": null,
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: read <ROOT>/cfg/config.yaml: is a directory\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "empty_file_is_valid": {
+        "cfg": "",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "",
+        "stdout": "Configuration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 0
+      },
+      "json_clipboard_fix": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 30\n    copyByDefault: true\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\n{\"path\":\"<ROOT>/cfg/config.yaml\",\"valid\":true}\n",
+        "steps_done": 1
+      },
+      "json_decline": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "json_edit_fix": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration repaired successfully.\n{\"path\":\"<ROOT>/cfg/config.yaml\",\"valid\":true}\n",
+        "steps_done": 2
+      },
+      "json_still_invalid": {
+        "cfg": "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: config still invalid after manual edit: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nError: config still invalid after manual edit: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 2
+      },
+      "json_valid": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "",
+        "stdout": "{\"path\":\"<ROOT>/cfg/config.yaml\",\"valid\":true}\n",
+        "steps_done": 0
+      },
+      "missing_file_decline": {
+        "cfg": null,
+        "exit": "6",
+        "listing": [],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: open <ROOT>/cfg/config.yaml: no such file or directory\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "missing_file_editor_creates": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: open <ROOT>/cfg/config.yaml: no such file or directory\nOpen config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "multi_all_accepted": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 30\n    copyByDefault: true\naudit:\n    maxSizeMb: 100\n    maxBackups: 5\n    maxAgeDays: 30\nvaultDir: <ROOT>/home/.symvault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\n  ✗ Validation error: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'audit.maxFileSize' must be greater than 0. Suggestion: 100MB. Apply this fix? (y/N): Field 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Field 'vaultDir' must not be empty. Suggestion: <ROOT>/home/.symvault. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 3
+      },
+      "multi_partial_keeps_blank_vault_dir": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 30\n    copyByDefault: true\naudit:\n    maxBackups: 5\n    maxAgeDays: 30\nvaultDir: '  '\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\n  ✗ Validation error: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'audit.maxFileSize' must be greater than 0. Suggestion: 100MB. Apply this fix? (y/N): Field 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Field 'vaultDir' must not be empty. Suggestion: <ROOT>/home/.symvault. Apply this fix? (y/N): Auto-fixes applied successfully.\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 4
+      },
+      "quiet_clipboard_fix": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 30\n    copyByDefault: true\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "quiet_yaml_edit": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "save_failure_falls_back_to_editor": {
+        "cfg": "clipboard:\n  auto_clear_duration: -5\nvaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): Failed to save auto-fixes: open <ROOT>/cfg/config.yaml.tmp-<RAND>: permission denied\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 2
+      },
+      "terminal_audit_logging": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\naudit:\n    maxSizeMb: 100\n    maxBackups: 5\n    maxAgeDays: 30\nlogging:\n    level: debug\n    format: text\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "Configuration error detected in <ROOT>/cfg/config.yaml\r\n  ✗ Validation error: audit.maxFileSize: must be greater than 0 (configure audit.maxFileSize in config.yaml)\r\nField 'audit.maxFileSize' must be greater than 0. Suggestion: 100MB. Apply this fix? (y/N): y\r\nAuto-fixes applied successfully.\r\nConfiguration repaired successfully.\r\nConfiguration is valid (<ROOT>/cfg/config.yaml)\r\n",
+        "stderr": "",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "terminal_clipboard_fix": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nclipboard:\n    auto_clear_duration: 30\n    copyByDefault: true\nvaultDir: /tmp/x\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "Configuration error detected in <ROOT>/cfg/config.yaml\r\n  ✗ Validation error: clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)\r\nField 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix? (y/N): y\r\nAuto-fixes applied successfully.\r\nConfiguration repaired successfully.\r\nConfiguration is valid (<ROOT>/cfg/config.yaml)\r\n",
+        "stderr": "",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "terminal_yaml_decline": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "Configuration error detected in <ROOT>/cfg/config.yaml\r\n  ✗ Load error: yaml: line 1: did not find expected node content\r\nOpen config.yaml in $EDITOR to fix manually? (y/N): n\r\nError: config fix failed: configuration fix aborted by user\r\nError: config fix failed: configuration fix aborted by user\r\nRun 'symvault doctor' to diagnose and fix configuration issues.\r\n",
+        "stderr": "",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "terminal_yaml_edit": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "Configuration error detected in <ROOT>/cfg/config.yaml\r\n  ✗ Load error: yaml: line 1: did not find expected node content\r\nOpen config.yaml in $EDITOR to fix manually? (y/N): y\r\nEDITOR-ARGS: 1 <ROOT>/cfg/config.yaml\r\nEDITOR-OUT\r\nConfiguration is valid (<ROOT>/cfg/config.yaml)\r\n",
+        "stderr": "",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "traversal_path_is_load_error": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/../cfg/config.yaml\n  ✗ Load error: config file path escapes expected directory\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config still invalid after manual edit: config file path escapes expected directory\nError: config still invalid after manual edit: config file path escapes expected directory\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "two_documents": {
+        "cfg": "a: 1\n---\nb: 2\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: config contains more than one YAML document; split it into separate files or remove everything after the first document separator\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "valid_config_needs_no_prompt": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "",
+        "stdout": "Configuration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 0
+      },
+      "vaultdir_blank_decline": {
+        "cfg": "vaultDir: '   '\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\nField 'vaultDir' must not be empty. Suggestion: <ROOT>/home/.symvault. Apply this fix? (y/N): Open config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 2
+      },
+      "vaultdir_blank_empty_home": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: ~/.symvault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\nField 'vaultDir' must not be empty. Suggestion: ~/.symvault. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "vaultdir_blank_fix": {
+        "cfg": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: <ROOT>/home/.symvault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Validation error: vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)\nField 'vaultDir' must not be empty. Suggestion: <ROOT>/home/.symvault. Apply this fix? (y/N): Auto-fixes applied successfully.\n",
+        "stdout": "Configuration repaired successfully.\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "yaml_accept_default_vi": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "yaml_accept_editor_io": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): EDITOR-ARGS: 1 <ROOT>/cfg/config.yaml\n",
+        "stdout": "EDITOR-OUT\nConfiguration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "yaml_accept_fail": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: editor failed: exit status 3\nError: config fix failed: editor failed: exit status 3\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "yaml_accept_fail_after_modify": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: editor failed: exit status 1\nError: config fix failed: editor failed: exit status 1\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "yaml_accept_fix": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "yaml_accept_garble": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config still invalid after manual edit: yaml: line 1: did not find expected node content\nError: config still invalid after manual edit: yaml: line 1: did not find expected node content\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "yaml_accept_killed": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: editor failed: signal: killed\nError: config fix failed: editor failed: signal: killed\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "yaml_accept_missing_editor": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: editor \"<ROOT>/nonexistent-editor\" not found in PATH\nError: config fix failed: editor \"<ROOT>/nonexistent-editor\" not found in PATH\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "yaml_accept_noop": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config still invalid after manual edit: yaml: line 1: did not find expected node content\nError: config still invalid after manual edit: yaml: line 1: did not find expected node content\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "yaml_answer_empty": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "yaml_answer_eof": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "yaml_answer_padded": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "yaml_answer_upper_y": {
+        "cfg": "vaultDir: /tmp/x\n",
+        "exit": "0",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): ",
+        "stdout": "Configuration is valid (<ROOT>/cfg/config.yaml)\n",
+        "steps_done": 1
+      },
+      "yaml_answer_yes_declines": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      },
+      "yaml_decline": {
+        "cfg": "agents: [\n",
+        "exit": "6",
+        "listing": [
+          "config.yaml"
+        ],
+        "merged": "",
+        "stderr": "Configuration error detected in <ROOT>/cfg/config.yaml\n  ✗ Load error: yaml: line 1: did not find expected node content\nOpen config.yaml in $EDITOR to fix manually? (y/N): Error: config fix failed: configuration fix aborted by user\nError: config fix failed: configuration fix aborted by user\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+        "stdout": "",
+        "steps_done": 1
+      }
+    }
+  }
+}

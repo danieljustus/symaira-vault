@@ -3,14 +3,19 @@
 
 //! Go↔Rust differential for `symvault set` (cmd/crud/set.go).
 //!
-//! Every case runs the Go oracle (`SYMVAULT_GO_BINARY`) and the Rust binary in
-//! separate disposable HOME/XDG roots, with the same arguments and piped stdin,
+//! Every case runs the Rust binary live and compares it with the recorded Go
+//! oracle (`testdata/port/cli-observations/set_differential.json`; a missing
+//! recording fails the test) in separate disposable HOME/XDG roots, with the same arguments and piped stdin,
 //! and compares byte for byte the exit status, stdout and stderr (roots
 //! normalised) plus the files the run created in the vault (so "nothing was
 //! written" is asserted too). Successful writes are additionally read back with
 //! the Rust binary and compared. The PTY cases feed Go and Rust a terminal as
-//! stdin to reach the argv-exposure warning. The suite skips with a message
-//! when `SYMVAULT_GO_BINARY` is unset.
+//! stdin to reach the argv-exposure warning. The read-back of a Go-written
+//! entry was done by the Rust binary at capture time; replay compares the
+//! recorded read-back with the Rust binary reading its own write.
+
+#[path = "common/go_oracle_ext.rs"]
+mod go_oracle_ext;
 
 use std::{
     collections::BTreeMap,
@@ -21,7 +26,12 @@ use std::{
     thread,
 };
 
+use go_oracle_ext::Observations;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+
+/// Pinned Go oracle.
+const ORACLE_COMMIT: &str = "c069d3f2b17d704525cedc1bd42840cc6a3e9896";
 
 const RUST: &str = env!("CARGO_BIN_EXE_symvault");
 const PASS: &str = "correct horse battery staple";
@@ -735,7 +745,7 @@ fn normalise(bytes: &[u8], root: &Path, home: &Path) -> String {
         .replace(&home.display().to_string(), "<HOME>")
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 struct Observed {
     code: Option<i32>,
     stdout: String,
@@ -824,21 +834,13 @@ fn run_piped(binary: &Path, parent: &Path, case: &Case) -> Observed {
     }
 }
 
-fn oracle() -> Option<PathBuf> {
-    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
-        return None;
-    };
-    let go = PathBuf::from(go);
-    assert!(go.is_file(), "SYMVAULT_GO_BINARY is not a file: {go:?}");
-    Some(go)
-}
-
 #[test]
 fn set_matches_the_go_oracle_on_piped_input() {
-    let Some(go) = oracle() else {
-        return;
-    };
+    let observations = Observations::begin(
+        "set_differential",
+        "set_matches_the_go_oracle_on_piped_input",
+        Some(ORACLE_COMMIT),
+    );
     let rust = PathBuf::from(RUST);
     let mut cases = cases();
     cases.extend(open_failure_cases());
@@ -848,13 +850,18 @@ fn set_matches_the_go_oracle_on_piped_input() {
             batch
                 .iter()
                 .map(|case| {
-                    let (go, rust) = (&go, &rust);
+                    let (observations, rust) = (&observations, &rust);
                     scope.spawn(move || {
                         let temp = tempfile::Builder::new()
                             .prefix("symvault-set-diff-")
                             .tempdir()
                             .expect("temp");
-                        let go_run = run_piped(go, &temp.path().join("go"), case);
+                        let go_run = observations.observe(&case.name, |go| {
+                            serde_json::to_value(run_piped(go, &temp.path().join("go"), case))
+                                .expect("Go run json")
+                        });
+                        let go_run: Observed =
+                            serde_json::from_value(go_run).expect("recorded Go run");
                         let rust_run = run_piped(rust, &temp.path().join("rs"), case);
                         (case.name.clone(), go_run, rust_run)
                     })
@@ -877,6 +884,7 @@ fn set_matches_the_go_oracle_on_piped_input() {
         cases.len(),
         failures.join("\n")
     );
+    assert_eq!(observations.count(), cases.len());
 }
 
 /// Opens a pseudo-terminal as the child's stdin (stdout/stderr are pipes),
@@ -954,9 +962,11 @@ fn run_pty(binary: &Path, parent: &Path, case: &PtyCase) -> Observed {
 
 #[test]
 fn set_matches_the_go_oracle_on_a_terminal_stdin() {
-    let Some(go) = oracle() else {
-        return;
-    };
+    let observations = Observations::begin(
+        "set_differential",
+        "set_matches_the_go_oracle_on_a_terminal_stdin",
+        Some(ORACLE_COMMIT),
+    );
     let rust = PathBuf::from(RUST);
     // (2) Go warns about argv exposure right after the stdin read and before
     // any validation, for --value and --totp-secret alike; --stdin-value
@@ -1017,7 +1027,10 @@ fn set_matches_the_go_oracle_on_a_terminal_stdin() {
             .prefix("symvault-set-pty-")
             .tempdir()
             .expect("temp");
-        let go_run = run_pty(&go, &temp.path().join("go"), case);
+        let go_run = observations.observe(case.name, |go| {
+            serde_json::to_value(run_pty(go, &temp.path().join("go"), case)).expect("Go run json")
+        });
+        let go_run: Observed = serde_json::from_value(go_run).expect("recorded Go run");
         let rust_run = run_pty(&rust, &temp.path().join("rs"), case);
         if go_run != rust_run {
             failures.push(format!(
@@ -1038,6 +1051,7 @@ fn set_matches_the_go_oracle_on_a_terminal_stdin() {
         "pty cases differ:\n{}",
         failures.join("\n")
     );
+    assert_eq!(observations.count(), cases.len());
 }
 
 /// Answers prompts like a person at a terminal: the child gets a controlling
@@ -1108,7 +1122,7 @@ struct PromptCase {
     env_pass: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 struct Prompted {
     code: Option<i32>,
     stdout: String,
@@ -1205,9 +1219,11 @@ const PASS_LINE: &str = "correct horse battery staple\r";
 
 #[test]
 fn set_matches_the_go_oracle_on_answered_prompts() {
-    let Some(go) = oracle() else {
-        return;
-    };
+    let observations = Observations::begin(
+        "set_differential",
+        "set_matches_the_go_oracle_on_answered_prompts",
+        Some(ORACLE_COMMIT),
+    );
     let rust = PathBuf::from(RUST);
     let cases = [
         answered(
@@ -1447,7 +1463,11 @@ fn set_matches_the_go_oracle_on_answered_prompts() {
             .prefix("symvault-set-prompt-")
             .tempdir()
             .expect("temp");
-        let go_run = run_prompted(&go, &temp.path().join("go"), case);
+        let go_run = observations.observe(case.name, |go| {
+            serde_json::to_value(run_prompted(go, &temp.path().join("go"), case))
+                .expect("Go run json")
+        });
+        let go_run: Prompted = serde_json::from_value(go_run).expect("recorded Go run");
         let rust_run = run_prompted(&rust, &temp.path().join("rs"), case);
         assert_eq!(
             go_run.unanswered, 0,
@@ -1468,4 +1488,5 @@ fn set_matches_the_go_oracle_on_answered_prompts() {
         cases.len(),
         failures.join("\n")
     );
+    assert_eq!(observations.count(), cases.len());
 }
