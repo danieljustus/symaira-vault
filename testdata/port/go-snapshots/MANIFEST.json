@@ -773,8 +773,8 @@
     {
       "path": "scripts/rust-port/check_output_modes_cli.sh",
       "snapshot": "scripts/rust-port/check_output_modes_cli.sh.txt",
-      "sha256": "179c40f8efa19a641419c5677e916fca0250157f578ae13fe93c1ab022d0279f",
-      "bytes": 3403
+      "sha256": "7a8a454900d2f7fe5c79cc076f97261fa516a422983c165d13e8ee4100ecc0a8",
+      "bytes": 3755
     },
     {
       "path": "scripts/rust-port/cmd/entrypolicygen/main.go",

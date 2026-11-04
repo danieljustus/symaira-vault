@@ -34,3 +34,9 @@ change's working tree and its `MANIFEST.json` sha256/bytes are updated; the
   search-fallback scenarios (CLI-002/CLI-006: single and multiple hits, path and
   field matches, the lone `-`, no match, invalid paths, `--print` and `--length`)
   added to the output-modes corpus (90 cases, 549 -> 639).
+- `scripts/rust-port/check_output_modes_cli.sh`: the frozen snapshot is the Go-era regeneration/check script as
+  refreshed by the TMPDIR fix (local/nest2). It is a provenance input, not the live script: the Go-free
+  `scripts/rust-port/check_output_modes_cli.sh` in the working tree is a different, shorter replay script. The
+  snapshot's bytes are what `testdata/port/cli/output-modes.json` hashes into its `generator_digest`
+  (`5b62dffb...`), so they stay as is and `MANIFEST.json` now records them (3755 bytes, sha256 `7a8a454900d2f7fe5c79cc076f97261fa516a422983c165d13e8ee4100ecc0a8`) instead of
+  the pre-fix 3403-byte original.
