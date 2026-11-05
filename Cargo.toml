@@ -45,6 +45,18 @@ opt-level = 3
 [profile.test.package.blake2]
 opt-level = 3
 
+# libyaml's simple-key scan and rowan's node offsets are O(depth) per step
+# (libyaml as in Go's yaml.v3); the 10000-level config cases take minutes per
+# run unoptimized.
+[profile.test.package.unsafe-libyaml]
+opt-level = 3
+
+[profile.test.package.rowan]
+opt-level = 3
+
+[profile.test.package.yaml-edit]
+opt-level = 3
+
 # Preserve encoded Go legacy memory while retaining upstream block filling.
 [patch.crates-io]
 argon2 = { path = "third_party/argon2" }

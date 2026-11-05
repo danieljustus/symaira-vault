@@ -75,7 +75,7 @@ jobs:
   pairing-native:
     name: Pairing differential (${{ matrix.os }})
     runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       # PAIRING-001 claims all platforms, so all three native runners execute
@@ -168,9 +168,10 @@ jobs:
 
       - name: Verify complete port contract on native macOS
         if: runner.os == 'macOS'
-        # Hosted runs take 15-18 minutes; 20 left too little headroom
-        # (run 40957343241 timed out). The 45-minute job bound still applies.
-        timeout-minutes: 30
+        # With every Go-recorded replay in port-contract the hosted step was
+        # still running at 30 minutes (run 42063393472, two tests of about 8
+        # minutes each). The 60-minute job bound still applies.
+        timeout-minutes: 50
         shell: bash
         # Verify the documented entrypoint without inherited backend selectors.
         run: env -u CI -u GITHUB_ACTIONS -u HEADLESS -u SYMVAULT_TEST_KEYRING make port-contract
