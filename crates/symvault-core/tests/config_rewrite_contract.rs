@@ -1,3 +1,6 @@
+// Loads configs through yaml-edit, whose rowan 0.16 thin Arc trips Miri under
+// Stacked and Tree Borrows (rust-analyzer/rowan#108); see `rust-miri` in the Makefile.
+#![cfg(not(miri))]
 //! CONFIG-WRITER: the bytes a config rewrite leaves behind, against Go's
 //! `Config.SaveTo`.
 //!

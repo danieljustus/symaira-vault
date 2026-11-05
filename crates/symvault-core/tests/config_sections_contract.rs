@@ -1,3 +1,6 @@
+// Loads configs through yaml-edit, whose rowan 0.16 thin Arc trips Miri under
+// Stacked and Tree Borrows (rust-analyzer/rowan#108); see `rust-miri` in the Makefile.
+#![cfg(not(miri))]
 //! CFG-002 (sections) and CFG-003 (deprecation warnings): the loader's
 //! section-presence contract, against the Go oracle.
 //!

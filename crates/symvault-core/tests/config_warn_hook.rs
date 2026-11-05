@@ -1,3 +1,6 @@
+// Loads configs through yaml-edit, whose rowan 0.16 thin Arc trips Miri under
+// Stacked and Tree Borrows (rust-analyzer/rowan#108); see `rust-miri` in the Makefile.
+#![cfg(not(miri))]
 //! CONFIG-RESID: the process-wide warning sink, Go's `config.SetWarnFunc`.
 //!
 //! A process of its own, because the sink and the `clipboard.printByDefault`

@@ -388,6 +388,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "wall-clock deadline; meaningless in the interpreter")]
     fn a_depth_violation_stops_the_read_and_an_earlier_failure_still_wins() {
         // libyaml would parse all 100000 brackets; the read ends at level 10001.
         let deep = format!("a: {}\n", "[".repeat(100_000));

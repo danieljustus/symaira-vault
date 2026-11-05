@@ -1,3 +1,6 @@
+// Loads configs through yaml-edit, whose rowan 0.16 thin Arc trips Miri under
+// Stacked and Tree Borrows (rust-analyzer/rowan#108); see `rust-miri` in the Makefile.
+#![cfg(not(miri))]
 #![deny(unsafe_code)]
 
 use serde::Deserialize;
